@@ -1,9 +1,9 @@
 # Parallel Subagent Framework
 
-## 実施時のカスタマイズ（置き換えること）
-- テストコマンド: <テストコマンド>   # 例: bun run test / pytest
-- Lintコマンド:   <Lintコマンド>     # 例: bun run lint / ruff check
-- UIディレクトリ: src/components/   / データ取得: src/api/  / DB: prisma/schema.prisma
+## プロジェクト設定
+- テストコマンド: npm test
+- Lintコマンド:   npm run lint
+- UIディレクトリ: src/app/ / src/components/ / データ取得: src/lib/supabase/ / DB: Supabase (PostgreSQL)
 
 ## フロー（骨格）
 Phase 1 調査(並列) → Phase 2 仕様書(並列グループ宣言) → [停止① 人間レビュー] → Phase 3 実装(TDD・並列) → Phase 4 統合ゲート → Phase 5 検証(並列) → [停止② 構造化レビュー]
