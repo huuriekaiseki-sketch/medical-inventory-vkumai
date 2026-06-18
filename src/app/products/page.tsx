@@ -4,42 +4,27 @@ import { useEffect, useState, useReducer } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Product } from '@/types/product'
 import { ProductList } from '@/components/products/ProductList'
-import { DeleteConfirmDialog } from '@/components/products/DeleteConfirmDialog'
 
 export default function ProductsPage() {
   const router = useRouter()
   const [products, setProducts] = useState<Product[]>([])
-  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null)
   const [refreshKey, refresh] = useReducer((x: number) => x + 1, 0)
 
   useEffect(() => {
     let cancelled = false
-    async function load() {
-      const res = await fetch('/api/products')
-      const data = await res.json()
-      if (!cancelled) setProducts(data.products)
-    }
-    load()
+    fetch('/api/products')
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setProducts(d.products) })
     return () => { cancelled = true }
   }, [refreshKey])
 
-  function handleEdit(id: string) {
-    router.push(`/products/${id}/edit`)
-  }
-
-  function handleDeleteClick(id: string) {
-    const product = products.find((p) => p.id === id)
-    if (product) setDeleteTarget(product)
-  }
-
-  async function handleDeleteConfirm() {
-    if (!deleteTarget) return
-    const res = await fetch(`/api/products/${deleteTarget.id}`, { method: 'DELETE' })
+  async function handleDelete(id: string) {
+    if (!confirm('削除しますか？')) return
+    const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
     if (!res.ok) {
       const body = await res.json()
       alert(body.error ?? '削除に失敗しました')
     }
-    setDeleteTarget(null)
     refresh()
   }
 
@@ -58,17 +43,10 @@ export default function ProductsPage() {
       <div className="rounded-lg bg-white shadow">
         <ProductList
           products={products}
-          onEdit={handleEdit}
-          onDelete={handleDeleteClick}
+          onEdit={(id) => router.push(`/products/${id}/edit`)}
+          onDelete={handleDelete}
         />
       </div>
-
-      <DeleteConfirmDialog
-        isOpen={deleteTarget !== null}
-        productName={deleteTarget?.name ?? ''}
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeleteTarget(null)}
-      />
     </div>
   )
 }
