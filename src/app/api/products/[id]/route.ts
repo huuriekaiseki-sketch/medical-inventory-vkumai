@@ -7,11 +7,9 @@ type RouteContext = { params: Promise<{ id: string }> }
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   const product = await getProduct(id)
-
   if (!product) {
     return NextResponse.json({ error: '製品が見つかりません' }, { status: 404 })
   }
-
   return NextResponse.json({ product })
 }
 
@@ -24,8 +22,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'リクエストが不正です' }, { status: 400 })
   }
 
-  if (!input.name || !input.code || !input.category || !input.unit) {
-    return NextResponse.json({ error: '必須項目が未入力です' }, { status: 400 })
+  if (!input.jan || !input.ref) {
+    return NextResponse.json({ error: 'JAN と REF は必須です' }, { status: 400 })
   }
 
   try {
@@ -37,7 +35,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ error: '製品が見つかりません' }, { status: 404 })
       }
       if (error.message.includes('既に使用されています')) {
-        return NextResponse.json({ error: '製品コードが重複しています' }, { status: 409 })
+        return NextResponse.json({ error: 'JAN または REF が重複しています' }, { status: 409 })
       }
     }
     throw error
@@ -46,7 +44,6 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
-
   try {
     await deleteProduct(id)
     return NextResponse.json({ success: true })
