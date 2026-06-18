@@ -61,9 +61,11 @@ export async function updateFacility(id: string, input: FacilityInput): Promise<
 }
 
 export async function deleteFacility(id: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('facilities')
     .delete()
     .eq('id', id)
+    .select('id')
   if (error) throw new Error(error.message)
+  if (data.length === 0) throw new Error(`施設ID "${id}" は存在しません`)
 }

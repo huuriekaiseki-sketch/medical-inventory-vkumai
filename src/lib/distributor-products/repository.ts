@@ -8,7 +8,7 @@ function mapDistributorProduct(row: Record<string, unknown>): DistributorProduct
     maker: row.maker as string,
     supplier: row.supplier as string,
     name: row.name as string,
-    reimbursementPrice: row.reimbursement_price as number | null,
+    reimbursementPrice: row.reimbursement_price != null ? Number(row.reimbursement_price) : null,
     quantity: row.quantity as number,
     category: row.category as string,
     createdAt: row.created_at as string,
@@ -83,9 +83,11 @@ export async function updateDistributorProduct(id: string, input: DistributorPro
 }
 
 export async function deleteDistributorProduct(id: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('distributor_products')
     .delete()
     .eq('id', id)
+    .select('id')
   if (error) throw new Error(error.message)
+  if (data.length === 0) throw new Error(`代理店商品ID "${id}" は存在しません`)
 }

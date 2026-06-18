@@ -62,9 +62,11 @@ export async function updateProduct(id: string, input: ProductInput): Promise<Pr
 }
 
 export async function deleteProduct(id: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('products')
     .delete()
     .eq('id', id)
+    .select('id')
   if (error) throw new Error(error.message)
+  if (data.length === 0) throw new Error(`製品ID "${id}" は存在しません`)
 }

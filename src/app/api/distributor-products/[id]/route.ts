@@ -30,8 +30,13 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const item = await updateDistributorProduct(id, input)
     return NextResponse.json({ item })
   } catch (error) {
-    if (error instanceof Error && error.message.includes('存在しません')) {
-      return NextResponse.json({ error: error.message }, { status: 404 })
+    if (error instanceof Error) {
+      if (error.message.includes('代理店商品ID')) {
+        return NextResponse.json({ error: '代理店商品が見つかりません' }, { status: 404 })
+      }
+      if (error.message.includes('製品ID')) {
+        return NextResponse.json({ error: '指定された製品が見つかりません' }, { status: 404 })
+      }
     }
     throw error
   }

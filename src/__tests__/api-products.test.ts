@@ -131,4 +131,13 @@ describe('DELETE /api/products/[id]', () => {
     const body = await res.json()
     expect(body.success).toBe(true)
   })
+
+  it('存在しない ID なら 404', async () => {
+    vi.mocked(deleteProduct).mockRejectedValue(new Error('製品ID "nonexistent" は存在しません'))
+    const req = makeRequest('/api/products/nonexistent', { method: 'DELETE' })
+    const res = await DELETE(req, makeParams('nonexistent'))
+    expect(res.status).toBe(404)
+    const body = await res.json()
+    expect(body.error).toBe('製品が見つかりません')
+  })
 })
