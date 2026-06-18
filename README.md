@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# medical-inventory-vkumai
+
+医療機器在庫管理システム — 熊井フレームワーク（並列ループエージェント）学習用リポジトリ
+
+## 技術スタック
+
+- Next.js (App Router)
+- Supabase (PostgreSQL)
+- Vitest
+- TypeScript
+
+## フレームワーク
+
+熊井さん「Claude Codeでつくる『並列ループエージェント』実践ハンズオンガイド」をベースに構築。
+
+5フェーズ: 調査(並列) → 仕様書 → [人間レビュー] → 実装(TDD・並列) → 統合ゲート → 検証(並列) → [構造化レビュー]
+
+## 2026-06-17 の学び（Day 6 / OBL6）
+
+### やったこと
+- 熊井フレームワーク5フェーズを1サイクル完走
+- implementerサブエージェント4体で並列TDD実装
+- テスト40件全パス、ビルド成功
+- reviewerが4観点で並列レビュー → バグ4件検出・修正
+- ブラウザで製品マスタCRUD動作確認OK
+
+### 気づき
+- サブエージェント4体並列が実際に動く。ファイル独立の並列グループ宣言が衝突防止の鍵
+- 「使える」と「わかって使える」は別。回せたが中身の理解はこれから
+- 仕様駆動（SPEC.md）の重要性：Part 1で人間がレビュー、Part 2でAIが実装する分離構造
+- レビューフェーズは形式的ではなく実効性がある（unitPrice=0→null等の実バグが見つかった）
+
+### 次のステップ
+- `/goal` サーキットブレーカーの実践
+- 同じフレームワークで2〜3周目を回す
+- Supabase実接続に差し替え
+- GitHub Issues + CI/CD を組み込む
+- 守 → 破：フレームワークの設計意図を理解して自分の案件に合わせて変える
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Test
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm test
+```
