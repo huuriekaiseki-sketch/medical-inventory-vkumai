@@ -8,11 +8,6 @@ type ProductListProps = {
   onDelete: (id: string) => void
 }
 
-function formatPrice(price: number | null): string {
-  if (price === null) return '-'
-  return `¥${price.toLocaleString()}`
-}
-
 export function ProductList({ products, onEdit, onDelete }: ProductListProps) {
   if (products.length === 0) {
     return (
@@ -27,22 +22,16 @@ export function ProductList({ products, onEdit, onDelete }: ProductListProps) {
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">製品名</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">製品コード</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">カテゴリ</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">単位</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">単価</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">JAN コード</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">REF コード</th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {products.map((product) => (
             <tr key={product.id}>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.name}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.code}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.category}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.unit}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatPrice(product.unitPrice)}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.jan}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.ref}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
                 <button
                   onClick={() => onEdit(product.id)}

@@ -26,10 +26,7 @@ export default function NewProductPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <Link
-        href="/products"
-        className="mb-4 inline-block text-sm text-blue-600 hover:text-blue-800"
-      >
+      <Link href="/products" className="mb-4 inline-block text-sm text-blue-600 hover:text-blue-800">
         &larr; 一覧に戻る
       </Link>
       <h1 className="mb-6 text-2xl font-bold text-gray-900">製品登録</h1>
