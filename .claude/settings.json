@@ -5,7 +5,9 @@
       "Bash(npm test *)",
       "Bash(npm install *)",
       "Bash(npx vitest *)",
-      "Bash(supabase status *)"
+      "Bash(supabase status *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
