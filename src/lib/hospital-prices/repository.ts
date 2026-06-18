@@ -6,8 +6,8 @@ function mapHospitalPrice(row: Record<string, unknown>): HospitalPrice {
     id: row.id as string,
     distributorProductId: row.distributor_product_id as string,
     facilityId: row.facility_id as string,
-    purchasePrice: row.purchase_price as number,
-    deliveryPrice: row.delivery_price as number,
+    purchasePrice: Number(row.purchase_price),
+    deliveryPrice: Number(row.delivery_price),
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   }
@@ -69,15 +69,18 @@ export async function updateHospitalPrice(id: string, input: HospitalPriceInput)
   if (error) {
     if (error.code === 'PGRST116') throw new Error(`病院別価格ID "${id}" は存在しません`)
     if (error.code === '23505') throw new Error('この代理店商品と施設の組み合わせは既に登録されています')
+    if (error.code === '23503') throw new Error('代理店商品または施設が存在しません')
     throw new Error(error.message)
   }
   return mapHospitalPrice(data)
 }
 
 export async function deleteHospitalPrice(id: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('hospital_prices')
     .delete()
     .eq('id', id)
+    .select('id')
   if (error) throw new Error(error.message)
+  if (data.length === 0) throw new Error(`病院別価格ID "${id}" は存在しません`)
 }
