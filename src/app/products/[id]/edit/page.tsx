@@ -10,11 +10,19 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   const { id } = use(params)
   const router = useRouter()
   const [product, setProduct] = useState<Product | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     fetch(`/api/products/${id}`)
       .then((r) => r.json())
-      .then((d) => setProduct(d.product))
+      .then((d) => {
+        if (cancelled) return
+        if (!d.product) { setError('製品が見つかりません'); return }
+        setProduct(d.product)
+      })
+      .catch(() => { if (!cancelled) setError('データの取得に失敗しました') })
+    return () => { cancelled = true }
   }, [id])
 
   async function handleSubmit(data: ProductInput) {
@@ -31,6 +39,14 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     }
 
     router.push('/products')
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-8">
+        <p className="text-red-600">{error}</p>
+      </div>
+    )
   }
 
   if (!product) {

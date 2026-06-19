@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'リクエストが不正です' }, { status: 400 })
   }
 
-  if (!input.name) {
+  if (!input.name?.trim()) {
     return NextResponse.json({ error: '施設名は必須です' }, { status: 400 })
   }
 

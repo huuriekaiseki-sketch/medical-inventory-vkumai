@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getHospitalPrice, updateHospitalPrice, deleteHospitalPrice } from '@/lib/hospital-prices/repository'
 import type { HospitalPriceInput } from '@/types/hospitalPrice'
-
-type RouteContext = { params: Promise<{ id: string }> }
+import type { RouteContext } from '@/types/route'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
@@ -32,8 +31,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ price })
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message.includes('存在しません')) {
-        return NextResponse.json({ error: error.message }, { status: 404 })
+      if (error.message.includes('病院別価格ID')) {
+        return NextResponse.json({ error: '価格情報が見つかりません' }, { status: 404 })
+      }
+      if (error.message.includes('代理店商品または施設が存在しません')) {
+        return NextResponse.json({ error: error.message }, { status: 422 })
       }
       if (error.message.includes('既に登録されています')) {
         return NextResponse.json({ error: error.message }, { status: 409 })
