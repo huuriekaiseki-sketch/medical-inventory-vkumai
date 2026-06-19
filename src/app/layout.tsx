@@ -18,6 +18,12 @@ export const metadata: Metadata = {
   description: "医療在庫管理システム",
 };
 
+const navLinks = [
+  { href: '/products', label: '製品マスタ' },
+  { href: '/facilities', label: '施設管理' },
+  { href: '/hospital-prices', label: '施設別価格' },
+]
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -34,12 +40,11 @@ export default function RootLayout({
             <Link href="/" className="text-lg font-bold tracking-wide">
               Medical Inventory
             </Link>
-            <Link
-              href="/products"
-              className="text-sm text-slate-300 hover:text-white"
-            >
-              製品マスタ
-            </Link>
+            {navLinks.map(({ href, label }) => (
+              <Link key={href} href={href} className="text-sm text-slate-300 hover:text-white">
+                {label}
+              </Link>
+            ))}
           </nav>
         </header>
         <main className="flex-1">{children}</main>

@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 409 })
       }
       if (error.message.includes('存在しません')) {
-        return NextResponse.json({ error: error.message }, { status: 404 })
+        return NextResponse.json({ error: error.message }, { status: 422 })
       }
     }
     throw error

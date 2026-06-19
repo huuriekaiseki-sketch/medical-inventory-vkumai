@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDistributorProduct, updateDistributorProduct, deleteDistributorProduct } from '@/lib/distributor-products/repository'
 import type { DistributorProductInput } from '@/types/distributorProduct'
-
-type RouteContext = { params: Promise<{ id: string }> }
+import type { RouteContext } from '@/types/route'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params

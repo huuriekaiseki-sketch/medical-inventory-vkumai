@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getFacility, updateFacility, deleteFacility } from '@/lib/facilities/repository'
 import type { FacilityInput } from '@/types/facility'
-
-type RouteContext = { params: Promise<{ id: string }> }
+import type { RouteContext } from '@/types/route'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
