@@ -1,6 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { FacilityList } from '../FacilityList'
 import type { Facility } from '@/types/facility'
 
@@ -11,27 +10,13 @@ const facilities: Facility[] = [
 
 describe('FacilityList', () => {
   it('施設一覧が表示される', () => {
-    render(<FacilityList facilities={facilities} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    render(<FacilityList facilities={facilities} />)
     expect(screen.getByText('中央病院')).toBeInTheDocument()
     expect(screen.getByText('東クリニック')).toBeInTheDocument()
   })
 
   it('空のとき「施設が登録されていません」が表示される', () => {
-    render(<FacilityList facilities={[]} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    render(<FacilityList facilities={[]} />)
     expect(screen.getByText('施設が登録されていません')).toBeInTheDocument()
-  })
-
-  it('編集ボタンクリックで onEdit が呼ばれる', async () => {
-    const onEdit = vi.fn()
-    render(<FacilityList facilities={facilities} onEdit={onEdit} onDelete={vi.fn()} />)
-    await userEvent.click(screen.getAllByText('編集')[0])
-    expect(onEdit).toHaveBeenCalledWith('1')
-  })
-
-  it('削除ボタンクリックで onDelete が呼ばれる', async () => {
-    const onDelete = vi.fn()
-    render(<FacilityList facilities={facilities} onEdit={vi.fn()} onDelete={onDelete} />)
-    await userEvent.click(screen.getAllByText('削除')[0])
-    expect(onDelete).toHaveBeenCalledWith('1')
   })
 })

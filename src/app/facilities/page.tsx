@@ -1,15 +1,12 @@
 'use client'
 
-import { useEffect, useState, useReducer } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import type { Facility } from '@/types/facility'
 import { FacilityList } from '@/components/facilities/FacilityList'
 
 export default function FacilitiesPage() {
-  const router = useRouter()
   const [facilities, setFacilities] = useState<Facility[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [refreshKey, refresh] = useReducer((x: number) => x + 1, 0)
 
   useEffect(() => {
     let cancelled = false
@@ -18,39 +15,28 @@ export default function FacilitiesPage() {
       .then((d) => { if (!cancelled) setFacilities(d.facilities) })
       .catch(() => { if (!cancelled) setError('施設の取得に失敗しました') })
     return () => { cancelled = true }
-  }, [refreshKey])
-
-  async function handleDelete(id: string) {
-    setError(null)
-    const res = await fetch(`/api/facilities/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const body = await res.json()
-      setError(body.error ?? '削除に失敗しました')
-      return
-    }
-    refresh()
-  }
+  }, [])
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">施設マスタ</h1>
-        <button
-          onClick={() => router.push('/facilities/new')}
-          className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          + 新規施設を登録
-        </button>
+    <div className="mx-auto max-w-6xl px-6 py-10">
+      <div className="mb-8 border-b pb-4" style={{ borderColor: '#072C2C33' }}>
+        <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#FF5F03', fontFamily: 'var(--font-oswald), sans-serif' }}>
+          Master Data
+        </p>
+        <h1 className="text-3xl font-bold" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif', letterSpacing: '0.04em' }}>
+          施設一覧
+        </h1>
       </div>
 
-      {error && <p className="mb-4 text-red-600">{error}</p>}
+      {error && (
+        <div className="mb-6 flex items-center gap-3 rounded px-4 py-3 text-sm font-medium text-white" style={{ backgroundColor: '#DC2626', borderRadius: '2px' }}>
+          <span>⚠</span>
+          <span>{error}</span>
+        </div>
+      )}
 
-      <div className="rounded-lg bg-white shadow">
-        <FacilityList
-          facilities={facilities}
-          onEdit={(id) => router.push(`/facilities/${id}/edit`)}
-          onDelete={handleDelete}
-        />
+      <div className="rounded bg-white shadow-sm overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
+        <FacilityList facilities={facilities} />
       </div>
     </div>
   )

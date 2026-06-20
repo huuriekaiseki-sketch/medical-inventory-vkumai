@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, type FormEvent } from 'react'
+import Link from 'next/link'
 import type { HospitalPriceInput } from '@/types/hospitalPrice'
 import type { Facility } from '@/types/facility'
 import type { DistributorProduct } from '@/types/distributorProduct'
@@ -60,9 +61,9 @@ export function HospitalPriceForm({
         {noFacilities ? (
           <p className="mt-1 text-sm text-gray-700">
             施設が登録されていません。
-            <a href="/facilities" className="text-blue-600 hover:text-blue-800">
+            <Link href="/facilities" className="text-blue-600 hover:text-blue-800">
               先に施設を登録してください
-            </a>
+            </Link>
           </p>
         ) : (
           <select
