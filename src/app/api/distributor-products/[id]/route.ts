@@ -21,7 +21,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'リクエストが不正です' }, { status: 400 })
   }
 
-  if (!input.productId || !input.maker || !input.supplier || !input.name || !input.category) {
+  if (!input.productId || !input.maker || !input.supplier || !input.name || !input.categoryId) {
     return NextResponse.json({ error: '必須項目が未入力です' }, { status: 400 })
   }
 

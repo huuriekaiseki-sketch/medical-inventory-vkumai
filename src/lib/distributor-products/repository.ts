@@ -10,7 +10,7 @@ function mapDistributorProduct(row: Record<string, unknown>): DistributorProduct
     name: row.name as string,
     reimbursementPrice: row.reimbursement_price != null ? Number(row.reimbursement_price) : null,
     quantity: row.quantity as number,
-    category: row.category as string,
+    categoryId: row.category_id as string,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   }
@@ -48,7 +48,7 @@ export async function createDistributorProduct(input: DistributorProductInput): 
       name: input.name,
       reimbursement_price: input.reimbursementPrice,
       quantity: input.quantity,
-      category: input.category,
+      category_id: input.categoryId,
     })
     .select()
     .single()
@@ -69,7 +69,7 @@ export async function updateDistributorProduct(id: string, input: DistributorPro
       name: input.name,
       reimbursement_price: input.reimbursementPrice,
       quantity: input.quantity,
-      category: input.category,
+      category_id: input.categoryId,
     })
     .eq('id', id)
     .select()

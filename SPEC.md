@@ -1,254 +1,185 @@
-# 施設管理 & 施設別価格管理 UI 実装仕様
+# SPEC: 販売店商品（Distributor Products）管理UI
 
 ---
 
-## Part 1 — 仕様（★人間がレビューする部分）
+## Part 1 — 仕様（人間レビュー用）
 
 ### 何ができるようになるか
 
-現在、施設（病院・クリニックなど）の情報や、施設ごとの商品価格はデータベースに保存できる状態だが、画面から操作する手段がない。
+販売店から仕入れる商品（販売店商品）を画面から一覧表示・登録・編集・削除できるようになります。
 
-今回の実装で以下が可能になる：
-
-1. **施設の登録・一覧表示・編集・削除**
-   - 施設名を入力して登録できる
-   - 登録済みの施設を一覧で確認できる
-   - 施設名を変更できる
-   - 不要な施設を削除できる
-
-2. **施設別価格の登録・一覧表示・編集・削除**
-   - 施設と代理店商品の組み合わせに対して「仕切値（購入価格）」と「納品価格」を登録できる
-   - 登録済みの価格情報を一覧で確認できる（施設名・商品名も表示）
-   - 価格を変更できる
-   - 不要な価格情報を削除できる
+各商品には以下の情報が登録されます：
+- どの製品か（製品コードで紐付け）
+- メーカー名
+- 仕入先（販売店名）
+- 商品名
+- カテゴリ
+- 償還価格（任意）
+- 数量
 
 ---
 
 ### 画面イメージ / 操作の流れ
 
-#### A. 施設管理
+#### 1. 一覧ページ（/distributor-products）
 
 ```
-ヘッダー: [Medical Inventory]  [製品マスタ] [施設管理] [施設別価格]
-
-施設管理
-────────────────────────────────────────
-  [+ 新規施設を登録]
-
-  施設名              登録日         操作
-  ─────────────────────────────────────
-  東京大学病院        2026-06-19    [編集] [削除]
-  慶應義塾大学病院    2026-06-19    [編集] [削除]
-  ─────────────────────────────────────
-                                       📸
+販売店商品一覧
+────────────────────────────────────────────────────────
+[ + 新規登録 ]
+────────────────────────────────────────────────────────
+| 商品名        | メーカー | 仕入先  | カテゴリ | 償還価格 | 数量 | 操作       |
+| ○○カテーテル  | ○○社    | ○○商事  | 消耗品   | ¥1,200  |  5  | [編集][削除]|
+| △△ガーゼ     | △△社    | △△商事  | 消耗品   | —       | 10  | [編集][削除]|
+────────────────────────────────────────────────────────
 ```
+📸 一覧表示（データあり）
+📸 一覧表示（データなし・空状態）
 
-**新規登録 / 編集フォーム：**
+#### 2. 新規登録ページ（/distributor-products/new）
+
 ```
-施設名
-[ テキスト入力欄                    ]
-
-[保存]  [キャンセル]
+販売店商品を登録
+──────────────────────────────
+製品（Products）  [ セレクト ▼ ]
+メーカー          [ テキスト   ]
+仕入先            [ テキスト   ]
+商品名            [ テキスト   ]
+カテゴリ          [ テキスト   ]
+償還価格（円）    [ 数値・任意  ]
+数量              [ 数値       ]
+                  [ 登録する   ]
+──────────────────────────────
 ```
+📸 フォーム表示（空）
+📸 バリデーションエラー表示
 
-**操作の流れ：**
-1. 一覧ページの「+ 新規施設を登録」ボタンを押す
-2. 施設名を入力して「保存」
-3. 一覧に戻り、登録した施設が表示される 📸
-4. 「編集」ボタンで名前を変更できる 📸
-5. 「削除」ボタンで即時削除できる
+#### 3. 編集ページ（/distributor-products/[id]/edit）
+
+- 登録と同じフォームに既存値が入力済みで表示される
+📸 フォーム表示（既存値入り）
 
 ---
 
-#### B. 施設別価格管理
+### 受け入れ条件（チェックリスト）
 
-```
-施設別価格管理
-────────────────────────────────────────────────────────────────────
-  [+ 新規価格を登録]
+**一覧**
+- [ ] `/distributor-products` にアクセスすると商品一覧が表示される
+- [ ] 商品がない場合は「商品が登録されていません」を表示する
+- [ ] 「新規登録」ボタンで `/distributor-products/new` に遷移する
+- [ ] 「編集」ボタンで `/distributor-products/[id]/edit` に遷移する
+- [ ] 「削除」ボタンで確認ダイアログを表示し、OKで削除・一覧を再取得する
+- [ ] API取得失敗時にエラーメッセージを表示する
 
-  施設          商品名         仕切値（円）  納品価格（円）  粗利（円）  操作
-  ──────────────────────────────────────────────────────────────────
-  東京大学病院  ○○カテーテル      8,000        10,000      2,000    [編集] [削除]
-  慶應大学病院  △△ステント       15,000        18,000      3,000    [編集] [削除]
-  ──────────────────────────────────────────────────────────────────
-                                                                         📸
-```
+**新規登録**
+- [ ] 全必須項目（製品・メーカー・仕入先・商品名・カテゴリ・数量）を入力して登録できる
+- [ ] 償還価格は空欄のまま登録できる（任意項目）
+- [ ] 登録成功後に一覧ページへ遷移する
+- [ ] APIエラー時にフォーム内にエラーメッセージを表示する
 
-> 粗利 = 納品価格 − 仕切値（表示のみ、保存しない）
-
-**新規登録 / 編集フォーム：**
-```
-施設
-[ セレクトボックス（施設一覧から選択）  ▼ ]
-
-代理店商品
-[ セレクトボックス（商品名一覧から選択）▼ ]
-
-仕切値（円）
-[ 数値入力 ]
-
-納品価格（円）
-[ 数値入力 ]
-
-[保存]  [キャンセル]
-```
-
-**操作の流れ：**
-1. 一覧ページの「+ 新規価格を登録」ボタンを押す
-2. 施設・代理店商品をセレクトボックスで選択
-3. 仕切値・納品価格を入力して「保存」
-4. 一覧に戻り、登録した価格が表示される 📸
-5. 「編集」ボタンで価格を変更できる 📸
-6. 同じ施設・商品の組み合わせを重複登録しようとするとエラーメッセージが表示される
-
----
-
-### 受け入れ条件チェックリスト
-
-#### 施設管理
-
-- [ ] 施設一覧が表示される（`/facilities`）
-- [ ] 施設の新規登録ができる（`/facilities/new`）
-- [ ] 施設名が重複するとエラーメッセージが表示される
-- [ ] 施設の編集ができる（`/facilities/[id]/edit`）
-- [ ] 施設の削除ができる（即時削除）
-- [ ] ナビゲーションに「施設管理」リンクが追加される
-
-#### 施設別価格管理
-
-- [ ] 施設別価格一覧が表示される（`/hospital-prices`）
-- [ ] 一覧に施設名・商品名・仕切値・納品価格・粗利が表示される
-- [ ] 新規価格を登録できる（`/hospital-prices/new`）
-- [ ] セレクトボックスで施設・代理店商品を選択できる
-- [ ] 施設が0件のとき「施設が登録されていません。先に施設を登録してください」＋施設管理へのリンクを表示する
-- [ ] 仕切値・納品価格は数値のみ入力可能
-- [ ] 同一施設 × 同一商品の重複登録でエラーメッセージが表示される
-- [ ] 価格の編集ができる（`/hospital-prices/[id]/edit`）
-- [ ] 価格の削除ができる
-- [ ] ナビゲーションに「施設別価格」リンクが追加される
-
----
+**編集**
+- [ ] 既存の値がフォームに初期表示される
+- [ ] 変更して保存すると一覧ページへ遷移する
+- [ ] APIエラー時にフォーム内にエラーメッセージを表示する
 
 ---
 
 ## Part 2 — 実装計画（AI用・レビュー不要）
 
-### スタック・方針
+### 型・API方針
 
-- Next.js App Router（既存パターンに合わせる）
-- Tailwind CSS v4（shadcn 未使用）
-- API: 既存エンドポイントをそのまま使用（追加なし）
-- 非制御コンポーネント（FormData API）・`useState` + `useEffect` でデータ取得
-- 粗利は `delivery_price - purchase_price` をクライアント側で計算（DB保存なし）
+- 型: `src/types/distributorProduct.ts`（既存）— 変更なし
+- API: `src/app/api/distributor-products/` 以下（既存）— 変更なし
+- **レスポンスキー注意**: 一覧は `{ items }`, 単件は `{ item }`（products の `{ products }` / `{ product }` と異なる）
+- フォームの製品セレクトは `GET /api/products` → `{ products: Product[] }` から取得
 
----
+### 実装セット一覧
 
-### 実装セット一覧（依存順）
-
-#### Wave 1（同時実装可 — 互いに別ファイル）
-
-**セット A: 施設管理 UI**
-
-触るファイル：
-- `src/components/facilities/FacilityList.tsx` (新規)
-- `src/components/facilities/FacilityForm.tsx` (新規)
-- `src/app/facilities/page.tsx` (新規)
-- `src/app/facilities/new/page.tsx` (新規)
-- `src/app/facilities/[id]/edit/page.tsx` (新規)
-
-テスト観点：
-- `FacilityList`: props で渡した施設が表示される / onEdit・onDelete が呼ばれる
-- `FacilityForm`: 送信時に正しい値が onSubmit に渡る / 必須バリデーション
-
-実装詳細：
-- `ProductList` / `ProductForm` のパターンをそのまま踏襲
-- 一覧ページ: `useState<Facility[]>` + `useEffect(fetch('/api/facilities'))` + `useReducer` でリフレッシュ
-- 削除: 即時削除（confirm なし）
-- エラー表示: API が 409 を返したとき `<p className="text-red-600">` で表示
-
-**セット B: 施設別価格管理 UI**
-
-触るファイル：
-- `src/components/hospitalPrices/HospitalPriceList.tsx` (新規)
-- `src/components/hospitalPrices/HospitalPriceForm.tsx` (新規)
-- `src/app/hospital-prices/page.tsx` (新規)
-- `src/app/hospital-prices/new/page.tsx` (新規)
-- `src/app/hospital-prices/[id]/edit/page.tsx` (新規)
-
-テスト観点：
-- `HospitalPriceList`: 粗利が正しく計算されて表示される / 施設名・商品名が表示される
-- `HospitalPriceForm`: セレクトボックスの初期値が正しい / 送信時に数値型で渡る
-- 重複エラー（409）が表示される
-
-実装詳細：
-- フォームページで `useEffect` を2つ使用: `GET /api/facilities` と `GET /api/distributor-products` を並列フェッチしてセレクトボックスを構築
-- 粗利: `deliveryPrice - purchasePrice` を一覧コンポーネント内で計算・表示
-- 数値入力: `type="number"` + `step="1"` / 送信時 `Number(formData.get(...))` で変換
-- エラー表示: 409（重複）と 404（FK違反）で別メッセージを出し分ける
-
----
-
-#### Wave 2（統合ゲート — 共有ファイルを触る）
-
-**セット C: ナビゲーション更新**
-
-触るファイル：
-- `src/app/layout.tsx` (既存・変更)
-
-実装詳細：
-- ヘッダーに `/facilities`（施設管理）と `/hospital-prices`（施設別価格）リンクを追加
-- 既存の `/products`（製品マスタ）リンクの隣に並べる
-- スタイル: 既存リンクと同じ `text-sm text-slate-300 hover:text-white`
-
----
+| セット | 内容 | 触るファイル |
+|--------|------|------------|
+| A | DistributorProductListコンポーネント | `src/components/distributor-products/DistributorProductList.tsx` |
+| B | DistributorProductFormコンポーネント | `src/components/distributor-products/DistributorProductForm.tsx` |
+| C | 一覧ページ | `src/app/distributor-products/page.tsx` |
+| D | 新規登録ページ | `src/app/distributor-products/new/page.tsx` |
+| E | 編集ページ | `src/app/distributor-products/[id]/edit/page.tsx` |
+| F | ナビゲーション結線（統合ゲート） | `src/app/layout.tsx` |
 
 ### 並列グループ宣言
 
 ```
-Wave 1（同時起動）
-  ├── セット A: 施設管理 UI
-  └── セット B: 施設別価格管理 UI
+Wave 1（同時実装可 — ファイル独立）
+  ├── セット A: DistributorProductList.tsx
+  └── セット B: DistributorProductForm.tsx
 
-    ↓ 両方完了後
+      ↓ Wave 1 完了後
 
-Wave 2（統合ゲート・逐次）
-  └── セット C: ナビゲーション更新 + 全テスト + lint
+Wave 2（同時実装可 — ファイル独立）
+  ├── セット C: distributor-products/page.tsx        ← セット A に依存
+  ├── セット D: distributor-products/new/page.tsx    ← セット B に依存
+  └── セット E: distributor-products/[id]/edit/page.tsx ← セット B に依存
+
+      ↓ Wave 2 完了後
+
+統合ゲート（逐次・親が担当）
+  └── セット F: layout.tsx にナビゲーションリンク追加
 ```
 
-Wave 1 のセット A と B は共有ファイルを触らないため、同一 worktree での並列実装が可能。
-Wave 2 は `layout.tsx` という共有ファイルを触るため、親（または 1 体の implementer）が単独で実施する。
+### 各セットのテスト観点
 
----
+**セット A（DistributorProductList）**
+- データあり: 商品名・メーカー・仕入先・カテゴリ・償還価格・数量が正しく表示される
+- 償還価格null: "—"（ダッシュ）表示
+- 空配列: 空状態メッセージ表示
+- 編集ボタンクリック: onEdit(id) が呼ばれる
+- 削除ボタンクリック: onDelete(id) が呼ばれる
 
-### ファイル依存マップ
+**セット B（DistributorProductForm）**
+- products が select に表示される
+- defaultValues が各フィールドに反映される
+- isSubmitting 中: submitボタンがdisabled
+- submitError あり: エラーメッセージ表示
+- reimbursementPrice 空欄: null として渡される（0ではなくnull）
+- quantity: min=1、integer のみ
 
-```
-既存（変更なし）
-  src/lib/facilities/repository.ts
-  src/lib/hospital-prices/repository.ts
-  src/lib/distributor-products/repository.ts
-  src/types/facility.ts
-  src/types/hospitalPrice.ts
-  src/types/distributorProduct.ts
-  src/app/api/facilities/*
-  src/app/api/hospital-prices/*
-  src/app/api/distributor-products/*
+**セット C（一覧ページ）**
+- fetch成功: items がリストに渡される
+- fetch失敗: エラーバナー表示
+- 削除成功: 一覧再取得
+- 削除失敗: エラーバナー表示（削除前後にリフレッシュしない）
 
-Wave 1 新規作成（セット A）
-  src/components/facilities/FacilityList.tsx
-  src/components/facilities/FacilityForm.tsx
-  src/app/facilities/page.tsx
-  src/app/facilities/new/page.tsx
-  src/app/facilities/[id]/edit/page.tsx
+**セット D（新規登録ページ）**
+- POST成功: `/distributor-products` にリダイレクト
+- POST失敗: フォーム内エラーメッセージ表示
 
-Wave 1 新規作成（セット B）
-  src/components/hospitalPrices/HospitalPriceList.tsx
-  src/components/hospitalPrices/HospitalPriceForm.tsx
-  src/app/hospital-prices/page.tsx
-  src/app/hospital-prices/new/page.tsx
-  src/app/hospital-prices/[id]/edit/page.tsx
+**セット E（編集ページ）**
+- GET成功: フォームに既存値が入る
+- GET失敗: エラーメッセージ表示（フォーム非表示）
+- PUT成功: `/distributor-products` にリダイレクト
+- PUT失敗: フォーム内エラーメッセージ表示
 
-Wave 2 更新（統合ゲート）
-  src/app/layout.tsx
-```
+### フォームフィールド詳細（セット B 実装参考）
+
+| フィールド | 入力型 | 必須 | 備考 |
+|-----------|--------|------|------|
+| productId | select | ○ | GET /api/products から取得。`${product.jan} / ${product.ref}` で表示 |
+| maker | text | ○ | |
+| supplier | text | ○ | |
+| name | text | ○ | |
+| category | text | ○ | |
+| reimbursementPrice | number | — | 空欄=null。`Number(v) || null` で変換 |
+| quantity | number | ○ | min=1、step=1 |
+
+### エラーハンドリング方針
+
+| 状況 | 表示 |
+|------|------|
+| 一覧fetch失敗 | エラーバナー（FacilitiesPage パターン） |
+| フォーム送信失敗 | フォーム内エラーメッセージ（FacilityForm パターン） |
+| 削除失敗 | エラーバナー（ProductsPage パターン） |
+| 404 | "商品が見つかりません" |
+| その他API | APIレスポンスの `error` フィールドをそのまま表示 |
+
+### スタイル方針
+
+- 既存の企業デザイン（#072C2C / #FF5F03 / Oswald / Ubuntu Mono）に合わせる
+- ProductList・FacilitiesPage のスタイルパターンを踏襲

@@ -6,7 +6,7 @@ export type DistributorProduct = {
   name: string
   reimbursementPrice: number | null
   quantity: number
-  category: string
+  categoryId: string
   createdAt: string
   updatedAt: string
 }
@@ -18,5 +18,5 @@ export type DistributorProductInput = {
   name: string
   reimbursementPrice: number | null
   quantity: number
-  category: string
+  categoryId: string
 }
