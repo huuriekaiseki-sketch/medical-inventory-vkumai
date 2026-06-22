@@ -89,4 +89,12 @@ describe('EditDistributorProductPage', () => {
     render(<EditDistributorProductPage params={params()} />)
     expect(await screen.findByText('販売店商品の取得に失敗しました')).toBeInTheDocument()
   })
+
+  it('「価格履歴を見る」リンクが正しい href を持つ', async () => {
+    global.fetch = setupFetch() as unknown as typeof fetch
+    render(<EditDistributorProductPage params={params()} />)
+    await screen.findByDisplayValue('商品A')
+    const link = screen.getByRole('link', { name: /価格履歴を見る/ })
+    expect(link).toHaveAttribute('href', '/distributor-products/dp1/price-history')
+  })
 })
