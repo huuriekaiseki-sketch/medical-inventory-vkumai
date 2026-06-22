@@ -27,6 +27,10 @@ CREATE POLICY "price_histories_no_insert" ON price_histories
 
 GRANT SELECT ON price_histories TO anon, authenticated, service_role;
 
+-- NOTE: service_role は Supabase の設計上 RLS をバイパスする。
+-- 通常の API クライアント（anon/authenticated）からの直接 INSERT は上記ポリシーで拒否される。
+-- service_role 経由の管理操作（マイグレーション・バックフィル等）は許容する設計とする。
+
 -- ③ distributor_products トリガー: reimbursement_price 変更検知
 CREATE OR REPLACE FUNCTION trg_distributor_products_price_history()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -80,7 +84,7 @@ RETURNS TABLE (
   id                     UUID,
   entity_type            TEXT,
   entity_id              UUID,
-  distributor_product_id UUID,
+  dist_product_id        UUID,
   field_name             TEXT,
   old_value              NUMERIC,
   new_value              NUMERIC,
@@ -88,7 +92,7 @@ RETURNS TABLE (
   facility_name          TEXT
 ) LANGUAGE sql SECURITY DEFINER AS $$
   SELECT
-    ph.id, ph.entity_type, ph.entity_id, ph.distributor_product_id,
+    ph.id, ph.entity_type, ph.entity_id, ph.distributor_product_id AS dist_product_id,
     ph.field_name, ph.old_value, ph.new_value, ph.changed_at,
     NULL::TEXT AS facility_name
   FROM price_histories ph
@@ -98,7 +102,7 @@ RETURNS TABLE (
   UNION ALL
 
   SELECT
-    ph.id, ph.entity_type, ph.entity_id, ph.distributor_product_id,
+    ph.id, ph.entity_type, ph.entity_id, ph.distributor_product_id AS dist_product_id,
     ph.field_name, ph.old_value, ph.new_value, ph.changed_at,
     f.name AS facility_name
   FROM price_histories ph
