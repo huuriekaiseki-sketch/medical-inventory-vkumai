@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
+import type { DistributorProduct } from '@/types/distributorProduct'
 
 vi.mock('@/lib/supabase/server', () => ({ supabase: {} }))
 vi.mock('@/lib/price-histories/repository')
@@ -21,7 +22,7 @@ const mockHistory = {
   facilityName: null,
 }
 
-const mockProduct = {
+const mockProduct: DistributorProduct = {
   id: 'dp-1',
   productId: 'prod-1',
   maker: 'メーカーA',
@@ -83,6 +84,15 @@ describe('GET /api/distributor-products/[id]/price-history', () => {
   it('リポジトリがエラーを投げた場合 500 を返す', async () => {
     vi.mocked(getDistributorProduct).mockResolvedValue(mockProduct)
     vi.mocked(getPriceHistory).mockRejectedValue(new Error('DB error'))
+
+    const req = makeRequest('/api/distributor-products/dp-1/price-history')
+    const res = await GET(req, makeParams('dp-1'))
+
+    expect(res.status).toBe(500)
+  })
+
+  it('getDistributorProductがエラーを投げた場合 500 を返す', async () => {
+    vi.mocked(getDistributorProduct).mockRejectedValue(new Error('DB connection error'))
 
     const req = makeRequest('/api/distributor-products/dp-1/price-history')
     const res = await GET(req, makeParams('dp-1'))
