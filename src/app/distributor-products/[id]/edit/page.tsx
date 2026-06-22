@@ -73,9 +73,14 @@ export default function EditDistributorProductPage({ params }: { params: Promise
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <Link href="/distributor-products" className="mb-4 inline-block text-sm text-blue-600 hover:text-blue-800">
-        &larr; 一覧に戻る
-      </Link>
+      <div className="mb-4 flex items-center justify-between">
+        <Link href="/distributor-products" className="text-sm text-blue-600 hover:text-blue-800">
+          &larr; 一覧に戻る
+        </Link>
+        <Link href={`/distributor-products/${id}/price-history`} className="text-sm text-blue-600 hover:text-blue-800">
+          価格履歴を見る →
+        </Link>
+      </div>
       <h1 className="mb-6 text-2xl font-bold text-gray-900">販売店商品編集</h1>
       <div className="rounded-lg bg-white p-6 shadow">
         <DistributorProductForm
