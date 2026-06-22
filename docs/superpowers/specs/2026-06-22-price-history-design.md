@@ -35,7 +35,7 @@ CREATE INDEX idx_price_histories_entity ON price_histories (entity_type, entity_
 
 ```sql
 CREATE OR REPLACE FUNCTION trg_distributor_products_price_history()
-RETURNS trigger LANGUAGE plpgsql AS $$
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   IF NEW.reimbursement_price IS DISTINCT FROM OLD.reimbursement_price THEN
     INSERT INTO price_histories (entity_type, entity_id, field_name, old_value, new_value)
@@ -54,7 +54,7 @@ FOR EACH ROW EXECUTE FUNCTION trg_distributor_products_price_history();
 
 ```sql
 CREATE OR REPLACE FUNCTION trg_hospital_prices_price_history()
-RETURNS trigger LANGUAGE plpgsql AS $$
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   IF NEW.purchase_price IS DISTINCT FROM OLD.purchase_price THEN
     INSERT INTO price_histories (entity_type, entity_id, field_name, old_value, new_value)
@@ -120,15 +120,18 @@ WHERE ph.entity_type = 'distributor_product' AND ph.entity_id = [id]
 UNION ALL
 
 -- ② 関連 hospital_prices の履歴（施設名付き）
+-- hospital_prices や facilities が削除済みでも履歴行を消さないため LEFT JOIN を使う
 SELECT ph.*, f.name AS facility_name
 FROM price_histories ph
-JOIN hospital_prices hp ON hp.id = ph.entity_id
-JOIN facilities f ON f.id = hp.facility_id
+LEFT JOIN hospital_prices hp ON hp.id = ph.entity_id
+LEFT JOIN facilities f ON f.id = hp.facility_id
 WHERE ph.entity_type = 'hospital_price'
   AND hp.distributor_product_id = [id]
 
 ORDER BY changed_at DESC
 ```
+
+facility_name が NULL の場合（施設削除済み）はAPIレスポンスで `facilityName: null` を返し、UIでは「施設情報なし」と表示する。
 
 ---
 
@@ -147,8 +150,8 @@ export interface PriceHistory {
   oldValue: number | null
   newValue: number | null
   changedAt: string
-  // 施設名（hospital_price の場合のみ）
-  facilityName?: string
+  // 施設名（hospital_price の場合のみ。施設が削除済みの場合は null）
+  facilityName?: string | null
 }
 ```
 
@@ -217,5 +220,9 @@ supabase/
 
 - 履歴は削除しない（append-only）
 - `hospital_prices` が削除された場合、対応する履歴の `entity_id` は孤立するが、問題なし（履歴として保持）
-- テーブル権限: `price_histories` に対して `anon`, `authenticated`, `service_role` に SELECT/INSERT 権限を付与
-- INSERT は DBトリガー経由のみ（アプリ層から直接 INSERT しない）
+- テーブル権限:
+  - `anon`, `authenticated` には **SELECT のみ**付与
+  - INSERT は `service_role`（DBトリガー実行コンテキスト）のみ許可
+  - トリガー関数は `SECURITY DEFINER` で定義し、postgres ロールの権限で price_histories に INSERT する
+  - RLS ポリシーで `anon`/`authenticated` からの直接 INSERT を明示的に DENY する
+- INSERT は DBトリガー経由のみ。クライアントからの直接 INSERT は DB 権限レベルで禁止する
