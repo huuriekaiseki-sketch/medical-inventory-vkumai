@@ -58,4 +58,9 @@ describe('PriceHistoryList', () => {
     render(<PriceHistoryList items={items} />)
     expect(screen.getByText('施設価格（施設情報なし）')).toBeInTheDocument()
   })
+
+  it('distributor_productの場合フィールド列は「—」を表示する', () => {
+    render(<PriceHistoryList items={[mockItems[0]]} />)
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+  })
 })

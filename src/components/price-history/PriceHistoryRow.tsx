@@ -42,7 +42,7 @@ export function PriceHistoryRow({ item, isOpen, onToggle }: Props) {
           {entityLabel(item)}
         </td>
         <td className="px-4 py-3 text-sm text-gray-500">
-          {FIELD_LABEL[item.fieldName]}
+          {item.entityType === 'hospital_price' ? FIELD_LABEL[item.fieldName] : '—'}
         </td>
         <td className="px-4 py-3 text-sm text-gray-900 text-right">
           {formatPrice(item.oldValue)}
