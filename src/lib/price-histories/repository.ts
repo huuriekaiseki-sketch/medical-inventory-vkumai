@@ -26,5 +26,5 @@ export async function getPriceHistory(distributorProductId: string): Promise<Pri
     { p_distributor_product_id: distributorProductId }
   )
   if (error) throw new Error(error.message)
-  return (data as Record<string, unknown>[]).map(mapPriceHistory)
+  return (data as Record<string, unknown>[] | null ?? []).map(mapPriceHistory)
 }
