@@ -13,6 +13,21 @@ Phase 1 調査(並列) → Phase 2 仕様書(並列グループ宣言) → [停�
 - E2E・スクショが必要なとき（随時・フロー外）→ skill「e2e-runner」を使う
 - Phase 5（検証）のあと → ユーザーに /structured-review を促して停止する
 
+## Phase 2 仕様書の深層検証（条件付き）
+以下のいずれかに該当する場合、feature-spec で SPEC.md を生成した**後**に
+workflow「spec-deep-validate」を実行して仕様書を検証してから停止①に入ること。
+
+- 設計が複雑（複数テーブル・複数レイヤーにまたがる）
+- DBスキーマ変更・マイグレーションを含む
+- リスクが高い（認証・認可・課金・外部連携など）
+
+実行方法（args.specContent に SPEC.md の内容を渡す）:
+```
+Workflow({ name: 'spec-deep-validate', args: { specContent: '...', specPath: 'SPEC.md' } })
+```
+
+ワークフローの出力（synthesis）を仕様書修正に反映してから停止①でレビューを求めること。
+
 ## 絶対ルール
 - 確認を求めるのは「仕様レビュー（停止①）」と「構造化レビュー（停止②）」の2箇所のみ。
 - それ以外は止まらず自律的に進める。
