@@ -1,4 +1,4 @@
-# SPEC: 販売店商品（Distributor Products）管理UI
+# SPEC: hospital_prices への粗利・仕入れ掛け率・納入掛け率の追加
 
 ---
 
@@ -6,180 +6,137 @@
 
 ### 何ができるようになるか
 
-販売店から仕入れる商品（販売店商品）を画面から一覧表示・登録・編集・削除できるようになります。
+病院価格一覧画面に、以下の3つの指標が表示されるようになります。
 
-各商品には以下の情報が登録されます：
-- どの製品か（製品コードで紐付け）
-- メーカー名
-- 仕入先（販売店名）
-- 商品名
-- カテゴリ
-- 償還価格（任意）
-- 数量
+| 指標 | 定義 |
+|------|------|
+| **粗利** | 納入価格 − 仕切値（円） |
+| **仕入れ掛け率** | 仕切値 ÷ 償還価格（%表示） |
+| **納入掛け率** | 納入価格 ÷ 償還価格（%表示） |
+
+> **注意**: 償還価格（reimbursement_price）が未設定の場合、掛け率は「—」表示とします。
 
 ---
 
-### 画面イメージ / 操作の流れ
+### 画面イメージ
 
-#### 1. 一覧ページ（/distributor-products）
+**病院価格一覧（HospitalPriceList）**
 
-```
-販売店商品一覧
-────────────────────────────────────────────────────────
-[ + 新規登録 ]
-────────────────────────────────────────────────────────
-| 商品名        | メーカー | 仕入先  | カテゴリ | 償還価格 | 数量 | 操作       |
-| ○○カテーテル  | ○○社    | ○○商事  | 消耗品   | ¥1,200  |  5  | [編集][削除]|
-| △△ガーゼ     | △△社    | △△商事  | 消耗品   | —       | 10  | [編集][削除]|
-────────────────────────────────────────────────────────
-```
-📸 一覧表示（データあり）
-📸 一覧表示（データなし・空状態）
+| 施設名 | 商品名 | 仕切値 | 納入価格 | **粗利** | **仕入れ掛け率** | **納入掛け率** | 操作 |
+|--------|--------|--------|---------|---------|--------------|--------------|------|
+| 〇〇病院 | 製品A | ¥1,000 | ¥1,200 | **¥200** | **80.0%** | **96.0%** | 編集 削除 |
+| △△クリニック | 製品B | ¥500 | ¥600 | **¥100** | — | — | 編集 削除 |
 
-#### 2. 新規登録ページ（/distributor-products/new）
+📸 一覧画面に粗利・仕入れ掛け率・納入掛け率の列が表示されていること
 
-```
-販売店商品を登録
-──────────────────────────────
-製品（Products）  [ セレクト ▼ ]
-メーカー          [ テキスト   ]
-仕入先            [ テキスト   ]
-商品名            [ テキスト   ]
-カテゴリ          [ テキスト   ]
-償還価格（円）    [ 数値・任意  ]
-数量              [ 数値       ]
-                  [ 登録する   ]
-──────────────────────────────
-```
-📸 フォーム表示（空）
-📸 バリデーションエラー表示
+---
 
-#### 3. 編集ページ（/distributor-products/[id]/edit）
+### 操作の流れ
 
-- 登録と同じフォームに既存値が入力済みで表示される
-📸 フォーム表示（既存値入り）
+1. 病院価格一覧ページ（`/hospital-prices`）にアクセスする
+2. テーブルに「粗利」「仕入れ掛け率」「納入掛け率」列が表示される
+3. 粗利 = 納入価格 − 仕切値（常に表示）
+4. 掛け率 = 償還価格が設定されている場合のみ %表示、未設定は「—」
 
 ---
 
 ### 受け入れ条件（チェックリスト）
 
-**一覧**
-- [ ] `/distributor-products` にアクセスすると商品一覧が表示される
-- [ ] 商品がない場合は「商品が登録されていません」を表示する
-- [ ] 「新規登録」ボタンで `/distributor-products/new` に遷移する
-- [ ] 「編集」ボタンで `/distributor-products/[id]/edit` に遷移する
-- [ ] 「削除」ボタンで確認ダイアログを表示し、OKで削除・一覧を再取得する
-- [ ] API取得失敗時にエラーメッセージを表示する
-
-**新規登録**
-- [ ] 全必須項目（製品・メーカー・仕入先・商品名・カテゴリ・数量）を入力して登録できる
-- [ ] 償還価格は空欄のまま登録できる（任意項目）
-- [ ] 登録成功後に一覧ページへ遷移する
-- [ ] APIエラー時にフォーム内にエラーメッセージを表示する
-
-**編集**
-- [ ] 既存の値がフォームに初期表示される
-- [ ] 変更して保存すると一覧ページへ遷移する
-- [ ] APIエラー時にフォーム内にエラーメッセージを表示する
+- [ ] 病院価格一覧に「粗利」列が追加され、`deliveryPrice - purchasePrice` の値が円表示される
+- [ ] 病院価格一覧に「仕入れ掛け率」列が追加され、`purchasePrice / reimbursementPrice × 100` が % 表示される
+- [ ] 病院価格一覧に「納入掛け率」列が追加され、`deliveryPrice / reimbursementPrice × 100` が % 表示される
+- [ ] reimbursementPrice が null または 0 の場合、掛け率は「—」表示
+- [ ] 掛け率は小数点1桁（例: 80.0%）
+- [ ] 既存テスト（77件）がすべて通過する
+- [ ] 新規テストが追加される（掛け率の計算ロジック・null/0ガード）
 
 ---
 
 ## Part 2 — 実装計画（AI用・レビュー不要）
 
-### 型・API方針
+### 実装方針
 
-- 型: `src/types/distributorProduct.ts`（既存）— 変更なし
-- API: `src/app/api/distributor-products/` 以下（既存）— 変更なし
-- **レスポンスキー注意**: 一覧は `{ items }`, 単件は `{ item }`（products の `{ products }` / `{ product }` と異なる）
-- フォームの製品セレクトは `GET /api/products` → `{ products: Product[] }` から取得
+**アプリケーション層での計算**（DBスキーマ変更なし）を採用する。
 
-### 実装セット一覧
+理由:
+- 粗利・仕入れ掛け率・納入掛け率はすべて既存フィールドから導出可能
+- reimbursement_price は JOIN で取得済みの値（`listHospitalPrices` に追加）
+- トリガーや migration を追加するより安全・シンプル
 
-| セット | 内容 | 触るファイル |
+---
+
+### 実装セット一覧（依存順）
+
+#### Wave 1（並列実装可）
+
+| セット | 概要 | 触るファイル |
 |--------|------|------------|
-| A | DistributorProductListコンポーネント | `src/components/distributor-products/DistributorProductList.tsx` |
-| B | DistributorProductFormコンポーネント | `src/components/distributor-products/DistributorProductForm.tsx` |
-| C | 一覧ページ | `src/app/distributor-products/page.tsx` |
-| D | 新規登録ページ | `src/app/distributor-products/new/page.tsx` |
-| E | 編集ページ | `src/app/distributor-products/[id]/edit/page.tsx` |
-| F | ナビゲーション結線（統合ゲート） | `src/app/layout.tsx` |
+| **Set A** | repository に reimbursementPrice を追加 | `src/lib/hospital-prices/repository.ts` |
+| **Set B** | HospitalPrice 型に reimbursementPrice フィールドを追加 | `src/types/hospitalPrice.ts` |
 
-### 並列グループ宣言
+#### Wave 2（Wave 1 完了後）
+
+| セット | 概要 | 触るファイル |
+|--------|------|------------|
+| **Set C** | HospitalPriceList に3列を追加 + 計算ロジック | `src/components/hospitalPrices/HospitalPriceList.tsx` + `src/components/hospitalPrices/HospitalPriceList.test.tsx` |
+
+#### 統合ゲート
+
+- `src/app/hospital-prices/page.tsx` の型整合確認（型が変わるので Props 確認）
+- 全テスト + lint 実行
+
+---
+
+### 各セットの詳細
+
+#### Set A: repository.ts
+
+- `listHospitalPrices()` の SELECT クエリに `distributor_products(reimbursement_price)` を JOIN して取得
+- 現在の Supabase クエリ: `supabase.from('hospital_prices').select(...)` を拡張
+- 戻り値のマッピングに `reimbursementPrice: row.distributor_products?.reimbursement_price ?? null` を追加
+- テスト観点:
+  - reimbursementPrice が正しく返る
+  - distributor_products が null の場合に null が返る
+
+#### Set B: hospitalPrice.ts
+
+- `HospitalPrice` 型に `reimbursementPrice: number | null` を追加
+
+#### Set C: HospitalPriceList.tsx
+
+- テーブルヘッダーに「粗利」「仕入れ掛け率」「納入掛け率」を追加
+- 計算ロジック（純粋関数として定義）:
+  - grossProfit = deliveryPrice - purchasePrice
+  - purchaseRate = reimbursementPrice > 0 ? (purchasePrice / reimbursementPrice * 100).toFixed(1) + '%' : '—'
+  - deliveryRate = reimbursementPrice > 0 ? (deliveryPrice / reimbursementPrice * 100).toFixed(1) + '%' : '—'
+- テスト観点:
+  - 粗利が正しく計算・表示される
+  - reimbursementPrice が有効な場合に掛け率が表示される
+  - reimbursementPrice が null の場合に「—」が表示される
+  - reimbursementPrice が 0 の場合に「—」が表示される（ゼロ除算ガード）
+
+---
+
+### 型・データアクセス層の方針
+
+- DBスキーマ変更なし（migration 不要）
+- Supabase JOIN: `select('*, distributor_products(reimbursement_price)')` を使用
+- 計算はすべてフロントエンド（TypeScript）で実施
+- `formatPrice` 関数（既存）を粗利表示に流用
+
+---
+
+### 並列グループ宣言まとめ
 
 ```
-Wave 1（同時実装可 — ファイル独立）
-  ├── セット A: DistributorProductList.tsx
-  └── セット B: DistributorProductForm.tsx
+Wave 1（同時実装可）:
+  Set A → src/lib/hospital-prices/repository.ts のみ
+  Set B → src/types/hospitalPrice.ts のみ
 
-      ↓ Wave 1 完了後
+Wave 2（Wave 1 後）:
+  Set C → src/components/hospitalPrices/HospitalPriceList.tsx + .test.tsx
 
-Wave 2（同時実装可 — ファイル独立）
-  ├── セット C: distributor-products/page.tsx        ← セット A に依存
-  ├── セット D: distributor-products/new/page.tsx    ← セット B に依存
-  └── セット E: distributor-products/[id]/edit/page.tsx ← セット B に依存
-
-      ↓ Wave 2 完了後
-
-統合ゲート（逐次・親が担当）
-  └── セット F: layout.tsx にナビゲーションリンク追加
+統合ゲート（逐次）:
+  親が src/app/hospital-prices/page.tsx の型確認
+  npm test + npm run lint
 ```
-
-### 各セットのテスト観点
-
-**セット A（DistributorProductList）**
-- データあり: 商品名・メーカー・仕入先・カテゴリ・償還価格・数量が正しく表示される
-- 償還価格null: "—"（ダッシュ）表示
-- 空配列: 空状態メッセージ表示
-- 編集ボタンクリック: onEdit(id) が呼ばれる
-- 削除ボタンクリック: onDelete(id) が呼ばれる
-
-**セット B（DistributorProductForm）**
-- products が select に表示される
-- defaultValues が各フィールドに反映される
-- isSubmitting 中: submitボタンがdisabled
-- submitError あり: エラーメッセージ表示
-- reimbursementPrice 空欄: null として渡される（0ではなくnull）
-- quantity: min=1、integer のみ
-
-**セット C（一覧ページ）**
-- fetch成功: items がリストに渡される
-- fetch失敗: エラーバナー表示
-- 削除成功: 一覧再取得
-- 削除失敗: エラーバナー表示（削除前後にリフレッシュしない）
-
-**セット D（新規登録ページ）**
-- POST成功: `/distributor-products` にリダイレクト
-- POST失敗: フォーム内エラーメッセージ表示
-
-**セット E（編集ページ）**
-- GET成功: フォームに既存値が入る
-- GET失敗: エラーメッセージ表示（フォーム非表示）
-- PUT成功: `/distributor-products` にリダイレクト
-- PUT失敗: フォーム内エラーメッセージ表示
-
-### フォームフィールド詳細（セット B 実装参考）
-
-| フィールド | 入力型 | 必須 | 備考 |
-|-----------|--------|------|------|
-| productId | select | ○ | GET /api/products から取得。`${product.jan} / ${product.ref}` で表示 |
-| maker | text | ○ | |
-| supplier | text | ○ | |
-| name | text | ○ | |
-| category | text | ○ | |
-| reimbursementPrice | number | — | 空欄=null。`Number(v) || null` で変換 |
-| quantity | number | ○ | min=1、step=1 |
-
-### エラーハンドリング方針
-
-| 状況 | 表示 |
-|------|------|
-| 一覧fetch失敗 | エラーバナー（FacilitiesPage パターン） |
-| フォーム送信失敗 | フォーム内エラーメッセージ（FacilityForm パターン） |
-| 削除失敗 | エラーバナー（ProductsPage パターン） |
-| 404 | "商品が見つかりません" |
-| その他API | APIレスポンスの `error` フィールドをそのまま表示 |
-
-### スタイル方針
-
-- 既存の企業デザイン（#072C2C / #FF5F03 / Oswald / Ubuntu Mono）に合わせる
-- ProductList・FacilitiesPage のスタイルパターンを踏襲
