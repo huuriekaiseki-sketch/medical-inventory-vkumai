@@ -63,7 +63,7 @@ describe('HospitalPriceList', () => {
   it('掛け率が null のとき「—」が表示される', () => {
     render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} />)
     const dashes = screen.getAllByText('—')
-    expect(dashes.length).toBeGreaterThanOrEqual(2)
+    expect(dashes).toHaveLength(2)
   })
 
   it('空のとき「価格情報が登録されていません」が表示される', () => {
