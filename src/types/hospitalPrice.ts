@@ -4,6 +4,9 @@ export type HospitalPrice = {
   facilityId: string
   purchasePrice: number
   deliveryPrice: number
+  grossProfit: number
+  purchaseRate: number | null
+  deliveryRate: number | null
   createdAt: string
   updatedAt: string
 }
