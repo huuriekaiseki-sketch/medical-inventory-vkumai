@@ -4,7 +4,7 @@ vi.mock('@/lib/supabase/server', () => ({ supabase: {} }))
 
 import { listHospitalPrices, getHospitalPrice } from '@/lib/hospital-prices/repository'
 
-describe('mapHospitalPrice', () => {
+describe('listHospitalPrices / getHospitalPrice', () => {
   const mockRow = {
     id: 'hp-123',
     distributor_product_id: 'dp-456',
@@ -12,8 +12,8 @@ describe('mapHospitalPrice', () => {
     purchase_price: '1000.50',
     delivery_price: '500.25',
     gross_profit: '2000.75',
-    purchase_rate: '10.5',
-    delivery_rate: '5.25',
+    purchase_rate: '0.8',
+    delivery_rate: '0.96',
     created_at: '2026-06-23T00:00:00Z',
     updated_at: '2026-06-23T00:00:00Z',
   }
@@ -44,8 +44,8 @@ describe('mapHospitalPrice', () => {
       purchasePrice: 1000.50,
       deliveryPrice: 500.25,
       grossProfit: 2000.75,
-      purchaseRate: 10.5,
-      deliveryRate: 5.25,
+      purchaseRate: 0.8,
+      deliveryRate: 0.96,
       createdAt: '2026-06-23T00:00:00Z',
       updatedAt: '2026-06-23T00:00:00Z',
     })
@@ -98,8 +98,8 @@ describe('mapHospitalPrice', () => {
       purchasePrice: 1000.50,
       deliveryPrice: 500.25,
       grossProfit: 2000.75,
-      purchaseRate: 10.5,
-      deliveryRate: 5.25,
+      purchaseRate: 0.8,
+      deliveryRate: 0.96,
       createdAt: '2026-06-23T00:00:00Z',
       updatedAt: '2026-06-23T00:00:00Z',
     })
