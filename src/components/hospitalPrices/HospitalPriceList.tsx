@@ -8,6 +8,11 @@ type HospitalPriceListProps = {
   onDelete: (id: string) => void
 }
 
+function formatRate(rate: number | null): string {
+  if (rate == null) return '—'
+  return `${(rate * 100).toFixed(1)}%`
+}
+
 export function HospitalPriceList({ prices, onEdit, onDelete }: HospitalPriceListProps) {
   if (prices.length === 0) {
     return (
@@ -27,6 +32,8 @@ export function HospitalPriceList({ prices, onEdit, onDelete }: HospitalPriceLis
             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">仕切値（円）</th>
             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">納品価格（円）</th>
             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">粗利（円）</th>
+            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">仕入れ掛け率</th>
+            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">納入掛け率</th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
           </tr>
         </thead>
@@ -37,7 +44,9 @@ export function HospitalPriceList({ prices, onEdit, onDelete }: HospitalPriceLis
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{price.productName}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{price.purchasePrice.toLocaleString()}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{price.deliveryPrice.toLocaleString()}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{(price.deliveryPrice - price.purchasePrice).toLocaleString()}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{price.grossProfit.toLocaleString()}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{formatRate(price.purchaseRate)}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">{formatRate(price.deliveryRate)}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
                 <button
                   onClick={() => onEdit(price.id)}
