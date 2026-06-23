@@ -48,10 +48,22 @@ describe('HospitalPriceList', () => {
     expect(screen.getByText('25,000')).toBeInTheDocument()
   })
 
-  it('粗利が正しく計算されて表示される（deliveryPrice - purchasePrice）', () => {
+  it('粗利がDBの値（grossProfit）で表示される', () => {
     render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} />)
     expect(screen.getByText('500')).toBeInTheDocument()
     expect(screen.getByText('5,000')).toBeInTheDocument()
+  })
+
+  it('掛け率が数値のとき % 表示される（小数点1桁）', () => {
+    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    expect(screen.getAllByText('80.0%')).toHaveLength(1)
+    expect(screen.getAllByText('96.0%')).toHaveLength(1)
+  })
+
+  it('掛け率が null のとき「—」が表示される', () => {
+    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    const dashes = screen.getAllByText('—')
+    expect(dashes.length).toBeGreaterThanOrEqual(2)
   })
 
   it('空のとき「価格情報が登録されていません」が表示される', () => {
