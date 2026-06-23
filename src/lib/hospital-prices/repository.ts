@@ -8,6 +8,9 @@ function mapHospitalPrice(row: Record<string, unknown>): HospitalPrice {
     facilityId: row.facility_id as string,
     purchasePrice: Number(row.purchase_price),
     deliveryPrice: Number(row.delivery_price),
+    grossProfit: Number(row.gross_profit),
+    purchaseRate: row.purchase_rate != null ? Number(row.purchase_rate) : null,
+    deliveryRate: row.delivery_rate != null ? Number(row.delivery_rate) : null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   }
