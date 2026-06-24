@@ -6,8 +6,8 @@ function mapItem(row: Record<string, unknown>): CaseOrderItem {
     id: row.id as string,
     caseOrderId: row.case_order_id as string,
     jan: row.jan as string,
-    lot: row.lot as string | undefined,
-    ubd: row.ubd as string | undefined,
+    lot: row.lot != null ? (row.lot as string) : undefined,
+    ubd: row.ubd != null ? (row.ubd as string) : undefined,
     quantity: row.quantity as number,
     createdAt: row.created_at as string,
   }
