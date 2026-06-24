@@ -5,7 +5,7 @@ import { ConsumableOrderModal } from '../ConsumableOrderModal'
 
 const mockConsumables = [
   { id: 'c-1', facilityId: 'f-1', name: 'ガーゼ', jan: '490000001', purpose: '止血', createdAt: '', updatedAt: '' },
-  { id: 'c-2', facilityId: 'f-1', name: 'シリンジ', jan: null, purpose: '注射', createdAt: '', updatedAt: '' },
+  { id: 'c-2', facilityId: 'f-1', name: 'シリンジ', jan: undefined, purpose: '注射', createdAt: '', updatedAt: '' },
 ]
 
 describe('ConsumableOrderModal', () => {

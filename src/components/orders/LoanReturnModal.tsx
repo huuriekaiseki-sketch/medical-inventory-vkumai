@@ -16,6 +16,14 @@ export function LoanReturnModal({ facilityId, isOpen, onClose, onSuccess }: Prop
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const resetForm = () => {
+    setReturnDatetime('')
+    setItems([{ jan: '', lot: '', ubd: '', quantity: 1 }])
+    setError(null)
+  }
+
+  const handleClose = () => { resetForm(); onClose() }
+
   if (!isOpen) return null
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -33,6 +41,7 @@ export function LoanReturnModal({ facilityId, isOpen, onClose, onSuccess }: Prop
         }),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || '送信に失敗しました') }
+      resetForm()
       onSuccess()
       onClose()
     } catch (err) {
@@ -50,7 +59,7 @@ export function LoanReturnModal({ facilityId, isOpen, onClose, onSuccess }: Prop
       <div className="bg-white rounded shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6" style={{ border: '1px solid #E5E7EB' }}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold" role="heading" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif' }}>短貸返却</h2>
-          <button type="button" onClick={onClose} style={{ color: '#6B7280' }}>✕</button>
+          <button type="button" onClick={handleClose} style={{ color: '#6B7280' }}>✕</button>
         </div>
         {error && <div className="mb-4 px-4 py-2 rounded text-sm text-white" style={{ backgroundColor: '#DC2626' }}>{error}</div>}
         <form onSubmit={handleSubmit}>
@@ -63,7 +72,7 @@ export function LoanReturnModal({ facilityId, isOpen, onClose, onSuccess }: Prop
             <ItemRowInput rows={items} onChange={setItems} />
           </div>
           <div className="flex justify-end gap-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded border" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>キャンセル</button>
+            <button type="button" onClick={handleClose} className="px-4 py-2 text-sm rounded border" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>キャンセル</button>
             <button type="submit" disabled={submitting} className="px-4 py-2 text-sm rounded text-white" style={{ backgroundColor: '#4B5563' }}>
               {submitting ? '送信中...' : '返却する'}
             </button>

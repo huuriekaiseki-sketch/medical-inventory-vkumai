@@ -21,6 +21,19 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const resetForm = () => {
+    setCaseDatetime('')
+    setProcedureName('')
+    setPatientId('')
+    setPatientInitials('')
+    setGender('male')
+    setDoctorName('')
+    setItems([{ jan: '', lot: '', ubd: '', quantity: 1 }])
+    setError(null)
+  }
+
+  const handleClose = () => { resetForm(); onClose() }
+
   if (!isOpen) return null
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -46,6 +59,7 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
         const d = await res.json()
         throw new Error(d.error || '送信に失敗しました')
       }
+      resetForm()
       onSuccess()
       onClose()
     } catch (err) {
@@ -65,7 +79,7 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
       <div className="bg-white rounded shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6" style={{ border: '1px solid #E5E7EB' }}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold" role="heading" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif' }}>症例発注</h2>
-          <button type="button" onClick={onClose} style={{ color: '#6B7280' }}>✕</button>
+          <button type="button" onClick={handleClose} style={{ color: '#6B7280' }}>✕</button>
         </div>
 
         {error && (
@@ -106,7 +120,7 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
             <ItemRowInput rows={items} onChange={setItems} />
           </div>
           <div className="flex justify-end gap-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded border" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>キャンセル</button>
+            <button type="button" onClick={handleClose} className="px-4 py-2 text-sm rounded border" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>キャンセル</button>
             <button type="submit" disabled={submitting} className="px-4 py-2 text-sm rounded text-white" style={{ backgroundColor: '#FF5F03' }}>
               {submitting ? '送信中...' : '発注する'}
             </button>
