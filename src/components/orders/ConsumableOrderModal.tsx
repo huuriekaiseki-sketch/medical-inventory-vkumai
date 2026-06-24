@@ -27,6 +27,14 @@ export function ConsumableOrderModal({ facilityId, isOpen, onClose, onSuccess }:
       .catch(() => setError('消耗品の取得に失敗しました'))
   }, [isOpen, facilityId])
 
+  const resetForm = () => {
+    setSelections({})
+    setPurposeFilter('')
+    setError(null)
+  }
+
+  const handleClose = () => { resetForm(); onClose() }
+
   if (!isOpen) return null
 
   const purposes = Array.from(new Set(consumables.map(c => c.purpose)))
@@ -54,6 +62,7 @@ export function ConsumableOrderModal({ facilityId, isOpen, onClose, onSuccess }:
         body: JSON.stringify({ facilityId, items }),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || '送信に失敗しました') }
+      resetForm()
       onSuccess()
       onClose()
     } catch (err) {
@@ -71,7 +80,7 @@ export function ConsumableOrderModal({ facilityId, isOpen, onClose, onSuccess }:
       <div className="bg-white rounded shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6" style={{ border: '1px solid #E5E7EB' }}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold" role="heading" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif' }}>消耗品発注</h2>
-          <button type="button" onClick={onClose} style={{ color: '#6B7280' }}>✕</button>
+          <button type="button" onClick={handleClose} style={{ color: '#6B7280' }}>✕</button>
         </div>
 
         {error && <div className="mb-4 px-4 py-2 rounded text-sm text-white" style={{ backgroundColor: '#DC2626' }}>{error}</div>}
@@ -103,7 +112,7 @@ export function ConsumableOrderModal({ facilityId, isOpen, onClose, onSuccess }:
           </div>
 
           <div className="flex justify-end gap-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded border" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>キャンセル</button>
+            <button type="button" onClick={handleClose} className="px-4 py-2 text-sm rounded border" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>キャンセル</button>
             <button type="submit" disabled={submitting} className="px-4 py-2 text-sm rounded text-white" style={{ backgroundColor: '#16A34A' }}>
               {submitting ? '送信中...' : '発注する'}
             </button>

@@ -11,6 +11,9 @@ export async function POST(request: NextRequest) {
   }
   if (!body.facilityId) return NextResponse.json({ error: '施設IDは必須です' }, { status: 400 })
   if (!body.returnDatetime) return NextResponse.json({ error: '返却日時は必須です' }, { status: 400 })
+  if (body.items && body.items.some((item: { jan?: string }) => !item.jan?.trim())) {
+    return NextResponse.json({ error: 'JANは必須です' }, { status: 400 })
+  }
 
   const input: LoanReturnInput = {
     returnDatetime: body.returnDatetime,

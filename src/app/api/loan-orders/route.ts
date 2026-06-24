@@ -12,6 +12,9 @@ export async function POST(request: NextRequest) {
   if (!body.facilityId) return NextResponse.json({ error: '施設IDは必須です' }, { status: 400 })
   if (!body.procedureName?.trim()) return NextResponse.json({ error: '手技名は必須です' }, { status: 400 })
   if (!body.maker?.trim()) return NextResponse.json({ error: 'メーカー名は必須です' }, { status: 400 })
+  if (body.items && body.items.some((item: { name?: string }) => !item.name?.trim())) {
+    return NextResponse.json({ error: '品名は必須です' }, { status: 400 })
+  }
 
   const input: LoanOrderInput = {
     procedureName: body.procedureName,

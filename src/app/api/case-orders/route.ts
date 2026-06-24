@@ -15,7 +15,10 @@ export async function POST(request: NextRequest) {
   if (!body.procedureName?.trim()) return NextResponse.json({ error: '手技名は必須です' }, { status: 400 })
   if (!body.patientId?.trim()) return NextResponse.json({ error: '患者IDは必須です' }, { status: 400 })
   if (!body.patientInitials?.trim()) return NextResponse.json({ error: '患者イニシャルは必須です' }, { status: 400 })
-  if (!body.gender) return NextResponse.json({ error: '性別は必須です' }, { status: 400 })
+  const validGenders = ['male', 'female', 'other']
+  if (!body.gender || !validGenders.includes(body.gender)) {
+    return NextResponse.json({ error: '性別は male / female / other のいずれかを指定してください' }, { status: 400 })
+  }
   if (!body.doctorName?.trim()) return NextResponse.json({ error: '担当医師名は必須です' }, { status: 400 })
 
   const input: CaseOrderInput = {
@@ -32,6 +35,9 @@ export async function POST(request: NextRequest) {
     const order = await createCaseOrder(body.facilityId, input)
     return NextResponse.json({ order }, { status: 201 })
   } catch (error) {
-    throw error
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : '発注に失敗しました' },
+      { status: 500 }
+    )
   }
 }
