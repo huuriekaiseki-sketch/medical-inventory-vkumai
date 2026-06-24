@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { Facility } from '@/types/facility'
+import { OrderButtons } from '@/components/orders/OrderButtons'
 
 export default function FacilityDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -56,6 +57,8 @@ export default function FacilityDetailPage({ params }: { params: Promise<{ id: s
           {facility.name}
         </h1>
       </div>
+
+      <OrderButtons facilityId={id} />
 
       <div className="rounded bg-white shadow-sm overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
         <table className="min-w-full">
