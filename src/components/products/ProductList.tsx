@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import type { Product } from '@/types/product'
 
 type ProductListProps = {
@@ -9,6 +10,9 @@ type ProductListProps = {
 }
 
 export function ProductList({ products, onEdit, onDelete }: ProductListProps) {
+  // WHY: ホバー時の (e.target as HTMLElement).style 直接操作はReactの管理外でDOMを変更し、
+  //      再レンダリングで状態が失われるため、useState + className で宣言的に管理する
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null)
   if (products.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -49,24 +53,36 @@ export function ProductList({ products, onEdit, onDelete }: ProductListProps) {
               </td>
               <td className="px-6 py-4 text-sm">
                 <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => onEdit(product.id)}
-                    className="text-xs font-semibold uppercase tracking-wide px-3 py-1.5 transition-colors duration-100 focus:outline-none focus-visible:ring-2"
-                    style={{ color: '#072C2C', border: '1px solid #072C2C', borderRadius: '2px', fontFamily: 'var(--font-oswald), sans-serif' }}
-                    onMouseEnter={e => { (e.target as HTMLElement).style.backgroundColor = '#072C2C'; (e.target as HTMLElement).style.color = '#fff' }}
-                    onMouseLeave={e => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; (e.target as HTMLElement).style.color = '#072C2C' }}
-                  >
-                    編集
-                  </button>
-                  <button
-                    onClick={() => onDelete(product.id)}
-                    className="text-xs font-semibold uppercase tracking-wide px-3 py-1.5 transition-colors duration-100 focus:outline-none focus-visible:ring-2"
-                    style={{ color: '#DC2626', border: '1px solid #DC2626', borderRadius: '2px', fontFamily: 'var(--font-oswald), sans-serif' }}
-                    onMouseEnter={e => { (e.target as HTMLElement).style.backgroundColor = '#DC2626'; (e.target as HTMLElement).style.color = '#fff' }}
-                    onMouseLeave={e => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; (e.target as HTMLElement).style.color = '#DC2626' }}
-                  >
-                    削除
-                  </button>
+                  {(() => {
+                    const editKey = `${product.id}-edit`
+                    const editHover = hoveredKey === editKey
+                    return (
+                      <button
+                        onClick={() => onEdit(product.id)}
+                        className={`text-xs font-semibold uppercase tracking-wide px-3 py-1.5 transition-colors duration-100 focus:outline-none focus-visible:ring-2${editHover ? ' is-hover' : ''}`}
+                        style={{ color: editHover ? '#fff' : '#072C2C', backgroundColor: editHover ? '#072C2C' : 'transparent', border: '1px solid #072C2C', borderRadius: '2px', fontFamily: 'var(--font-oswald), sans-serif' }}
+                        onMouseEnter={() => setHoveredKey(editKey)}
+                        onMouseLeave={() => setHoveredKey(null)}
+                      >
+                        編集
+                      </button>
+                    )
+                  })()}
+                  {(() => {
+                    const delKey = `${product.id}-delete`
+                    const delHover = hoveredKey === delKey
+                    return (
+                      <button
+                        onClick={() => onDelete(product.id)}
+                        className={`text-xs font-semibold uppercase tracking-wide px-3 py-1.5 transition-colors duration-100 focus:outline-none focus-visible:ring-2${delHover ? ' is-hover' : ''}`}
+                        style={{ color: delHover ? '#fff' : '#DC2626', backgroundColor: delHover ? '#DC2626' : 'transparent', border: '1px solid #DC2626', borderRadius: '2px', fontFamily: 'var(--font-oswald), sans-serif' }}
+                        onMouseEnter={() => setHoveredKey(delKey)}
+                        onMouseLeave={() => setHoveredKey(null)}
+                      >
+                        削除
+                      </button>
+                    )
+                  })()}
                 </div>
               </td>
             </tr>

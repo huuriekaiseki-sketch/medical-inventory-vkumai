@@ -1,19 +1,29 @@
 import { supabase } from '@/lib/supabase/server'
+import { asString } from '@/lib/mapping'
 import type { Facility, FacilityInput } from '@/types/facility'
 
-function mapFacility(row: Record<string, unknown>): Facility {
+const FACILITY_COLUMNS = 'id, name, created_at, updated_at'
+
+interface FacilityRow {
+  id?: unknown
+  name?: unknown
+  created_at?: unknown
+  updated_at?: unknown
+}
+
+export function mapFacility(row: FacilityRow): Facility {
   return {
-    id: row.id as string,
-    name: row.name as string,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
+    id: asString(row.id),
+    name: asString(row.name),
+    createdAt: asString(row.created_at),
+    updatedAt: asString(row.updated_at),
   }
 }
 
 export async function listFacilities(): Promise<Facility[]> {
   const { data, error } = await supabase
     .from('facilities')
-    .select('*')
+    .select(FACILITY_COLUMNS)
     .order('name', { ascending: true })
   if (error) throw new Error(error.message)
   return data.map(mapFacility)
@@ -22,7 +32,7 @@ export async function listFacilities(): Promise<Facility[]> {
 export async function getFacility(id: string): Promise<Facility | null> {
   const { data, error } = await supabase
     .from('facilities')
-    .select('*')
+    .select(FACILITY_COLUMNS)
     .eq('id', id)
     .single()
   if (error) {
@@ -36,7 +46,7 @@ export async function createFacility(input: FacilityInput): Promise<Facility> {
   const { data, error } = await supabase
     .from('facilities')
     .insert({ name: input.name })
-    .select()
+    .select(FACILITY_COLUMNS)
     .single()
   if (error) {
     if (error.code === '23505') throw new Error(`施設名 "${input.name}" は既に使用されています`)
@@ -50,7 +60,7 @@ export async function updateFacility(id: string, input: FacilityInput): Promise<
     .from('facilities')
     .update({ name: input.name })
     .eq('id', id)
-    .select()
+    .select(FACILITY_COLUMNS)
     .single()
   if (error) {
     if (error.code === 'PGRST116') throw new Error(`施設ID "${id}" は存在しません`)

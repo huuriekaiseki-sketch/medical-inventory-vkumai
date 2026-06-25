@@ -105,7 +105,7 @@ export function ConsumableOrderModal({ facilityId, isOpen, onClose, onSuccess }:
                   <span className="ml-2 text-xs px-1 rounded" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>{c.purpose}</span>
                 </label>
                 {selections[c.id] && (
-                  <input type="number" min={1} value={selections[c.id]} onChange={e => setQty(c.id, Number(e.target.value))} className="border rounded px-2 py-1 text-sm w-16" style={{ borderColor: '#E5E7EB' }} />
+                  <input type="number" min={1} value={selections[c.id]} onChange={e => setQty(c.id, Number(e.target.value) || 1)} className="border rounded px-2 py-1 text-sm w-16" style={{ borderColor: '#E5E7EB' }} />
                 )}
               </div>
             ))}

@@ -1,25 +1,42 @@
 import { supabase } from '@/lib/supabase/server'
+import { asString, asNumber, asNullableNumber } from '@/lib/mapping'
 import type { HospitalPrice, HospitalPriceInput } from '@/types/hospitalPrice'
 
-function mapHospitalPrice(row: Record<string, unknown>): HospitalPrice {
+const HOSPITAL_PRICE_COLUMNS =
+  'id, distributor_product_id, facility_id, purchase_price, delivery_price, gross_profit, purchase_rate, delivery_rate, created_at, updated_at'
+
+interface HospitalPriceRow {
+  id?: unknown
+  distributor_product_id?: unknown
+  facility_id?: unknown
+  purchase_price?: unknown
+  delivery_price?: unknown
+  gross_profit?: unknown
+  purchase_rate?: unknown
+  delivery_rate?: unknown
+  created_at?: unknown
+  updated_at?: unknown
+}
+
+export function mapHospitalPrice(row: HospitalPriceRow): HospitalPrice {
   return {
-    id: row.id as string,
-    distributorProductId: row.distributor_product_id as string,
-    facilityId: row.facility_id as string,
-    purchasePrice: Number(row.purchase_price),
-    deliveryPrice: Number(row.delivery_price),
-    grossProfit: Number(row.gross_profit),
-    purchaseRate: row.purchase_rate != null ? Number(row.purchase_rate) : null,
-    deliveryRate: row.delivery_rate != null ? Number(row.delivery_rate) : null,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
+    id: asString(row.id),
+    distributorProductId: asString(row.distributor_product_id),
+    facilityId: asString(row.facility_id),
+    purchasePrice: asNumber(row.purchase_price),
+    deliveryPrice: asNumber(row.delivery_price),
+    grossProfit: asNumber(row.gross_profit),
+    purchaseRate: asNullableNumber(row.purchase_rate),
+    deliveryRate: asNullableNumber(row.delivery_rate),
+    createdAt: asString(row.created_at),
+    updatedAt: asString(row.updated_at),
   }
 }
 
 export async function listHospitalPrices(): Promise<HospitalPrice[]> {
   const { data, error } = await supabase
     .from('hospital_prices')
-    .select('*')
+    .select(HOSPITAL_PRICE_COLUMNS)
     .order('created_at', { ascending: false })
   if (error) throw new Error(error.message)
   return data.map(mapHospitalPrice)
@@ -28,7 +45,7 @@ export async function listHospitalPrices(): Promise<HospitalPrice[]> {
 export async function getHospitalPrice(id: string): Promise<HospitalPrice | null> {
   const { data, error } = await supabase
     .from('hospital_prices')
-    .select('*')
+    .select(HOSPITAL_PRICE_COLUMNS)
     .eq('id', id)
     .single()
   if (error) {
@@ -47,7 +64,7 @@ export async function createHospitalPrice(input: HospitalPriceInput): Promise<Ho
       purchase_price: input.purchasePrice,
       delivery_price: input.deliveryPrice,
     })
-    .select()
+    .select(HOSPITAL_PRICE_COLUMNS)
     .single()
   if (error) {
     if (error.code === '23505') throw new Error('この代理店商品と施設の組み合わせは既に登録されています')
@@ -67,7 +84,7 @@ export async function updateHospitalPrice(id: string, input: HospitalPriceInput)
       delivery_price: input.deliveryPrice,
     })
     .eq('id', id)
-    .select()
+    .select(HOSPITAL_PRICE_COLUMNS)
     .single()
   if (error) {
     if (error.code === 'PGRST116') throw new Error(`病院別価格ID "${id}" は存在しません`)

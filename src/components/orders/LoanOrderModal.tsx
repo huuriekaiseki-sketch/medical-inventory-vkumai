@@ -36,6 +36,8 @@ export function LoanOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!procedureName.trim()) { setError('手技名を入力してください'); return }
+    if (!maker.trim()) { setError('メーカーを入力してください'); return }
     setSubmitting(true)
     setError(null)
     try {
@@ -74,11 +76,11 @@ export function LoanOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label htmlFor="procedureName" className={labelClass} style={labelStyle}>手技名 <span style={{ color: '#DC2626' }}>*</span></label>
-            <input id="procedureName" type="text" value={procedureName} onChange={e => setProcedureName(e.target.value)} required className={inputClass} style={inputStyle} />
+            <input id="procedureName" type="text" value={procedureName} onChange={e => setProcedureName(e.target.value)} className={inputClass} style={inputStyle} />
           </div>
           <div className="mb-4">
             <label htmlFor="maker" className={labelClass} style={labelStyle}>メーカー <span style={{ color: '#DC2626' }}>*</span></label>
-            <input id="maker" type="text" value={maker} onChange={e => setMaker(e.target.value)} required className={inputClass} style={inputStyle} />
+            <input id="maker" type="text" value={maker} onChange={e => setMaker(e.target.value)} className={inputClass} style={inputStyle} />
           </div>
           <div className="mb-6">
             <p className={labelClass} style={labelStyle}>発注物品</p>
@@ -91,7 +93,7 @@ export function LoanOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
               <div key={i} className="flex gap-2 mb-2 items-center">
                 <input type="text" value={row.jan} onChange={e => updateRow(i, 'jan', e.target.value)} placeholder="JAN" className="border rounded px-2 py-1 text-sm w-28" style={{ borderColor: '#E5E7EB' }} />
                 <input type="text" value={row.name} onChange={e => updateRow(i, 'name', e.target.value)} placeholder="品名" className="border rounded px-2 py-1 text-sm flex-1" style={{ borderColor: '#E5E7EB' }} />
-                <input type="number" value={row.quantity} onChange={e => updateRow(i, 'quantity', Number(e.target.value))} min={1} className="border rounded px-2 py-1 text-sm w-16" style={{ borderColor: '#E5E7EB' }} />
+                <input type="number" value={row.quantity} onChange={e => updateRow(i, 'quantity', Number(e.target.value) || 0)} min={1} className="border rounded px-2 py-1 text-sm w-16" style={{ borderColor: '#E5E7EB' }} />
                 <button type="button" onClick={() => removeRow(i)} style={{ color: '#DC2626' }} className="text-sm px-2">削除</button>
               </div>
             ))}

@@ -1,43 +1,55 @@
 import { supabase } from '@/lib/supabase/server'
+import { asString, asNumber } from '@/lib/mapping'
 import type { ConsumableOrder, ConsumableOrderInput, ConsumableOrderItem } from '@/types/order'
 
-function mapItem(row: Record<string, unknown>): ConsumableOrderItem {
+interface ConsumableOrderItemRow {
+  id?: unknown
+  consumable_order_id?: unknown
+  consumable_id?: unknown
+  quantity?: unknown
+  created_at?: unknown
+}
+
+interface ConsumableOrderRow {
+  id?: unknown
+  facility_id?: unknown
+  status?: unknown
+  created_at?: unknown
+  updated_at?: unknown
+}
+
+export function mapItem(row: ConsumableOrderItemRow): ConsumableOrderItem {
   return {
-    id: row.id as string,
-    consumableOrderId: row.consumable_order_id as string,
-    consumableId: row.consumable_id as string,
-    quantity: row.quantity as number,
-    createdAt: row.created_at as string,
+    id: asString(row.id),
+    consumableOrderId: asString(row.consumable_order_id),
+    consumableId: asString(row.consumable_id),
+    quantity: asNumber(row.quantity),
+    createdAt: asString(row.created_at),
   }
 }
 
 export async function createConsumableOrder(facilityId: string, input: ConsumableOrderInput): Promise<ConsumableOrder> {
-  const { data: order, error: orderError } = await supabase
-    .from('consumable_orders')
-    .insert({ facility_id: facilityId })
-    .select()
-    .single()
-  if (orderError) throw new Error(orderError.message)
+  // 単一トランザクションで完結させるため RPC を呼ぶ（ヘッダー+明細を原子的に INSERT）
+  const { data, error } = await supabase.rpc('create_consumable_order_atomic', {
+    p_facility_id: facilityId,
+    p_items: JSON.stringify(
+      input.items.map(item => ({
+        consumable_id: item.consumableId,
+        quantity: item.quantity,
+      }))
+    ),
+  })
+  if (error) throw new Error(error.message)
 
-  const o = order as Record<string, unknown>
-  const itemRows = input.items.map(item => ({
-    consumable_order_id: o.id,
-    consumable_id: item.consumableId,
-    quantity: item.quantity,
-  }))
-
-  const { data: items, error: itemsError } = await supabase
-    .from('consumable_order_items')
-    .insert(itemRows)
-    .select()
-  if (itemsError) throw new Error(itemsError.message)
+  const o = (data ?? {}) as ConsumableOrderRow & { items?: unknown }
+  const itemRows = Array.isArray(o.items) ? (o.items as ConsumableOrderItemRow[]) : []
 
   return {
-    id: o.id as string,
-    facilityId: o.facility_id as string,
-    status: o.status as 'draft' | 'submitted',
-    items: (items as Record<string, unknown>[]).map(mapItem),
-    createdAt: o.created_at as string,
-    updatedAt: o.updated_at as string,
+    id: asString(o.id),
+    facilityId: asString(o.facility_id),
+    status: asString(o.status) as 'draft' | 'submitted',
+    items: itemRows.map(mapItem),
+    createdAt: asString(o.created_at),
+    updatedAt: asString(o.updated_at),
   }
 }
