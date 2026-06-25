@@ -1,5 +1,21 @@
 # Parallel Subagent Framework
 
+## エージェント構成（クイックリファレンス）
+
+| エージェント | 場所 | モデル | Phase |
+|---|---|---|---|
+| `implementer` | `.claude/agents/` | opus | Phase 3 実装 |
+| `reviewer` | `.claude/agents/` | sonnet | Phase 5 検証 |
+| `code-reviewer`（汎用） | `~/.claude/agents/` | haiku | 随時 |
+
+| スキル | 場所 | Phase |
+|---|---|---|
+| `feature-spec` | `.claude/skills/` | Phase 2 仕様書生成 |
+| `structured-review` | `.claude/skills/` | Phase 5 後・人間起動 |
+| `e2e-runner` | `.claude/skills/` | 随時 |
+
+→ 全体マップ: [`docs/ai-config-map.md`](docs/ai-config-map.md)
+
 ## プロジェクト設定
 - テストコマンド: npm test
 - Lintコマンド:   npm run lint
