@@ -1,61 +1,79 @@
 import { supabase } from '@/lib/supabase/server'
+import { asString, asOptionalString, asNumber } from '@/lib/mapping'
 import type { CaseOrder, CaseOrderInput, CaseOrderItem } from '@/types/order'
 
-function mapItem(row: Record<string, unknown>): CaseOrderItem {
+interface CaseOrderItemRow {
+  id?: unknown
+  case_order_id?: unknown
+  jan?: unknown
+  lot?: unknown
+  ubd?: unknown
+  quantity?: unknown
+  created_at?: unknown
+}
+
+interface CaseOrderRow {
+  id?: unknown
+  facility_id?: unknown
+  case_datetime?: unknown
+  procedure_name?: unknown
+  patient_id?: unknown
+  patient_initials?: unknown
+  gender?: unknown
+  doctor_name?: unknown
+  status?: unknown
+  created_at?: unknown
+  updated_at?: unknown
+}
+
+export function mapItem(row: CaseOrderItemRow): CaseOrderItem {
   return {
-    id: row.id as string,
-    caseOrderId: row.case_order_id as string,
-    jan: row.jan as string,
-    lot: row.lot != null ? (row.lot as string) : undefined,
-    ubd: row.ubd != null ? (row.ubd as string) : undefined,
-    quantity: row.quantity as number,
-    createdAt: row.created_at as string,
+    id: asString(row.id),
+    caseOrderId: asString(row.case_order_id),
+    jan: asString(row.jan),
+    lot: asOptionalString(row.lot),
+    ubd: asOptionalString(row.ubd),
+    quantity: asNumber(row.quantity),
+    createdAt: asString(row.created_at),
   }
 }
 
 export async function createCaseOrder(facilityId: string, input: CaseOrderInput): Promise<CaseOrder> {
-  const { data: order, error: orderError } = await supabase
-    .from('case_orders')
-    .insert({
-      facility_id: facilityId,
-      case_datetime: input.caseDatetime,
-      procedure_name: input.procedureName,
-      patient_id: input.patientId,
-      patient_initials: input.patientInitials,
-      gender: input.gender,
-      doctor_name: input.doctorName,
-    })
-    .select()
-    .single()
-  if (orderError) throw new Error(orderError.message)
+  // 単一トランザクションで完結させるため RPC を呼ぶ（ヘッダー+明細を原子的に INSERT）
+  const { data, error } = await supabase.rpc('create_case_order_atomic', {
+    p_facility_id: facilityId,
+    p_case_datetime: input.caseDatetime,
+    p_procedure_name: input.procedureName,
+    p_patient_id: input.patientId,
+    p_patient_initials: input.patientInitials,
+    p_gender: input.gender,
+    p_doctor_name: input.doctorName,
+    p_items: JSON.stringify(
+      input.items.map(item => ({
+        jan: item.jan,
+        lot: item.lot ?? null,
+        ubd: item.ubd ?? null,
+        quantity: item.quantity,
+      }))
+    ),
+  })
+  if (error) throw new Error(error.message)
 
-  const itemRows = input.items.map(item => ({
-    case_order_id: (order as Record<string, unknown>).id,
-    jan: item.jan,
-    lot: item.lot ?? null,
-    ubd: item.ubd ?? null,
-    quantity: item.quantity,
-  }))
+  const o = (data ?? {}) as CaseOrderRow & { items?: unknown }
+  const itemRows = Array.isArray(o.items) ? (o.items as CaseOrderItemRow[]) : []
 
-  const { data: items, error: itemsError } = await supabase
-    .from('case_order_items')
-    .insert(itemRows)
-    .select()
-  if (itemsError) throw new Error(itemsError.message)
-
-  const o = order as Record<string, unknown>
   return {
-    id: o.id as string,
-    facilityId: o.facility_id as string,
-    caseDatetime: o.case_datetime as string,
-    procedureName: o.procedure_name as string,
-    patientId: o.patient_id as string,
-    patientInitials: o.patient_initials as string,
-    gender: o.gender as 'male' | 'female' | 'other',
-    doctorName: o.doctor_name as string,
-    status: o.status as 'draft' | 'submitted',
-    items: (items as Record<string, unknown>[]).map(mapItem),
-    createdAt: o.created_at as string,
-    updatedAt: o.updated_at as string,
+    id: asString(o.id),
+    facilityId: asString(o.facility_id),
+    caseDatetime: asString(o.case_datetime),
+    procedureName: asString(o.procedure_name),
+    patientId: asString(o.patient_id),
+    patientInitials: asString(o.patient_initials),
+    gender: asString(o.gender) as 'male' | 'female' | 'other',
+    doctorName: asString(o.doctor_name),
+    status: asString(o.status) as 'draft' | 'submitted',
+    items: itemRows.map(mapItem),
+    createdAt: asString(o.created_at),
+    updatedAt: asString(o.updated_at),
   }
 }

@@ -1,20 +1,31 @@
 import { supabase } from '@/lib/supabase/server'
+import { asString, asNullableString } from '@/lib/mapping'
 import type { Category, CategoryInput } from '@/types/category'
 
-function mapCategory(row: Record<string, unknown>): Category {
+const CATEGORY_COLUMNS = 'id, name, description, created_at, updated_at'
+
+interface CategoryRow {
+  id?: unknown
+  name?: unknown
+  description?: unknown
+  created_at?: unknown
+  updated_at?: unknown
+}
+
+export function mapCategory(row: CategoryRow): Category {
   return {
-    id: row.id as string,
-    name: row.name as string,
-    description: row.description != null ? (row.description as string) : null,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
+    id: asString(row.id),
+    name: asString(row.name),
+    description: asNullableString(row.description),
+    createdAt: asString(row.created_at),
+    updatedAt: asString(row.updated_at),
   }
 }
 
 export async function listCategories(): Promise<Category[]> {
   const { data, error } = await supabase
     .from('categories')
-    .select('*')
+    .select(CATEGORY_COLUMNS)
     .order('name', { ascending: true })
   if (error) throw new Error(error.message)
   return data.map(mapCategory)
@@ -23,7 +34,7 @@ export async function listCategories(): Promise<Category[]> {
 export async function getCategory(id: string): Promise<Category | null> {
   const { data, error } = await supabase
     .from('categories')
-    .select('*')
+    .select(CATEGORY_COLUMNS)
     .eq('id', id)
     .single()
   if (error) {
@@ -37,7 +48,7 @@ export async function createCategory(input: CategoryInput): Promise<Category> {
   const { data, error } = await supabase
     .from('categories')
     .insert({ name: input.name, description: input.description })
-    .select()
+    .select(CATEGORY_COLUMNS)
     .single()
   if (error) {
     if (error.code === '23505') throw new Error('カテゴリ名が既に使用されています')
@@ -51,7 +62,7 @@ export async function updateCategory(id: string, input: CategoryInput): Promise<
     .from('categories')
     .update({ name: input.name, description: input.description })
     .eq('id', id)
-    .select()
+    .select(CATEGORY_COLUMNS)
     .single()
   if (error) {
     if (error.code === 'PGRST116') throw new Error(`カテゴリID "${id}" は存在しません`)
@@ -64,7 +75,7 @@ export async function updateCategory(id: string, input: CategoryInput): Promise<
 export async function deleteCategory(id: string): Promise<void> {
   const { count, error: countError } = await supabase
     .from('distributor_products')
-    .select('*', { count: 'exact', head: true })
+    .select('id', { count: 'exact', head: true })
     .eq('category_id', id)
   if (countError) throw new Error(countError.message)
   if ((count ?? 0) > 0) throw new Error('使用中のため削除できません')

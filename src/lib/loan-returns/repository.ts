@@ -1,15 +1,39 @@
 import { supabase } from '@/lib/supabase/server'
+import { asString, asOptionalString, asNumber } from '@/lib/mapping'
 import type { LoanReturn, LoanReturnInput, LoanReturnItem } from '@/types/order'
 
-function mapItem(row: Record<string, unknown>): LoanReturnItem {
+const LOAN_RETURN_COLUMNS = 'id, facility_id, return_datetime, status, created_at, updated_at'
+// 注: updated_at は Group A のマイグレーション適用前のため明細列挙には含めない
+const LOAN_RETURN_ITEM_COLUMNS = 'id, loan_return_id, jan, lot, ubd, quantity, created_at'
+
+interface LoanReturnItemRow {
+  id?: unknown
+  loan_return_id?: unknown
+  jan?: unknown
+  lot?: unknown
+  ubd?: unknown
+  quantity?: unknown
+  created_at?: unknown
+}
+
+interface LoanReturnRow {
+  id?: unknown
+  facility_id?: unknown
+  return_datetime?: unknown
+  status?: unknown
+  created_at?: unknown
+  updated_at?: unknown
+}
+
+export function mapItem(row: LoanReturnItemRow): LoanReturnItem {
   return {
-    id: row.id as string,
-    loanReturnId: row.loan_return_id as string,
-    jan: row.jan as string,
-    lot: row.lot != null ? (row.lot as string) : undefined,
-    ubd: row.ubd != null ? (row.ubd as string) : undefined,
-    quantity: row.quantity as number,
-    createdAt: row.created_at as string,
+    id: asString(row.id),
+    loanReturnId: asString(row.loan_return_id),
+    jan: asString(row.jan),
+    lot: asOptionalString(row.lot),
+    ubd: asOptionalString(row.ubd),
+    quantity: asNumber(row.quantity),
+    createdAt: asString(row.created_at),
   }
 }
 
@@ -17,11 +41,11 @@ export async function createLoanReturn(facilityId: string, input: LoanReturnInpu
   const { data: ret, error: retError } = await supabase
     .from('loan_returns')
     .insert({ facility_id: facilityId, return_datetime: input.returnDatetime })
-    .select()
+    .select(LOAN_RETURN_COLUMNS)
     .single()
   if (retError) throw new Error(retError.message)
 
-  const r = ret as Record<string, unknown>
+  const r = ret as LoanReturnRow
   const itemRows = input.items.map(item => ({
     loan_return_id: r.id,
     jan: item.jan,
@@ -33,16 +57,16 @@ export async function createLoanReturn(facilityId: string, input: LoanReturnInpu
   const { data: items, error: itemsError } = await supabase
     .from('loan_return_items')
     .insert(itemRows)
-    .select()
+    .select(LOAN_RETURN_ITEM_COLUMNS)
   if (itemsError) throw new Error(itemsError.message)
 
   return {
-    id: r.id as string,
-    facilityId: r.facility_id as string,
-    returnDatetime: r.return_datetime as string,
-    status: r.status as 'draft' | 'returned',
-    items: (items as Record<string, unknown>[]).map(mapItem),
-    createdAt: r.created_at as string,
-    updatedAt: r.updated_at as string,
+    id: asString(r.id),
+    facilityId: asString(r.facility_id),
+    returnDatetime: asString(r.return_datetime),
+    status: asString(r.status) as 'draft' | 'returned',
+    items: (items as LoanReturnItemRow[]).map(mapItem),
+    createdAt: asString(r.created_at),
+    updatedAt: asString(r.updated_at),
   }
 }

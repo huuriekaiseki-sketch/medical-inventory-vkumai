@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIDD Pipeline Status — medical-inventory-vkumai</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #070b14;
+    --bg2: #0d1526;
+    --bg3: #111d35;
+    --border: #1e3058;
+    --text: #c8d8f0;
+    --text-dim: #5a7090;
+    --cyan: #00d4ff;
+    --amber: #ffb800;
+    --purple: #b48efe;
+    --green: #00e87a;
+    --red: #ff4d6a;
+    --gray: #5a7090;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ─── Header ─── */
+  .header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .header-left h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.05em;
+  }
+
+  .header-left .subtitle {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .summary-badges {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .badge {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    border: 1px solid;
+  }
+
+  .badge-green { background: #00e87a18; color: var(--green); border-color: #00e87a40; }
+  .badge-red   { background: #ff4d6a18; color: var(--red);   border-color: #ff4d6a40; }
+  .badge-gray  { background: #5a709018; color: var(--gray);  border-color: #5a709040; }
+
+  /* ─── Layout ─── */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 260px;
+    gap: 0;
+    min-height: calc(100vh - 80px);
+  }
+
+  .main {
+    padding: 28px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .sidebar {
+    background: var(--bg2);
+    border-left: 1px solid var(--border);
+    padding: 28px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  /* ─── Phase Card ─── */
+  .phase-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .phase-header {
+    padding: 14px 20px;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .phase-num {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .phase-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .phase-pattern {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-dim);
+    background: #ffffff08;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+
+  /* ─── Component Row ─── */
+  .component-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .component-table thead tr {
+    background: #ffffff04;
+  }
+
+  .component-table th {
+    padding: 8px 16px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .component-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid #1e305840;
+    vertical-align: middle;
+  }
+
+  .component-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .component-table tr:hover td {
+    background: #ffffff04;
+  }
+
+  /* ─── Tier stripe (left border) ─── */
+  .tier-basic    { border-left: 3px solid var(--cyan); }
+  .tier-standard { border-left: 3px solid var(--amber); }
+  .tier-advanced { border-left: 3px solid var(--purple); }
+
+  /* ─── Component name ─── */
+  .comp-name {
+    font-weight: 500;
+    color: #e8f0ff;
+    font-size: 13px;
+  }
+
+  /* ─── Type chip ─── */
+  .type-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .type-subagent { background: #00d4ff12; color: var(--cyan);   border: 1px solid #00d4ff30; }
+  .type-agent    { background: #b48efe12; color: var(--purple); border: 1px solid #b48efe30; }
+  .type-skill    { background: #00e87a12; color: var(--green);  border: 1px solid #00e87a30; }
+  .type-workflow { background: #ffb80012; color: var(--amber);  border: 1px solid #ffb80030; }
+  .type-pattern  { background: #ffffff08; color: var(--text-dim); border: 1px solid #ffffff15; }
+
+  /* ─── Tier badge ─── */
+  .tier-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+
+  .tier-badge-basic    { background: #00d4ff10; color: var(--cyan);   border: 1px solid #00d4ff25; }
+  .tier-badge-standard { background: #ffb80010; color: var(--amber);  border: 1px solid #ffb80025; }
+  .tier-badge-advanced { background: #b48efe10; color: var(--purple); border: 1px solid #b48efe25; }
+
+  /* ─── Model ─── */
+  .model-text {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .model-opus    { color: #b48efe; }
+  .model-sonnet  { color: #00d4ff; }
+  .model-haiku   { color: #ffb800; }
+
+  /* ─── Status badge ─── */
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  .status-exists  { background: #00e87a15; color: var(--green);   border: 1px solid #00e87a35; }
+  .status-missing { background: #ff4d6a15; color: var(--red);     border: 1px solid #ff4d6a35; }
+  .status-standby { background: #5a709015; color: var(--gray);    border: 1px solid #5a709035; }
+
+  /* ─── Location ─── */
+  .location {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  /* ─── Purpose ─── */
+  .purpose {
+    font-size: 11px;
+    color: #8098c0;
+    max-width: 240px;
+  }
+
+  /* ─── Sidebar ─── */
+  .sidebar-section h3 {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 12px;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .action-item {
+    background: #ff4d6a10;
+    border: 1px solid #ff4d6a25;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    font-size: 11px;
+  }
+
+  .action-item .action-name {
+    color: var(--red);
+    font-weight: 700;
+    margin-bottom: 3px;
+  }
+
+  .action-item .action-desc {
+    color: var(--text-dim);
+    font-size: 10px;
+  }
+
+  .no-missing {
+    background: #00e87a10;
+    border: 1px solid #00e87a25;
+    border-radius: 6px;
+    padding: 12px;
+    color: var(--green);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  /* ─── Divider ─── */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  .generated-at {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── Header ─── -->
+<div class="header">
+  <div class="header-left">
+    <h1>AIDD Pipeline Status</h1>
+    <div class="subtitle">medical-inventory-vkumai &nbsp;·&nbsp; 2026-06-25</div>
+  </div>
+  <div class="summary-badges">
+    <span class="badge badge-green">✅ 11 EXISTS</span>
+    <span class="badge badge-red">❌ 0 MISSING</span>
+    <span class="badge badge-gray">⬜ 4 STANDBY</span>
+  </div>
+</div>
+
+<!-- ─── Layout ─── -->
+<div class="layout">
+  <div class="main">
+
+    <!-- Phase 1 -->
+    <div class="phase-card">
+      <div class="phase-header">
+        <span class="phase-num">Phase 1</span>
+        <span class="phase-title">調査（Multimodal Sweep）</span>
+        <span class="phase-pattern">Loop-until-dry · 最大3ラウンド</span>
+      </div>
+      <table class="component-table">
+        <thead>
+          <tr>
+            <th>コンポーネント</th>
+            <th>タイプ</th>
+            <th>ティア</th>
+            <th>モデル</th>
+            <th>目的</th>
+            <th>ステータス</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="tier-basic">
+            <td><span class="comp-name">Explore × 4</span><br><span class="location">~/.claude/agents/ (global)</span></td>
+            <td><span class="type-chip type-subagent">subagent</span></td>
+            <td><span class="tier-badge tier-badge-basic">basic</span></td>
+            <td><span class="model-text">inherited</span></td>
+            <td><span class="purpose">UI・データ・DB・型 の4軸並列読み取り調査</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+          <tr class="tier-standard">
+            <td><span class="comp-name">Completeness Critic</span><br><span class="location">各ラウンド末に起動</span></td>
+            <td><span class="type-chip type-subagent">subagent</span></td>
+            <td><span class="tier-badge tier-badge-standard">standard</span></td>
+            <td><span class="model-text">inherited</span></td>
+            <td><span class="purpose">未調査モダリティ・未検証クレームを検出</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+          <tr class="tier-standard">
+            <td><span class="comp-name">Loop-until-dry</span><br><span class="location">CLAUDE.md パターン定義</span></td>
+            <td><span class="type-chip type-pattern">pattern</span></td>
+            <td><span class="tier-badge tier-badge-standard">standard</span></td>
+            <td><span class="model-text">—</span></td>
+            <td><span class="purpose">新規発見0 &amp; Critic指摘0 が2ラウンド連続で終了</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Phase 2 -->
+    <div class="phase-card">
+      <div class="phase-header">
+        <span class="phase-num">Phase 2</span>
+        <span class="phase-title">仕様書生成</span>
+        <span class="phase-pattern">停止① — 人間レビュー待ち</span>
+      </div>
+      <table class="component-table">
+        <thead>
+          <tr>
+            <th>コンポーネント</th>
+            <th>タイプ</th>
+            <th>ティア</th>
+            <th>モデル</th>
+            <th>目的</th>
+            <th>ステータス</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="tier-basic">
+            <td><span class="comp-name">feature-spec</span><br><span class="location">.claude/skills/</span></td>
+            <td><span class="type-chip type-skill">skill</span></td>
+            <td><span class="tier-badge tier-badge-basic">basic</span></td>
+            <td><span class="model-text">—</span></td>
+            <td><span class="purpose">調査結果 → SPEC.md（2部構成＋並列グループ宣言）</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+          <tr class="tier-standard">
+            <td><span class="comp-name">spec-deep-validate</span><br><span class="location">~/.claude/workflows/</span></td>
+            <td><span class="type-chip type-workflow">workflow</span></td>
+            <td><span class="tier-badge tier-badge-standard">standard</span></td>
+            <td><span class="model-text">—</span></td>
+            <td><span class="purpose">複雑設計・DBスキーマ変更時に仕様書を深層検証</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+          <tr class="tier-advanced">
+            <td><span class="comp-name">Proposer</span><br><span class="location">未作成</span></td>
+            <td><span class="type-chip type-agent">agent</span></td>
+            <td><span class="tier-badge tier-badge-advanced">advanced</span></td>
+            <td><span class="model-text model-sonnet">sonnet</span></td>
+            <td><span class="purpose">問題点ごとに解決策を複数提案</span></td>
+            <td><span class="status status-standby">⬜ STANDBY</span></td>
+          </tr>
+          <tr class="tier-advanced">
+            <td><span class="comp-name">Judge Panel</span><br><span class="location">未作成</span></td>
+            <td><span class="type-chip type-agent">agent</span></td>
+            <td><span class="tier-badge tier-badge-advanced">advanced</span></td>
+            <td><span class="model-text model-opus">opus</span></td>
+            <td><span class="purpose">トレードオフを多角的に評価・採点</span></td>
+            <td><span class="status status-standby">⬜ STANDBY</span></td>
+          </tr>
+          <tr class="tier-advanced">
+            <td><span class="comp-name">Adversarial Verify</span><br><span class="location">未作成</span></td>
+            <td><span class="type-chip type-agent">agent</span></td>
+            <td><span class="tier-badge tier-badge-advanced">advanced</span></td>
+            <td><span class="model-text model-sonnet">sonnet</span></td>
+            <td><span class="purpose">仮定・前提を反論で検証（悪魔の代弁者）</span></td>
+            <td><span class="status status-standby">⬜ STANDBY</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Phase 3 -->
+    <div class="phase-card">
+      <div class="phase-header">
+        <span class="phase-num">Phase 3</span>
+        <span class="phase-title">実装（TDD・並列）</span>
+        <span class="phase-pattern">RED → GREEN → REFACTOR</span>
+      </div>
+      <table class="component-table">
+        <thead>
+          <tr>
+            <th>コンポーネント</th>
+            <th>タイプ</th>
+            <th>ティア</th>
+            <th>モデル</th>
+            <th>目的</th>
+            <th>ステータス</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="tier-basic">
+            <td><span class="comp-name">implementer</span><br><span class="location">.claude/agents/</span></td>
+            <td><span class="type-chip type-agent">agent</span></td>
+            <td><span class="tier-badge tier-badge-basic">basic</span></td>
+            <td><span class="model-text model-opus">opus</span></td>
+            <td><span class="purpose">並列グループごとにTDD実装（自ファイルのみ）</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Phase 4 -->
+    <div class="phase-card">
+      <div class="phase-header">
+        <span class="phase-num">Phase 4</span>
+        <span class="phase-title">統合ゲート</span>
+        <span class="phase-pattern">親が逐次・全テスト緑確認</span>
+      </div>
+      <table class="component-table">
+        <thead>
+          <tr>
+            <th>コンポーネント</th>
+            <th>タイプ</th>
+            <th>ティア</th>
+            <th>モデル</th>
+            <th>目的</th>
+            <th>ステータス</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="tier-basic">
+            <td><span class="comp-name">親エージェント（統合）</span><br><span class="location">CLAUDE.md パターン定義</span></td>
+            <td><span class="type-chip type-pattern">pattern</span></td>
+            <td><span class="tier-badge tier-badge-basic">basic</span></td>
+            <td><span class="model-text">—</span></td>
+            <td><span class="purpose">共有ファイル結線・競合解消・全テスト＋lint</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Phase 5 -->
+    <div class="phase-card">
+      <div class="phase-header">
+        <span class="phase-num">Phase 5</span>
+        <span class="phase-title">検証（4観点並列）</span>
+        <span class="phase-pattern">停止② — /structured-review 人間起動</span>
+      </div>
+      <table class="component-table">
+        <thead>
+          <tr>
+            <th>コンポーネント</th>
+            <th>タイプ</th>
+            <th>ティア</th>
+            <th>モデル</th>
+            <th>目的</th>
+            <th>ステータス</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="tier-basic">
+            <td><span class="comp-name">reviewer</span><br><span class="location">.claude/agents/</span></td>
+            <td><span class="type-chip type-agent">agent</span></td>
+            <td><span class="tier-badge tier-badge-basic">basic</span></td>
+            <td><span class="model-text model-sonnet">sonnet</span></td>
+            <td><span class="purpose">正しさ・仕様カバレッジ・重複・型安全 の4観点並列</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+          <tr class="tier-basic">
+            <td><span class="comp-name">structured-review</span><br><span class="location">.claude/skills/</span></td>
+            <td><span class="type-chip type-skill">skill</span></td>
+            <td><span class="tier-badge tier-badge-basic">basic</span></td>
+            <td><span class="model-text">—</span></td>
+            <td><span class="purpose">最終構造化レビュー（人間が /structured-review で起動）</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+          <tr class="tier-standard">
+            <td><span class="comp-name">e2e-runner</span><br><span class="location">.claude/skills/</span></td>
+            <td><span class="type-chip type-skill">skill</span></td>
+            <td><span class="tier-badge tier-badge-standard">standard</span></td>
+            <td><span class="model-text">—</span></td>
+            <td><span class="purpose">E2Eテスト・スクリーンショット（随時・フロー外でも可）</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Global -->
+    <div class="phase-card">
+      <div class="phase-header">
+        <span class="phase-num">Global</span>
+        <span class="phase-title">グローバルエージェント（随時）</span>
+        <span class="phase-pattern">~/.claude/agents/</span>
+      </div>
+      <table class="component-table">
+        <thead>
+          <tr>
+            <th>コンポーネント</th>
+            <th>タイプ</th>
+            <th>ティア</th>
+            <th>モデル</th>
+            <th>目的</th>
+            <th>ステータス</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="tier-standard">
+            <td><span class="comp-name">ceo</span><br><span class="location">~/.claude/agents/</span></td>
+            <td><span class="type-chip type-agent">agent</span></td>
+            <td><span class="tier-badge tier-badge-standard">standard</span></td>
+            <td><span class="model-text">—</span></td>
+            <td><span class="purpose">タスク委任・CFO/CMO/CTO等の部門振り分け</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+          <tr class="tier-basic">
+            <td><span class="comp-name">code-reviewer</span><br><span class="location">~/.claude/agents/</span></td>
+            <td><span class="type-chip type-agent">agent</span></td>
+            <td><span class="tier-badge tier-badge-basic">basic</span></td>
+            <td><span class="model-text model-haiku">haiku</span></td>
+            <td><span class="purpose">汎用コードレビュー（品質・設計・セキュリティ・パフォーマンス）</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+          <tr class="tier-standard">
+            <td><span class="comp-name">secretary</span><br><span class="location">~/.claude/agents/</span></td>
+            <td><span class="type-chip type-agent">agent</span></td>
+            <td><span class="tier-badge tier-badge-standard">standard</span></td>
+            <td><span class="model-text">—</span></td>
+            <td><span class="purpose">GitHub Issue作成・確認・ファイル管理</span></td>
+            <td><span class="status status-exists">✅ EXISTS</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- /main -->
+
+  <!-- ─── Sidebar ─── -->
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <h3>ティア凡例</h3>
+      <div class="legend-item">
+        <div class="legend-dot" style="background: #00d4ff;"></div>
+        <div>
+          <div style="color: #00d4ff; font-weight: 700; font-size: 11px;">BASIC</div>
+          <div style="color: var(--text-dim); font-size: 10px;">必須コンポーネント</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background: #ffb800;"></div>
+        <div>
+          <div style="color: #ffb800; font-weight: 700; font-size: 11px;">STANDARD</div>
+          <div style="color: var(--text-dim); font-size: 10px;">推奨コンポーネント</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background: #b48efe;"></div>
+        <div>
+          <div style="color: #b48efe; font-weight: 700; font-size: 11px;">ADVANCED</div>
+          <div style="color: var(--text-dim); font-size: 10px;">高度機能（控え）</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>ステータス凡例</h3>
+      <div class="legend-item">
+        <span class="status status-exists" style="font-size:10px; padding: 2px 8px;">✅ EXISTS</span>
+        <span style="color: var(--text-dim); font-size: 10px;">ファイル確認済み</span>
+      </div>
+      <div class="legend-item">
+        <span class="status status-missing" style="font-size:10px; padding: 2px 8px;">❌ MISSING</span>
+        <span style="color: var(--text-dim); font-size: 10px;">要作成</span>
+      </div>
+      <div class="legend-item">
+        <span class="status status-standby" style="font-size:10px; padding: 2px 8px;">⬜ STANDBY</span>
+        <span style="color: var(--text-dim); font-size: 10px;">控え・問題なし</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>次のアクション</h3>
+      <div class="no-missing">
+        🎉 MISSING なし<br>
+        <span style="font-size: 10px; opacity: 0.7;">全 basic・standard コンポーネント揃っています</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>STANDBY コンポーネント</h3>
+      <div style="font-size: 11px; color: var(--text-dim); line-height: 1.8;">
+        以下は advanced ティアのため<br>
+        未作成でも問題ありません：<br><br>
+        <span style="color: #b48efe;">⬜</span> Proposer (Phase 2)<br>
+        <span style="color: #b48efe;">⬜</span> Judge Panel (Phase 2)<br>
+        <span style="color: #b48efe;">⬜</span> Adversarial Verify (Phase 2)<br><br>
+        複雑な意思決定フローが<br>
+        必要になったタイミングで<br>
+        追加してください。
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>フロー概要</h3>
+      <div style="font-size: 11px; color: var(--text-dim); line-height: 2.2;">
+        <span style="color: var(--cyan);">Phase 1</span> 調査 (4軸並列)<br>
+        <span style="color: var(--text-dim); margin-left: 8px; font-size: 10px;">↓ Loop-until-dry</span><br>
+        <span style="color: var(--cyan);">Phase 2</span> 仕様書<br>
+        <span style="color: #ff4d6a; margin-left: 8px; font-size: 10px;">⛔ 停止① 人間レビュー</span><br>
+        <span style="color: var(--amber);">Phase 3</span> 実装 (TDD並列)<br>
+        <span style="color: var(--amber);">Phase 4</span> 統合ゲート<br>
+        <span style="color: var(--green);">Phase 5</span> 検証 (4観点並列)<br>
+        <span style="color: #ff4d6a; margin-left: 8px; font-size: 10px;">⛔ 停止② /structured-review</span>
+      </div>
+    </div>
+
+    <div class="generated-at">
+      Generated 2026-06-25<br>
+      medical-inventory-vkumai
+    </div>
+
+  </div><!-- /sidebar -->
+
+</div><!-- /layout -->
+
+</body>
+</html>

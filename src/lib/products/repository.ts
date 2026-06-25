@@ -1,20 +1,31 @@
 import { supabase } from '@/lib/supabase/server'
+import { asString } from '@/lib/mapping'
 import type { Product, ProductInput } from '@/types/product'
 
-function mapProduct(row: Record<string, unknown>): Product {
+const PRODUCT_COLUMNS = 'id, jan, ref, created_at, updated_at'
+
+interface ProductRow {
+  id?: unknown
+  jan?: unknown
+  ref?: unknown
+  created_at?: unknown
+  updated_at?: unknown
+}
+
+export function mapProduct(row: ProductRow): Product {
   return {
-    id: row.id as string,
-    jan: row.jan as string,
-    ref: row.ref as string,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
+    id: asString(row.id),
+    jan: asString(row.jan),
+    ref: asString(row.ref),
+    createdAt: asString(row.created_at),
+    updatedAt: asString(row.updated_at),
   }
 }
 
 export async function listProducts(): Promise<Product[]> {
   const { data, error } = await supabase
     .from('products')
-    .select('*')
+    .select(PRODUCT_COLUMNS)
     .order('created_at', { ascending: false })
   if (error) throw new Error(error.message)
   return data.map(mapProduct)
@@ -23,7 +34,7 @@ export async function listProducts(): Promise<Product[]> {
 export async function getProduct(id: string): Promise<Product | null> {
   const { data, error } = await supabase
     .from('products')
-    .select('*')
+    .select(PRODUCT_COLUMNS)
     .eq('id', id)
     .single()
   if (error) {
@@ -37,7 +48,7 @@ export async function createProduct(input: ProductInput): Promise<Product> {
   const { data, error } = await supabase
     .from('products')
     .insert({ jan: input.jan, ref: input.ref })
-    .select()
+    .select(PRODUCT_COLUMNS)
     .single()
   if (error) {
     if (error.code === '23505') throw new Error('JAN または REF が既に使用されています')
@@ -51,7 +62,7 @@ export async function updateProduct(id: string, input: ProductInput): Promise<Pr
     .from('products')
     .update({ jan: input.jan, ref: input.ref })
     .eq('id', id)
-    .select()
+    .select(PRODUCT_COLUMNS)
     .single()
   if (error) {
     if (error.code === 'PGRST116') throw new Error(`製品ID "${id}" は存在しません`)

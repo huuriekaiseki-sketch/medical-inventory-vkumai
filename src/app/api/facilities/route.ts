@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listFacilities, createFacility } from '@/lib/facilities/repository'
+import { apiError } from '@/lib/api-error'
 import type { FacilityInput } from '@/types/facility'
 
 export async function GET() {
-  const facilities = await listFacilities()
-  return NextResponse.json({ facilities })
+  try {
+    const facilities = await listFacilities()
+    return NextResponse.json({ facilities, data: facilities })
+  } catch (error) {
+    return apiError(error instanceof Error ? error.message : '施設の取得に失敗しました')
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -12,20 +17,20 @@ export async function POST(request: NextRequest) {
   try {
     input = await request.json()
   } catch {
-    return NextResponse.json({ error: 'リクエストが不正です' }, { status: 400 })
+    return apiError('リクエストが不正です', 400)
   }
 
   if (!input.name?.trim()) {
-    return NextResponse.json({ error: '施設名は必須です' }, { status: 400 })
+    return apiError('施設名は必須です', 400)
   }
 
   try {
     const facility = await createFacility(input)
-    return NextResponse.json({ facility }, { status: 201 })
+    return NextResponse.json({ facility, data: facility }, { status: 201 })
   } catch (error) {
     if (error instanceof Error && error.message.includes('既に使用されています')) {
-      return NextResponse.json({ error: '施設名が重複しています' }, { status: 409 })
+      return apiError('施設名が重複しています', 409)
     }
-    throw error
+    return apiError(error instanceof Error ? error.message : '施設の作成に失敗しました')
   }
 }

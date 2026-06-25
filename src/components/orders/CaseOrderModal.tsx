@@ -38,6 +38,7 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!procedureName.trim()) { setError('手技名を入力してください'); return }
     setSubmitting(true)
     setError(null)
     try {

@@ -20,10 +20,12 @@ export default function ProductsPage() {
 
   async function handleDelete(id: string) {
     if (!confirm('削除しますか？')) return
+    // WHY: DELETE完了をawaitで待ってから再取得しないと、削除前のデータが再描画され不整合が起きるため
     const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
     if (!res.ok) {
       const body = await res.json()
       alert(body.error ?? '削除に失敗しました')
+      return
     }
     refresh()
   }

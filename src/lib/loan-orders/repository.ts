@@ -1,47 +1,64 @@
 import { supabase } from '@/lib/supabase/server'
+import { asString, asOptionalString, asNumber } from '@/lib/mapping'
 import type { LoanOrder, LoanOrderInput, LoanOrderItem } from '@/types/order'
 
-function mapItem(row: Record<string, unknown>): LoanOrderItem {
+interface LoanOrderItemRow {
+  id?: unknown
+  loan_order_id?: unknown
+  jan?: unknown
+  name?: unknown
+  quantity?: unknown
+  created_at?: unknown
+}
+
+interface LoanOrderRow {
+  id?: unknown
+  facility_id?: unknown
+  procedure_name?: unknown
+  maker?: unknown
+  status?: unknown
+  created_at?: unknown
+  updated_at?: unknown
+}
+
+export function mapItem(row: LoanOrderItemRow): LoanOrderItem {
   return {
-    id: row.id as string,
-    loanOrderId: row.loan_order_id as string,
-    jan: row.jan != null ? (row.jan as string) : undefined,
-    name: row.name as string,
-    quantity: row.quantity as number,
-    createdAt: row.created_at as string,
+    id: asString(row.id),
+    loanOrderId: asString(row.loan_order_id),
+    jan: asOptionalString(row.jan),
+    name: asString(row.name),
+    quantity: asNumber(row.quantity),
+    createdAt: asString(row.created_at),
   }
 }
 
 export async function createLoanOrder(facilityId: string, input: LoanOrderInput): Promise<LoanOrder> {
-  const { data: order, error: orderError } = await supabase
-    .from('loan_orders')
-    .insert({ facility_id: facilityId, procedure_name: input.procedureName, maker: input.maker })
-    .select()
-    .single()
-  if (orderError) throw new Error(orderError.message)
+  // 単一トランザクションで完結させるため RPC を呼ぶ（ヘッダー+明細を原子的に INSERT）
+  const { data, error } = await supabase.rpc('create_loan_order_atomic', {
+    p_facility_id: facilityId,
+    p_procedure_name: input.procedureName,
+    p_maker: input.maker,
+    p_items: JSON.stringify(
+      input.items.map(item => ({
+        jan: item.jan ?? null,
+        name: item.name,
+        quantity: item.quantity,
+      }))
+    ),
+  })
+  if (error) throw new Error(error.message)
 
-  const o = order as Record<string, unknown>
-  const itemRows = input.items.map(item => ({
-    loan_order_id: o.id,
-    jan: item.jan ?? null,
-    name: item.name,
-    quantity: item.quantity,
-  }))
-
-  const { data: items, error: itemsError } = await supabase
-    .from('loan_order_items')
-    .insert(itemRows)
-    .select()
-  if (itemsError) throw new Error(itemsError.message)
+  const o = (data ?? {}) as LoanOrderRow & { items?: unknown }
+  const itemRows = Array.isArray(o.items) ? (o.items as LoanOrderItemRow[]) : []
 
   return {
-    id: o.id as string,
-    facilityId: o.facility_id as string,
-    procedureName: o.procedure_name as string,
-    maker: o.maker as string,
-    status: o.status as 'draft' | 'submitted',
-    items: (items as Record<string, unknown>[]).map(mapItem),
-    createdAt: o.created_at as string,
-    updatedAt: o.updated_at as string,
+    id: asString(o.id),
+    facilityId: asString(o.facility_id),
+    procedureName: asString(o.procedure_name),
+    maker: asString(o.maker),
+    status: asString(o.status) as 'draft' | 'submitted',
+    items: itemRows.map(mapItem),
+    createdAt: asString(o.created_at),
+    updatedAt: asString(o.updated_at),
   }
 }

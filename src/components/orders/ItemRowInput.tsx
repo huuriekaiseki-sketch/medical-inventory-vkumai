@@ -55,7 +55,7 @@ export function ItemRowInput({ rows, onChange }: Props) {
           <input
             type="number"
             value={row.quantity}
-            onChange={e => updateRow(i, 'quantity', Number(e.target.value))}
+            onChange={e => updateRow(i, 'quantity', Number(e.target.value) || 0)}
             min={1}
             className="border rounded px-2 py-1 text-sm w-16"
             style={{ borderColor: '#E5E7EB' }}
