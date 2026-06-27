@@ -87,7 +87,7 @@ export default function AdminUsersPage() {
       showToast(`${email} に招待メールを送信しました`)
       await loadUsers()
     } else {
-      const { error } = await res.json()
+      const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
       showToast(`エラー: ${error}`)
     }
   }
