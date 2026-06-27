@@ -29,4 +29,17 @@ describe('InviteModal', () => {
     fireEvent.click(screen.getByText('招待する'))
     expect(onInvite).not.toHaveBeenCalled()
   })
+
+  it('キャンセルボタンを押すと onClose が呼ばれ email 入力がクリアされる', () => {
+    const onClose = vi.fn()
+    const { rerender } = render(<InviteModal open={true} onClose={onClose} onInvite={vi.fn()} />)
+    fireEvent.change(screen.getByPlaceholderText('メールアドレス'), {
+      target: { value: 'test@example.com' },
+    })
+    expect(screen.getByPlaceholderText('メールアドレス')).toHaveValue('test@example.com')
+    fireEvent.click(screen.getByText('キャンセル'))
+    expect(onClose).toHaveBeenCalled()
+    rerender(<InviteModal open={true} onClose={onClose} onInvite={vi.fn()} />)
+    expect(screen.getByPlaceholderText('メールアドレス')).toHaveValue('')
+  })
 })
