@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { listProducts, createProduct } from '@/lib/products/repository'
 import { apiError } from '@/lib/api-error'
 import type { ProductInput } from '@/types/product'
 
 export async function GET() {
   try {
-    const products = await listProducts()
+    const db = await createServerSupabase()
+    const products = await listProducts(db)
     return NextResponse.json({ products, data: products })
   } catch (error) {
     return apiError(error instanceof Error ? error.message : '製品の取得に失敗しました')
@@ -25,7 +27,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const product = await createProduct(input)
+    const db = await createServerSupabase()
+    const product = await createProduct(db, input)
     return NextResponse.json({ product, data: product }, { status: 201 })
   } catch (error) {
     if (error instanceof Error && error.message.includes('既に使用されています')) {

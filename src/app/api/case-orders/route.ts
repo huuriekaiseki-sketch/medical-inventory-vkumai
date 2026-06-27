@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { createCaseOrder } from '@/lib/case-orders/repository'
 import { apiError } from '@/lib/api-error'
 import type { CaseOrderInput } from '@/types/order'
@@ -33,7 +34,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const order = await createCaseOrder(body.facilityId, input)
+    const db = await createServerSupabase()
+    const order = await createCaseOrder(db, body.facilityId, input)
     return NextResponse.json({ data: order }, { status: 201 })
   } catch (error) {
     return apiError(error instanceof Error ? error.message : '発注に失敗しました')

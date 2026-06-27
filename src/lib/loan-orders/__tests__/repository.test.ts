@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-
-vi.mock('@/lib/supabase/server', () => ({ supabase: {} }))
-
+import { describe, it, expect, vi } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLoanOrder } from '@/lib/loan-orders/repository'
+
+function makeMockRpcDb(rpcResult: unknown): SupabaseClient {
+  return { rpc: vi.fn().mockResolvedValue(rpcResult) } as unknown as SupabaseClient
+}
 
 describe('createLoanOrder', () => {
   const mockRpcResult = {
@@ -13,15 +15,9 @@ describe('createLoanOrder', () => {
     ],
   }
 
-  beforeEach(async () => {
-    vi.resetAllMocks()
-    const { supabase } = await import('@/lib/supabase/server')
-    const mock = supabase as Record<string, unknown>
-    mock.rpc = vi.fn().mockResolvedValue({ data: mockRpcResult, error: null })
-  })
-
   it('RPC を呼んで LoanOrder を返す', async () => {
-    const result = await createLoanOrder('f-1', {
+    const db = makeMockRpcDb({ data: mockRpcResult, error: null })
+    const result = await createLoanOrder(db, 'f-1', {
       procedureName: 'TAVI',
       maker: 'メドトロニック',
       items: [{ jan: '490001', name: 'カテーテルA', quantity: 1 }],
@@ -33,10 +29,10 @@ describe('createLoanOrder', () => {
   })
 
   it('create_loan_order_atomic を正しい引数で呼ぶ', async () => {
-    const { supabase } = await import('@/lib/supabase/server')
-    const rpc = (supabase as Record<string, unknown>).rpc as ReturnType<typeof vi.fn>
+    const db = makeMockRpcDb({ data: mockRpcResult, error: null })
+    const rpc = db.rpc as ReturnType<typeof vi.fn>
 
-    await createLoanOrder('f-1', {
+    await createLoanOrder(db, 'f-1', {
       procedureName: 'TAVI',
       maker: 'メドトロニック',
       items: [{ jan: '490001', name: 'カテーテルA', quantity: 1 }],
@@ -55,12 +51,10 @@ describe('createLoanOrder', () => {
   })
 
   it('Supabaseエラー時に例外を投げる', async () => {
-    const { supabase } = await import('@/lib/supabase/server')
-    const mock = supabase as Record<string, unknown>
-    mock.rpc = vi.fn().mockResolvedValue({ data: null, error: { message: 'DB error' } })
+    const db = makeMockRpcDb({ data: null, error: { message: 'DB error' } })
 
     await expect(
-      createLoanOrder('f-1', { procedureName: 'TAVI', maker: 'M', items: [] })
+      createLoanOrder(db, 'f-1', { procedureName: 'TAVI', maker: 'M', items: [] })
     ).rejects.toThrow('DB error')
   })
 })

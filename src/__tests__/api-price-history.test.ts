@@ -2,7 +2,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 import type { DistributorProduct } from '@/types/distributorProduct'
 
-vi.mock('@/lib/supabase/server', () => ({ supabase: {} }))
+vi.mock('@/lib/supabase/server', () => ({ createServerSupabase: vi.fn().mockResolvedValue({}) }))
 vi.mock('@/lib/price-histories/repository')
 vi.mock('@/lib/distributor-products/repository')
 

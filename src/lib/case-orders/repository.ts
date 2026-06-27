@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asOptionalString, asNumber } from '@/lib/mapping'
 import type { CaseOrder, CaseOrderInput, CaseOrderItem } from '@/types/order'
 
@@ -38,9 +38,9 @@ export function mapItem(row: CaseOrderItemRow): CaseOrderItem {
   }
 }
 
-export async function createCaseOrder(facilityId: string, input: CaseOrderInput): Promise<CaseOrder> {
+export async function createCaseOrder(db: SupabaseClient, facilityId: string, input: CaseOrderInput): Promise<CaseOrder> {
   // 単一トランザクションで完結させるため RPC を呼ぶ（ヘッダー+明細を原子的に INSERT）
-  const { data, error } = await supabase.rpc('create_case_order_atomic', {
+  const { data, error } = await db.rpc('create_case_order_atomic', {
     p_facility_id: facilityId,
     p_case_datetime: input.caseDatetime,
     p_procedure_name: input.procedureName,

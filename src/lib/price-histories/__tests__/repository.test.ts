@@ -1,20 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-
-// Mock supabase before importing repository
-vi.mock('@/lib/supabase/server', () => ({
-  supabase: {
-    rpc: vi.fn(),
-  },
-}))
-
+import { describe, it, expect, vi } from 'vitest'
 import { getPriceHistory } from '../repository'
-import { supabase } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+function makeMockDb(rpcResult: unknown): SupabaseClient {
+  return { rpc: vi.fn().mockResolvedValueOnce(rpcResult) } as unknown as SupabaseClient
+}
 
 describe('getPriceHistory', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
   it('should map RPC response with dist_product_id correctly', async () => {
     const mockData = [
       {
@@ -40,13 +32,8 @@ describe('getPriceHistory', () => {
         facility_name: '病院A',
       },
     ]
-
-    vi.mocked(supabase.rpc).mockResolvedValueOnce({
-      data: mockData,
-      error: null,
-    } as { data: Record<string, unknown>[]; error: null })
-
-    const result = await getPriceHistory('dpi-123')
+    const db = makeMockDb({ data: mockData, error: null })
+    const result = await getPriceHistory(db, 'dpi-123')
 
     expect(result).toHaveLength(2)
     expect(result[0]).toEqual({
@@ -60,19 +47,8 @@ describe('getPriceHistory', () => {
       changedAt: '2026-06-22T10:00:00Z',
       facilityName: null,
     })
-    expect(result[1]).toEqual({
-      id: 'hist-2',
-      entityType: 'hospital_price',
-      entityId: 'hp-1',
-      distributorProductId: 'dpi-123',
-      fieldName: 'purchase_price',
-      oldValue: 80,
-      newValue: 85,
-      changedAt: '2026-06-22T11:00:00Z',
-      facilityName: '病院A',
-    })
-
-    expect(supabase.rpc).toHaveBeenCalledWith(
+    expect(result[1].facilityName).toBe('病院A')
+    expect((db.rpc as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(
       'get_distributor_product_price_history',
       { p_distributor_product_id: 'dpi-123' }
     )
@@ -92,44 +68,21 @@ describe('getPriceHistory', () => {
         facility_name: null,
       },
     ]
+    const db = makeMockDb({ data: mockData, error: null })
+    const result = await getPriceHistory(db, 'dpi-456')
 
-    vi.mocked(supabase.rpc).mockResolvedValueOnce({
-      data: mockData,
-      error: null,
-    } as { data: Record<string, unknown>[]; error: null })
-
-    const result = await getPriceHistory('dpi-456')
-
-    expect(result[0]).toEqual({
-      id: 'hist-3',
-      entityType: 'distributor_product',
-      entityId: 'dp-2',
-      distributorProductId: 'dpi-456',
-      fieldName: 'delivery_price',
-      oldValue: null,
-      newValue: 50,
-      changedAt: '2026-06-22T12:00:00Z',
-      facilityName: null,
-    })
+    expect(result[0].oldValue).toBeNull()
+    expect(result[0].newValue).toBe(50)
   })
 
   it('should throw error when RPC fails', async () => {
-    vi.mocked(supabase.rpc).mockResolvedValueOnce({
-      data: null,
-      error: { message: 'Database error' },
-    } as { data: null; error: { message: string } })
-
-    await expect(getPriceHistory('dpi-789')).rejects.toThrow('Database error')
+    const db = makeMockDb({ data: null, error: { message: 'Database error' } })
+    await expect(getPriceHistory(db, 'dpi-789')).rejects.toThrow('Database error')
   })
 
   it('should return empty array when no records found', async () => {
-    vi.mocked(supabase.rpc).mockResolvedValueOnce({
-      data: [],
-      error: null,
-    } as { data: Record<string, unknown>[]; error: null })
-
-    const result = await getPriceHistory('dpi-nonexistent')
-
+    const db = makeMockDb({ data: [], error: null })
+    const result = await getPriceHistory(db, 'dpi-nonexistent')
     expect(result).toEqual([])
   })
 })

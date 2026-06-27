@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { getFacility, updateFacility, deleteFacility } from '@/lib/facilities/repository'
 import type { FacilityInput } from '@/types/facility'
 import type { RouteContext } from '@/types/route'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
-  const facility = await getFacility(id)
+  const db = await createServerSupabase()
+  const facility = await getFacility(db, id)
   if (!facility) {
     return NextResponse.json({ error: '施設が見つかりません' }, { status: 404 })
   }
@@ -26,7 +28,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    const facility = await updateFacility(id, input)
+    const db = await createServerSupabase()
+    const facility = await updateFacility(db, id, input)
     return NextResponse.json({ facility })
   } catch (error) {
     if (error instanceof Error) {
@@ -44,7 +47,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   try {
-    await deleteFacility(id)
+    const db = await createServerSupabase()
+    await deleteFacility(db, id)
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof Error && error.message.includes('存在しません')) {

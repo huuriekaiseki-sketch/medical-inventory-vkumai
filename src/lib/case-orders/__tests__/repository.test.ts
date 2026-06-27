@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-
-vi.mock('@/lib/supabase/server', () => ({ supabase: {} }))
-
+import { describe, it, expect, vi } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createCaseOrder } from '@/lib/case-orders/repository'
+
+function makeMockRpcDb(rpcResult: unknown): SupabaseClient {
+  return { rpc: vi.fn().mockResolvedValue(rpcResult) } as unknown as SupabaseClient
+}
 
 describe('createCaseOrder', () => {
   // RPC は case_orders 行 + items 配列をネストした JSONB を返す
@@ -23,15 +25,9 @@ describe('createCaseOrder', () => {
     ],
   }
 
-  beforeEach(async () => {
-    vi.resetAllMocks()
-    const { supabase } = await import('@/lib/supabase/server')
-    const mock = supabase as Record<string, unknown>
-    mock.rpc = vi.fn().mockResolvedValue({ data: mockRpcResult, error: null })
-  })
-
   it('RPC を呼んで CaseOrder を返す', async () => {
-    const result = await createCaseOrder('f-1', {
+    const db = makeMockRpcDb({ data: mockRpcResult, error: null })
+    const result = await createCaseOrder(db, 'f-1', {
       caseDatetime: '2026-06-24T10:00:00Z',
       procedureName: 'TAVI',
       patientId: 'P001',
@@ -50,10 +46,10 @@ describe('createCaseOrder', () => {
   })
 
   it('create_case_order_atomic を正しい引数で呼ぶ', async () => {
-    const { supabase } = await import('@/lib/supabase/server')
-    const rpc = (supabase as Record<string, unknown>).rpc as ReturnType<typeof vi.fn>
+    const db = makeMockRpcDb({ data: mockRpcResult, error: null })
+    const rpc = db.rpc as ReturnType<typeof vi.fn>
 
-    await createCaseOrder('f-1', {
+    await createCaseOrder(db, 'f-1', {
       caseDatetime: '2026-06-24T10:00:00Z',
       procedureName: 'TAVI',
       patientId: 'P001',
@@ -76,12 +72,10 @@ describe('createCaseOrder', () => {
   })
 
   it('Supabaseエラー時に例外を投げる', async () => {
-    const { supabase } = await import('@/lib/supabase/server')
-    const mock = supabase as Record<string, unknown>
-    mock.rpc = vi.fn().mockResolvedValue({ data: null, error: { message: 'DB error' } })
+    const db = makeMockRpcDb({ data: null, error: { message: 'DB error' } })
 
     await expect(
-      createCaseOrder('f-1', {
+      createCaseOrder(db, 'f-1', {
         caseDatetime: '2026-06-24T10:00:00Z',
         procedureName: 'TAVI',
         patientId: 'P001',

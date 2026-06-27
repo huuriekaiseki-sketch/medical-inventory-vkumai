@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { createLoanOrder } from '@/lib/loan-orders/repository'
 import { apiError } from '@/lib/api-error'
 import type { LoanOrderInput } from '@/types/order'
@@ -23,7 +24,8 @@ export async function POST(request: NextRequest) {
     items: body.items ?? [],
   }
   try {
-    const order = await createLoanOrder(body.facilityId, input)
+    const db = await createServerSupabase()
+    const order = await createLoanOrder(db, body.facilityId, input)
     return NextResponse.json({ order, data: order }, { status: 201 })
   } catch (error) {
     return apiError(error instanceof Error ? error.message : '発注に失敗しました')
