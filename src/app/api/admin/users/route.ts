@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminSupabase, createServerSupabase } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/server'
 import { apiError } from '@/lib/api-error'
+import { requireAdmin } from '@/lib/admin-auth'
 import type { AdminUser } from '@/types/admin'
-
-async function requireAdmin() {
-  const db = await createServerSupabase()
-  const { data: { user } } = await db.auth.getUser()
-  const adminEmails = (process.env.ADMIN_EMAILS ?? '')
-    .split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
-  const email = user?.email?.trim().toLowerCase() ?? ''
-  if (!user || !adminEmails.includes(email)) return null
-  return user
-}
 
 export async function GET() {
   const user = await requireAdmin()
@@ -42,7 +33,7 @@ export async function POST(request: NextRequest) {
   const user = await requireAdmin()
   if (!user) return apiError('権限がありません', 403)
 
-  let email: string
+  let email: string | undefined
   try {
     const body = await request.json()
     email = body.email?.trim()

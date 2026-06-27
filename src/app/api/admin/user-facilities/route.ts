@@ -1,16 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminSupabase, createServerSupabase } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/server'
 import { apiError } from '@/lib/api-error'
-
-async function requireAdmin() {
-  const db = await createServerSupabase()
-  const { data: { user } } = await db.auth.getUser()
-  const adminEmails = (process.env.ADMIN_EMAILS ?? '')
-    .split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
-  const email = user?.email?.trim().toLowerCase() ?? ''
-  if (!user || !adminEmails.includes(email)) return null
-  return user
-}
+import { requireAdmin } from '@/lib/admin-auth'
 
 export async function POST(request: NextRequest) {
   const user = await requireAdmin()
