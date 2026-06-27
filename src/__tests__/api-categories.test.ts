@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-vi.mock('@/lib/supabase/server', () => ({ supabase: {} }))
+vi.mock('@/lib/supabase/server', () => ({ createServerSupabase: vi.fn().mockResolvedValue({}) }))
 vi.mock('@/lib/categories/repository')
 
 import {
@@ -26,7 +26,7 @@ const mockCategory = {
   updatedAt: '2026-06-18T00:00:00Z',
 }
 
-function makeRequest(url: string, init?: RequestInit) {
+function makeRequest(url: string, init?: Omit<RequestInit, 'signal'> & { signal?: AbortSignal }) {
   return new NextRequest(`http://localhost${url}`, init)
 }
 

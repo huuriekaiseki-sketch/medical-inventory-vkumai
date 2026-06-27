@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { getDistributorProduct, updateDistributorProduct, deleteDistributorProduct } from '@/lib/distributor-products/repository'
 import type { DistributorProductInput } from '@/types/distributorProduct'
 import type { RouteContext } from '@/types/route'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
-  const item = await getDistributorProduct(id)
+  const db = await createServerSupabase()
+  const item = await getDistributorProduct(db, id)
   if (!item) {
     return NextResponse.json({ error: '代理店商品が見つかりません' }, { status: 404 })
   }
@@ -26,7 +28,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    const item = await updateDistributorProduct(id, input)
+    const db = await createServerSupabase()
+    const item = await updateDistributorProduct(db, id, input)
     return NextResponse.json({ item })
   } catch (error) {
     if (error instanceof Error) {
@@ -44,7 +47,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   try {
-    await deleteDistributorProduct(id)
+    const db = await createServerSupabase()
+    await deleteDistributorProduct(db, id)
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof Error && error.message.includes('存在しません')) {

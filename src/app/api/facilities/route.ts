@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { listFacilities, createFacility } from '@/lib/facilities/repository'
 import { apiError } from '@/lib/api-error'
 import type { FacilityInput } from '@/types/facility'
 
 export async function GET() {
   try {
-    const facilities = await listFacilities()
+    const db = await createServerSupabase()
+    const facilities = await listFacilities(db)
     return NextResponse.json({ facilities, data: facilities })
   } catch (error) {
     return apiError(error instanceof Error ? error.message : '施設の取得に失敗しました')
@@ -25,7 +27,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const facility = await createFacility(input)
+    const db = await createServerSupabase()
+    const facility = await createFacility(db, input)
     return NextResponse.json({ facility, data: facility }, { status: 201 })
   } catch (error) {
     if (error instanceof Error && error.message.includes('既に使用されています')) {

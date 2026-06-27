@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { listCategories, createCategory } from '@/lib/categories/repository'
 import { apiError } from '@/lib/api-error'
 import type { CategoryInput } from '@/types/category'
 
 export async function GET() {
   try {
-    const categories = await listCategories()
+    const db = await createServerSupabase()
+    const categories = await listCategories(db)
     return NextResponse.json({ categories, data: categories })
   } catch (error) {
     return apiError(error instanceof Error ? error.message : 'カテゴリの取得に失敗しました')
@@ -25,7 +27,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const category = await createCategory(input)
+    const db = await createServerSupabase()
+    const category = await createCategory(db, input)
     return NextResponse.json({ category, data: category }, { status: 201 })
   } catch (error) {
     if (error instanceof Error && error.message.includes('既に使用されています')) {
