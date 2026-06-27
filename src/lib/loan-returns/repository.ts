@@ -44,6 +44,7 @@ export async function createLoanReturn(db: SupabaseClient, facilityId: string, i
     .select(LOAN_RETURN_COLUMNS)
     .single()
   if (retError) throw new Error(retError.message)
+  if (!ret) throw new Error('loan_returns の作成に失敗しました')
 
   const r = ret as LoanReturnRow
   const itemRows = input.items.map(item => ({
