@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString } from '@/lib/mapping'
 import type { Facility, FacilityInput } from '@/types/facility'
 
@@ -20,8 +20,8 @@ export function mapFacility(row: FacilityRow): Facility {
   }
 }
 
-export async function listFacilities(): Promise<Facility[]> {
-  const { data, error } = await supabase
+export async function listFacilities(db: SupabaseClient): Promise<Facility[]> {
+  const { data, error } = await db
     .from('facilities')
     .select(FACILITY_COLUMNS)
     .order('name', { ascending: true })
@@ -29,8 +29,8 @@ export async function listFacilities(): Promise<Facility[]> {
   return data.map(mapFacility)
 }
 
-export async function getFacility(id: string): Promise<Facility | null> {
-  const { data, error } = await supabase
+export async function getFacility(db: SupabaseClient, id: string): Promise<Facility | null> {
+  const { data, error } = await db
     .from('facilities')
     .select(FACILITY_COLUMNS)
     .eq('id', id)
@@ -42,8 +42,8 @@ export async function getFacility(id: string): Promise<Facility | null> {
   return mapFacility(data)
 }
 
-export async function createFacility(input: FacilityInput): Promise<Facility> {
-  const { data, error } = await supabase
+export async function createFacility(db: SupabaseClient, input: FacilityInput): Promise<Facility> {
+  const { data, error } = await db
     .from('facilities')
     .insert({ name: input.name })
     .select(FACILITY_COLUMNS)
@@ -55,8 +55,8 @@ export async function createFacility(input: FacilityInput): Promise<Facility> {
   return mapFacility(data)
 }
 
-export async function updateFacility(id: string, input: FacilityInput): Promise<Facility> {
-  const { data, error } = await supabase
+export async function updateFacility(db: SupabaseClient, id: string, input: FacilityInput): Promise<Facility> {
+  const { data, error } = await db
     .from('facilities')
     .update({ name: input.name })
     .eq('id', id)
@@ -70,8 +70,8 @@ export async function updateFacility(id: string, input: FacilityInput): Promise<
   return mapFacility(data)
 }
 
-export async function deleteFacility(id: string): Promise<void> {
-  const { data, error } = await supabase
+export async function deleteFacility(db: SupabaseClient, id: string): Promise<void> {
+  const { data, error } = await db
     .from('facilities')
     .delete()
     .eq('id', id)

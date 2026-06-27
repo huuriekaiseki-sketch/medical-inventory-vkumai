@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString } from '@/lib/mapping'
 import type { Product, ProductInput } from '@/types/product'
 
@@ -22,8 +22,8 @@ export function mapProduct(row: ProductRow): Product {
   }
 }
 
-export async function listProducts(): Promise<Product[]> {
-  const { data, error } = await supabase
+export async function listProducts(db: SupabaseClient): Promise<Product[]> {
+  const { data, error } = await db
     .from('products')
     .select(PRODUCT_COLUMNS)
     .order('created_at', { ascending: false })
@@ -31,8 +31,8 @@ export async function listProducts(): Promise<Product[]> {
   return data.map(mapProduct)
 }
 
-export async function getProduct(id: string): Promise<Product | null> {
-  const { data, error } = await supabase
+export async function getProduct(db: SupabaseClient, id: string): Promise<Product | null> {
+  const { data, error } = await db
     .from('products')
     .select(PRODUCT_COLUMNS)
     .eq('id', id)
@@ -44,8 +44,8 @@ export async function getProduct(id: string): Promise<Product | null> {
   return mapProduct(data)
 }
 
-export async function createProduct(input: ProductInput): Promise<Product> {
-  const { data, error } = await supabase
+export async function createProduct(db: SupabaseClient, input: ProductInput): Promise<Product> {
+  const { data, error } = await db
     .from('products')
     .insert({ jan: input.jan, ref: input.ref })
     .select(PRODUCT_COLUMNS)
@@ -57,8 +57,8 @@ export async function createProduct(input: ProductInput): Promise<Product> {
   return mapProduct(data)
 }
 
-export async function updateProduct(id: string, input: ProductInput): Promise<Product> {
-  const { data, error } = await supabase
+export async function updateProduct(db: SupabaseClient, id: string, input: ProductInput): Promise<Product> {
+  const { data, error } = await db
     .from('products')
     .update({ jan: input.jan, ref: input.ref })
     .eq('id', id)
@@ -72,8 +72,8 @@ export async function updateProduct(id: string, input: ProductInput): Promise<Pr
   return mapProduct(data)
 }
 
-export async function deleteProduct(id: string): Promise<void> {
-  const { data, error } = await supabase
+export async function deleteProduct(db: SupabaseClient, id: string): Promise<void> {
+  const { data, error } = await db
     .from('products')
     .delete()
     .eq('id', id)

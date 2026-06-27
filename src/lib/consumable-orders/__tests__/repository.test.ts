@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-
-vi.mock('@/lib/supabase/server', () => ({ supabase: {} }))
-
+import { describe, it, expect, vi } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createConsumableOrder } from '@/lib/consumable-orders/repository'
+
+function makeMockRpcDb(rpcResult: unknown): SupabaseClient {
+  return { rpc: vi.fn().mockResolvedValue(rpcResult) } as unknown as SupabaseClient
+}
 
 describe('createConsumableOrder', () => {
   const mockRpcResult = {
@@ -13,15 +15,9 @@ describe('createConsumableOrder', () => {
     ],
   }
 
-  beforeEach(async () => {
-    vi.resetAllMocks()
-    const { supabase } = await import('@/lib/supabase/server')
-    const mock = supabase as Record<string, unknown>
-    mock.rpc = vi.fn().mockResolvedValue({ data: mockRpcResult, error: null })
-  })
-
   it('RPC を呼んで ConsumableOrder を返す', async () => {
-    const result = await createConsumableOrder('f-1', {
+    const db = makeMockRpcDb({ data: mockRpcResult, error: null })
+    const result = await createConsumableOrder(db, 'f-1', {
       items: [{ consumableId: 'c-1', quantity: 3 }],
     })
     expect(result.id).toBe('coo-1')
@@ -31,10 +27,10 @@ describe('createConsumableOrder', () => {
   })
 
   it('create_consumable_order_atomic を正しい引数で呼ぶ', async () => {
-    const { supabase } = await import('@/lib/supabase/server')
-    const rpc = (supabase as Record<string, unknown>).rpc as ReturnType<typeof vi.fn>
+    const db = makeMockRpcDb({ data: mockRpcResult, error: null })
+    const rpc = db.rpc as ReturnType<typeof vi.fn>
 
-    await createConsumableOrder('f-1', { items: [{ consumableId: 'c-1', quantity: 3 }] })
+    await createConsumableOrder(db, 'f-1', { items: [{ consumableId: 'c-1', quantity: 3 }] })
 
     expect(rpc).toHaveBeenCalledWith('create_consumable_order_atomic', expect.objectContaining({
       p_facility_id: 'f-1',
@@ -47,12 +43,10 @@ describe('createConsumableOrder', () => {
   })
 
   it('Supabaseエラー時に例外を投げる', async () => {
-    const { supabase } = await import('@/lib/supabase/server')
-    const mock = supabase as Record<string, unknown>
-    mock.rpc = vi.fn().mockResolvedValue({ data: null, error: { message: 'DB error' } })
+    const db = makeMockRpcDb({ data: null, error: { message: 'DB error' } })
 
     await expect(
-      createConsumableOrder('f-1', { items: [] })
+      createConsumableOrder(db, 'f-1', { items: [] })
     ).rejects.toThrow('DB error')
   })
 })

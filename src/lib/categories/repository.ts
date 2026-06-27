@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asNullableString } from '@/lib/mapping'
 import type { Category, CategoryInput } from '@/types/category'
 
@@ -22,8 +22,8 @@ export function mapCategory(row: CategoryRow): Category {
   }
 }
 
-export async function listCategories(): Promise<Category[]> {
-  const { data, error } = await supabase
+export async function listCategories(db: SupabaseClient): Promise<Category[]> {
+  const { data, error } = await db
     .from('categories')
     .select(CATEGORY_COLUMNS)
     .order('name', { ascending: true })
@@ -31,8 +31,8 @@ export async function listCategories(): Promise<Category[]> {
   return data.map(mapCategory)
 }
 
-export async function getCategory(id: string): Promise<Category | null> {
-  const { data, error } = await supabase
+export async function getCategory(db: SupabaseClient, id: string): Promise<Category | null> {
+  const { data, error } = await db
     .from('categories')
     .select(CATEGORY_COLUMNS)
     .eq('id', id)
@@ -44,8 +44,8 @@ export async function getCategory(id: string): Promise<Category | null> {
   return mapCategory(data)
 }
 
-export async function createCategory(input: CategoryInput): Promise<Category> {
-  const { data, error } = await supabase
+export async function createCategory(db: SupabaseClient, input: CategoryInput): Promise<Category> {
+  const { data, error } = await db
     .from('categories')
     .insert({ name: input.name, description: input.description })
     .select(CATEGORY_COLUMNS)
@@ -57,8 +57,8 @@ export async function createCategory(input: CategoryInput): Promise<Category> {
   return mapCategory(data)
 }
 
-export async function updateCategory(id: string, input: CategoryInput): Promise<Category> {
-  const { data, error } = await supabase
+export async function updateCategory(db: SupabaseClient, id: string, input: CategoryInput): Promise<Category> {
+  const { data, error } = await db
     .from('categories')
     .update({ name: input.name, description: input.description })
     .eq('id', id)
@@ -72,15 +72,15 @@ export async function updateCategory(id: string, input: CategoryInput): Promise<
   return mapCategory(data)
 }
 
-export async function deleteCategory(id: string): Promise<void> {
-  const { count, error: countError } = await supabase
+export async function deleteCategory(db: SupabaseClient, id: string): Promise<void> {
+  const { count, error: countError } = await db
     .from('distributor_products')
     .select('id', { count: 'exact', head: true })
     .eq('category_id', id)
   if (countError) throw new Error(countError.message)
   if ((count ?? 0) > 0) throw new Error('使用中のため削除できません')
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('categories')
     .delete()
     .eq('id', id)

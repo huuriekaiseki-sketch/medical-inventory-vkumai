@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asNullableString, asNullableNumber } from '@/lib/mapping'
 import type { PriceHistory, PriceHistoryEntityType, PriceHistoryFieldName } from '@/types/priceHistory'
 
@@ -33,8 +33,8 @@ export function mapPriceHistory(row: PriceHistoryRow): PriceHistory {
   }
 }
 
-export async function getPriceHistory(distributorProductId: string): Promise<PriceHistory[]> {
-  const { data, error } = await supabase.rpc(
+export async function getPriceHistory(db: SupabaseClient, distributorProductId: string): Promise<PriceHistory[]> {
+  const { data, error } = await db.rpc(
     'get_distributor_product_price_history',
     { p_distributor_product_id: distributorProductId }
   )
