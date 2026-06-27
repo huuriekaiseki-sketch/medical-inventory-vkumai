@@ -1,17 +1,17 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
+import { useState, Suspense, FormEvent } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const urlError = typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.search).get('error')
-    : null
+  const searchParams = useSearchParams()
+  const urlError = searchParams.get('error')
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -87,5 +87,13 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }

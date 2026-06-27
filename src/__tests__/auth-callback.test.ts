@@ -16,12 +16,6 @@ vi.mock('next/headers', () => ({
   })),
 }))
 
-// GET 関数を直接インポート
-async function importGET() {
-  const mod = await import('../app/auth/callback/route')
-  return mod.GET
-}
-
 describe('auth/callback route', () => {
   beforeEach(() => {
     vi.resetModules()
