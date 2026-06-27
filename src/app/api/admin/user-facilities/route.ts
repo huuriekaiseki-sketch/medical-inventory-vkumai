@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   const user = await requireAdmin()
   if (!user) return apiError('権限がありません', 403)
 
-  let userId: string, facilityId: string
+  let userId: string | undefined, facilityId: string | undefined
   try {
     const body = await request.json()
     userId = body.userId
@@ -21,7 +21,9 @@ export async function POST(request: NextRequest) {
   const { error } = await admin
     .from('user_facilities')
     .insert({ user_id: userId, facility_id: facilityId })
-  if (error) return apiError(error.message)
+
+  // Treat duplicate as success (idempotent)
+  if (error && error.code !== '23505') return apiError(error.message)
 
   return NextResponse.json({ message: '施設を割り当てました' })
 }

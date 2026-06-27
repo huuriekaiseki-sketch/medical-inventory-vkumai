@@ -89,8 +89,8 @@ export default function AdminUsersPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     })
-    setInviteOpen(false)
     if (res.ok) {
+      setInviteOpen(false)
       showToast(`${email} に招待メールを送信しました`)
       reload()
     } else {

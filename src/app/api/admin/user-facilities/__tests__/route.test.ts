@@ -48,6 +48,18 @@ describe('POST /api/admin/user-facilities', () => {
     expect(mockInsert).toHaveBeenCalledWith({ user_id: 'u1', facility_id: 'f1' })
   })
 
+  it('重複 INSERT (23505) は 200 を返す（idempotent）', async () => {
+    mockFrom.mockReturnValue({ insert: mockInsert })
+    mockInsert.mockResolvedValue({ error: { code: '23505', message: 'duplicate key' } })
+
+    const req = new NextRequest('http://localhost/api/admin/user-facilities', {
+      method: 'POST',
+      body: JSON.stringify({ userId: 'u1', facilityId: 'f1' }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+  })
+
   it('非管理者は 403 を返す', async () => {
     mockGetUser.mockResolvedValue({
       data: { user: { email: 'other@test.com' } },

@@ -46,29 +46,35 @@ beforeEach(() => {
 })
 
 describe('GET /api/admin/users', () => {
-  it('ユーザー一覧と担当施設IDを返す', async () => {
+  it('ユーザー一覧と担当施設IDを返す（バルク取得）', async () => {
     mockListUsers.mockResolvedValue({
       data: {
         users: [
           { id: 'u1', email: 'a@test.com', last_sign_in_at: '2026-06-27T00:00:00Z' },
+          { id: 'u2', email: 'b@test.com', last_sign_in_at: null },
         ],
       },
       error: null,
     })
-    const mockSelect = vi.fn().mockReturnThis()
-    const mockEq = vi.fn().mockResolvedValue({
-      data: [{ facility_id: 'f1' }],
+    const mockIn = vi.fn().mockResolvedValue({
+      data: [
+        { user_id: 'u1', facility_id: 'f1' },
+        { user_id: 'u1', facility_id: 'f2' },
+      ],
       error: null,
     })
+    const mockSelect = vi.fn().mockReturnValue({ in: mockIn })
     mockFrom.mockReturnValue({ select: mockSelect })
-    mockSelect.mockReturnValue({ eq: mockEq })
 
     const res = await GET()
     const body = await res.json()
 
     expect(res.status).toBe(200)
+    expect(mockSelect).toHaveBeenCalledWith('user_id, facility_id')
+    expect(mockIn).toHaveBeenCalledWith('user_id', ['u1', 'u2'])
     expect(body.users[0].id).toBe('u1')
-    expect(body.users[0].facilityIds).toEqual(['f1'])
+    expect(body.users[0].facilityIds).toEqual(['f1', 'f2'])
+    expect(body.users[1].facilityIds).toEqual([])
   })
 
   it('非管理者は 403 を返す', async () => {
