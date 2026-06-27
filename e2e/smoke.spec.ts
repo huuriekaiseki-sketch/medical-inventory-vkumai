@@ -10,19 +10,21 @@ const pages = [
   { name: 'その他', path: '/other' },
 ]
 
-for (const { name, path } of pages) {
-  test(`${name}（${path}）が開いてクラッシュしない`, async ({ page }) => {
-    const consoleErrors: string[] = []
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') consoleErrors.push(msg.text())
-    })
+test.describe('ページスモークテスト', () => {
+  for (const { name, path } of pages) {
+    test(`${name}（${path}）が開いてクラッシュしない`, async ({ page }) => {
+      const consoleErrors: string[] = []
+      page.on('console', (msg) => {
+        if (msg.type() === 'error') consoleErrors.push(msg.text())
+      })
 
-    await page.goto(path)
-    await page.waitForLoadState('networkidle')
-    await expect(page.locator('h1')).toBeVisible()
-    expect(consoleErrors).toHaveLength(0)
-  })
-}
+      await page.goto(path)
+      await page.waitForLoadState('networkidle')
+      await expect(page.locator('h1')).toBeVisible()
+      expect(consoleErrors).toHaveLength(0)
+    })
+  }
+})
 
 test('未認証でアクセスすると /login にリダイレクトされる', async ({ browser }) => {
   // storageState を使わない新しいコンテキストで確認

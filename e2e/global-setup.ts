@@ -8,8 +8,14 @@ async function globalSetup() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const testEmail = process.env.E2E_TEST_EMAIL
 
+  const authFilePath = path.join(process.cwd(), 'e2e', '.auth', 'user.json')
+  fs.mkdirSync(path.dirname(authFilePath), { recursive: true })
+
   if (!supabaseUrl || !serviceRoleKey || !testEmail) {
-    throw new Error('E2E: NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / E2E_TEST_EMAIL が未設定')
+    console.warn('[E2E global-setup] E2E_TEST_EMAIL / SUPABASE_SERVICE_ROLE_KEY が未設定。認証なしで実行します。')
+    // 空のstorageStateを書く（Playwrightがファイル不在でクラッシュするのを防ぐ）
+    fs.writeFileSync(authFilePath, JSON.stringify({ cookies: [], origins: [] }))
+    return
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
@@ -25,14 +31,11 @@ async function globalSetup() {
   }
 
   // ブラウザでリンクを開いてセッションCookieを取得
-  const authDir = path.join(process.cwd(), 'e2e', '.auth')
-  fs.mkdirSync(authDir, { recursive: true })
-
   const browser = await chromium.launch()
   const page = await browser.newPage()
   await page.goto(data.properties.action_link)
   await page.waitForURL('/')
-  await page.context().storageState({ path: path.join(authDir, 'user.json') })
+  await page.context().storageState({ path: authFilePath })
   await browser.close()
 }
 
