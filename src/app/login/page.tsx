@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, Suspense, FormEvent } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useState, Suspense, FormEvent, useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 function LoginForm() {
@@ -12,6 +12,22 @@ function LoginForm() {
 
   const searchParams = useSearchParams()
   const urlError = searchParams.get('error')
+  const router = useRouter()
+
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash.includes('access_token=')) {
+      const params = new URLSearchParams(hash.slice(1))
+      const access_token = params.get('access_token')
+      const refresh_token = params.get('refresh_token')
+      if (access_token && refresh_token) {
+        const supabase = createSupabaseBrowserClient()
+        supabase.auth.setSession({ access_token, refresh_token }).then(({ error }) => {
+          if (!error) window.location.href = '/'
+        })
+      }
+    }
+  }, [])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
