@@ -11,7 +11,6 @@ CREATE TABLE user_facilities (
   facility_id UUID REFERENCES facilities(id)  ON DELETE CASCADE,
   PRIMARY KEY (user_id, facility_id)
 );
-CREATE INDEX ON user_facilities (user_id, facility_id);
 ALTER TABLE user_facilities ENABLE ROW LEVEL SECURITY;
 
 -- 自分の行のみ SELECT 可（RLS サブクエリが空集合にならないために必須）
@@ -82,12 +81,22 @@ CREATE POLICY "facility_member_only" ON case_order_items
     SELECT 1 FROM case_orders o
     WHERE o.id = case_order_items.case_order_id
       AND is_facility_member(o.facility_id)
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM case_orders o
+    WHERE o.id = case_order_items.case_order_id
+      AND is_facility_member(o.facility_id)
   ));
 
 DROP POLICY IF EXISTS "auth_only" ON consumable_order_items;
 CREATE POLICY "facility_member_only" ON consumable_order_items
   FOR ALL TO authenticated
   USING (EXISTS (
+    SELECT 1 FROM consumable_orders o
+    WHERE o.id = consumable_order_items.consumable_order_id
+      AND is_facility_member(o.facility_id)
+  ))
+  WITH CHECK (EXISTS (
     SELECT 1 FROM consumable_orders o
     WHERE o.id = consumable_order_items.consumable_order_id
       AND is_facility_member(o.facility_id)
@@ -100,12 +109,22 @@ CREATE POLICY "facility_member_only" ON loan_order_items
     SELECT 1 FROM loan_orders o
     WHERE o.id = loan_order_items.loan_order_id
       AND is_facility_member(o.facility_id)
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM loan_orders o
+    WHERE o.id = loan_order_items.loan_order_id
+      AND is_facility_member(o.facility_id)
   ));
 
 DROP POLICY IF EXISTS "auth_only" ON loan_return_items;
 CREATE POLICY "facility_member_only" ON loan_return_items
   FOR ALL TO authenticated
   USING (EXISTS (
+    SELECT 1 FROM loan_returns r
+    WHERE r.id = loan_return_items.loan_return_id
+      AND is_facility_member(r.facility_id)
+  ))
+  WITH CHECK (EXISTS (
     SELECT 1 FROM loan_returns r
     WHERE r.id = loan_return_items.loan_return_id
       AND is_facility_member(r.facility_id)
