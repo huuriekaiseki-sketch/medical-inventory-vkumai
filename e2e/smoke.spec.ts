@@ -28,7 +28,7 @@ test.describe('ページスモークテスト', () => {
 
 test('未認証でアクセスすると /login にリダイレクトされる', async ({ browser }) => {
   // storageState を使わない新しいコンテキストで確認
-  const context = await browser.newContext() // storageState なし
+  const context = await browser.newContext({ storageState: undefined }) // グローバル設定を継承しない
   const page = await context.newPage()
   await page.goto('/facilities')
   await expect(page).toHaveURL(/\/login/)

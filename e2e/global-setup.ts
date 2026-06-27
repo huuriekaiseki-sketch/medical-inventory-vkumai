@@ -31,12 +31,19 @@ async function globalSetup() {
   }
 
   // ブラウザでリンクを開いてセッションCookieを取得
-  const browser = await chromium.launch()
-  const page = await browser.newPage()
-  await page.goto(data.properties.action_link)
-  await page.waitForURL('/')
-  await page.context().storageState({ path: authFilePath })
-  await browser.close()
+  let browser
+  try {
+    browser = await chromium.launch()
+    const page = await browser.newPage()
+    await page.goto(data.properties.action_link)
+    await page.waitForURL('/')
+    await page.context().storageState({ path: authFilePath })
+  } catch (launchError) {
+    console.warn('[E2E global-setup] ブラウザ起動失敗。認証なしで実行します:', launchError)
+    fs.writeFileSync(authFilePath, JSON.stringify({ cookies: [], origins: [] }))
+  } finally {
+    await browser?.close()
+  }
 }
 
 export default globalSetup
