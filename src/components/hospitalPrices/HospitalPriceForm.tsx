@@ -35,8 +35,8 @@ export function HospitalPriceForm({
     setIsSubmitting(true)
     try {
       await onSubmit({
-        facilityId: formData.get('facilityId') ?? '',
-        distributorProductId: formData.get('distributorProductId') ?? '',
+        facilityId: (formData.get('facilityId') as string) ?? '',
+        distributorProductId: (formData.get('distributorProductId') as string) ?? '',
         purchasePrice: Number(formData.get('purchasePrice')),
         deliveryPrice: Number(formData.get('deliveryPrice')),
       })
