@@ -5,39 +5,9 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 
-export async function middleware(request: NextRequest) {
-  const response = NextResponse.next()
-
-  // WHY: @supabase/ssr の createServerClient は Cookie の読み書きを
-  //      request/response 経由で行う設計のため、ここで明示的に渡す。
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options)
-          })
-        },
-      },
-    },
-  )
-
-  // WHY: getSession() はローカル Cookie を信頼するだけで JWT 再検証を行わない。
-  //      getUser() はサーバーサイドで Supabase に問い合わせるため改ざんトークンを防げる。
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  return response
+// WHY: 認証機能実装前の暫定措置。全APIを認証なしで通過させる。
+export async function middleware(_request: NextRequest) {
+  return NextResponse.next()
 }
 
 export const config = {
