@@ -33,7 +33,7 @@ export function InviteModal({ open, onClose, onInvite }: Props) {
         />
         <div className="flex justify-end gap-2">
           <button
-            onClick={onClose}
+            onClick={() => { setEmail(''); onClose() }}
             className="px-4 py-2 text-sm rounded border"
           >
             キャンセル

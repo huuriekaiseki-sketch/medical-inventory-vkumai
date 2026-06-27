@@ -3,9 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { UserTable } from '@/components/admin/UserTable'
 import { InviteModal } from '@/components/admin/InviteModal'
-import type { AdminUser } from '@/types/admin'
-
-type Facility = { id: string; name: string }
+import type { AdminUser, Facility } from '@/types/admin'
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -19,24 +17,37 @@ export default function AdminUsersPage() {
   }
 
   const loadUsers = useCallback(async () => {
-    const [usersRes, facilitiesRes] = await Promise.all([
-      fetch('/api/admin/users'),
-      fetch('/api/facilities'),
-    ])
-    const { users } = await usersRes.json()
-    const { facilities } = await facilitiesRes.json()
-    setUsers(users)
-    setFacilities(facilities)
+    try {
+      const [usersRes, facilitiesRes] = await Promise.all([
+        fetch('/api/admin/users'),
+        fetch('/api/facilities'),
+      ])
+      if (!usersRes.ok || !facilitiesRes.ok) {
+        showToast('データの取得に失敗しました')
+        return
+      }
+      const { users } = await usersRes.json()
+      const { facilities } = await facilitiesRes.json()
+      setUsers(users)
+      setFacilities(facilities)
+    } catch {
+      showToast('データの取得に失敗しました')
+    }
   }, [])
 
   useEffect(() => { loadUsers() }, [loadUsers])
 
   const handleToggleFacility = async (userId: string, facilityId: string, add: boolean) => {
-    await fetch('/api/admin/user-facilities', {
+    const res = await fetch('/api/admin/user-facilities', {
       method: add ? 'POST' : 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, facilityId }),
     })
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
+      showToast(`エラー: ${error}`)
+      return
+    }
     setUsers(prev =>
       prev.map(u =>
         u.id !== userId ? u : {
@@ -51,11 +62,16 @@ export default function AdminUsersPage() {
 
   const handleDeleteUser = async (userId: string, email: string) => {
     if (!confirm(`${email} を削除しますか？`)) return
-    await fetch('/api/admin/users', {
+    const res = await fetch('/api/admin/users', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId }),
     })
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
+      showToast(`エラー: ${error}`)
+      return
+    }
     setUsers(prev => prev.filter(u => u.id !== userId))
     showToast('ユーザーを削除しました')
   }
