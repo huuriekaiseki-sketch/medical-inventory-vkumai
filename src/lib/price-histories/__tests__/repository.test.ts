@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { getPriceHistory } from '../repository'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
