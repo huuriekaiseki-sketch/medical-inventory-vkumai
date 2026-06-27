@@ -18,6 +18,7 @@ for (const { name, path } of pages) {
     })
 
     await page.goto(path)
+    await page.waitForLoadState('networkidle')
     await expect(page.locator('h1')).toBeVisible()
     expect(consoleErrors).toHaveLength(0)
   })
