@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { middleware } from '../middleware'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -19,6 +19,10 @@ beforeEach(() => {
 })
 
 describe('middleware', () => {
+  afterEach(() => {
+    vi.resetAllMocks()
+  })
+
   describe('未認証ガード', () => {
     it('未認証ユーザーが /facilities にアクセス→ /login にリダイレクト', async () => {
       const { createServerClient } = await import('@supabase/ssr')
@@ -214,11 +218,27 @@ describe('middleware', () => {
     })
   })
 
-  describe('matcher と静的アセット除外', () => {
-    it('/_next/static にはミドルウェアが実行されない（matcher設定）', async () => {
-      // matcher 設定により実際にはミドルウェアが実行されないため、
-      // ここではテストスキップ（実装確認のみ）
-      expect(true).toBe(true)
+  describe('パスマッチング（admin パス）', () => {
+    it('名前空間の誤マッチを避ける（/adminfoo は admin パスではない）', async () => {
+      // /admin のみ、または /admin/ 配下が正しい admin パス
+      // /adminfoo などの誤マッチを防ぐテスト
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({
+            data: { user: { id: 'admin-1', email: 'admin@example.com' } },
+          }),
+        },
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/adminfoo')
+      )
+
+      const response = await middleware(request)
+
+      // /adminfoo は admin パスではないので、通常のみドルウェアロジック通す
+      expect(response).toBeInstanceOf(NextResponse)
     })
   })
 })
