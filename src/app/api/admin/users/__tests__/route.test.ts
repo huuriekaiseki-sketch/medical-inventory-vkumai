@@ -24,6 +24,17 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
+vi.mock('@/lib/admin-auth', () => ({
+  requireAdmin: async () => {
+    const result = await mockGetUser()
+    const adminEmails = (process.env.ADMIN_EMAILS ?? '')
+      .split(',').map((e: string) => e.trim().toLowerCase()).filter(Boolean)
+    const email = result?.data?.user?.email?.trim().toLowerCase() ?? ''
+    if (!result?.data?.user || !adminEmails.includes(email)) return null
+    return result.data.user
+  },
+}))
+
 const ADMIN_EMAIL = 'admin@test.com'
 
 beforeEach(() => {
@@ -101,5 +112,14 @@ describe('DELETE /api/admin/users', () => {
     const res = await DELETE(req)
     expect(res.status).toBe(200)
     expect(mockDeleteUser).toHaveBeenCalledWith('u1')
+  })
+
+  it('userId 未指定は 400 を返す', async () => {
+    const req = new NextRequest('http://localhost/api/admin/users', {
+      method: 'DELETE',
+      body: JSON.stringify({}),
+    })
+    const res = await DELETE(req)
+    expect(res.status).toBe(400)
   })
 })
