@@ -10,32 +10,39 @@ export default function AdminUsersPage() {
   const [facilities, setFacilities] = useState<Facility[]>([])
   const [inviteOpen, setInviteOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const showToast = (msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
   }
 
-  const loadUsers = useCallback(async () => {
-    try {
-      const [usersRes, facilitiesRes] = await Promise.all([
-        fetch('/api/admin/users'),
-        fetch('/api/facilities'),
-      ])
-      if (!usersRes.ok || !facilitiesRes.ok) {
-        showToast('データの取得に失敗しました')
-        return
-      }
-      const { users } = await usersRes.json()
-      const { facilities } = await facilitiesRes.json()
-      setUsers(users)
-      setFacilities(facilities)
-    } catch {
-      showToast('データの取得に失敗しました')
-    }
-  }, [])
+  const reload = useCallback(() => setRefreshKey(k => k + 1), [])
 
-  useEffect(() => { loadUsers() }, [loadUsers])
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      try {
+        const [usersRes, facilitiesRes] = await Promise.all([
+          fetch('/api/admin/users'),
+          fetch('/api/facilities'),
+        ])
+        if (cancelled) return
+        if (!usersRes.ok || !facilitiesRes.ok) {
+          showToast('データの取得に失敗しました')
+          return
+        }
+        const { users } = await usersRes.json()
+        const { facilities } = await facilitiesRes.json()
+        setUsers(users)
+        setFacilities(facilities)
+      } catch {
+        if (!cancelled) showToast('データの取得に失敗しました')
+      }
+    }
+    run()
+    return () => { cancelled = true }
+  }, [refreshKey])
 
   const handleToggleFacility = async (userId: string, facilityId: string, add: boolean) => {
     const res = await fetch('/api/admin/user-facilities', {
@@ -85,7 +92,7 @@ export default function AdminUsersPage() {
     setInviteOpen(false)
     if (res.ok) {
       showToast(`${email} に招待メールを送信しました`)
-      await loadUsers()
+      reload()
     } else {
       const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
       showToast(`エラー: ${error}`)
