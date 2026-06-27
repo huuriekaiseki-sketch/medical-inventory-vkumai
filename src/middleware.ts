@@ -40,7 +40,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // admin ガード（middleware + 各 route で二重チェック）
-  const isAdminPath = pathname === '/admin' || pathname.startsWith('/admin/') || pathname.startsWith('/api/admin')
+  const isAdminPath = pathname === '/admin' || pathname.startsWith('/admin/') || pathname === '/api/admin' || pathname.startsWith('/api/admin/')
   if (isAdminPath) {
     const adminEmails = (process.env.ADMIN_EMAILS ?? '')
       .split(',')
