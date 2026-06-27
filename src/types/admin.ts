@@ -4,3 +4,8 @@ export type AdminUser = {
   lastSignInAt: string | null
   facilityIds: string[]
 }
+
+export type Facility = {
+  id: string
+  name: string
+}

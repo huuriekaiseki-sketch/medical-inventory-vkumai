@@ -1,9 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import type { AdminUser } from '@/types/admin'
-
-type Facility = { id: string; name: string }
+import type { AdminUser, Facility } from '@/types/admin'
 
 type Props = {
   users: AdminUser[]
