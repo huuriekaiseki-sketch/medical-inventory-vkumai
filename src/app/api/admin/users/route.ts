@@ -12,20 +12,31 @@ export async function GET() {
   const { data, error } = await admin.auth.admin.listUsers()
   if (error) return apiError(error.message)
 
-  const users: AdminUser[] = await Promise.all(
-    data.users.map(async (u) => {
-      const { data: rows } = await admin
-        .from('user_facilities')
-        .select('facility_id')
-        .eq('user_id', u.id)
-      return {
-        id: u.id,
-        email: u.email ?? '',
-        lastSignInAt: u.last_sign_in_at ?? null,
-        facilityIds: (rows ?? []).map((r: { facility_id: string }) => r.facility_id),
-      }
-    })
-  )
+  const userIds = data.users.map(u => u.id)
+
+  // Bulk fetch all facility assignments in one query
+  const { data: facilityRows, error: facilityError } = await admin
+    .from('user_facilities')
+    .select('user_id, facility_id')
+    .in('user_id', userIds)
+
+  if (facilityError) return apiError(facilityError.message)
+
+  // Group by user_id in memory
+  const facilityMap = new Map<string, string[]>()
+  for (const row of (facilityRows ?? [])) {
+    const list = facilityMap.get(row.user_id) ?? []
+    list.push(row.facility_id)
+    facilityMap.set(row.user_id, list)
+  }
+
+  const users: AdminUser[] = data.users.map(u => ({
+    id: u.id,
+    email: u.email ?? '',
+    lastSignInAt: u.last_sign_in_at ?? null,
+    facilityIds: facilityMap.get(u.id) ?? [],
+  }))
+
   return NextResponse.json({ users })
 }
 
