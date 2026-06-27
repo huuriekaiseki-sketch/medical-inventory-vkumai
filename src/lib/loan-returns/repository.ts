@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asOptionalString, asNumber } from '@/lib/mapping'
 import type { LoanReturn, LoanReturnInput, LoanReturnItem } from '@/types/order'
 
@@ -37,13 +37,14 @@ export function mapItem(row: LoanReturnItemRow): LoanReturnItem {
   }
 }
 
-export async function createLoanReturn(facilityId: string, input: LoanReturnInput): Promise<LoanReturn> {
-  const { data: ret, error: retError } = await supabase
+export async function createLoanReturn(db: SupabaseClient, facilityId: string, input: LoanReturnInput): Promise<LoanReturn> {
+  const { data: ret, error: retError } = await db
     .from('loan_returns')
     .insert({ facility_id: facilityId, return_datetime: input.returnDatetime })
     .select(LOAN_RETURN_COLUMNS)
     .single()
   if (retError) throw new Error(retError.message)
+  if (!ret) throw new Error('loan_returns の作成に失敗しました')
 
   const r = ret as LoanReturnRow
   const itemRows = input.items.map(item => ({
@@ -54,7 +55,7 @@ export async function createLoanReturn(facilityId: string, input: LoanReturnInpu
     quantity: item.quantity,
   }))
 
-  const { data: items, error: itemsError } = await supabase
+  const { data: items, error: itemsError } = await db
     .from('loan_return_items')
     .insert(itemRows)
     .select(LOAN_RETURN_ITEM_COLUMNS)

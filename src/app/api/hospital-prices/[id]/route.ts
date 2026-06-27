@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { getHospitalPrice, updateHospitalPrice, deleteHospitalPrice } from '@/lib/hospital-prices/repository'
 import type { HospitalPriceInput } from '@/types/hospitalPrice'
 import type { RouteContext } from '@/types/route'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
-  const price = await getHospitalPrice(id)
+  const db = await createServerSupabase()
+  const price = await getHospitalPrice(db, id)
   if (!price) {
     return NextResponse.json({ error: '病院別価格が見つかりません' }, { status: 404 })
   }
@@ -27,7 +29,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    const price = await updateHospitalPrice(id, input)
+    const db = await createServerSupabase()
+    const price = await updateHospitalPrice(db, id, input)
     return NextResponse.json({ price })
   } catch (error) {
     if (error instanceof Error) {
@@ -48,7 +51,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   try {
-    await deleteHospitalPrice(id)
+    const db = await createServerSupabase()
+    await deleteHospitalPrice(db, id)
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof Error && error.message.includes('存在しません')) {

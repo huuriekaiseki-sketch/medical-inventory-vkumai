@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asNumber } from '@/lib/mapping'
 import type { ConsumableOrder, ConsumableOrderInput, ConsumableOrderItem } from '@/types/order'
 
@@ -28,9 +28,9 @@ export function mapItem(row: ConsumableOrderItemRow): ConsumableOrderItem {
   }
 }
 
-export async function createConsumableOrder(facilityId: string, input: ConsumableOrderInput): Promise<ConsumableOrder> {
+export async function createConsumableOrder(db: SupabaseClient, facilityId: string, input: ConsumableOrderInput): Promise<ConsumableOrder> {
   // 単一トランザクションで完結させるため RPC を呼ぶ（ヘッダー+明細を原子的に INSERT）
-  const { data, error } = await supabase.rpc('create_consumable_order_atomic', {
+  const { data, error } = await db.rpc('create_consumable_order_atomic', {
     p_facility_id: facilityId,
     p_items: JSON.stringify(
       input.items.map(item => ({

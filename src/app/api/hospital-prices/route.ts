@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { listHospitalPrices, createHospitalPrice } from '@/lib/hospital-prices/repository'
 import { apiError } from '@/lib/api-error'
 import type { HospitalPriceInput } from '@/types/hospitalPrice'
 
 export async function GET() {
   try {
-    const prices = await listHospitalPrices()
+    const db = await createServerSupabase()
+    const prices = await listHospitalPrices(db)
     return NextResponse.json({ prices, data: prices })
   } catch (error) {
     return apiError(error instanceof Error ? error.message : '価格の取得に失敗しました')
@@ -27,7 +29,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const price = await createHospitalPrice(input)
+    const db = await createServerSupabase()
+    const price = await createHospitalPrice(db, input)
     return NextResponse.json({ price, data: price }, { status: 201 })
   } catch (error) {
     if (error instanceof Error) {

@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asNumber, asNullableNumber } from '@/lib/mapping'
 import type { DistributorProduct, DistributorProductInput } from '@/types/distributorProduct'
 
@@ -33,8 +33,8 @@ export function mapDistributorProduct(row: DistributorProductRow): DistributorPr
   }
 }
 
-export async function listDistributorProducts(): Promise<DistributorProduct[]> {
-  const { data, error } = await supabase
+export async function listDistributorProducts(db: SupabaseClient): Promise<DistributorProduct[]> {
+  const { data, error } = await db
     .from('distributor_products')
     .select(DISTRIBUTOR_PRODUCT_COLUMNS)
     .order('created_at', { ascending: false })
@@ -42,8 +42,8 @@ export async function listDistributorProducts(): Promise<DistributorProduct[]> {
   return data.map(mapDistributorProduct)
 }
 
-export async function getDistributorProduct(id: string): Promise<DistributorProduct | null> {
-  const { data, error } = await supabase
+export async function getDistributorProduct(db: SupabaseClient, id: string): Promise<DistributorProduct | null> {
+  const { data, error } = await db
     .from('distributor_products')
     .select(DISTRIBUTOR_PRODUCT_COLUMNS)
     .eq('id', id)
@@ -55,8 +55,8 @@ export async function getDistributorProduct(id: string): Promise<DistributorProd
   return mapDistributorProduct(data)
 }
 
-export async function createDistributorProduct(input: DistributorProductInput): Promise<DistributorProduct> {
-  const { data, error } = await supabase
+export async function createDistributorProduct(db: SupabaseClient, input: DistributorProductInput): Promise<DistributorProduct> {
+  const { data, error } = await db
     .from('distributor_products')
     .insert({
       product_id: input.productId,
@@ -76,8 +76,8 @@ export async function createDistributorProduct(input: DistributorProductInput): 
   return mapDistributorProduct(data)
 }
 
-export async function updateDistributorProduct(id: string, input: DistributorProductInput): Promise<DistributorProduct> {
-  const { data, error } = await supabase
+export async function updateDistributorProduct(db: SupabaseClient, id: string, input: DistributorProductInput): Promise<DistributorProduct> {
+  const { data, error } = await db
     .from('distributor_products')
     .update({
       product_id: input.productId,
@@ -99,8 +99,8 @@ export async function updateDistributorProduct(id: string, input: DistributorPro
   return mapDistributorProduct(data)
 }
 
-export async function deleteDistributorProduct(id: string): Promise<void> {
-  const { data, error } = await supabase
+export async function deleteDistributorProduct(db: SupabaseClient, id: string): Promise<void> {
+  const { data, error } = await db
     .from('distributor_products')
     .delete()
     .eq('id', id)

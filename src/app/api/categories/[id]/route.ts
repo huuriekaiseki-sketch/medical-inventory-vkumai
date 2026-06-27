@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { getCategory, updateCategory, deleteCategory } from '@/lib/categories/repository'
 import type { CategoryInput } from '@/types/category'
 import type { RouteContext } from '@/types/route'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
-  const category = await getCategory(id)
+  const db = await createServerSupabase()
+  const category = await getCategory(db, id)
   if (!category) {
     return NextResponse.json({ error: 'カテゴリが見つかりません' }, { status: 404 })
   }
@@ -26,7 +28,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    const category = await updateCategory(id, input)
+    const db = await createServerSupabase()
+    const category = await updateCategory(db, id, input)
     return NextResponse.json({ category })
   } catch (error) {
     if (error instanceof Error) {
@@ -44,7 +47,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   try {
-    await deleteCategory(id)
+    const db = await createServerSupabase()
+    await deleteCategory(db, id)
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof Error) {

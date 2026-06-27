@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asNumber, asNullableNumber } from '@/lib/mapping'
 import type { HospitalPrice, HospitalPriceInput } from '@/types/hospitalPrice'
 
@@ -33,8 +33,8 @@ export function mapHospitalPrice(row: HospitalPriceRow): HospitalPrice {
   }
 }
 
-export async function listHospitalPrices(): Promise<HospitalPrice[]> {
-  const { data, error } = await supabase
+export async function listHospitalPrices(db: SupabaseClient): Promise<HospitalPrice[]> {
+  const { data, error } = await db
     .from('hospital_prices')
     .select(HOSPITAL_PRICE_COLUMNS)
     .order('created_at', { ascending: false })
@@ -42,8 +42,8 @@ export async function listHospitalPrices(): Promise<HospitalPrice[]> {
   return data.map(mapHospitalPrice)
 }
 
-export async function getHospitalPrice(id: string): Promise<HospitalPrice | null> {
-  const { data, error } = await supabase
+export async function getHospitalPrice(db: SupabaseClient, id: string): Promise<HospitalPrice | null> {
+  const { data, error } = await db
     .from('hospital_prices')
     .select(HOSPITAL_PRICE_COLUMNS)
     .eq('id', id)
@@ -55,8 +55,8 @@ export async function getHospitalPrice(id: string): Promise<HospitalPrice | null
   return mapHospitalPrice(data)
 }
 
-export async function createHospitalPrice(input: HospitalPriceInput): Promise<HospitalPrice> {
-  const { data, error } = await supabase
+export async function createHospitalPrice(db: SupabaseClient, input: HospitalPriceInput): Promise<HospitalPrice> {
+  const { data, error } = await db
     .from('hospital_prices')
     .insert({
       distributor_product_id: input.distributorProductId,
@@ -74,8 +74,8 @@ export async function createHospitalPrice(input: HospitalPriceInput): Promise<Ho
   return mapHospitalPrice(data)
 }
 
-export async function updateHospitalPrice(id: string, input: HospitalPriceInput): Promise<HospitalPrice> {
-  const { data, error } = await supabase
+export async function updateHospitalPrice(db: SupabaseClient, id: string, input: HospitalPriceInput): Promise<HospitalPrice> {
+  const { data, error } = await db
     .from('hospital_prices')
     .update({
       distributor_product_id: input.distributorProductId,
@@ -95,8 +95,8 @@ export async function updateHospitalPrice(id: string, input: HospitalPriceInput)
   return mapHospitalPrice(data)
 }
 
-export async function deleteHospitalPrice(id: string): Promise<void> {
-  const { data, error } = await supabase
+export async function deleteHospitalPrice(db: SupabaseClient, id: string): Promise<void> {
+  const { data, error } = await db
     .from('hospital_prices')
     .delete()
     .eq('id', id)

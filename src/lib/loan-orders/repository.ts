@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asOptionalString, asNumber } from '@/lib/mapping'
 import type { LoanOrder, LoanOrderInput, LoanOrderItem } from '@/types/order'
 
@@ -32,9 +32,9 @@ export function mapItem(row: LoanOrderItemRow): LoanOrderItem {
   }
 }
 
-export async function createLoanOrder(facilityId: string, input: LoanOrderInput): Promise<LoanOrder> {
+export async function createLoanOrder(db: SupabaseClient, facilityId: string, input: LoanOrderInput): Promise<LoanOrder> {
   // 単一トランザクションで完結させるため RPC を呼ぶ（ヘッダー+明細を原子的に INSERT）
-  const { data, error } = await supabase.rpc('create_loan_order_atomic', {
+  const { data, error } = await db.rpc('create_loan_order_atomic', {
     p_facility_id: facilityId,
     p_procedure_name: input.procedureName,
     p_maker: input.maker,
