@@ -26,12 +26,25 @@ Phase 5 検証(並列) →
 - セッション終了時 → Stop hook が自動でレポートを生成（`~/aidd_session_report.sh`）
 
 ## AIDD stats 書き出しルール
-aidd-phase1.js または aidd-phase2.js 完了後、必ず以下を Bash で実行する：
+以下の5タイミングで必ず Bash 実行する（Stop hook が自動でレポート生成）：
+
 ```bash
-echo '<stats_json>' | ~/write_aidd_stats.sh <phase> "<feature>" "$(pwd)"
-# 例（phase1）: echo '{"agents":4,"rounds":1,"findingCount":2}' | ~/write_aidd_stats.sh phase1 "login-multitenant" "$(pwd)"
-# 例（phase2）: echo '{"implAgents":2,"reviewAgents":4,"totalAgents":7,"implSuccessCount":2}' | ~/write_aidd_stats.sh phase2 "login-multitenant" "$(pwd)"
+# 1. AIDDフロー開始時（aidd-phase1.js を呼ぶ前）
+echo '' | ~/write_aidd_stats.sh start "<feature>" "$(pwd)"
+
+# 2. phase1 開始直前
+echo '' | ~/write_aidd_stats.sh phase1_start "<feature>" "$(pwd)"
+
+# 3. phase1 完了直後（戻り値の stats を渡す）
+echo '{"agents":4,"rounds":1,"findingCount":2}' | ~/write_aidd_stats.sh phase1 "<feature>" "$(pwd)"
+
+# 4. phase2 開始直前
+echo '' | ~/write_aidd_stats.sh phase2_start "" ""
+
+# 5. phase2 完了直後（戻り値の stats を渡す）
+echo '{"implAgents":2,"reviewAgents":4,"totalAgents":7,"implSuccessCount":2}' | ~/write_aidd_stats.sh phase2 "" ""
 ```
+※ start を呼び忘れた場合は phase1_start_at がフォールバックで使われる
 
 ## 絶対ルール
 - 確認を求めるのは「仕様レビュー（停止①）」と「構造化レビュー（停止②）」の2箇所のみ。
