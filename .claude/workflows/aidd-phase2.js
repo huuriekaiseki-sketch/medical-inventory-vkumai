@@ -78,4 +78,11 @@ return {
     dimension: dim.label,
     findings:  reviewResults[i] ?? '指摘なし',
   })),
+  stats: {
+    phase: 'phase2',
+    implAgents: parallelGroups.length,
+    reviewAgents: REVIEW_DIMENSIONS.length,
+    totalAgents: parallelGroups.length + 1 + REVIEW_DIMENSIONS.length,
+    implSuccessCount: successCount,
+  },
 }

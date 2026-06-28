@@ -41,4 +41,11 @@ return {
     db:    dbResult    ?? '指摘なし',
     types: typesResult ?? '指摘なし',
   },
+  stats: {
+    phase: 'phase1',
+    agents: 4,
+    rounds: 1,
+    findingCount: [uiResult, dataResult, dbResult, typesResult]
+      .filter(r => r && r !== '指摘なし').length,
+  },
 }
