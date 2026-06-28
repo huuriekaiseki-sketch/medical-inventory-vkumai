@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { POST, DELETE } from '../route'
 import { NextRequest } from 'next/server'
 
-const mockInsert = vi.fn()
+const mockInsert = vi.fn() // DELETE テストで使用
 const mockGetUser = vi.fn()
 const mockFrom = vi.fn()
+
+const mockUpsert = vi.fn()
 
 vi.mock('@/lib/supabase/server', () => ({
   createAdminSupabase: () => ({ from: mockFrom }),
@@ -35,9 +37,9 @@ beforeEach(() => {
 })
 
 describe('POST /api/admin/user-facilities', () => {
-  it('施設を割り当てて 200 を返す', async () => {
-    mockFrom.mockReturnValue({ insert: mockInsert })
-    mockInsert.mockResolvedValue({ error: null })
+  it('role 省略時は staff で upsert して 200 を返す', async () => {
+    mockFrom.mockReturnValue({ upsert: mockUpsert })
+    mockUpsert.mockResolvedValue({ error: null })
 
     const req = new NextRequest('http://localhost/api/admin/user-facilities', {
       method: 'POST',
@@ -45,19 +47,53 @@ describe('POST /api/admin/user-facilities', () => {
     })
     const res = await POST(req)
     expect(res.status).toBe(200)
-    expect(mockInsert).toHaveBeenCalledWith({ user_id: 'u1', facility_id: 'f1' })
+    expect(mockUpsert).toHaveBeenCalledWith(
+      { user_id: 'u1', facility_id: 'f1', role: 'staff' },
+      { onConflict: 'user_id,facility_id' }
+    )
   })
 
-  it('重複 INSERT (23505) は 200 を返す（idempotent）', async () => {
-    mockFrom.mockReturnValue({ insert: mockInsert })
-    mockInsert.mockResolvedValue({ error: { code: '23505', message: 'duplicate key' } })
+  it('role=admin で upsert して 200 を返す', async () => {
+    mockFrom.mockReturnValue({ upsert: mockUpsert })
+    mockUpsert.mockResolvedValue({ error: null })
 
     const req = new NextRequest('http://localhost/api/admin/user-facilities', {
       method: 'POST',
-      body: JSON.stringify({ userId: 'u1', facilityId: 'f1' }),
+      body: JSON.stringify({ userId: 'u1', facilityId: 'f1', role: 'admin' }),
     })
     const res = await POST(req)
     expect(res.status).toBe(200)
+    expect(mockUpsert).toHaveBeenCalledWith(
+      { user_id: 'u1', facility_id: 'f1', role: 'admin' },
+      { onConflict: 'user_id,facility_id' }
+    )
+  })
+
+  it('既存レコードの role を staff から admin に更新できる', async () => {
+    mockFrom.mockReturnValue({ upsert: mockUpsert })
+    mockUpsert.mockResolvedValue({ error: null })
+
+    const req = new NextRequest('http://localhost/api/admin/user-facilities', {
+      method: 'POST',
+      body: JSON.stringify({ userId: 'u1', facilityId: 'f1', role: 'admin' }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    expect(mockUpsert).toHaveBeenCalledWith(
+      { user_id: 'u1', facility_id: 'f1', role: 'admin' },
+      { onConflict: 'user_id,facility_id' }
+    )
+  })
+
+  it('role=invalid は 400 を返す', async () => {
+    mockFrom.mockReturnValue({ upsert: mockUpsert })
+    const req = new NextRequest('http://localhost/api/admin/user-facilities', {
+      method: 'POST',
+      body: JSON.stringify({ userId: 'u1', facilityId: 'f1', role: 'invalid' }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(400)
+    expect(mockUpsert).not.toHaveBeenCalled()
   })
 
   it('非管理者は 403 を返す', async () => {

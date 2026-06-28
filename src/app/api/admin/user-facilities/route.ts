@@ -7,23 +7,29 @@ export async function POST(request: NextRequest) {
   const user = await requireAdmin()
   if (!user) return apiError('権限がありません', 403)
 
-  let userId: string | undefined, facilityId: string | undefined
+  let userId: string | undefined, facilityId: string | undefined, role: 'staff' | 'admin' | undefined
   try {
     const body = await request.json()
     userId = body.userId
     facilityId = body.facilityId
+    role = body.role
   } catch {
     return apiError('リクエストが不正です', 400)
   }
   if (!userId || !facilityId) return apiError('userId と facilityId は必須です', 400)
+  if (role !== undefined && role !== 'staff' && role !== 'admin') {
+    return apiError("role は 'staff' か 'admin' のみ指定できます", 400)
+  }
 
   const admin = createAdminSupabase()
   const { error } = await admin
     .from('user_facilities')
-    .insert({ user_id: userId, facility_id: facilityId })
+    .upsert(
+      { user_id: userId, facility_id: facilityId, role: role ?? 'staff' },
+      { onConflict: 'user_id,facility_id' }
+    )
 
-  // Treat duplicate as success (idempotent)
-  if (error && error.code !== '23505') return apiError(error.message)
+  if (error) return apiError(error.message)
 
   return NextResponse.json({ message: '施設を割り当てました' })
 }
