@@ -72,6 +72,7 @@ export async function DELETE(request: NextRequest) {
     return apiError('リクエストが不正です', 400)
   }
   if (!userId) return apiError('userId は必須です', 400)
+  if (userId === user.id) return apiError('自分自身は削除できません', 400)
 
   const admin = createAdminSupabase()
   const { error } = await admin.auth.admin.deleteUser(userId)

@@ -36,12 +36,13 @@ vi.mock('@/lib/admin-auth', () => ({
 }))
 
 const ADMIN_EMAIL = 'admin@test.com'
+const ADMIN_ID = 'admin-user-id'
 
 beforeEach(() => {
   vi.clearAllMocks()
   process.env.ADMIN_EMAILS = ADMIN_EMAIL
   mockGetUser.mockResolvedValue({
-    data: { user: { email: ADMIN_EMAIL } },
+    data: { user: { id: ADMIN_ID, email: ADMIN_EMAIL } },
   })
 })
 
@@ -127,5 +128,16 @@ describe('DELETE /api/admin/users', () => {
     })
     const res = await DELETE(req)
     expect(res.status).toBe(400)
+  })
+
+  it('自分自身の削除は 400 を返す', async () => {
+    const req = new NextRequest('http://localhost/api/admin/users', {
+      method: 'DELETE',
+      body: JSON.stringify({ userId: ADMIN_ID }),
+    })
+    const res = await DELETE(req)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('自分自身は削除できません')
   })
 })

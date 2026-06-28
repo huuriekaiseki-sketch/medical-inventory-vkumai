@@ -1,5 +1,5 @@
 export const meta = {
-  name: 'aidd-impl',
+  name: 'aidd-phase2',
   description: 'Phase 3-5: TDD並列実装 → 統合ゲート → 4観点並列検証。仕様書承認後（停止①の後）に実行。',
   whenToUse: '人間が仕様書（SPEC.md）を承認した後、Phase 3 実装に入るときに使う。',
   phases: [
@@ -16,6 +16,11 @@ export const meta = {
 //     description: string,
 //   }>
 // }
+//
+// ── 完了後の手順（Claude が実行すること）──────────────────────────────
+// 1. 【停止②】ユーザーに /structured-review の実行を促して停止する
+//    （structured-review は Claude から勝手に呼ばない）
+// ────────────────────────────────────────────────────────────────────
 const specContent     = args?.specContent     ?? '（仕様書を args.specContent で渡してください）'
 const parallelGroups  = args?.parallelGroups  ?? [{ name: 'default', description: '仕様書に従って実装してください' }]
 
