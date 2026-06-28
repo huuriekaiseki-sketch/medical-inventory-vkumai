@@ -38,6 +38,35 @@ export function mapItem(row: CaseOrderItemRow): CaseOrderItem {
   }
 }
 
+export async function listCaseOrders(
+  db: SupabaseClient,
+  facilityId: string,
+  limit = 50,
+  offset = 0
+): Promise<CaseOrder[]> {
+  const { data, error } = await db
+    .from('case_orders')
+    .select('*, case_order_items(*)')
+    .eq('facility_id', facilityId)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as (CaseOrderRow & { case_order_items?: CaseOrderItemRow[] })[]).map(o => ({
+    id: asString(o.id),
+    facilityId: asString(o.facility_id),
+    caseDatetime: asString(o.case_datetime),
+    procedureName: asString(o.procedure_name),
+    patientId: asString(o.patient_id),
+    patientInitials: asString(o.patient_initials),
+    gender: asString(o.gender) as 'male' | 'female' | 'other',
+    doctorName: asString(o.doctor_name),
+    status: asString(o.status) as 'draft' | 'submitted',
+    items: (o.case_order_items ?? []).map(mapItem),
+    createdAt: asString(o.created_at),
+    updatedAt: asString(o.updated_at),
+  }))
+}
+
 export async function createCaseOrder(db: SupabaseClient, facilityId: string, input: CaseOrderInput): Promise<CaseOrder> {
   // 単一トランザクションで完結させるため RPC を呼ぶ（ヘッダー+明細を原子的に INSERT）
   const { data, error } = await db.rpc('create_case_order_atomic', {

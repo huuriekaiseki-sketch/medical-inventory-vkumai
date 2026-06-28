@@ -37,6 +37,30 @@ export function mapItem(row: LoanReturnItemRow): LoanReturnItem {
   }
 }
 
+export async function listLoanReturns(
+  db: SupabaseClient,
+  facilityId: string,
+  limit = 50,
+  offset = 0
+): Promise<LoanReturn[]> {
+  const { data, error } = await db
+    .from('loan_returns')
+    .select(`${LOAN_RETURN_COLUMNS}, loan_return_items(${LOAN_RETURN_ITEM_COLUMNS})`)
+    .eq('facility_id', facilityId)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as (LoanReturnRow & { loan_return_items?: LoanReturnItemRow[] })[]).map(r => ({
+    id: asString(r.id),
+    facilityId: asString(r.facility_id),
+    returnDatetime: asString(r.return_datetime),
+    status: asString(r.status) as 'draft' | 'returned',
+    items: (r.loan_return_items ?? []).map(mapItem),
+    createdAt: asString(r.created_at),
+    updatedAt: asString(r.updated_at),
+  }))
+}
+
 export async function createLoanReturn(db: SupabaseClient, facilityId: string, input: LoanReturnInput): Promise<LoanReturn> {
   const { data: ret, error: retError } = await db
     .from('loan_returns')

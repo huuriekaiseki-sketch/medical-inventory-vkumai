@@ -30,3 +30,15 @@ export function asNullableNumber(value: unknown): number | null {
   const n = Number(value)
   return Number.isNaN(n) ? null : n
 }
+
+/**
+ * enum 型の値チェック。不正値の場合は fallback を返す。
+ * `as SomeEnum` キャストの代わりに使い、DB から想定外の値が来ても壊れない値を返す。
+ */
+export function asEnum<T extends string>(
+  value: unknown,
+  validValues: readonly T[],
+  fallback: T
+): T {
+  return validValues.includes(value as T) ? (value as T) : fallback
+}

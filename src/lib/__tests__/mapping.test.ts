@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { asString, asOptionalString, asNullableString, asNumber, asNullableNumber } from '../mapping'
+import { asString, asOptionalString, asNullableString, asNumber, asNullableNumber, asEnum } from '../mapping'
 
 describe('asString', () => {
   it('文字列はそのまま返す', () => {
@@ -61,5 +61,21 @@ describe('asNullableNumber', () => {
   })
   it('NaN になる値は null を返す', () => {
     expect(asNullableNumber('abc')).toBeNull()
+  })
+})
+
+describe('asEnum', () => {
+  const GENDERS = ['male', 'female', 'other'] as const
+  type Gender = typeof GENDERS[number]
+
+  it('有効な値はそのまま返す', () => {
+    expect(asEnum<Gender>('male', GENDERS, 'other')).toBe('male')
+    expect(asEnum<Gender>('female', GENDERS, 'other')).toBe('female')
+  })
+  it('不正な値は fallback を返す', () => {
+    expect(asEnum<Gender>('unknown', GENDERS, 'other')).toBe('other')
+    expect(asEnum<Gender>(null, GENDERS, 'other')).toBe('other')
+    expect(asEnum<Gender>(undefined, GENDERS, 'other')).toBe('other')
+    expect(asEnum<Gender>(42, GENDERS, 'other')).toBe('other')
   })
 })
