@@ -23,6 +23,15 @@ Phase 5 検証(並列) →
 - Phase 1〜2 → `.claude/workflows/aidd-phase1.js` を読む
 - Phase 3〜5 → `.claude/workflows/aidd-phase2.js` を読む
 - 深掘り調査・仕様検証が必要なとき（条件付き）→ `.claude/workflows/aidd-1-1-deep-task.js` を読む
+- セッション終了時 → Stop hook が自動でレポートを生成（`~/aidd_session_report.sh`）
+
+## AIDD stats 書き出しルール
+aidd-phase1.js または aidd-phase2.js 完了後、必ず以下を Bash で実行する：
+```bash
+echo '<stats_json>' | ~/write_aidd_stats.sh <phase> "<feature>" "$(pwd)"
+# 例（phase1）: echo '{"agents":4,"rounds":1,"findingCount":2}' | ~/write_aidd_stats.sh phase1 "login-multitenant" "$(pwd)"
+# 例（phase2）: echo '{"implAgents":2,"reviewAgents":4,"totalAgents":7,"implSuccessCount":2}' | ~/write_aidd_stats.sh phase2 "login-multitenant" "$(pwd)"
+```
 
 ## 絶対ルール
 - 確認を求めるのは「仕様レビュー（停止①）」と「構造化レビュー（停止②）」の2箇所のみ。
