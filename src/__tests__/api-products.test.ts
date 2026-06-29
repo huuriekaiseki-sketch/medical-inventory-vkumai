@@ -2,6 +2,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/supabase/server', () => ({ createServerSupabase: vi.fn().mockResolvedValue({}) }))
+vi.mock('@/lib/supabase/require-auth', () => ({ requireAuth: vi.fn().mockResolvedValue({ id: 'u-1', email: 'user@example.com' }) }))
 vi.mock('@/lib/products/repository')
 
 import {
@@ -77,6 +78,17 @@ describe('POST /api/products', () => {
     })
     const res = await POST(req)
     expect(res.status).toBe(409)
+  })
+
+  it('未認証なら POST も 401 を返す', async () => {
+    const { requireAuth } = await import('@/lib/supabase/require-auth')
+    vi.mocked(requireAuth).mockRejectedValueOnce(new Error('UNAUTHORIZED'))
+    const req = makeRequest('/api/products', {
+      method: 'POST',
+      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-001' }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(401)
   })
 })
 

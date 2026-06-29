@@ -13,7 +13,7 @@ vi.mock('@/lib/supabase/client', () => ({
   })),
 }))
 
-// useSearchParams をモック
+// useSearchParams / useRouter をモック
 vi.mock('next/navigation', () => ({
   useSearchParams: vi.fn(() => {
     const params = new URLSearchParams()
@@ -21,6 +21,11 @@ vi.mock('next/navigation', () => ({
       get: (key: string) => params.get(key),
     }
   }),
+  useRouter: vi.fn(() => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+  })),
 }))
 
 describe('LoginPage', () => {
