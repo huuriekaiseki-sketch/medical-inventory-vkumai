@@ -41,6 +41,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = await createServerSupabase()
+    let user
+    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try {
+      await requireFacilityAccess(db, user, input.facilityId)
+    } catch (e) {
+      if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('facilityId は必須です', 400)
+      return apiError('アクセス権限がありません', 403)
+    }
     const price = await createHospitalPrice(db, input)
     return NextResponse.json({ price }, { status: 201 })
   } catch (error) {
