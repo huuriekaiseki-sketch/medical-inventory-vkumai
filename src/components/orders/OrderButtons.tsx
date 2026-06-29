@@ -27,7 +27,7 @@ export function OrderButtons({ facilityId }: Props) {
       <button
         type="button"
         className={btnBase}
-        style={{ backgroundColor: '#9CA3AF', cursor: 'not-allowed', opacity: 0.5 }}
+        style={{ backgroundColor: '#9CA3AF' }}
         disabled
       >
         長貸し処理
