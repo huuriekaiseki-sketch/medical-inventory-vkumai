@@ -2,6 +2,8 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/supabase/server', () => ({ createServerSupabase: vi.fn().mockResolvedValue({}) }))
+vi.mock('@/lib/supabase/require-auth', () => ({ requireAuth: vi.fn().mockResolvedValue({ id: 'u1' }) }))
+vi.mock('@/lib/supabase/require-facility-access', () => ({ requireFacilityAccess: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@/lib/case-orders/repository')
 vi.mock('@/lib/consumable-orders/repository')
 vi.mock('@/lib/loan-orders/repository')

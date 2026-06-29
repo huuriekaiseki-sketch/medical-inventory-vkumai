@@ -39,6 +39,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = await createServerSupabase()
+    let user
+    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try {
+      await requireFacilityAccess(db, user, body.facilityId)
+    } catch (e) {
+      if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('施設IDは必須です', 400)
+      return apiError('アクセス権限がありません', 403)
+    }
     const order = await createConsumableOrder(db, body.facilityId, { items: body.items })
     return NextResponse.json({ order }, { status: 201 })
   } catch (error) {
