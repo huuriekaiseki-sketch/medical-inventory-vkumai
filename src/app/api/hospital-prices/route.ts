@@ -1,14 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/supabase/require-auth'
+import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listHospitalPrices, createHospitalPrice } from '@/lib/hospital-prices/repository'
 import { apiError } from '@/lib/api-error'
 import type { HospitalPriceInput } from '@/types/hospitalPrice'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const db = await createServerSupabase()
+    let user
+    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    const facilityId = request.nextUrl.searchParams.get('facilityId')
+    try {
+      await requireFacilityAccess(db, user, facilityId)
+    } catch (e) {
+      if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('facilityId は必須です', 400)
+      return apiError('アクセス権限がありません', 403)
+    }
     const prices = await listHospitalPrices(db)
-    return NextResponse.json({ prices, data: prices })
+    return NextResponse.json({ prices })
   } catch (error) {
     return apiError(error instanceof Error ? error.message : '価格の取得に失敗しました')
   }
@@ -30,8 +41,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = await createServerSupabase()
+    let user
+    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try {
+      await requireFacilityAccess(db, user, input.facilityId)
+    } catch (e) {
+      if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('facilityId は必須です', 400)
+      return apiError('アクセス権限がありません', 403)
+    }
     const price = await createHospitalPrice(db, input)
-    return NextResponse.json({ price, data: price }, { status: 201 })
+    return NextResponse.json({ price }, { status: 201 })
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('既に登録されています')) {

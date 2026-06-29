@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/supabase/require-auth'
 import { listDistributorProducts, createDistributorProduct } from '@/lib/distributor-products/repository'
 import { apiError } from '@/lib/api-error'
 import type { DistributorProductInput } from '@/types/distributorProduct'
@@ -7,8 +8,9 @@ import type { DistributorProductInput } from '@/types/distributorProduct'
 export async function GET() {
   try {
     const db = await createServerSupabase()
+    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
     const items = await listDistributorProducts(db)
-    return NextResponse.json({ items, data: items })
+    return NextResponse.json({ items })
   } catch (error) {
     return apiError(error instanceof Error ? error.message : 'ディーラー商品の取得に失敗しました')
   }
@@ -28,8 +30,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = await createServerSupabase()
+    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
     const item = await createDistributorProduct(db, input)
-    return NextResponse.json({ item, data: item }, { status: 201 })
+    return NextResponse.json({ item }, { status: 201 })
   } catch (error) {
     if (error instanceof Error && error.message.includes('存在しません')) {
       return apiError(error.message, 404)
