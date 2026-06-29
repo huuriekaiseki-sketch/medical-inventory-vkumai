@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = await createServerSupabase()
+    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
     const product = await createProduct(db, input)
     return NextResponse.json({ product }, { status: 201 })
   } catch (error) {
