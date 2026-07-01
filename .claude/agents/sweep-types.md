@@ -9,13 +9,16 @@ model: haiku
 
 ## 調査対象
 - `src/types/` または `src/lib/types/` — 型定義ファイル
-- `src/lib/supabase/` — mappers・型変換関数
+- `src/lib/mapping.ts`（または同等のmapper/型変換ファイル） — 型変換関数
 - Supabaseスキーマ（DB列の型）
 - `src/components/` — UIコンポーネントのprops型
 
+## 除外対象
+- `__tests__/` ディレクトリ配下のファイルおよび `*.test.ts`・`*.test.tsx` ファイルはすべて除外する
+
 ## 調査観点
 - DB列の型 ≠ TypeScript型定義の不一致
-- mapper関数での型変換ミス・フィールド欠落
+- mapping.tsでの型変換ミス・フィールド欠落（認証・クライアント接続ロジックはsweep-dataに委ねる）
 - UIコンポーネントが期待する型 ≠ データ取得層が返す型
 - オプショナル（`?`）と必須の不整合
 - `any` / `unknown` の不適切な使用
