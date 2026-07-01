@@ -53,7 +53,7 @@ phase('Implement')
 
 const [dataResult, apiResult, uiResult] = await parallel([
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/lib/supabase/ のデータアクセス関数を実装してください。\n型定義（src/types/）は確定済みです。\n触ってよいファイル: src/lib/supabase/ のみ。\n\n## contract-writer完了報告\n${contractResult}\n\n## db-impl完了報告\n${dbResult}`,
+    `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/lib/supabase/ のデータアクセス関数を実装してください。\n型定義（src/types/）は確定済みです。\n触ってよいファイル: src/lib/supabase/ と src/lib/*/repository.ts。\n\n## contract-writer完了報告\n${contractResult}\n\n## db-impl完了報告\n${dbResult}`,
     { label: 'data-impl', phase: 'Implement', agentType: 'implementer' }
   ),
   () => agent(

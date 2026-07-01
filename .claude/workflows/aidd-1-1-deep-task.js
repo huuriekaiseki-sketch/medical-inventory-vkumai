@@ -160,7 +160,7 @@ const VERDICT_SCHEMA = {
 
 const verdicts = await parallel(
   dedupedFindings.map((f, i) => () => agent(
-    `次の仕様指摘を反証しようとせよ。仕様書のどこかで既に対処されているか、問題が成立しない理由があれば refuted=true にせよ。不確かなら refuted=true でよい。\n\nタイトル: ${f.title}\n説明: ${f.description}\n\n仕様書ドラフト:\n${draftSpec}`,
+    `次の仕様指摘を反証しようとせよ。仕様書のどこかで既に対処されているか、問題が成立しない理由があれば refuted=true にせよ。不確かなら refuted=false にせよ（疑わしいものは生存させる）。\n\nタイトル: ${f.title}\n説明: ${f.description}\n\n仕様書ドラフト:\n${draftSpec}`,
     { label: `verify:${i}`, phase: 'Adversarial Verify', schema: VERDICT_SCHEMA, model: 'claude-sonnet-4-6', effort: 'medium' }
   ))
 )
