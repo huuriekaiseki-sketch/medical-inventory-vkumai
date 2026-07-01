@@ -1,6 +1,8 @@
 // src/middleware.ts
 // WHY: 全パスの認証ガード（未認証→/login）と admin ガード（/admin/*, /api/admin/*）を
 //      middleware で一元化し、重複実装を避けるため。セッションリフレッシュも同時実行。
+//      admin判定はDB roleベース（user_facilities.role='admin'）に統一し、
+//      ADMIN_EMAILSはDBにadminが0件の場合のフォールバックとして使用する。
 
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
@@ -42,14 +44,27 @@ export async function middleware(request: NextRequest) {
   // admin ガード（middleware + 各 route で二重チェック）
   const isAdminPath = pathname === '/admin' || pathname.startsWith('/admin/') || pathname === '/api/admin' || pathname.startsWith('/api/admin/')
   if (isAdminPath) {
-    const adminEmails = (process.env.ADMIN_EMAILS ?? '')
-      .split(',')
-      .map(e => e.trim().toLowerCase())
-      .filter(Boolean)
-    const userEmail = user?.email?.trim().toLowerCase() ?? ''
-    if (!user || !adminEmails.includes(userEmail)) {
+    if (!user) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
+
+    // WHY: middlewareではcreateAdminSupabase（Service Role Key）が使えないため、
+    //      ユーザーセッション付きのsupabaseクライアントでuser_facilitiesを問い合わせる。
+    //      RLSにより自分の行のみ返るため、role='admin'チェックが可能。
+    const { data: userAdminRows } = await supabase
+      .from('user_facilities')
+      .select('user_id, role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .limit(1)
+
+    const isDbAdmin = userAdminRows && userAdminRows.length > 0
+
+    if (!isDbAdmin) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+
+    return supabaseResponse
   }
 
   return supabaseResponse

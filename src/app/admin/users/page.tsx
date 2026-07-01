@@ -48,7 +48,8 @@ export default function AdminUsersPage() {
     const res = await fetch('/api/admin/user-facilities', {
       method: add ? 'POST' : 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, facilityId }),
+      // add=true 時は role='staff' をデフォルト送信
+      body: JSON.stringify(add ? { userId, facilityId, role: 'staff' } : { userId, facilityId }),
     })
     if (!res.ok) {
       const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
@@ -59,9 +60,32 @@ export default function AdminUsersPage() {
       prev.map(u =>
         u.id !== userId ? u : {
           ...u,
-          facilityIds: add
-            ? [...u.facilityIds, facilityId]
-            : u.facilityIds.filter(id => id !== facilityId),
+          facilities: add
+            ? [...u.facilities, { id: facilityId, role: 'staff' as const }]
+            : u.facilities.filter(f => f.id !== facilityId),
+        }
+      )
+    )
+  }
+
+  const handleChangeRole = async (userId: string, facilityId: string, role: 'admin' | 'staff') => {
+    const res = await fetch('/api/admin/user-facilities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, facilityId, role }),
+    })
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
+      showToast(`エラー: ${error}`)
+      return
+    }
+    setUsers(prev =>
+      prev.map(u =>
+        u.id !== userId ? u : {
+          ...u,
+          facilities: u.facilities.map(f =>
+            f.id === facilityId ? { ...f, role } : f
+          ),
         }
       )
     )
@@ -117,6 +141,7 @@ export default function AdminUsersPage() {
         facilities={facilities}
         onToggleFacility={handleToggleFacility}
         onDeleteUser={handleDeleteUser}
+        onChangeRole={handleChangeRole}
       />
 
       <InviteModal

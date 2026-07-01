@@ -17,16 +17,16 @@ export async function GET() {
   // Bulk fetch all facility assignments in one query
   const { data: facilityRows, error: facilityError } = await admin
     .from('user_facilities')
-    .select('user_id, facility_id')
+    .select('user_id, facility_id, role')
     .in('user_id', userIds)
 
   if (facilityError) return apiError(facilityError.message)
 
   // Group by user_id in memory
-  const facilityMap = new Map<string, string[]>()
+  const facilityMap = new Map<string, { id: string; role: 'admin' | 'staff' }[]>()
   for (const row of (facilityRows ?? [])) {
     const list = facilityMap.get(row.user_id) ?? []
-    list.push(row.facility_id)
+    list.push({ id: row.facility_id, role: row.role as 'admin' | 'staff' })
     facilityMap.set(row.user_id, list)
   }
 
@@ -34,7 +34,7 @@ export async function GET() {
     id: u.id,
     email: u.email ?? '',
     lastSignInAt: u.last_sign_in_at ?? null,
-    facilityIds: facilityMap.get(u.id) ?? [],
+    facilities: facilityMap.get(u.id) ?? [],
   }))
 
   return NextResponse.json({ users })

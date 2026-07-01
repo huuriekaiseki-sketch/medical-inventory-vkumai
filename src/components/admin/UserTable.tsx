@@ -8,9 +8,10 @@ type Props = {
   facilities: Facility[]
   onToggleFacility: (userId: string, facilityId: string, add: boolean) => void
   onDeleteUser: (userId: string, email: string) => void
+  onChangeRole: (userId: string, facilityId: string, role: 'admin' | 'staff') => void
 }
 
-export function UserTable({ users, facilities, onToggleFacility, onDeleteUser }: Props) {
+export function UserTable({ users, facilities, onToggleFacility, onDeleteUser, onChangeRole }: Props) {
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null)
 
   return (
@@ -56,19 +57,37 @@ export function UserTable({ users, facilities, onToggleFacility, onDeleteUser }:
               <tr>
                 <td colSpan={4} className="px-6 py-2 bg-white">
                   <div className="flex flex-wrap gap-4">
-                    {facilities.map((f) => (
-                      <label key={f.id} className="flex items-center gap-1 text-sm">
-                        <input
-                          type="checkbox"
-                          aria-label={f.name}
-                          checked={user.facilityIds.includes(f.id)}
-                          onChange={(e) =>
-                            onToggleFacility(user.id, f.id, e.target.checked)
-                          }
-                        />
-                        {f.name}
-                      </label>
-                    ))}
+                    {facilities.map((f) => {
+                      const assigned = user.facilities.find((uf) => uf.id === f.id)
+                      return (
+                        <div key={f.id} className="flex items-center gap-2 text-sm">
+                          <label className="flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              aria-label={f.name}
+                              checked={user.facilities.some((uf) => uf.id === f.id)}
+                              onChange={(e) =>
+                                onToggleFacility(user.id, f.id, e.target.checked)
+                              }
+                            />
+                            {f.name}
+                          </label>
+                          {assigned && (
+                            <select
+                              aria-label={`${f.name}のrole`}
+                              value={assigned.role}
+                              onChange={(e) =>
+                                onChangeRole(user.id, f.id, e.target.value as 'admin' | 'staff')
+                              }
+                              className="text-xs border rounded px-1"
+                            >
+                              <option value="staff">staff</option>
+                              <option value="admin">admin</option>
+                            </select>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </td>
               </tr>
