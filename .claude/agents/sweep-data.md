@@ -9,7 +9,13 @@ model: haiku
 
 ## 調査対象
 - `src/lib/supabase/` — Supabaseクライアント・クエリ関数・hooks
-- `src/app/api/` — Next.js APIルート
+- `src/lib/` 配下のドメインrepository層（`case-orders/`, `consumable-orders/`, `consumables/`, `distributor-products/`, `facilities/`, `hospital-prices/`, `loan-orders/`, `loan-returns/`, `price-histories/`, `products/`, `categories/` 等）
+- `src/lib/admin-auth.ts`, `src/lib/api-error.ts` — トップレベルユーティリティ
+- `src/middleware.ts` — 認証ミドルウェア
+- `src/app/` 配下の `route.ts` ファイル（Next.js App Routerのルートハンドラ。ディレクトリがどこであっても `route.ts` という名前であればすべて対象）
+
+## 除外対象
+- `__tests__/` ディレクトリ配下のファイルおよび `*.test.ts`・`*.test.tsx` ファイルはすべて除外する
 
 ## 調査観点
 - 型エラー・暗黙のany・未定義値の伝播
