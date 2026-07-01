@@ -9,9 +9,12 @@ export default function NewConsumableOrderPage({ params }: { params: Promise<{ i
   const { id } = use(params)
   const router = useRouter()
 
+  const TABS = ['ALL', 'PCI', 'EVT', 'デバイス', 'ABL'] as const
+  type Tab = typeof TABS[number]
+
   const [consumables, setConsumables] = useState<Consumable[]>([])
   const [selections, setSelections] = useState<Record<string, number>>({})
-  const [purposeFilter, setPurposeFilter] = useState('')
+  const [activeTab, setActiveTab] = useState<Tab>('ALL')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -22,8 +25,7 @@ export default function NewConsumableOrderPage({ params }: { params: Promise<{ i
       .catch(() => setError('消耗品の取得に失敗しました'))
   }, [id])
 
-  const purposes = Array.from(new Set(consumables.map(c => c.purpose)))
-  const filtered = purposeFilter ? consumables.filter(c => c.purpose === purposeFilter) : consumables
+  const filtered = activeTab === 'ALL' ? consumables : consumables.filter(c => c.purpose === activeTab)
 
   const toggle = (consumableId: string) => {
     setSelections(prev => {
@@ -78,10 +80,21 @@ export default function NewConsumableOrderPage({ params }: { params: Promise<{ i
       <div className="bg-white rounded shadow-sm p-6" style={{ border: '1px solid #E5E7EB' }}>
         <div className="mb-4">
           <label className={labelClass} style={labelStyle}>用途で絞り込み</label>
-          <select value={purposeFilter} onChange={e => setPurposeFilter(e.target.value)} className="border rounded px-3 py-2 text-sm w-full" style={{ borderColor: '#E5E7EB' }}>
-            <option value="">すべて</option>
-            {purposes.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
+          <div className="flex gap-2 flex-wrap">
+            {TABS.map(tab => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                className="px-4 py-1.5 text-sm font-semibold rounded-full border transition-colors"
+                style={activeTab === tab
+                  ? { backgroundColor: '#16A34A', color: '#fff', borderColor: '#16A34A' }
+                  : { backgroundColor: '#fff', color: '#6B7280', borderColor: '#E5E7EB' }}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
         </div>
 
         <form onSubmit={handleSubmit}>

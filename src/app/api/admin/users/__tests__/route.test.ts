@@ -59,8 +59,8 @@ describe('GET /api/admin/users', () => {
     })
     const mockIn = vi.fn().mockResolvedValue({
       data: [
-        { user_id: 'u1', facility_id: 'f1' },
-        { user_id: 'u1', facility_id: 'f2' },
+        { user_id: 'u1', facility_id: 'f1', role: 'admin' },
+        { user_id: 'u1', facility_id: 'f2', role: 'staff' },
       ],
       error: null,
     })
@@ -71,11 +71,14 @@ describe('GET /api/admin/users', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(mockSelect).toHaveBeenCalledWith('user_id, facility_id')
+    expect(mockSelect).toHaveBeenCalledWith('user_id, facility_id, role')
     expect(mockIn).toHaveBeenCalledWith('user_id', ['u1', 'u2'])
     expect(body.users[0].id).toBe('u1')
-    expect(body.users[0].facilityIds).toEqual(['f1', 'f2'])
-    expect(body.users[1].facilityIds).toEqual([])
+    expect(body.users[0].facilities).toEqual([
+      { id: 'f1', role: 'admin' },
+      { id: 'f2', role: 'staff' },
+    ])
+    expect(body.users[1].facilities).toEqual([])
   })
 
   it('非管理者は 403 を返す', async () => {
