@@ -26,7 +26,7 @@ Phase 5 検証(並列) →
 - セッション終了時 → Stop hook が自動でレポートを生成（`~/aidd_session_report.sh`）
 
 ## AIDD stats 書き出しルール
-以下の5タイミングで必ず Bash 実行する（Stop hook が自動でレポート生成）：
+**SDD・AIDD・手動実装など、フロー種別を問わず**以下のタイミングで必ず Bash 実行する（Stop hook が自動でレポート生成）：
 
 ```bash
 # 1. AIDDフロー開始時（aidd-phase1.js を呼ぶ前）
