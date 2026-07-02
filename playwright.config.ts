@@ -5,6 +5,7 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   retries: process.env.CI ? 1 : 0,
   timeout: 30_000,
+  reporter: [['list'], ['./scripts/playwright-loop-observability-reporter.ts']],
   use: {
     baseURL: 'http://localhost:3000',
     storageState: 'e2e/.auth/user.json',
