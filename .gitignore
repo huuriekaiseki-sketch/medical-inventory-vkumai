@@ -45,3 +45,6 @@ e2e/.auth/user.json
 
 # loop observability
 /logs/
+
+# git worktrees (created under .claude/worktrees/ for isolated feature branches)
+/.claude/worktrees/
