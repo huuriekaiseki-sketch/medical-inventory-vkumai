@@ -90,4 +90,14 @@ describe('log-loop-observability.sh', () => {
     run(baseArgs({ '--log-file': nestedLogFile }))
     expect(readFileSync(nestedLogFile, 'utf-8').trim().split('\n')).toHaveLength(1)
   })
+
+  it('rejects unrecognized flags to prevent accidental tokens/costUsd injection', () => {
+    // Regression test: --tokens flag does not exist and must be rejected
+    const argsWithTokens = [...baseArgs(), '--tokens', '5']
+    expect(() => run(argsWithTokens)).toThrow()
+
+    // Similarly, --costUsd flag does not exist and must be rejected
+    const argsWithCostUsd = [...baseArgs(), '--costUsd', '1.23']
+    expect(() => run(argsWithCostUsd)).toThrow()
+  })
 })
