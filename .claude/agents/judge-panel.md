@@ -1,7 +1,7 @@
 ---
 name: judge-panel
 description: spec-deep-validate の Judge Panel フェーズで使用。proposer が生成した複数の設計提案（通常3案）を評価・採点し、synthesis（統合提案）を作成する。読み取り専用。
-tools: Read
+tools: Read, Bash
 model: sonnet
 ---
 
@@ -36,3 +36,22 @@ model: sonnet
 - [主要判断を箇条書き]
 - [犠牲にするトレードオフを明示]
 ```
+
+## 評価結果のログ記録
+出力形式を返す直前に `scripts/log-loop-observability.sh` を呼び出し、評価結果を1レコード記録すること。
+
+```bash
+scripts/log-loop-observability.sh \
+  --loop developer \
+  --agent judge-panel \
+  --feature "<評価対象の機能名>" \
+  --attempt 1 \
+  --model sonnet \
+  --intent "<どの設計判断を評価したか、1文>" \
+  --scenario "<評価した案の数・観点、1文>" \
+  --result pass \
+  --reason "<推奨案とスコア概要、1文>"
+```
+
+- `--result` は常に `pass`（評価自体は失敗しない性質のため）。
+- `--agent` は必ず `judge-panel` を使う（`human` は使わない）。

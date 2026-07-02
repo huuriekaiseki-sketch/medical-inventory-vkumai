@@ -29,3 +29,22 @@ model: sonnet
 - 型安全・データ層の整合
 
 担当次元の指摘だけを箇条書きで返すこと。修正可否の判断は親に委ねる。
+
+## レビュー結果のログ記録
+指摘一覧を返す直前に `scripts/log-loop-observability.sh` を呼び出し、レビュー結果を1レコード記録すること。
+
+```bash
+scripts/log-loop-observability.sh \
+  --loop developer \
+  --agent reviewer \
+  --feature "<レビュー対象の機能名>" \
+  --attempt 1 \
+  --model sonnet \
+  --intent "<何を確認しようとしたレビューか、1文>" \
+  --scenario "<担当したレビュー観点、1文>" \
+  --result pass \
+  --reason "<指摘なし、または指摘件数と要約、1文>"
+```
+
+- 指摘が0件なら `--result pass`、1件以上あれば `--result fail` とする。
+- `--agent` は必ず `reviewer` を使う（`human` は使わない。人間自身の判断は別途 `--agent human` で記録される）。
