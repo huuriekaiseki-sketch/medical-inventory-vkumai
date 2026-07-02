@@ -42,3 +42,6 @@ next-env.d.ts
 
 # playwright
 e2e/.auth/user.json
+
+# loop observability
+/logs/
