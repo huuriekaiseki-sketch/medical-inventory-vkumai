@@ -16,6 +16,35 @@ contract-writer が確定した `src/types/` の型定義を「契約」とし�
 4. テスト通過を確認 → 次のセットへ
 5. 失敗したら自分で直す。3回直して通らなければ報告。
 
+## 自己修正ループのログ記録
+実装セットごとに、テストを実行するたびに `scripts/log-loop-observability.sh` を呼び出し、1回の試行につき1レコードを記録すること。「実装セットの進め方」のステップ4（テスト通過を確認）とステップ5（自己修正の再試行）の両方で、テストを実行した直後に呼ぶ。
+
+例（1回目のテストが失敗し、2回目の修正で通った場合）:
+```bash
+scripts/log-loop-observability.sh \
+  --agent implementer \
+  --feature "<SPEC.mdのタスク名>" \
+  --attempt 1 \
+  --model sonnet \
+  --intent "<何を実装しようとしたか、1文>" \
+  --scenario "<実行したテストの内容、1文>" \
+  --result fail \
+  --reason "<失敗理由、1文>"
+
+scripts/log-loop-observability.sh \
+  --agent implementer \
+  --feature "<SPEC.mdのタスク名>" \
+  --attempt 2 \
+  --model sonnet \
+  --intent "<何を実装しようとしたか、1文>" \
+  --scenario "<実行したテストの内容、1文>" \
+  --result pass \
+  --reason "<通った理由、1文>"
+```
+
+- `--model` には自分が実行されているモデル名（例: `sonnet`、`opus`）を書く。
+- 3回修正しても通らず人間に報告する場合も、3回目の試行として `--result fail` を記録してから報告すること。
+
 ## 絶対にやってはいけないこと
 - テストを削除・無効化して「通った」ことにする
 - テストの期待値（アサーション）をこっそり緩めて通す
