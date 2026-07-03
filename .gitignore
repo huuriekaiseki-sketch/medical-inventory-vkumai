@@ -48,3 +48,4 @@ e2e/.auth/user.json
 
 # git worktrees (created under .claude/worktrees/ for isolated feature branches)
 /.claude/worktrees/
+.playwright-mcp/

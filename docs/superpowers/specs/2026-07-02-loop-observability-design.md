@@ -99,8 +99,8 @@ Loop Engineering（Agentic coding loop / Developer feedback loop / External feed
 | 2 | reviewer.md/judge-panel.mdに判断記録の指示を追加 | `.claude/agents/reviewer.md`, `judge-panel.md` |
 | 3 | Playwright実行結果をログに紐付け | `playwright.config.ts` or e2e側 |
 | 4 | 溜まったログを人間が読める要約に変換するコマンド/スクリプトを作る | 新規スクリプト |
-| 5（任意・MCP） | implementerのブラウザ確認箇所でPlaywright MCPを使わせ、利用ログも記録 | `.claude/agents/implementer.md` |
-| 6（任意・MCP） | 実装前にContext7 MCPで最新ドキュメント参照させ、参照有無をログに残す | `.claude/agents/implementer.md` |
+| 5（任意・MCP） | implementerのブラウザ確認箇所でPlaywright MCPを使わせ、利用ログも記録（完了・2026-07-03） | `.mcp.json`, `.claude/agents/implementer.md` |
+| 6（任意・MCP） | 実装前にContext7 MCPで最新ドキュメント参照させ、参照有無をログに残す（縮小版で完了・2026-07-03。`resolve-library-id`のみ利用。`query-docs`はサブエージェントのツール可視性制約〔deferredツールをロードする`ToolSearch`がサブエージェントに提供されない〕により保留、環境側の仕様変更後に再挑戦） | `.mcp.json`, `.claude/agents/implementer.md` |
 | 7（任意・後日） | transcript集計スクリプトで`tokens`/`costUsd`を後付け更新（第二段階） | 新規スクリプト |
 
 ---

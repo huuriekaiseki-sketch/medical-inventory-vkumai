@@ -20,11 +20,36 @@
       "Bash(npx *)",
       "Bash(node *)",
       "Bash(supabase *)",
-      "Bash(git *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout -b *)",
+      "Bash(git push origin *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git stash*)",
+      "Bash(git worktree list*)",
       "Bash(gh *)",
+      "Bash(claude mcp list*)",
+      "Bash(claude mcp --help*)",
+      "Bash(claude mcp add --help*)",
       "Bash(ls /Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/)",
       "Read(//Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/**)",
       "Bash(/Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/task-brief /Users/masanori/medical-inventory-vkumai/docs/superpowers/plans/2026-06-22-price-history.md 1)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push origin main --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -f*)",
+      "Bash(git branch -D *)",
+      "Bash(sudo *)"
     ]
   }
 }
