@@ -1,7 +1,7 @@
 ---
 name: implementer
 description: 機能実装・バグ修正用。複雑な実装に使う。
-tools: Read, Edit, Write, Bash
+tools: Read, Edit, Write, Bash, mcp__playwright__browser_navigate, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_wait_for, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_console_messages, mcp__context7__resolve-library-id
 model: sonnet
 ---
 
@@ -44,6 +44,42 @@ scripts/log-loop-observability.sh \
 
 - `--model` には自分が実行されているモデル名（例: `sonnet`、`opus`）を書く。
 - 3回修正しても通らず人間に報告する場合も、3回目の試行として `--result fail` を記録してから報告すること。
+
+## 最新ドキュメント参照（Context7 MCP）
+実装対象のライブラリ・フレームワーク（Next.js、Supabaseクライアント、その他外部パッケージ）の名称やバージョンが不確かな場合は、実装（GREEN）に入る前に `mcp__context7__resolve-library-id` でライブラリを特定すること。
+
+※ `mcp__context7__query-docs`（ドキュメント本文取得）はサブエージェントのツール可視性の制約により現状呼び出せない（deferredなツールをロードする`ToolSearch`がサブエージェントに提供されないため）。環境側の仕様が変わるまでは`resolve-library-id`によるライブラリ特定のみを行うこと。
+
+- 参照した場合、`scripts/log-loop-observability.sh` に以下を追加で呼び出し、利用したことをログに残す。
+  ```bash
+  scripts/log-loop-observability.sh \
+    --agent implementer \
+    --feature "<SPEC.mdのタスク名>" \
+    --attempt <試行回数> \
+    --model sonnet \
+    --intent "Context7 MCPでライブラリを特定" \
+    --scenario "<特定したライブラリ・確認した内容、1文>" \
+    --result pass \
+    --reason "<参照した理由、1文>"
+  ```
+- 既に確実に知っている一般的なAPI（言語標準機能など）で参照が不要と判断した実装セットでは、このログを書かない（実際に参照した場合のみ記録する）。
+
+## ブラウザ確認（Playwright MCP）
+実装したUI・画面挙動をブラウザで目視確認する必要がある場合は、`curl` や推測ではなく Playwright MCP（`mcp__playwright__browser_*` ツール）を使って実際にブラウザを操作し確認すること。
+
+- 確認したら `scripts/log-loop-observability.sh` に以下を追加で呼び出し、利用したことをログに残す。
+  ```bash
+  scripts/log-loop-observability.sh \
+    --agent implementer \
+    --feature "<SPEC.mdのタスク名>" \
+    --attempt <試行回数> \
+    --model sonnet \
+    --intent "Playwright MCPでブラウザ確認" \
+    --scenario "<確認した画面・操作の内容、1文>" \
+    --result <pass|fail> \
+    --reason "<確認結果の理由、1文>"
+  ```
+- ブラウザ確認をしなかった実装セットでは、このログを書かない（実際に使った場合のみ記録する）。
 
 ## 絶対にやってはいけないこと
 - テストを削除・無効化して「通った」ことにする
