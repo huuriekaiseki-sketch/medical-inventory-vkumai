@@ -2,7 +2,11 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 import type { DistributorProduct } from '@/types/distributorProduct'
 
-vi.mock('@/lib/supabase/server', () => ({ createServerSupabase: vi.fn().mockResolvedValue({}) }))
+const mockGetUser = vi.hoisted(() => vi.fn())
+const mockCreateServerSupabase = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/supabase/server', () => ({
+  createServerSupabase: mockCreateServerSupabase,
+}))
 vi.mock('@/lib/price-histories/repository')
 vi.mock('@/lib/distributor-products/repository')
 
@@ -43,9 +47,23 @@ function makeParams(id: string) {
   return { params: Promise.resolve({ id }) }
 }
 
-beforeEach(() => vi.resetAllMocks())
+beforeEach(() => {
+  vi.resetAllMocks()
+  mockCreateServerSupabase.mockResolvedValue({ auth: { getUser: mockGetUser } })
+  mockGetUser.mockResolvedValue({ data: { user: { id: 'u1', email: 'u1@test.com' } }, error: null })
+})
 
 describe('GET /api/distributor-products/[id]/price-history', () => {
+  it('未認証の場合は401を返す', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: { message: 'no user' } })
+
+    const req = makeRequest('/api/distributor-products/dp-1/price-history')
+    const res = await GET(req, makeParams('dp-1'))
+
+    expect(res.status).toBe(401)
+    expect(getDistributorProduct).not.toHaveBeenCalled()
+  })
+
   it('価格履歴一覧を返す', async () => {
     vi.mocked(getDistributorProduct).mockResolvedValue(mockProduct)
     vi.mocked(getPriceHistory).mockResolvedValue([mockHistory])
