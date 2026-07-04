@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/supabase/require-auth'
 import { getDistributorProduct, updateDistributorProduct, deleteDistributorProduct } from '@/lib/distributor-products/repository'
+import { apiError } from '@/lib/api-error'
 import type { DistributorProductInput } from '@/types/distributorProduct'
 import type { RouteContext } from '@/types/route'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   const db = await createServerSupabase()
+  try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
   const item = await getDistributorProduct(db, id)
   if (!item) {
     return NextResponse.json({ error: '代理店商品が見つかりません' }, { status: 404 })
@@ -29,6 +32,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   try {
     const db = await createServerSupabase()
+    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
     const item = await updateDistributorProduct(db, id, input)
     return NextResponse.json({ item })
   } catch (error) {
@@ -48,6 +52,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   try {
     const db = await createServerSupabase()
+    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
     await deleteDistributorProduct(db, id)
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -1,11 +1,14 @@
 // src/middleware.ts
 // WHY: 全パスの認証ガード（未認証→/login）と admin ガード（/admin/*, /api/admin/*）を
 //      middleware で一元化し、重複実装を避けるため。セッションリフレッシュも同時実行。
-//      admin判定はDB roleベース（user_facilities.role='admin'）に統一し、
-//      ADMIN_EMAILSはDBにadminが0件の場合のフォールバックとして使用する。
+//      admin判定はresolveIsAdmin()（src/lib/admin-status.ts）に一本化する。
+//      SECURITY DEFINER RPC(get_admin_status)を使うため、Edge Runtimeでも
+//      service role keyなしにセッション付きクライアントでDB roleベース判定＋
+//      ADMIN_EMAILSフォールバックの両方が可能になる。
 
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveIsAdmin } from '@/lib/admin-status'
 
 const PUBLIC_PATHS = ['/login', '/auth/callback']
 
@@ -48,19 +51,11 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // WHY: middlewareではcreateAdminSupabase（Service Role Key）が使えないため、
-    //      ユーザーセッション付きのsupabaseクライアントでuser_facilitiesを問い合わせる。
-    //      RLSにより自分の行のみ返るため、role='admin'チェックが可能。
-    const { data: userAdminRows } = await supabase
-      .from('user_facilities')
-      .select('user_id, role')
-      .eq('user_id', user.id)
-      .eq('role', 'admin')
-      .limit(1)
+    // WHY: resolveIsAdminはSupabaseClient(rpc呼び出し)+fetchのみに依存するため
+    //      Edge RuntimeのmiddlewareでもService Role Keyなしに動作する。
+    const isAdmin = await resolveIsAdmin(supabase, user)
 
-    const isDbAdmin = userAdminRows && userAdminRows.length > 0
-
-    if (!isDbAdmin) {
+    if (!isAdmin) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
 

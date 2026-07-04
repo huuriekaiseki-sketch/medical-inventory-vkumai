@@ -18,24 +18,20 @@ beforeEach(() => {
   process.env.ADMIN_EMAILS = 'admin@example.com,another@example.com'
 })
 
-// DB roleチェック用のmockヘルパー
-function makeSupabaseClientWithAdminRole(user: { id: string; email: string } | null, isAdminInDb: boolean) {
+// resolveIsAdmin は get_admin_status RPC を呼ぶため、rpc モックを用意する
+function makeSupabaseClientWithAdminRpc(
+  user: { id: string; email: string } | null,
+  userIsAdmin: boolean,
+  dbHasAdmin: boolean
+) {
   return {
     auth: {
       getUser: vi.fn().mockResolvedValueOnce({ data: { user } }),
     },
-    from: vi.fn().mockImplementation(() => ({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({
-              data: isAdminInDb ? [{ user_id: user?.id, role: 'admin' }] : [],
-              error: null,
-            }),
-          }),
-        }),
-      }),
-    })),
+    rpc: vi.fn().mockResolvedValue({
+      data: [{ user_is_admin: userIsAdmin, db_has_admin: dbHasAdmin }],
+      error: null,
+    }),
   }
 }
 
@@ -124,23 +120,15 @@ describe('middleware', () => {
   describe('admin ガード（DBロールベース）', () => {
     it('ADMIN_EMAILSに含まれてもDBにrole=adminがなければ /login にリダイレクト', async () => {
       const { createServerClient } = await import('@supabase/ssr')
-      vi.mocked(createServerClient).mockReturnValueOnce({
-        auth: {
-          getUser: vi.fn().mockResolvedValueOnce({
-            data: { user: { id: 'admin-1', email: 'admin@example.com' } },
-          }),
-        },
-        from: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-              limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-            }),
-          }),
-        }),
-      } as unknown as ReturnType<typeof createServerClient>)
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'admin-1', email: 'admin@example.com' },
+          false,
+          false
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
+      // ADMIN_EMAILSに一致しないメールにするため上書き
+      process.env.ADMIN_EMAILS = 'other@example.com'
 
       const request = new NextRequest(
         new URL('http://localhost:3000/admin/settings')
@@ -153,23 +141,13 @@ describe('middleware', () => {
 
     it('非 admin メールのユーザーが /admin/settings にアクセス→ /login にリダイレクト', async () => {
       const { createServerClient } = await import('@supabase/ssr')
-      vi.mocked(createServerClient).mockReturnValueOnce({
-        auth: {
-          getUser: vi.fn().mockResolvedValueOnce({
-            data: { user: { id: 'user-1', email: 'user@example.com' } },
-          }),
-        },
-        from: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-              limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-            }),
-          }),
-        }),
-      } as unknown as ReturnType<typeof createServerClient>)
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'user-1', email: 'user@example.com' },
+          false,
+          false
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
 
       const request = new NextRequest(
         new URL('http://localhost:3000/admin/settings')
@@ -199,25 +177,13 @@ describe('middleware', () => {
 
     it('DBにrole=adminがあるユーザーが /admin/* にアクセス→ そのまま通す', async () => {
       const { createServerClient } = await import('@supabase/ssr')
-      vi.mocked(createServerClient).mockReturnValueOnce({
-        auth: {
-          getUser: vi.fn().mockResolvedValueOnce({
-            data: { user: { id: 'admin-2', email: 'admin@example.com' } },
-          }),
-        },
-        from: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue({
-                  data: [{ user_id: 'admin-2', role: 'admin' }],
-                  error: null,
-                }),
-              }),
-            }),
-          }),
-        }),
-      } as unknown as ReturnType<typeof createServerClient>)
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'admin-2', email: 'admin@example.com' },
+          true,
+          true
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
 
       const request = new NextRequest(
         new URL('http://localhost:3000/admin/users')
@@ -231,23 +197,13 @@ describe('middleware', () => {
     it('ADMIN_EMAILS が未設定でも動作する（DBにもadminなし→リダイレクト）', async () => {
       delete process.env.ADMIN_EMAILS
       const { createServerClient } = await import('@supabase/ssr')
-      vi.mocked(createServerClient).mockReturnValueOnce({
-        auth: {
-          getUser: vi.fn().mockResolvedValueOnce({
-            data: { user: { id: 'user-1', email: 'user@example.com' } },
-          }),
-        },
-        from: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-              limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-            }),
-          }),
-        }),
-      } as unknown as ReturnType<typeof createServerClient>)
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'user-1', email: 'user@example.com' },
+          false,
+          false
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
 
       const request = new NextRequest(
         new URL('http://localhost:3000/admin/settings')
@@ -260,33 +216,58 @@ describe('middleware', () => {
     })
   })
 
-  describe('admin ガード（DBロールベース）', () => {
+  describe('admin ガード（ADMIN_EMAILSフォールバック）', () => {
+    it('DBにadmin0件でADMIN_EMAILSに一致するユーザーが /admin にアクセス→ 通過', async () => {
+      process.env.ADMIN_EMAILS = 'admin@example.com'
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'fallback-admin', email: 'admin@example.com' },
+          false,
+          false
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/admin')
+      )
+
+      const response = await middleware(request)
+
+      expect(response?.status).not.toBe(307)
+    })
+
+    it('DBにadmin0件でADMIN_EMAILSに一致しないユーザーが /admin にアクセス→ /login にリダイレクト', async () => {
+      process.env.ADMIN_EMAILS = 'admin@example.com'
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'regular-user', email: 'other@example.com' },
+          false,
+          false
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/admin')
+      )
+
+      const response = await middleware(request)
+
+      expect(response?.status).toBe(307)
+    })
+  })
+
+  describe('admin ガード（DBロールベース・二重登録防止）', () => {
     it('user_facilitiesにrole=adminがあれば /admin/* を通す', async () => {
       const { createServerClient } = await import('@supabase/ssr')
-      // DB roleチェックが2回（user+role確認 → 全体admin存在確認）
-      let fromCallCount = 0
-      vi.mocked(createServerClient).mockReturnValueOnce({
-        auth: {
-          getUser: vi.fn().mockResolvedValueOnce({
-            data: { user: { id: 'db-admin-1', email: 'dbadmin@example.com' } },
-          }),
-        },
-        from: vi.fn().mockImplementation(() => {
-          fromCallCount++
-          return {
-            select: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                eq: vi.fn().mockReturnValue({
-                  limit: vi.fn().mockResolvedValue({
-                    data: [{ user_id: 'db-admin-1', role: 'admin' }],
-                    error: null,
-                  }),
-                }),
-              }),
-            }),
-          }
-        }),
-      } as unknown as ReturnType<typeof createServerClient>)
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'db-admin-1', email: 'dbadmin@example.com' },
+          true,
+          true
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
 
       // DB adminには含まれないメール
       process.env.ADMIN_EMAILS = 'other@example.com'
@@ -302,23 +283,14 @@ describe('middleware', () => {
 
     it('user_facilitiesにrole=adminがなくADMIN_EMAILSにも含まれなければリダイレクト', async () => {
       const { createServerClient } = await import('@supabase/ssr')
-      vi.mocked(createServerClient).mockReturnValueOnce({
-        auth: {
-          getUser: vi.fn().mockResolvedValueOnce({
-            data: { user: { id: 'regular-user', email: 'regular@example.com' } },
-          }),
-        },
-        from: vi.fn().mockImplementation(() => ({
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-              limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-            }),
-          }),
-        })),
-      } as unknown as ReturnType<typeof createServerClient>)
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'regular-user', email: 'regular@example.com' },
+          false,
+          false
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
+      process.env.ADMIN_EMAILS = 'other@example.com'
 
       const request = new NextRequest(
         new URL('http://localhost:3000/admin/settings')

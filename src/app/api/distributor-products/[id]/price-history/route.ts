@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/supabase/require-auth'
 import { getPriceHistory } from '@/lib/price-histories/repository'
 import { getDistributorProduct } from '@/lib/distributor-products/repository'
+import { apiError } from '@/lib/api-error'
 
 export async function GET(
   _req: NextRequest,
@@ -11,6 +13,7 @@ export async function GET(
 
   try {
     const db = await createServerSupabase()
+    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
     const product = await getDistributorProduct(db, id)
     if (!product) {
       return NextResponse.json({ error: '代理店商品が見つかりません' }, { status: 404 })

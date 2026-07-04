@@ -1,4 +1,4 @@
-# SPEC: 業務ダッシュボード（トップページ置き換え / Issue #19）
+# SPEC: 既存API [id]系の認証チェック漏れ・admin判定ロジックの重複解消（Issue #24）
 
 ---
 
@@ -6,65 +6,34 @@
 
 ### 何ができるようになるか
 
-ログイン後に表示されるトップページ（現在はcreate-next-appのデフォルト画面）が、日々の業務状況を一目で把握できる「業務ダッシュボード」に置き換わります。
-
-- 自分が所属する施設ごとに、直近の発注（貸出・消耗品・症例）の状況が一覧で見える
-- 「返してもらっていない貸出品」が施設ごとに件数で分かる
-- 最近、仕切値・納入価格・償還価格が変わった商品が分かる
-- 各管理画面（施設一覧・商品一覧・発注一覧など）へワンクリックで移動できる
-
-### 画面イメージ / 操作の流れ
-
-ログイン → 自動的に `/`（トップ）へ遷移 → ダッシュボードが表示される。
-
-**セクション構成（上から順）**
-
-1. **施設別 直近発注サマリー**
-   - 自分の所属施設ごとにカードを表示
-   - 各カードに、直近の症例発注・消耗品発注・貸出発注の件数と最新日時
-   - カードをクリックすると該当施設の発注一覧へ遷移
-
-   📸 施設カードが自分の所属施設数だけ表示されていること
-
-2. **未返却の貸出件数**
-   - 施設ごとに「未返却件数」をバッジ表示
-   - 未返却件数 = 提出済み（submitted）の貸出発注に対して、対応する返却（returned）が完了していない件数
-   - 0件の施設は「未返却なし」と表示、1件以上は警告色で強調
-
-   📸 未返却件数バッジが施設ごとに表示され、0件と1件以上で見た目が区別されていること
-
-3. **最近の価格改定**
-   - 直近の価格改定（仕切値・納入価格・償還価格の変更）を新しい順に最大10件表示
-   - 商品名・変更項目・変更前後の値・変更日時を表示
-   - 該当商品の価格改定履歴ページへのリンクあり
-
-   📸 価格改定一覧が新しい順に並んでいること
-
-4. **管理ページへのショートカット**
-   - 施設一覧・商品一覧・販売店商品一覧・病院価格一覧・カテゴリ一覧へのボタンリンク
-   - admin権限を持つユーザーには管理ユーザーページへのリンクも追加表示
-
-   📸 ショートカットボタンから各管理ページへ遷移できること
+- これまで認証なしでアクセスできてしまっていたAPI（商品・施設・カテゴリ・販売店商品・病院価格の詳細取得/更新/削除、価格改定履歴、消耗品登録）が、ログインしていないと401エラーになります。
+- 管理者判定（admin判定）のロジックが3箇所（`middleware.ts`／`admin-auth.ts`／`require-facility-access.ts`）にバラバラに実装されていたのを1箇所に統一し、今後ロジックを変更する際に修正漏れが起きにくくなります。
+- 現状「DBに管理者が1人もいない場合はADMIN_EMAILS環境変数で緊急ログインできる」というフォールバックが`admin-auth.ts`と`require-facility-access.ts`にはあるのに`middleware.ts`には無く、画面遷移レベルではADMIN_EMAILSでの緊急アクセスがブロックされてしまう状態でした。これを解消します。
 
 ### 受け入れ条件（チェックリスト）
 
-- [ ] `/` にログイン後アクセスすると、Next.jsデフォルトテンプレートではなく業務ダッシュボードが表示される
-- [ ] 自分が所属していない施設のデータは表示されない（施設間データ隔離）
-- [ ] **【必須・明示テスト】異なる施設に所属する2人のテストユーザーでログインし比較する。施設Aのユーザーには施設Bの発注サマリー・未返却件数・施設固有の価格改定（hospital_price）が一切表示されないことをPlaywright MCPまたは手動で確認する。既存コードで同種の施設フィルタ漏れ（`listHospitalPrices`）が実際に見つかっているため、新規実装での再発がないことを実装後に必ず確認する**
-- [ ] 未認証で `/` にアクセスすると `/login` にリダイレクトされる（既存middlewareの挙動を維持）
-- [ ] 施設別サマリー・未返却件数・価格改定一覧・ショートカットの4セクションが表示される
-- [ ] 各カード・リンクから対応する既存ページへ正しく遷移する
-- [ ] 表示対象データが0件のセクションは「データがありません」等の空状態表示になる（エラーにならない）
-- [ ] 新規テーブルを追加しない（既存データのみで実装。`price_histories`テーブルは2026-06-22のマイグレーションで既に作成済みで、`distributor_products`/`hospital_prices`更新時にDBトリガーで自動記録されているため、新規テーブルなしで「最近の価格改定」表示は実現可能——確認済み）
+**認証チェック追加**
+- [ ] 未認証で以下にアクセスすると401が返る
+  - `GET/PUT/DELETE /api/products/{id}`
+  - `GET/PUT/DELETE /api/facilities/{id}`
+  - `GET/PUT/DELETE /api/categories/{id}`
+  - `GET/PUT/DELETE /api/distributor-products/{id}`
+  - `GET/PUT/DELETE /api/hospital-prices/{id}`
+  - `GET /api/distributor-products/{id}/price-history`
+  - `POST /api/consumables`
+- [ ] `hospital-prices/{id}` は施設スコープのデータのため、認証に加えて`requireFacilityAccess`によるアクセス制御も行われる（他施設の価格情報を更新・削除できない）
+- [ ] 既存の正常系（認証済みユーザーのCRUD操作）が今まで通り動作する（既存テスト全通過）
 
-### 備考（今回のスコープ外・別issue化を推奨）
+**admin判定ロジックの統一**
+- [ ] `middleware.ts`のadmin判定で、DBにrole='admin'の行が1件も無い場合にADMIN_EMAILSへフォールバックする
+- [ ] `admin-auth.ts`の`requireAdmin()`と`require-facility-access.ts`の内部実装が、共通の判定ロジックを呼び出す形になっている（同一ロジックの二重実装が解消されている）
+- [ ] admin判定のふるまい（DB上の管理者判定→DBに管理者が0件ならADMIN_EMAILSフォールバック）が3箇所すべてで一致している
+- [ ] 既存のadmin関連テスト（`admin_rls.test.ts`, `middleware.test.ts`等）が全通過する
 
-Phase 1調査で以下の**既存バグ**が見つかりました。ダッシュボード機能の実装対象には含めず、別issueとして切り出すことを推奨します。
+### 備考（スコープ外）
 
-- `products` / `facilities` / `categories` / `distributor-products` / `hospital-prices` の `[id]/route.ts` の GET/PUT/DELETE に認証チェック（`requireAuth`）が無い
-- `listHospitalPrices(db)` が `facility_id` でフィルタされておらず、全施設の価格情報が露出するリスクがある
-- 各種フォーム・一覧ページで `res.json()` のエラーハンドリングが薄く、HTTPエラー時に例外が発生しうる
-- repository層でDBのenum値をunsafe castしている箇所が複数ある（`mapping.ts`の`asEnum()`未活用）
+- `products`/`categories`/`distributor-products`のRLSを「読み取り全認証ユーザー・書き込みadmin限定」に明確化する話は issue #25（技術負債残作業 SET F）で別途対応する。本issueでは「未認証を弾く」ところまでを対象とし、認証済みユーザー間の権限細分化（読み取り専用ユーザー等）は行わない。
+- unsafe enum castの解消・APIレスポンス形式統一・型安全性改善などは issue #25 の対象。
 
 ---
 
@@ -72,60 +41,102 @@ Phase 1調査で以下の**既存バグ**が見つかりました。ダッシュ
 
 ### 前提となる既存実装
 
-- `requireAuth(db)`: `src/lib/supabase/require-auth.ts` — 未認証時は`Error('UNAUTHORIZED')`
-- `requireFacilityAccess(db, user, facilityId)`: `src/lib/supabase/require-facility-access.ts` — admin全許可／非adminは所属施設のみ
-- `listCaseOrders` / `listConsumableOrders` / `listLoanOrders` / `listLoanReturns`: 各 `src/lib/*/repository.ts` に `(db, facilityId, limit, offset)` シグネチャで存在（施設単位・最新N件取得に流用可）
-- `listFacilities(db)`: `src/lib/facilities/repository.ts` — 全施設取得（所属フィルタなし）
-- ユーザー所属施設一覧の取得ロジックは存在しない → 新設が必要
-- 「全体横断の最近の価格改定」取得関数は存在しない → 新設が必要
-- 「未返却貸出」を突合する自動ロジックは存在しない → 新設が必要（`loan_order_items`と`loan_return_items`に直接の外部キーはないため、施設単位で `submitted` の貸出発注件数 − `returned` の返却件数 の差分をビジネスルールとして定義する）
+- `requireAuth(db): Promise<User>`（`src/lib/supabase/require-auth.ts`）: 未認証は`Error('UNAUTHORIZED')`
+- `requireFacilityAccess(db, user, facilityId): Promise<{facilityId}>`（`src/lib/supabase/require-facility-access.ts`）: admin全許可／非adminは所属施設のみ。内部で`isAdminUserWithEmail(user)`を呼んでいる
+- `requireAdmin(): Promise<User | null>`（`src/lib/admin-auth.ts`）: DB role='admin'判定＋ADMIN_EMAILSフォールバック
+- `middleware.ts`: `/admin*`パスでDB role='admin'のみチェック（ADMIN_EMAILSフォールバックなし）。Edge Runtimeのため`createAdminSupabase()`（service role key）が使えず、セッション付きクライアントで`user_facilities`をRLS越しに問い合わせている
+- 各routeの典型パターン（`src/app/api/products/route.ts`等）: `try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }`
 
-### 施設間データ隔離の方針（Confirmed）
+### admin判定統一の設計
 
-- `price_histories` テーブルは `20260622000000_add_price_histories.sql` で作成済み。`distributor_products.reimbursement_price` と `hospital_prices.purchase_price/delivery_price` の更新時にDBトリガーで自動的に履歴行がINSERTされる。**新規テーブル不要の制約を満たすことを確認済み**。
-- `20260627010000_add_multitenant.sql` のRLSポリシー`facility_member_only`（price_historiesテーブル）は、`entity_type='hospital_price'`の行を`hospital_prices.facility_id`経由で施設メンバーのみに絞り、`entity_type='distributor_product'`の行は全認証ユーザーに公開する設計になっている（`reimbursement_price`は施設非依存の商品マスタ属性のため、これは意図的な設計であり、Phase1 Sweepが指摘した「設計意図不明」は今回の調査で意図的と判断できた）。
-- **重要**: `src/lib/supabase/server.ts` の `createServerSupabase()`（anon key + セッションcookie）を使う限り、上記RLSがPostgres側で自動適用される。`createAdminSupabase()`（service_role、RLSバイパス）は本機能の実装では使用しないこと。Set 1〜5の新規repository/APIルートはすべて`createServerSupabase()`経由のクライアントを受け取って動作させ、アプリ側で追加のfacility_idフィルタを重ねて信頼性を担保する（RLS一本に依存しない多層防御）。
-- Set 5（APIルート）のテスト観点に追加: 異なる施設に所属する2ユーザーで実際にダッシュボードAPIを呼び出し、互いの施設データ（発注サマリー・未返却件数・hospital_price系の価格改定）が混入しないことを検証する統合テスト、およびPhase 5でのPlaywright/手動確認を必須とする。
+`requireAdmin()`と`isAdminUserWithEmail()`はどちらも「①自分がrole='admin'か（service role経由でRLSバイパス）→②DB全体にadminが1件でもいるか（いれば非admin確定）→③いなければADMIN_EMAILSフォールバック」という同一ロジックを別々に実装している。
+
+`middleware.ts`はEdge Runtimeでservice role keyが使えないため、同じ実装をそのまま共通化できない。そこで以下のSECURITY DEFINER RPCを新設し、RLSをバイパスしつつservice role keyなしで①②を判定できるようにする。
+
+```sql
+-- supabase/migrations/xxxxx_add_admin_status_rpc.sql
+CREATE OR REPLACE FUNCTION get_admin_status(p_user_id UUID)
+RETURNS TABLE (user_is_admin BOOLEAN, db_has_admin BOOLEAN)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT
+    EXISTS (SELECT 1 FROM user_facilities WHERE user_id = p_user_id AND role = 'admin'),
+    EXISTS (SELECT 1 FROM user_facilities WHERE role = 'admin');
+$$;
+
+GRANT EXECUTE ON FUNCTION get_admin_status TO anon, authenticated, service_role;
+```
+
+このRPCは`authenticated`ロールで呼び出し可能（SECURITY DEFINERでRLSをバイパスするが、判定結果のbooleanしか返さないため情報漏洩はない）。`createServerSupabase()`（セッション付き・anon key）からでも`createAdminSupabase()`（service role）からでも同じ結果を得られる。
+
+新設する共通関数（ADMIN_EMAILSはNext.js環境変数でPostgres側から読めないため、フォールバック判定はTS側に残す）：
+
+```typescript
+// src/lib/admin-status.ts
+export async function resolveIsAdmin(db: SupabaseClient, user: User): Promise<boolean> {
+  const { data, error } = await db.rpc('get_admin_status', { p_user_id: user.id })
+  if (error || !data || data.length === 0) return false
+  const { user_is_admin, db_has_admin } = data[0]
+  if (user_is_admin) return true
+  if (db_has_admin) return false
+  const adminEmails = (process.env.ADMIN_EMAILS ?? '')
+    .split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+  if (adminEmails.length === 0) return false
+  return adminEmails.includes((user.email ?? '').trim().toLowerCase())
+}
+```
+
+- `admin-auth.ts`の`requireAdmin()`は`resolveIsAdmin(db, user)`を呼ぶだけに簡略化（`createAdminSupabase()`不要になる）
+- `require-facility-access.ts`の`isAdminUserWithEmail()`を削除し、`resolveIsAdmin`を直接呼ぶ
+- `middleware.ts`はセッション付きクライアントで`resolveIsAdmin`相当のロジックを呼ぶ（RPCなのでEdge Runtimeでも動作する）。ただし`middleware.ts`はNext.js Edge Runtime向けの独立ファイルで`src/lib/`のNode専用コードに依存できない制約があるため、`resolveIsAdmin`が純粋にSupabaseClient+fetchのみに依存する（Node API不使用）ことを確認し、`middleware.ts`から直接importして使う
 
 ### 実装セット一覧（依存順）
 
-**Set 0: 契約（型定義）** [contract-writer]
-- `src/types/dashboard.ts` 新設: `DashboardFacilitySummary`, `LoanOutstandingSummary`, `RecentPriceChange`, `DashboardData` 型を定義
-- 触るファイル: `src/types/dashboard.ts`（新規）
+**Set 1: admin判定統一（DBマイグレーション + 共通関数）** [波A]
+- `supabase/migrations/xxxxx_add_admin_status_rpc.sql` 新設（上記RPC）
+- `src/lib/admin-status.ts` 新設: `resolveIsAdmin(db, user)`
+- テスト観点: 自分がadmin→true、他にadminがいる非admin→false、DBにadmin0件+ADMIN_EMAILS一致→true、DBにadmin0件+ADMIN_EMAILS不一致→false、RPCエラー時→false
+- 触るファイル: `supabase/migrations/`, `src/lib/admin-status.ts`（新規）, `.test.ts`（新規）
 
-**Set 1: user_facilities からユーザー所属施設一覧を取得するロジック** [波A]
-- `src/lib/user-facilities/repository.ts` 新設: `listUserFacilities(db, userId): Promise<{facilityId, facilityName, role}[]>`
-- テスト観点: 所属施設が0件/複数件/adminロール混在のケース
-- 触るファイル: `src/lib/user-facilities/repository.ts`（新規）, `src/lib/user-facilities/repository.test.ts`（新規）
+**Set 2: admin-auth.ts / require-facility-access.ts のリファクタ** [Set1依存]
+- `requireAdmin()`を`resolveIsAdmin`呼び出しに置き換え（`createAdminSupabase()`のimportを削除可能なら削除）
+- `isAdminUserWithEmail()`を削除し`resolveIsAdmin`を直接呼ぶ
+- 既存の外部インターフェース（`requireAdmin(): Promise<User|null>`、`requireFacilityAccess(db,user,facilityId)`）は変更しない（呼び出し元への影響なし）
+- テスト観点: 既存の`admin-auth`関連テストがすべて通ること（振る舞い不変のリファクタ）
+- 触るファイル: `src/lib/admin-auth.ts`, `src/lib/supabase/require-facility-access.ts`
 
-**Set 2: 施設別直近発注サマリー取得ロジック** [波A]
-- `src/lib/dashboard/facility-summary.ts` 新設: 施設IDを受け取り、既存の`listCaseOrders`/`listConsumableOrders`/`listLoanOrders`を`limit=1`で呼び出し、件数・最新日時を集約する`getFacilityOrderSummary(db, facilityId)`
-- テスト観点: 発注が1件もない施設、3種類すべて存在する施設
-- 触るファイル: `src/lib/dashboard/facility-summary.ts`（新規）, `.test.ts`（新規）
+**Set 3: middleware.ts のADMIN_EMAILSフォールバック追加** [Set1依存]
+- 現行の「DB role='admin'チェックのみ」を`resolveIsAdmin`相当のロジック（RPC呼び出し＋ADMIN_EMAILSフォールバック）に置き換え
+- テスト観点: DBにadmin0件+ADMIN_EMAILS一致ユーザーで`/admin`にアクセス→通過、不一致→`/login`へリダイレクト
+- 触るファイル: `src/middleware.ts`, `src/__tests__/middleware.test.ts`
 
-**Set 3: 未返却貸出件数の算出ロジック** [波A]
-- `src/lib/dashboard/loan-outstanding.ts` 新設: `getLoanOutstandingCount(db, facilityId)` — `submitted`状態の`loan_orders`件数と`returned`状態の`loan_returns`件数の差分を算出（0未満は0に丸める）
-- テスト観点: 提出0件、提出>返却、提出=返却、返却>提出（丸め確認）
-- 触るファイル: `src/lib/dashboard/loan-outstanding.ts`（新規）, `.test.ts`（新規）
+**Set 4: [id]系ルートへの認証チェック追加（マスタ系、facility非スコープ）** [波B、他セットと独立]
+- 対象: `src/app/api/products/[id]/route.ts`, `categories/[id]/route.ts`, `distributor-products/[id]/route.ts`
+- 各GET/PUT/DELETEの先頭に既存パターン（`try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }`）を追加
+- facilityIdスコープなし（マスタデータのため、認証済みなら誰でも操作可能という既存方針を維持。権限細分化はissue #25）
+- テスト観点: 各HTTPメソッドで未認証時401、認証済み時は既存の正常系が壊れないこと
+- 触るファイル: 上記3ファイル＋対応する`.test.ts`
 
-**Set 4: 全体横断の最近の価格改定取得ロジック** [波A]
-- `src/lib/price-histories/repository.ts` に `listRecentPriceHistories(db, limit=10): Promise<PriceHistory[]>` 追加（`price_histories`を`changed_at`降順で直接クエリ、既存の`asEnum()`パターンに寄せて型安全にする）
-- テスト観点: 0件、limit超過時の件数丸め、`entityType`/`fieldName`のenum安全性
-- 触るファイル: `src/lib/price-histories/repository.ts`（既存ファイルへの追記）, `src/lib/price-histories/repository.test.ts`（既存）
-- ※ 既存ファイルを触るため波Aには含めず、Set 1-3と同時実装せずこのセット単独で実装する（他セットはこのファイルを触らないため実質は独立して並列可）
+**Set 5: facilities/[id]route.tsへの認証チェック追加** [波B]
+- 同上パターンをGET/PUT/DELETEに追加
+- 触るファイル: `src/app/api/facilities/[id]/route.ts` ＋テスト
 
-**Set 5: ダッシュボード用APIルート** [統合ゲート]
-- `src/app/api/dashboard/route.ts` 新設: `requireAuth` → `listUserFacilities` → 各施設について `getFacilityOrderSummary` + `getLoanOutstandingCount` を集約 → `listRecentPriceHistories` → `DashboardData` を返す
-- テスト観点: 未認証401、所属施設0件、正常系のレスポンス形状
-- 触るファイル: `src/app/api/dashboard/route.ts`（新規）, `.test.ts`（新規） — Set 1〜4すべてに依存するため統合ゲートで実装
+**Set 6: hospital-prices/[id]route.tsへの認証+施設アクセス制御追加** [波B]
+- GET: `getHospitalPrice`で取得した価格の`facilityId`を使って`requireFacilityAccess(db, user, price.facilityId)`
+- PUT: body内の`input.facilityId`で`requireFacilityAccess`（既存の`hospital-prices/route.ts` POSTと同じパターン）
+- DELETE: 先に`getHospitalPrice`で対象を取得し、その`facilityId`で`requireFacilityAccess`してから削除
+- テスト観点: 未認証401、他施設ユーザーが403、自施設ユーザー/adminは通過
+- 触るファイル: `src/app/api/hospital-prices/[id]/route.ts` ＋テスト
 
-**Set 6: ダッシュボードUI（トップページ置き換え）** [統合ゲート]
-- `src/app/page.tsx` を全面置き換え: `'use client'` + `useEffect`で`/api/dashboard`をfetch（`res.ok`チェック徹底）、4セクションを既存UI規約（`#072C2C`見出し・`#FF5F03`アクセント・`rounded bg-white shadow-sm`カード）に沿って表示
-- テスト観点: ローディング状態、空状態、正常表示、fetch失敗時のエラー表示
-- 触るファイル: `src/app/page.tsx`（既存ファイルの全面置き換え）, `src/app/page.test.tsx`（新規/既存）
+**Set 7: price-history route への認証チェック追加** [波B]
+- `src/app/api/distributor-products/[id]/price-history/route.ts`のGETに`requireAuth`を追加（マスタ系のためfacilityスコープなし）
+- 触るファイル: 同ファイル＋テスト（新規作成）
+
+**Set 8: consumables POSTへの認証・施設アクセス制御追加** [波B]
+- 既にimport済みの`requireAuth`/`requireFacilityAccess`をPOSTハンドラでも呼ぶ（GETと同じパターン）
+- 触るファイル: `src/app/api/consumables/route.ts` ＋テスト
 
 ### 並列グループ宣言
 
-- **波A（同時実装可）**: Set 1（user_facilities repository）, Set 2（facility-summary）, Set 3（loan-outstanding）— それぞれ独立した新規ファイルのみを触るため並列可
-- **単独実装**: Set 4（price-histories repository への追記）— 既存共有ファイルを触るため波Aとは別枠だが、他セットと依存関係がないため並列着手自体は可能（統合時のコンフリクトのみ注意）
-- **統合ゲート（Phase 4）**: Set 5（APIルート、Set 0〜4すべてに依存）→ Set 6（UI、Set 5に依存）は直列。Set 0（型定義）は最初にcontract-writerが確定し、Set 1〜4が参照する。
+- **波A（Set1が先行、Set2/Set3はSet1完了後に並列可）**: Set1 → (Set2, Set3)
+- **波B（波Aと並列に着手可、Set4〜8は互いに別ファイルなので並列可）**: Set4, Set5, Set6, Set7, Set8
+- **統合ゲート**: 全セットのマイグレーション適用確認・npm test/lint実行・admin判定の一貫性を横断確認

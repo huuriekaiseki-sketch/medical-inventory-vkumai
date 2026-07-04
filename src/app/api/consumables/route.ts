@@ -36,8 +36,17 @@ export async function POST(request: NextRequest) {
   if (!body.name?.trim()) return apiError('品名は必須です', 400)
   if (!body.purpose?.trim()) return apiError('用途は必須です', 400)
 
+  const db = await createServerSupabase()
+  let user
+  try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
   try {
-    const db = await createServerSupabase()
+    await requireFacilityAccess(db, user, body.facilityId)
+  } catch (e) {
+    if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('施設IDは必須です', 400)
+    return apiError('アクセス権限がありません', 403)
+  }
+
+  try {
     const consumable = await createConsumable(db, body.facilityId, {
       name: body.name,
       jan: body.jan,
