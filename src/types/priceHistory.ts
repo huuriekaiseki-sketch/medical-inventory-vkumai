@@ -15,6 +15,10 @@ export interface PriceHistory {
   newValue: number | null
   changedAt: string
   facilityName?: string | null
+  // WHY: ダッシュボードの「全体横断の最近の価格改定」表示で商品名を出すために追加。
+  //      既存の単一商品向け価格履歴（get_distributor_product_price_history）は
+  //      呼び出し元が商品名を別途保持しているため未使用（optionalのまま後方互換）。
+  productName?: string | null
 }
 
 export const FIELD_LABEL: Record<PriceHistoryFieldName, string> = {
