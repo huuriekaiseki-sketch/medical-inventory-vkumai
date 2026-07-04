@@ -44,9 +44,16 @@ describe('FacilitySummaryList', () => {
     expect(screen.getByText('未返却なし')).toBeInTheDocument()
   })
 
-  it('施設リンクが /facilities/{id} を指す', () => {
+  it('施設名リンクが /facilities/{id} を指す', () => {
     render(<FacilitySummaryList facilitySummaries={summaries} loanOutstanding={outstanding} />)
-    expect(screen.getByRole('link', { name: /中央病院/ })).toHaveAttribute('href', '/facilities/f1')
+    expect(screen.getByRole('link', { name: '中央病院' })).toHaveAttribute('href', '/facilities/f1')
+  })
+
+  it('各発注種別のリンクが対応する一覧ページを指す', () => {
+    render(<FacilitySummaryList facilitySummaries={summaries} loanOutstanding={outstanding} />)
+    expect(screen.getAllByRole('link', { name: /症例発注/ })[0]).toHaveAttribute('href', '/facilities/f1/case-orders')
+    expect(screen.getAllByRole('link', { name: /消耗品発注/ })[0]).toHaveAttribute('href', '/facilities/f1/consumable-orders')
+    expect(screen.getAllByRole('link', { name: /貸出発注/ })[0]).toHaveAttribute('href', '/facilities/f1/loan-orders')
   })
 
   it('0件のとき「データがありません」が表示される', () => {

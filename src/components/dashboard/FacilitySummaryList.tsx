@@ -35,16 +35,19 @@ export function FacilitySummaryList({ facilitySummaries, loanOutstanding }: Faci
       {facilitySummaries.map((summary) => {
         const outstandingCount = outstandingByFacility.get(summary.facilityId) ?? 0
         return (
-          <Link
+          <div
             key={summary.facilityId}
-            href={`/facilities/${summary.facilityId}`}
-            className="block rounded bg-white p-5 shadow-sm transition-colors hover:bg-[#EDEADE]/40"
+            className="rounded bg-white p-5 shadow-sm"
             style={{ border: '1px solid #E5E7EB' }}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-bold" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif' }}>
+              <Link
+                href={`/facilities/${summary.facilityId}`}
+                className="text-lg font-bold hover:underline"
+                style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif' }}
+              >
                 {summary.facilityName}
-              </h3>
+              </Link>
               {outstandingCount > 0 ? (
                 <span
                   className="rounded-full px-3 py-1 text-xs font-semibold text-white"
@@ -59,20 +62,20 @@ export function FacilitySummaryList({ facilitySummaries, loanOutstanding }: Faci
               )}
             </div>
             <dl className="space-y-1 text-sm" style={{ color: '#374151' }}>
-              <div className="flex justify-between">
+              <Link href={`/facilities/${summary.facilityId}/case-orders`} className="flex justify-between rounded px-1 -mx-1 hover:bg-[#EDEADE]/40">
                 <dt>症例発注</dt>
                 <dd>{summary.caseOrderCount}件 / {formatDateTime(summary.caseOrderLatestAt)}</dd>
-              </div>
-              <div className="flex justify-between">
+              </Link>
+              <Link href={`/facilities/${summary.facilityId}/consumable-orders`} className="flex justify-between rounded px-1 -mx-1 hover:bg-[#EDEADE]/40">
                 <dt>消耗品発注</dt>
                 <dd>{summary.consumableOrderCount}件 / {formatDateTime(summary.consumableOrderLatestAt)}</dd>
-              </div>
-              <div className="flex justify-between">
+              </Link>
+              <Link href={`/facilities/${summary.facilityId}/loan-orders`} className="flex justify-between rounded px-1 -mx-1 hover:bg-[#EDEADE]/40">
                 <dt>貸出発注</dt>
                 <dd>{summary.loanOrderCount}件 / {formatDateTime(summary.loanOrderLatestAt)}</dd>
-              </div>
+              </Link>
             </dl>
-          </Link>
+          </div>
         )
       })}
     </div>
