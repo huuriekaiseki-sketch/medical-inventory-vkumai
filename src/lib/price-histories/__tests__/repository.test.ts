@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { getPriceHistory } from '../repository'
+import { getPriceHistory, listRecentPriceHistories } from '../repository'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 function makeMockDb(rpcResult: unknown): SupabaseClient {
@@ -84,5 +84,89 @@ describe('getPriceHistory', () => {
     const db = makeMockDb({ data: [], error: null })
     const result = await getPriceHistory(db, 'dpi-nonexistent')
     expect(result).toEqual([])
+  })
+})
+
+describe('listRecentPriceHistories', () => {
+  function makeMockQueryDb(result: unknown) {
+    const limitFn = vi.fn().mockResolvedValue(result)
+    const orderFn = vi.fn(() => ({ limit: limitFn }))
+    const selectFn = vi.fn(() => ({ order: orderFn }))
+    const fromFn = vi.fn(() => ({ select: selectFn }))
+    const db = { from: fromFn } as unknown as SupabaseClient
+    return { db, fromFn, selectFn, orderFn, limitFn }
+  }
+
+  it('changed_at降順・productName付きでマッピングする', async () => {
+    const rows = [
+      {
+        id: 'hist-1',
+        entity_type: 'distributor_product',
+        entity_id: 'dp-1',
+        distributor_product_id: 'dpi-1',
+        field_name: 'reimbursement_price',
+        old_value: 100,
+        new_value: 120,
+        changed_at: '2026-07-03T00:00:00Z',
+        distributor_products: { name: '商品A' },
+      },
+    ]
+    const { db, fromFn, orderFn, limitFn } = makeMockQueryDb({ data: rows, error: null })
+
+    const result = await listRecentPriceHistories(db, 10)
+
+    expect(fromFn).toHaveBeenCalledWith('price_histories')
+    expect(orderFn).toHaveBeenCalledWith('changed_at', { ascending: false })
+    expect(limitFn).toHaveBeenCalledWith(10)
+    expect(result).toEqual([
+      {
+        id: 'hist-1',
+        entityType: 'distributor_product',
+        entityId: 'dp-1',
+        distributorProductId: 'dpi-1',
+        fieldName: 'reimbursement_price',
+        oldValue: 100,
+        newValue: 120,
+        changedAt: '2026-07-03T00:00:00Z',
+        facilityName: null,
+        productName: '商品A',
+      },
+    ])
+  })
+
+  it('デフォルトlimitは10件', async () => {
+    const { db, limitFn } = makeMockQueryDb({ data: [], error: null })
+    await listRecentPriceHistories(db)
+    expect(limitFn).toHaveBeenCalledWith(10)
+  })
+
+  it('0件の場合は空配列を返す', async () => {
+    const { db } = makeMockQueryDb({ data: [], error: null })
+    const result = await listRecentPriceHistories(db)
+    expect(result).toEqual([])
+  })
+
+  it('distributor_productsがnullの場合はproductNameがnullになる', async () => {
+    const rows = [
+      {
+        id: 'hist-2',
+        entity_type: 'hospital_price',
+        entity_id: 'hp-1',
+        distributor_product_id: 'dpi-2',
+        field_name: 'purchase_price',
+        old_value: null,
+        new_value: 50,
+        changed_at: '2026-07-01T00:00:00Z',
+        distributor_products: null,
+      },
+    ]
+    const { db } = makeMockQueryDb({ data: rows, error: null })
+    const result = await listRecentPriceHistories(db)
+    expect(result[0].productName).toBeNull()
+  })
+
+  it('エラー時は例外を投げる', async () => {
+    const { db } = makeMockQueryDb({ data: null, error: { message: 'query failed' } })
+    await expect(listRecentPriceHistories(db)).rejects.toThrow('query failed')
   })
 })
