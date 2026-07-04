@@ -88,16 +88,25 @@ describe('getPriceHistory', () => {
 })
 
 describe('listRecentPriceHistories', () => {
-  function makeMockQueryDb(result: unknown) {
-    const limitFn = vi.fn().mockResolvedValue(result)
-    const orderFn = vi.fn(() => ({ limit: limitFn }))
-    const selectFn = vi.fn(() => ({ order: orderFn }))
-    const fromFn = vi.fn(() => ({ select: selectFn }))
+  // WHY: price_histories と hospital_prices の2テーブルにクエリが分かれるため、
+  // fromFn をテーブル名で分岐させたモックにする
+  function makeMockDb(priceHistoriesResult: unknown, hospitalPricesResult: unknown = { data: [], error: null }) {
+    const priceHistoriesLimitFn = vi.fn().mockResolvedValue(priceHistoriesResult)
+    const orderFn = vi.fn(() => ({ limit: priceHistoriesLimitFn }))
+    const priceHistoriesSelectFn = vi.fn(() => ({ order: orderFn }))
+
+    const hospitalPricesInFn = vi.fn().mockResolvedValue(hospitalPricesResult)
+    const hospitalPricesSelectFn = vi.fn(() => ({ in: hospitalPricesInFn }))
+
+    const fromFn = vi.fn((table: string) => {
+      if (table === 'hospital_prices') return { select: hospitalPricesSelectFn }
+      return { select: priceHistoriesSelectFn }
+    })
     const db = { from: fromFn } as unknown as SupabaseClient
-    return { db, fromFn, selectFn, orderFn, limitFn }
+    return { db, fromFn, orderFn, priceHistoriesLimitFn, hospitalPricesSelectFn, hospitalPricesInFn }
   }
 
-  it('changed_at降順・productName付きでマッピングする', async () => {
+  it('changed_at降順・productName付きでマッピングする（distributor_productは施設非依存で常に含まれる）', async () => {
     const rows = [
       {
         id: 'hist-1',
@@ -111,13 +120,13 @@ describe('listRecentPriceHistories', () => {
         distributor_products: { name: '商品A' },
       },
     ]
-    const { db, fromFn, orderFn, limitFn } = makeMockQueryDb({ data: rows, error: null })
+    const { db, fromFn, orderFn, priceHistoriesLimitFn } = makeMockDb({ data: rows, error: null })
 
-    const result = await listRecentPriceHistories(db, 10)
+    const result = await listRecentPriceHistories(db, ['f1'], 10)
 
     expect(fromFn).toHaveBeenCalledWith('price_histories')
     expect(orderFn).toHaveBeenCalledWith('changed_at', { ascending: false })
-    expect(limitFn).toHaveBeenCalledWith(10)
+    expect(priceHistoriesLimitFn).toHaveBeenCalledWith(30)
     expect(result).toEqual([
       {
         id: 'hist-1',
@@ -134,15 +143,32 @@ describe('listRecentPriceHistories', () => {
     ])
   })
 
-  it('デフォルトlimitは10件', async () => {
-    const { db, limitFn } = makeMockQueryDb({ data: [], error: null })
-    await listRecentPriceHistories(db)
-    expect(limitFn).toHaveBeenCalledWith(10)
+  it('デフォルトlimitは10件（内部フェッチは limit*3 件）', async () => {
+    const { db, priceHistoriesLimitFn } = makeMockDb({ data: [], error: null })
+    await listRecentPriceHistories(db, ['f1'])
+    expect(priceHistoriesLimitFn).toHaveBeenCalledWith(30)
+  })
+
+  it('limitを超える件数がフィルタ後も残る場合は先頭limit件に丸める', async () => {
+    const rows = Array.from({ length: 5 }, (_, i) => ({
+      id: `hist-${i}`,
+      entity_type: 'distributor_product',
+      entity_id: `dp-${i}`,
+      distributor_product_id: `dpi-${i}`,
+      field_name: 'reimbursement_price',
+      old_value: 100,
+      new_value: 120,
+      changed_at: `2026-07-0${i + 1}T00:00:00Z`,
+      distributor_products: { name: `商品${i}` },
+    }))
+    const { db } = makeMockDb({ data: rows, error: null })
+    const result = await listRecentPriceHistories(db, ['f1'], 2)
+    expect(result).toHaveLength(2)
   })
 
   it('0件の場合は空配列を返す', async () => {
-    const { db } = makeMockQueryDb({ data: [], error: null })
-    const result = await listRecentPriceHistories(db)
+    const { db } = makeMockDb({ data: [], error: null })
+    const result = await listRecentPriceHistories(db, ['f1'])
     expect(result).toEqual([])
   })
 
@@ -160,13 +186,96 @@ describe('listRecentPriceHistories', () => {
         distributor_products: null,
       },
     ]
-    const { db } = makeMockQueryDb({ data: rows, error: null })
-    const result = await listRecentPriceHistories(db)
+    const { db } = makeMockDb(
+      { data: rows, error: null },
+      { data: [{ id: 'hp-1', facility_id: 'f1' }], error: null }
+    )
+    const result = await listRecentPriceHistories(db, ['f1'])
     expect(result[0].productName).toBeNull()
   })
 
+  it('不正なentity_type/field_nameはフォールバック値になる（unsafe castを使わない）', async () => {
+    const rows = [
+      {
+        id: 'hist-bad',
+        entity_type: 'unknown_type',
+        entity_id: 'dp-1',
+        distributor_product_id: 'dpi-1',
+        field_name: 'unknown_field',
+        old_value: 1,
+        new_value: 2,
+        changed_at: '2026-07-03T00:00:00Z',
+        distributor_products: { name: '商品A' },
+      },
+    ]
+    const { db } = makeMockDb({ data: rows, error: null })
+    const result = await listRecentPriceHistories(db, ['f1'])
+    expect(result[0].entityType).toBe('distributor_product')
+    expect(result[0].fieldName).toBe('reimbursement_price')
+  })
+
+  it('hospital_price行は自分の施設のものだけ残る（他施設のhospital_price行は除外）', async () => {
+    const rows = [
+      {
+        id: 'hist-own',
+        entity_type: 'hospital_price',
+        entity_id: 'hp-own',
+        distributor_product_id: 'dpi-1',
+        field_name: 'purchase_price',
+        old_value: 100,
+        new_value: 110,
+        changed_at: '2026-07-03T00:00:00Z',
+        distributor_products: { name: '商品A' },
+      },
+      {
+        id: 'hist-other',
+        entity_type: 'hospital_price',
+        entity_id: 'hp-other',
+        distributor_product_id: 'dpi-2',
+        field_name: 'purchase_price',
+        old_value: 200,
+        new_value: 210,
+        changed_at: '2026-07-02T00:00:00Z',
+        distributor_products: { name: '商品B' },
+      },
+    ]
+    const { db, hospitalPricesInFn } = makeMockDb(
+      { data: rows, error: null },
+      {
+        data: [
+          { id: 'hp-own', facility_id: 'f1' },
+          { id: 'hp-other', facility_id: 'f2' },
+        ],
+        error: null,
+      }
+    )
+    const result = await listRecentPriceHistories(db, ['f1'])
+    expect(hospitalPricesInFn).toHaveBeenCalledWith('id', ['hp-own', 'hp-other'])
+    expect(result).toHaveLength(1)
+    expect(result[0].id).toBe('hist-own')
+  })
+
+  it('distributor_product行は施設に関わらず常に含まれる', async () => {
+    const rows = [
+      {
+        id: 'hist-global',
+        entity_type: 'distributor_product',
+        entity_id: 'dp-1',
+        distributor_product_id: 'dpi-1',
+        field_name: 'reimbursement_price',
+        old_value: 100,
+        new_value: 110,
+        changed_at: '2026-07-03T00:00:00Z',
+        distributor_products: { name: '商品A' },
+      },
+    ]
+    const { db } = makeMockDb({ data: rows, error: null })
+    const result = await listRecentPriceHistories(db, [])
+    expect(result).toHaveLength(1)
+  })
+
   it('エラー時は例外を投げる', async () => {
-    const { db } = makeMockQueryDb({ data: null, error: { message: 'query failed' } })
-    await expect(listRecentPriceHistories(db)).rejects.toThrow('query failed')
+    const { db } = makeMockDb({ data: null, error: { message: 'query failed' } })
+    await expect(listRecentPriceHistories(db, ['f1'])).rejects.toThrow('query failed')
   })
 })

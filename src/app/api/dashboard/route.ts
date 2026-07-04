@@ -8,10 +8,6 @@ import { listRecentPriceHistories } from '@/lib/price-histories/repository'
 import { apiError } from '@/lib/api-error'
 import type { DashboardData, DashboardFacilitySummary, LoanOutstandingSummary } from '@/types/dashboard'
 
-// WHY: getFacilityOrderSummary はfacilityIdを引数に取るため、施設名を知らない。
-// レスポンス整形（facilityName付与）はAPIルート側の責務として分離する。
-type FacilityOrderCounts = Omit<DashboardFacilitySummary, 'facilityName'>
-
 export async function GET() {
   try {
     const db = await createServerSupabase()
@@ -29,16 +25,10 @@ export async function GET() {
 
     const facilitySummaries: DashboardFacilitySummary[] = await Promise.all(
       memberships.map(async (m) => {
-        const summary = (await getFacilityOrderSummary(db, m.facilityId)) as FacilityOrderCounts
+        const summary = await getFacilityOrderSummary(db, m.facilityId)
         return {
-          facilityId: m.facilityId,
+          ...summary,
           facilityName: m.facilityName,
-          caseOrderCount: summary.caseOrderCount,
-          caseOrderLatestAt: summary.caseOrderLatestAt,
-          consumableOrderCount: summary.consumableOrderCount,
-          consumableOrderLatestAt: summary.consumableOrderLatestAt,
-          loanOrderCount: summary.loanOrderCount,
-          loanOrderLatestAt: summary.loanOrderLatestAt,
         }
       })
     )
@@ -54,7 +44,11 @@ export async function GET() {
       })
     )
 
-    const recentPriceChanges = await listRecentPriceHistories(db, 10)
+    const recentPriceChanges = await listRecentPriceHistories(
+      db,
+      memberships.map((m) => m.facilityId),
+      10
+    )
 
     // WHY: role に 'admin' が1件でも含まれれば管理ページショートカットを表示するため
     const isAdmin = memberships.some((m) => m.role === 'admin')

@@ -6,6 +6,19 @@ import { FacilitySummaryList } from '@/components/dashboard/FacilitySummaryList'
 import { RecentPriceChangeList } from '@/components/dashboard/RecentPriceChangeList'
 import { DashboardShortcuts } from '@/components/dashboard/DashboardShortcuts'
 
+// WHY: res.json() は any を返すため、レスポンス形状の破損時に .map 等が
+// ランタイムで初めて失敗するのを防ぐため、最低限の形状チェックをかける
+function isDashboardData(value: unknown): value is DashboardData {
+  if (typeof value !== 'object' || value === null) return false
+  const d = value as Record<string, unknown>
+  return (
+    Array.isArray(d.facilitySummaries) &&
+    Array.isArray(d.loanOutstanding) &&
+    Array.isArray(d.recentPriceChanges) &&
+    typeof d.isAdmin === 'boolean'
+  )
+}
+
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -17,7 +30,8 @@ export default function Home() {
         if (!r.ok) throw new Error()
         return r.json()
       })
-      .then((d: DashboardData) => {
+      .then((d: unknown) => {
+        if (!isDashboardData(d)) throw new Error()
         if (!cancelled) setData(d)
       })
       .catch(() => {

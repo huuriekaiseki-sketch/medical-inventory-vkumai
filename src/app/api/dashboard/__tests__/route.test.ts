@@ -126,6 +126,9 @@ describe('GET /api/dashboard', () => {
     expect(body.loanOutstanding).toHaveLength(1)
     expect(mockGetFacilityOrderSummary).toHaveBeenCalledTimes(1)
     expect(mockGetFacilityOrderSummary).not.toHaveBeenCalledWith(expect.anything(), 'f2')
+    // WHY: 価格改定一覧も「自分の所属施設ID一覧」だけを渡して呼ばれることを保証する
+    // （listRecentPriceHistories 内部でのfacility_idフィルタが機能する前提条件）
+    expect(mockListRecentPriceHistories).toHaveBeenCalledWith(expect.anything(), ['f1'], 10)
   })
 
   it('例外発生時は500を返す', async () => {
