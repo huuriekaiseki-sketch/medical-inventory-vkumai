@@ -10,9 +10,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "e2e:auth": "npx -y tsx e2e/generate-auth-state.ts",
     "loop-summary": "bash scripts/summarize-loop-observability.sh"
   },
   "dependencies": {
+    "@next/env": "16.2.9",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
     "next": "16.2.9",

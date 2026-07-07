@@ -1,3 +1,5 @@
+@docs/agents/common.md
+
 # Parallel Subagent Framework
 
 → 全体マップ: [`docs/ai-config-map.md`](docs/ai-config-map.md)
@@ -15,15 +17,6 @@ Phase 3 実装(TDD・並列) →
 Phase 4 統合ゲート → 
 Phase 5 検証(並列) → 
 [停止② 構造化レビュー]
-
-## ワークフローの使い方
-ワークフローを呼ぶ前に必ず `.claude/workflows/` の該当JSファイルを Read すること。
-詳細な手順・args・完了後の次ステップはすべてそのファイルに書いてある。
-
-- Phase 1〜2 → `.claude/workflows/aidd-phase1.js` を読む
-- Phase 3〜5 → `.claude/workflows/aidd-phase2.js` を読む
-- 深掘り調査・仕様検証が必要なとき（条件付き）→ `.claude/workflows/aidd-1-1-deep-task.js` を読む
-- セッション終了時 → Stop hook が自動でレポートを生成（`~/aidd_session_report.sh`）
 
 ## AIDD stats 書き出しルール
 **SDD・AIDD・手動実装など、フロー種別を問わず**以下のタイミングで必ず Bash 実行する（Stop hook が自動でレポート生成）：

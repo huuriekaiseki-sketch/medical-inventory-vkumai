@@ -17,18 +17,35 @@ export default function HospitalPricesPage() {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([
-      fetch('/api/hospital-prices').then((r) => { if (!r.ok) throw new Error(); return r.json() }),
-      fetch('/api/facilities').then((r) => { if (!r.ok) throw new Error(); return r.json() }),
-      fetch('/api/distributor-products').then((r) => { if (!r.ok) throw new Error(); return r.json() }),
-    ]).then(([pricesData, facilitiesData, dpData]) => {
-      if (cancelled) return
-      setPrices(pricesData.prices)
-      setFacilities(facilitiesData.facilities)
-      setDistributorProducts(dpData.items)
-    }).catch(() => {
-      if (!cancelled) setError('データの取得に失敗しました')
-    })
+    async function load() {
+      try {
+        const facilitiesRes = await fetch('/api/facilities')
+        if (!facilitiesRes.ok) throw new Error()
+        const facilitiesData = await facilitiesRes.json()
+        const loadedFacilities = facilitiesData.facilities as Facility[]
+        const firstFacilityId = loadedFacilities[0]?.id
+
+        const pricesPromise = firstFacilityId
+          ? fetch(`/api/hospital-prices?facilityId=${encodeURIComponent(firstFacilityId)}`).then((r) => {
+              if (!r.ok) throw new Error()
+              return r.json()
+            })
+          : Promise.resolve({ prices: [] })
+        const distributorProductsPromise = fetch('/api/distributor-products').then((r) => {
+          if (!r.ok) throw new Error()
+          return r.json()
+        })
+
+        const [pricesData, dpData] = await Promise.all([pricesPromise, distributorProductsPromise])
+        if (cancelled) return
+        setPrices(pricesData.prices)
+        setFacilities(loadedFacilities)
+        setDistributorProducts(dpData.items)
+      } catch {
+        if (!cancelled) setError('データの取得に失敗しました')
+      }
+    }
+    load()
     return () => {
       cancelled = true
     }

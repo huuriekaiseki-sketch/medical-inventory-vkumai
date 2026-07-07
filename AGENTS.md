@@ -1,11 +1,3 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
-
----
-
 # このリポジトリの AI エージェント設定ガイド
 
 医療在庫管理アプリ (medical-inventory-vkumai) における Claude Code のエージェント・スキル設定。
@@ -36,6 +28,28 @@ Phase 1 調査(並列) → Phase 2 仕様書 → [停止① 人間レビュー]
 | `feature-spec` | `/feature-spec` | 調査結果から SPEC.md を生成（Phase 2） |
 | `structured-review` | `/structured-review` | 最終構造化レビュー（Phase 5 後・人間が起動） |
 | `e2e-runner` | `/e2e-runner` | E2Eテスト・スクリーンショット生成（随時） |
+
+## TRI/RISK 機械判定基準（AIDDパイプライン採用条件）
+
+変更が以下の**いずれか**に触れる場合、Sレーン（軽量レーン）は禁止。必ず M/L 扱いとし、RISK=はい と判定する：
+
+- `supabase/migrations/` 配下のファイル
+- `src/lib/supabase/` 配下のファイル
+- `middleware.ts`（プロジェクト内のすべての middleware）
+- パス・ファイル名・変更内容が以下のドメインに関わるファイル：
+  **auth / facility / tenant / organization / inventory / RLS / policy**
+
+この判定は人間の裁量で緩めない（機械判定）。迷ったら高リスク側に倒す。
+
+## テスト環境・データ衛生ルール
+
+- **E2E/BSGはテスト専用Supabaseのみに接続する。** 接続情報は `.env.test` に置く（`.env.test.example` 参照）。
+  `NODE_ENV=test` のため `.env.local`（本番）は読み込まれず、さらに `e2e/env-guard.ts` が
+  許可ホスト以外（＝本番URL・本番service role実行）を**即失敗**させる
+- **認証ファイル（`e2e/.auth/user.json`）の漏洩チェックはCI側で行う**（`.github/workflows/e2e.yml`）。
+  BSG（ローカルゲート）ではチェックしない方針
+- **seed・スクリーンショット・E2E失敗ログ・issue添付に実在施設名・実データを入れない。**
+  施設名・ユーザー名・在庫品目などはすべてダミー（例: `テスト施設A`、`e2e-test-user@example.com`）を使う
 
 ## 重要ファイルへのパス
 

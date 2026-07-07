@@ -33,11 +33,15 @@ export function mapHospitalPrice(row: HospitalPriceRow): HospitalPrice {
   }
 }
 
-export async function listHospitalPrices(db: SupabaseClient): Promise<HospitalPrice[]> {
-  const { data, error } = await db
-    .from('hospital_prices')
-    .select(HOSPITAL_PRICE_COLUMNS)
-    .order('created_at', { ascending: false })
+// facilityId が null の場合は絞り込みなし（admin の全施設閲覧用）。
+// 非adminはAPI層の requireFacilityAccess で facilityId が必須になるため、必ず絞り込まれる
+export async function listHospitalPrices(
+  db: SupabaseClient,
+  facilityId: string | null = null
+): Promise<HospitalPrice[]> {
+  let query = db.from('hospital_prices').select(HOSPITAL_PRICE_COLUMNS)
+  if (facilityId) query = query.eq('facility_id', facilityId)
+  const { data, error } = await query.order('created_at', { ascending: false })
   if (error) throw new Error(error.message)
   return data.map(mapHospitalPrice)
 }

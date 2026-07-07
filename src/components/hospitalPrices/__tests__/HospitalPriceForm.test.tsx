@@ -18,7 +18,7 @@ const distributorProducts: DistributorProduct[] = [
     name: 'カテーテルA',
     reimbursementPrice: 2000,
     quantity: 1,
-    category: '消耗品',
+    categoryId: 'c1',
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
   },

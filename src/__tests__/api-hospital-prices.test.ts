@@ -12,6 +12,7 @@ vi.mock('@/lib/supabase/require-facility-access', () => ({
 vi.mock('@/lib/hospital-prices/repository')
 
 import { listHospitalPrices, createHospitalPrice } from '@/lib/hospital-prices/repository'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { GET, POST } from '@/app/api/hospital-prices/route'
@@ -22,6 +23,9 @@ const mockPrice = {
   facilityId: 'f-1',
   purchasePrice: 1000,
   deliveryPrice: 100,
+  grossProfit: 900,
+  purchaseRate: 0.5,
+  deliveryRate: 0.05,
   createdAt: '2026-06-29T00:00:00Z',
   updatedAt: '2026-06-29T00:00:00Z',
 }
@@ -32,6 +36,9 @@ function makeRequest(url: string, init?: Omit<RequestInit, 'signal'> & { signal?
 
 beforeEach(() => {
   vi.resetAllMocks()
+  // resetAllMocksはvi.mockのトップレベル実装も消すため、db・認証のモックをここで復元する
+  vi.mocked(createServerSupabase).mockResolvedValue({} as Awaited<ReturnType<typeof createServerSupabase>>)
+  vi.mocked(requireAuth).mockResolvedValue({ id: 'u-1', email: 'user@example.com' } as Awaited<ReturnType<typeof requireAuth>>)
   vi.mocked(requireFacilityAccess).mockImplementation(async (_db, _user, fid) => {
     if (!fid) throw new Error('FACILITY_ID_REQUIRED')
     return { facilityId: fid }
@@ -47,6 +54,17 @@ describe('GET /api/hospital-prices', () => {
     const body = await res.json()
     expect(body.prices).toHaveLength(1)
     expect(body.prices[0].id).toBe('p-1')
+    // facilityIdは認可チェックだけでなくクエリの絞り込みにも使う
+    expect(listHospitalPrices).toHaveBeenCalledWith(expect.anything(), 'f-1')
+  })
+
+  it('admin が facilityId 未指定なら全件取得（フィルタなし）', async () => {
+    vi.mocked(requireFacilityAccess).mockResolvedValueOnce({ facilityId: null })
+    vi.mocked(listHospitalPrices).mockResolvedValue([mockPrice])
+    const req = makeRequest('/api/hospital-prices')
+    const res = await GET(req)
+    expect(res.status).toBe(200)
+    expect(listHospitalPrices).toHaveBeenCalledWith(expect.anything(), null)
   })
 
   it('未認証（401）', async () => {

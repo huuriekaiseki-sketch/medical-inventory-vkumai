@@ -39,7 +39,12 @@
       "Bash(claude mcp add --help*)",
       "Bash(ls /Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/)",
       "Read(//Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/**)",
-      "Bash(/Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/task-brief /Users/masanori/medical-inventory-vkumai/docs/superpowers/plans/2026-06-22-price-history.md 1)"
+      "Bash(/Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/task-brief /Users/masanori/medical-inventory-vkumai/docs/superpowers/plans/2026-06-22-price-history.md 1)",
+      "Bash(~/write_aidd_stats.sh *)",
+      "Bash(scripts/log-loop-observability.sh *)",
+      "Bash(/Users/masanori/medical-inventory-vkumai/scripts/log-loop-observability.sh *)",
+      "Bash(curl -s http://localhost:*)",
+      "mcp__context7__resolve-library-id"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -50,6 +55,20 @@
       "Bash(git clean -f*)",
       "Bash(git branch -D *)",
       "Bash(sudo *)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "あなたはリポジトリ medical-inventory-vkumai のセッション終了時レビューアです。以下の手順に厳密に従ってください。\n\n1. Bashツールで `git status --porcelain` と `git diff HEAD` を実行し、今回のセッションで変更・追加されたファイルを確認する。\n2. 変更が次のいずれかに触れている場合のみ、以降の検討対象とする。触れていなければ何も提案せず終了する:\n   - `supabase/migrations/` 配下のファイル\n   - `src/lib/supabase/` 配下のファイル\n   - `middleware.ts`\n   - パス・ファイル名・変更内容が auth / facility / tenant / organization / inventory / RLS / policy のいずれかのドメインに関わるファイル\n3. 該当する場合、Readツールで `docs/agents/domain.md` と `docs/agents/decisions.md` を読み、次を検討する:\n   - **decisions.md候補**: 今回の変更に「なぜこの設計にしたか」という判断が含まれ、かつ次の3条件をすべて満たすものだけを候補にする。(a) 後戻りしづらい (b) 記録がないと後から見て『なぜ？』となる (c) 本当にトレードオフがあって選んだ結果。3条件のいずれか欠けるものは候補にしない。\n   - **domain.md候補**: 今回のコード変更で登場した用語で、domain.mdにまだ載っていないドメイン固有の概念（実装の詳細や汎用プログラミング概念は除く）。\n4. 候補が1件もない場合は、出力のsystemMessageを空文字列にする（無理に何かを提案しない）。\n5. 候補がある場合、日本語で箇条書き2〜4件程度にまとめる。各項目は『decisions.mdに記録候補: 〇〇（理由: △△）』または『domain.mdに追記候補: 〇〇』の形式にする。\n6. 最終出力は他のテキストを一切含めず、次のJSON形式のみを出力すること: {\"systemMessage\": \"<ここに提案内容、候補がなければ空文字列>\"}",
+            "timeout": 90,
+            "statusMessage": "domain.md/decisions.md更新候補を確認中..."
+          }
+        ]
+      }
     ]
   }
 }
