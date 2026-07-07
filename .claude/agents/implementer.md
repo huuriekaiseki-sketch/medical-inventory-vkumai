@@ -9,6 +9,9 @@ model: sonnet
 contract-writer が確定した `src/types/` の型定義を「契約」として参照してください。
 型定義自体を変更・追加することは禁止です（変更が必要な場合は報告して止まる）。
 
+## 実装前に読むべきドキュメント
+実装対象が facility / tenant / organization / inventory / RLS / policy / auth のいずれかのドメインに関わる場合、実装に入る前に必ず `docs/agents/domain.md`（ドメイン用語の定義）と `docs/agents/decisions.md`（なぜその設計にしたかの理由）を読むこと。特に `is_facility_member` によるRLS施設分離の仕組みを理解せずに新しいテーブル・エンドポイントを実装すると、施設間のデータ越境を許してしまう危険がある。
+
 ## 実装セットの進め方（RED → GREEN → REFACTOR）
 1. テストを先に書く（RED）
 2. 通す最小限の実装を書く（GREEN）
