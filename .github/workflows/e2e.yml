@@ -10,6 +10,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 認証ファイル漏洩チェック（BSGではなくCI側で行う方針）
+      - name: Check auth state files are not committed
+        run: |
+          leaked=$(git ls-files 'e2e/.auth' | grep -v '\.gitkeep$' || true)
+          if [ -n "$leaked" ]; then
+            echo "::error::e2e/.auth 配下に認証ファイルがコミットされています: $leaked"
+            exit 1
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: '24'  # ローカル開発環境に合わせる（node -v で確認）
@@ -29,3 +38,5 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
           E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
+          # テスト専用Supabaseのホストのみ許可（e2e/env-guard.ts が本番URLを即失敗させる）
+          E2E_ALLOWED_SUPABASE_HOSTS: ${{ secrets.E2E_ALLOWED_SUPABASE_HOSTS }}

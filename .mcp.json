@@ -5,7 +5,9 @@
       "command": "npx",
       "args": [
         "-y",
-        "@playwright/mcp@latest"
+        "@playwright/mcp@latest",
+        "--isolated",
+        "--storage-state=e2e/.auth/user.json"
       ],
       "env": {}
     },

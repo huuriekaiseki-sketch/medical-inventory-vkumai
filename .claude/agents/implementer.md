@@ -67,6 +67,8 @@ scripts/log-loop-observability.sh \
 ## ブラウザ確認（Playwright MCP）
 実装したUI・画面挙動をブラウザで目視確認する必要がある場合は、`curl` や推測ではなく Playwright MCP（`mcp__playwright__browser_*` ツール）を使って実際にブラウザを操作し確認すること。
 
+- 認証が必要な画面を確認する前に、まず `e2e/.auth/user.json` が存在するか確認する。存在しなければ `npm run e2e:auth` を実行してログイン済みセッションを生成してから確認に進むこと（Playwright MCPサーバーはこのファイルを `--storage-state` として読み込むため、ファイルが無いとログイン状態で開けない）。
+- ファイルが存在していても中身のセッションが期限切れの場合がある。ブラウザ確認中に想定外に `/login` へリダイレクトされたら、セッション切れとみなして `npm run e2e:auth` を再実行し、1回だけ確認をやり直すこと。再実行後も `/login` にリダイレクトされる場合は、セッション切れ以外の原因（実装側のバグ等）を疑い、無限に再試行しない。
 - 確認したら `scripts/log-loop-observability.sh` に以下を追加で呼び出し、利用したことをログに残す。
   ```bash
   scripts/log-loop-observability.sh \

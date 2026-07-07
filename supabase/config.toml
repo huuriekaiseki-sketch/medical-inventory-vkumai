@@ -1,0 +1,9 @@
+# ローカルSupabase（supabase start）の設定。未記載の項目はCLIデフォルトが使われる。
+project_id = "medical-inventory-vkumai"
+
+[auth]
+# E2Eは baseURL=http://localhost:3000 で動くため、マジックリンク検証後のリダイレクト先を
+# localhost に揃える（デフォルトの http://127.0.0.1:3000 だとCookieドメインが127.0.0.1になり、
+# localhostでアクセスするテストに認証が引き継がれない）
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000", "http://localhost:3000/**"]

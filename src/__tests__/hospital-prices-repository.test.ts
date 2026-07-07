@@ -63,6 +63,35 @@ describe('listHospitalPrices / getHospitalPrice', () => {
     expect(result[0].deliveryRate).toBeNull()
   })
 
+  it('should filter by facility_id when facilityId is given', async () => {
+    const eq = vi.fn(() => ({
+      order: vi.fn().mockResolvedValue({ data: [mockRow], error: null }),
+    }))
+    const db = makeMockFromDb({
+      hospital_prices: {
+        select: vi.fn(() => ({ eq })),
+      },
+    })
+    const result = await listHospitalPrices(db, 'f-789')
+
+    expect(eq).toHaveBeenCalledWith('facility_id', 'f-789')
+    expect(result).toHaveLength(1)
+    expect(result[0].facilityId).toBe('f-789')
+  })
+
+  it('should not filter when facilityId is null (admin全件取得)', async () => {
+    const db = makeMockFromDb({
+      hospital_prices: {
+        select: vi.fn(() => ({
+          order: vi.fn().mockResolvedValue({ data: [mockRow], error: null }),
+        })),
+      },
+    })
+    const result = await listHospitalPrices(db, null)
+
+    expect(result).toHaveLength(1)
+  })
+
   it('should map single hospital price with all fields', async () => {
     const db = makeMockFromDb({
       hospital_prices: {

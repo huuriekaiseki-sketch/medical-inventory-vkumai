@@ -12,13 +12,15 @@ export async function GET(request: NextRequest) {
     let user
     try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
     const facilityId = request.nextUrl.searchParams.get('facilityId')
+    let grantedFacilityId: string | null
     try {
-      await requireFacilityAccess(db, user, facilityId)
+      ;({ facilityId: grantedFacilityId } = await requireFacilityAccess(db, user, facilityId))
     } catch (e) {
       if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('facilityId は必須です', 400)
       return apiError('アクセス権限がありません', 403)
     }
-    const prices = await listHospitalPrices(db)
+    // 認可済みのfacilityIdでクエリも絞る（RLS任せにせず、API契約として指定施設分のみ返す）
+    const prices = await listHospitalPrices(db, grantedFacilityId)
     return NextResponse.json({ prices })
   } catch (error) {
     return apiError(error instanceof Error ? error.message : '価格の取得に失敗しました')
