@@ -7,6 +7,11 @@ model: haiku
 
 あなたはUI層の調査担当です。`src/app/` と `src/components/` を調査し、発見した問題点を**箇条書きのみ**で返してください。コードは書かない。修正提案も不要。
 
+## 既知の失敗パターン（必ず機械的にチェックする）
+`docs/agents/known-failure-patterns.md` の「UI層」セクションに載っている各パターン
+（Suspenseフォールバック未設定等）が調査対象に該当していないか必ず確認し、該当すれば
+指摘に含める。
+
 ## 調査対象
 - `src/app/` — Next.js ページ・レイアウト・ルートコンポーネント（**`route.ts` という名前のファイルはすべて除外**。これはNext.js App RouterのルートハンドラでUIではない）
 - `src/components/` — 共有UIコンポーネント

@@ -7,6 +7,7 @@
 
 - ドメイン用語（facility・price等が何であるか）は [`domain.md`](./domain.md) を参照
 - 各ルールが「なぜ」その設計になったかは [`decisions.md`](./decisions.md) を参照
+- 過去に実際に再発した実装ミスのチェックリストは [`known-failure-patterns.md`](./known-failure-patterns.md) を参照（レビュー・Sweep系エージェントは必読）
 
 ## Next.js バージョンに関する注意
 
@@ -44,6 +45,12 @@ any code. Heed deprecation notices.
 - マイグレーション外で本番/リモートDBに存在するスキーマ変更（トリガー・関数等）を発見した場合は、
   差分をキャッチアップ用マイグレーションとして必ず記録してから作業を進める
 - 理由（過去のスキーマドリフト事例）は [`decisions.md`](./decisions.md#なぜdbスキーマ変更をmigrationファイル経由に限定し直接ddl実行を禁止したか) を参照
+
+## ブランチ運用ルール
+
+- **新しいissue・機能の作業を始める前に、現在のブランチが別issue用の未マージPRの対象になっていないか確認する**（`git branch --show-current` → `gh pr list --head <branch>`）。
+  なっていた場合は、着手前に `git checkout -b <new-branch> main` で新しいブランチを切ってから進める。
+  1つのPRに無関係なissueのコミットが混ざると、レビュアーが混乱し、片方だけ却下・差し戻しになった際に切り分けられなくなる
 
 ## 重要ファイルへのパス
 
