@@ -25,8 +25,26 @@ export async function GET(request: NextRequest) {
 
     const limitParam = request.nextUrl.searchParams.get('limit')
     const offsetParam = request.nextUrl.searchParams.get('offset')
-    const limit = limitParam ? Number(limitParam) : DEFAULT_LIMIT
-    const offset = offsetParam ? Number(offsetParam) : DEFAULT_OFFSET
+
+    // Validate limit
+    let limit = DEFAULT_LIMIT
+    if (limitParam) {
+      const parsedLimit = Number(limitParam)
+      if (!Number.isFinite(parsedLimit) || parsedLimit < 0) {
+        return apiError('limit/offset が不正です', 400)
+      }
+      limit = parsedLimit
+    }
+
+    // Validate offset
+    let offset = DEFAULT_OFFSET
+    if (offsetParam) {
+      const parsedOffset = Number(offsetParam)
+      if (!Number.isFinite(parsedOffset) || parsedOffset < 0) {
+        return apiError('limit/offset が不正です', 400)
+      }
+      offset = parsedOffset
+    }
 
     const items = await listNewsFeed(db, { facilityId: grantedFacilityId, limit, offset })
     return NextResponse.json({ items })

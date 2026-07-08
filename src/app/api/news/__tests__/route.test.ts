@@ -76,4 +76,39 @@ describe('GET /api/news', () => {
     const res = await GET(new NextRequest('http://localhost/api/news?facilityId=f1'))
     expect(res.status).toBe(500)
   })
+
+  it('limit が不正値(abc)の場合は400を返す', async () => {
+    authenticated()
+    const res = await GET(new NextRequest('http://localhost/api/news?facilityId=f1&limit=abc'))
+    expect(res.status).toBe(400)
+    expect(mockListNewsFeed).not.toHaveBeenCalled()
+  })
+
+  it('offset が不正値(xyz)の場合は400を返す', async () => {
+    authenticated()
+    const res = await GET(new NextRequest('http://localhost/api/news?facilityId=f1&offset=xyz'))
+    expect(res.status).toBe(400)
+    expect(mockListNewsFeed).not.toHaveBeenCalled()
+  })
+
+  it('limit が負数の場合は400を返す', async () => {
+    authenticated()
+    const res = await GET(new NextRequest('http://localhost/api/news?facilityId=f1&limit=-1'))
+    expect(res.status).toBe(400)
+    expect(mockListNewsFeed).not.toHaveBeenCalled()
+  })
+
+  it('offset が負数の場合は400を返す', async () => {
+    authenticated()
+    const res = await GET(new NextRequest('http://localhost/api/news?facilityId=f1&offset=-5'))
+    expect(res.status).toBe(400)
+    expect(mockListNewsFeed).not.toHaveBeenCalled()
+  })
+
+  it('limit=0 は有効な値として受け入れる', async () => {
+    authenticated()
+    const res = await GET(new NextRequest('http://localhost/api/news?facilityId=f1&limit=0&offset=0'))
+    expect(res.status).toBe(200)
+    expect(mockListNewsFeed).toHaveBeenCalledWith(expect.anything(), { facilityId: 'f1', limit: 0, offset: 0 })
+  })
 })
