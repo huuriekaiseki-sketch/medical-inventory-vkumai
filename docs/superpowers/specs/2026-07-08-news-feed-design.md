@@ -55,16 +55,41 @@ new_value       NUMERIC
 facility_name   TEXT   -- hospital_price_change系のみ。他はNULL
 ```
 
-**認可（重要）**: この関数は `SECURITY DEFINER` であり、RLSをバイパスする。SECURITY DEFINER関数に
-`GRANT EXECUTE TO anon/authenticated` を付けると `/rest/v1/rpc/get_news_feed` として
-Next.jsのAPI Routeを経由せず直接呼び出せるため、「関数内の `p_facility_id` 条件」は
-単なるフィルタであり認可チェックではない。他施設のユーザー（または未認証者）が
-任意の `p_facility_id` を渡して直接RPCを叩けば、`hospital_price_change`（施設スコープの
-機微データ）を他施設分も取得できてしまう。
+**認可（重要・DEFINERなし方針）**: この関数は `SECURITY DEFINER` を**付けない**（PostgreSQL関数は
+デフォルトで `SECURITY INVOKER` = 呼び出しユーザーの権限で実行される）。これにより、
+`price_histories` の既存RLSポリシー `facility_member_or_admin`
+（`supabase/migrations/20260628010001_update_rls_admin.sql` で定義、確認済み・以降のマイグレーションで
+上書きなし）が関数内のクエリにもそのまま適用される:
 
-そのため、関数内で以下の認可チェックを**必ず**行う（既存の `get_distributor_product_price_history`
-が `is_facility_member(hp.facility_id)` を関数内でチェックしているのと同じ考え方。詳細は
-[`docs/agents/decisions.md`](../../agents/decisions.md) の facility RLS ポリシー方針を参照）:
+```sql
+-- price_histories の既存ポリシー（確認済み・変更不要）
+CREATE POLICY "facility_member_or_admin" ON price_histories
+  FOR SELECT TO authenticated
+  USING (
+    CASE
+      WHEN entity_type = 'hospital_price' THEN
+        EXISTS (
+          SELECT 1 FROM hospital_prices hp
+          WHERE hp.id = price_histories.entity_id
+            AND (is_facility_member(hp.facility_id) OR is_admin())
+        )
+      WHEN entity_type = 'distributor_product' THEN true
+      ELSE false
+    END
+  );
+```
+
+`distributor_products` も `authenticated USING (true)`（`20260629000001_fix_master_rls.sql`）で
+全施設公開、`facilities` は `is_facility_member(id) OR is_admin()`（`hospital_prices` と同条件）。
+これらは関数を通しても素通りせず自動適用されるため、**関数内で `is_facility_member` を手書きで
+チェックする必要はない**。認可ロジックがテーブル側のRLSポリシー1箇所に一元化され、
+「関数内チェックの書き忘れ」というバグの再発を構造的に防げる（先の`SECURITY DEFINER`版で
+発見された穴は、この設計では原理的に発生しない）。
+
+`SECURITY DEFINER` を使う既存の `get_distributor_product_price_history` とは異なる方針を取る:
+あちらは `entity_id`（ポリモーフィック列で `hospital_prices` への実FKではない）越しの
+JOINを内部で完結させる都合上DEFINERにしていると見られるが、`get_news_feed` は同様のJOINを
+RLSが素通しする形で書けるため、あえてDEFINERにする理由がない。
 
 ```sql
 CREATE OR REPLACE FUNCTION get_news_feed(
@@ -73,42 +98,48 @@ CREATE OR REPLACE FUNCTION get_news_feed(
   p_offset INT DEFAULT 0
 )
 RETURNS TABLE (...)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  IF p_facility_id IS NOT NULL
-     AND NOT (is_facility_member(p_facility_id) OR is_admin()) THEN
-    RAISE EXCEPTION 'FORBIDDEN' USING ERRCODE = '42501';
-  END IF;
+LANGUAGE sql STABLE SET search_path = public AS $$
+  SELECT ... -- distributor_price_change（price_histories.entity_type='distributor_product' → RLSで全施設公開）
+  FROM price_histories ph
+  JOIN distributor_products dp ON dp.id = ph.distributor_product_id
+  JOIN products p ON p.id = dp.product_id
+  WHERE ph.entity_type = 'distributor_product'
 
-  RETURN QUERY
-  SELECT ... -- distributor_price_change（全施設公開・facility_id条件なし）
   UNION ALL
-  SELECT ... -- new_product（全施設公開・facility_id条件なし）
+
+  SELECT ... -- new_product（distributor_products.created_at → RLSで全施設公開）
+  FROM distributor_products dp
+  JOIN products p ON p.id = dp.product_id
+
   UNION ALL
-  SELECT ...
+
+  SELECT ... -- hospital_price_change（price_histories RLSが facility_id 条件を自動適用）
   FROM price_histories ph
   JOIN hospital_prices hp ON hp.id = ph.entity_id
   JOIN facilities f ON f.id = hp.facility_id
+  JOIN distributor_products dp ON dp.id = ph.distributor_product_id
+  JOIN products p ON p.id = dp.product_id
   WHERE ph.entity_type = 'hospital_price'
-    AND p_facility_id IS NOT NULL
-    AND hp.facility_id = p_facility_id  -- 直前のIF文で認可済みのfacility_idのみ通る
+    AND (p_facility_id IS NULL OR hp.facility_id = p_facility_id)
+
   ORDER BY occurred_at DESC
   LIMIT p_limit OFFSET p_offset;
-END;
 $$;
 ```
 
-`p_facility_id` がNULLなら認可チェックをスキップして全体公開イベントのみ返す（未指定は許可された
-挙動であり、`hospital_price_change` 枝は `p_facility_id IS NOT NULL` 条件で自動的に除外される）。
+`p_facility_id` がNULLの場合: `hospital_price_change` 枝は `facility_id` で絞り込まないが、
+RLSにより非adminユーザーには自分の所属施設分しか返らない（RLSが自動的に安全側にフィルタする）。
+明示的な認可チェックやエラーを書く必要がない — 権限がなければRLSが黙って0件を返すだけで、
+アプリ層のロジックとして扱う必要すらない。
 
-GRANT: `anon` には付与しない。ニュースページはログイン必須ページであり、`hospital_price_change`
-は機微データのため `GRANT EXECUTE ON get_news_feed TO authenticated, service_role` のみとする
-（`get_distributor_product_price_history` がanonにも許可しているのは全施設公開データのみを
-返す関数だからであり、同じ判断をそのまま流用しない）。
+GRANT: `GRANT EXECUTE ON get_news_feed TO authenticated`（`anon` には付与しない。ニュースページは
+ログイン必須ページであり、`anon` ロールは `price_histories`/`distributor_products` のRLSポリシーが
+`TO authenticated` 限定のため、そもそもanonで呼んでも常に0件になるが、意図を明確にするため
+GRANTからも外す）。
 
-呼び出し元APIの `requireFacilityAccess` は、上記DB関数側チェックとは独立した**UXのための
-早期リターン**（400/403を早く返す）と位置づける。最終防御はDB関数側の
-`is_facility_member(p_facility_id) OR is_admin()` チェックであり、これを省略しない。
+呼び出し元APIの `requireFacilityAccess` は、DB側のRLSとは独立した**UXのための早期リターン**
+（未所属施設を指定したら早めに403を返す）として引き続き使う。これがなくても
+`get_news_feed` はRLSにより安全だが、エラーメッセージを早く返せる分UXが良い。
 
 ### API: `GET /api/news`
 
@@ -166,10 +197,12 @@ export type NewsFeedItem = {
   facilityId省略時に全体公開イベントのみ返る、正常系のレスポンス形状
 - `src/app/news/page.tsx` のコンポーネントテスト: 施設切替でフィードが再取得される、
   「もっと見る」でoffsetが加算される、空状態の表示
-- **DB関数の認可バイパステスト**（`supabase/migrations/__tests__` に追加、pgTAP等の既存パターンに
-  従う）: 他施設に所属するユーザーとして `get_news_feed` をAPI層を経由せず**直接RPC呼び出し**し、
-  他施設の `p_facility_id` を渡すと例外（`FORBIDDEN`）になることを検証する。API Route側のモックや
-  スタブでは検出できないため、Next.jsを経由しないDB層単独のテストとして書く
+- **DB関数のRLS適用テスト**（`supabase/migrations/__tests__` の既存パターンに従う）:
+  他施設に所属するユーザーとして `get_news_feed` をAPI層を経由せず**直接RPC呼び出し**し、
+  `p_facility_id` に他施設のIDを渡しても `hospital_price_change` 系イベントが0件になる
+  （RLSにより黙って除外される。DEFINERなしのため例外ではなく単に結果に含まれないことを検証する）
+  ことを確認する。API Route側のモックやスタブでは検出できないため、Next.jsを経由しない
+  DB層単独のテストとして書く
 
 ## スコープ外
 
