@@ -78,7 +78,7 @@ RETURNS TABLE (
   WHERE ph.entity_type = 'hospital_price'
     AND (p_facility_id IS NULL OR hp.facility_id = p_facility_id)
 
-  ORDER BY occurred_at DESC
+  ORDER BY occurred_at DESC, id DESC
   LIMIT p_limit OFFSET p_offset;
 $$;
 

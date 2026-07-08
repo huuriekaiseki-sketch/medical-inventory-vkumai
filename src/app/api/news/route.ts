@@ -7,6 +7,7 @@ import { apiError } from '@/lib/api-error'
 
 const DEFAULT_LIMIT = 20
 const DEFAULT_OFFSET = 0
+const MAX_LIMIT = 100
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,6 +33,9 @@ export async function GET(request: NextRequest) {
       const parsedLimit = Number(limitParam)
       if (!Number.isFinite(parsedLimit) || parsedLimit < 0) {
         return apiError('limit/offset が不正です', 400)
+      }
+      if (parsedLimit > MAX_LIMIT) {
+        return apiError('limit が不正です', 400)
       }
       limit = parsedLimit
     }

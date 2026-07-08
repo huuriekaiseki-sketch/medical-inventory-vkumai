@@ -111,4 +111,18 @@ describe('GET /api/news', () => {
     expect(res.status).toBe(200)
     expect(mockListNewsFeed).toHaveBeenCalledWith(expect.anything(), { facilityId: 'f1', limit: 0, offset: 0 })
   })
+
+  it('limit が上限(100)を超える場合は400を返す', async () => {
+    authenticated()
+    const res = await GET(new NextRequest('http://localhost/api/news?facilityId=f1&limit=101'))
+    expect(res.status).toBe(400)
+    expect(mockListNewsFeed).not.toHaveBeenCalled()
+  })
+
+  it('limit が上限ちょうど(100)の場合は200を返す', async () => {
+    authenticated()
+    const res = await GET(new NextRequest('http://localhost/api/news?facilityId=f1&limit=100'))
+    expect(res.status).toBe(200)
+    expect(mockListNewsFeed).toHaveBeenCalledWith(expect.anything(), { facilityId: 'f1', limit: 100, offset: 0 })
+  })
 })

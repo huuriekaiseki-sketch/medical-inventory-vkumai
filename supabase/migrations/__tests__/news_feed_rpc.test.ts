@@ -40,6 +40,10 @@ describe('20260708000001_add_news_feed_rpc.sql', () => {
     expect(n).toContain('from distributor_products dp')
   })
 
+  it('ORDER BYにidタイブレーカーを持つ（occurred_at同値時のページネーション安定性）', () => {
+    expect(n).toContain('order by occurred_at desc, id desc')
+  })
+
   it('anonにはEXECUTE権限を許可しない', () => {
     expect(n).toContain('grant execute on function get_news_feed to authenticated')
     expect(n).not.toMatch(/grant execute on function get_news_feed[^;]*anon/)
