@@ -43,8 +43,18 @@
       "Bash(~/write_aidd_stats.sh *)",
       "Bash(scripts/log-loop-observability.sh *)",
       "Bash(/Users/masanori/medical-inventory-vkumai/scripts/log-loop-observability.sh *)",
+      "Bash(scripts/doc-suggest-check.sh *)",
       "Bash(curl -s http://localhost:*)",
-      "mcp__context7__resolve-library-id"
+      "Bash(sort *)",
+      "Bash(ps *)",
+      "Bash(git rev-parse *)",
+      "Bash(git -C /Users/masanori/medical-inventory-vkumai log*)",
+      "Bash(git -C /Users/masanori/medical-inventory-vkumai status*)",
+      "Bash(git -C /Users/masanori/medical-inventory-vkumai rev-parse*)",
+      "Bash(/Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/review-package *)",
+      "Bash(/Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/task-brief *)",
+      "mcp__context7__resolve-library-id",
+      "mcp__playwright__browser_navigate"
     ],
     "deny": [
       "Bash(rm -rf *)",
