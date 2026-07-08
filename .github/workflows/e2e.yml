@@ -30,13 +30,31 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # WHY: e2e/env-guard.ts のデフォルト許可ホストは127.0.0.1/localhostのみ。
+      #      本番Supabaseの接続情報がCIに一切渡らないよう、GitHub Secretsは使わず
+      #      ローカルSupabaseを起動してその場で発行される接続情報だけを使う。
+      - name: Start local Supabase
+        run: |
+          supabase start
+          supabase db reset
+
+      - name: Export local Supabase connection info
+        run: |
+          echo "SUPABASE_API_URL=$(supabase status -o json | jq -r '.API_URL')" >> "$GITHUB_ENV"
+          echo "SUPABASE_ANON_KEY=$(supabase status -o json | jq -r '.ANON_KEY')" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$(supabase status -o json | jq -r '.SERVICE_ROLE_KEY')" >> "$GITHUB_ENV"
+
       - name: Run E2E smoke tests
         run: npm run test:e2e
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
-          E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
-          # テスト専用Supabaseのホストのみ許可（e2e/env-guard.ts が本番URLを即失敗させる）
-          E2E_ALLOWED_SUPABASE_HOSTS: ${{ secrets.E2E_ALLOWED_SUPABASE_HOSTS }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_API_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+          # WHY: ダミーデータ規約（docs/agents/common.md）に合わせた固定のテスト用メール。
+          #      ローカルSupabaseは毎回まっさらな状態なので機密情報ではなくsecrets化不要
+          E2E_TEST_EMAIL: e2e-test-user@example.com
