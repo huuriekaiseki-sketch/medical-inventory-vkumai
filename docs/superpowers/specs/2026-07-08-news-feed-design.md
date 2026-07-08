@@ -91,6 +91,9 @@ CREATE POLICY "facility_member_or_admin" ON price_histories
 JOINを内部で完結させる都合上DEFINERにしていると見られるが、`get_news_feed` は同様のJOINを
 RLSが素通しする形で書けるため、あえてDEFINERにする理由がない。
 
+`distributor_products` は `name`/`maker`/`supplier` を直接持つ（`products` テーブルは `jan`/`ref`
+コードのみで表示用の名称を持たないため、`products` へのJOINは不要）。
+
 ```sql
 CREATE OR REPLACE FUNCTION get_news_feed(
   p_facility_id UUID,
@@ -102,14 +105,12 @@ LANGUAGE sql STABLE SET search_path = public AS $$
   SELECT ... -- distributor_price_change（price_histories.entity_type='distributor_product' → RLSで全施設公開）
   FROM price_histories ph
   JOIN distributor_products dp ON dp.id = ph.distributor_product_id
-  JOIN products p ON p.id = dp.product_id
   WHERE ph.entity_type = 'distributor_product'
 
   UNION ALL
 
   SELECT ... -- new_product（distributor_products.created_at → RLSで全施設公開）
   FROM distributor_products dp
-  JOIN products p ON p.id = dp.product_id
 
   UNION ALL
 
@@ -118,7 +119,6 @@ LANGUAGE sql STABLE SET search_path = public AS $$
   JOIN hospital_prices hp ON hp.id = ph.entity_id
   JOIN facilities f ON f.id = hp.facility_id
   JOIN distributor_products dp ON dp.id = ph.distributor_product_id
-  JOIN products p ON p.id = dp.product_id
   WHERE ph.entity_type = 'hospital_price'
     AND (p_facility_id IS NULL OR hp.facility_id = p_facility_id)
 
@@ -197,12 +197,16 @@ export type NewsFeedItem = {
   facilityId省略時に全体公開イベントのみ返る、正常系のレスポンス形状
 - `src/app/news/page.tsx` のコンポーネントテスト: 施設切替でフィードが再取得される、
   「もっと見る」でoffsetが加算される、空状態の表示
-- **DB関数のRLS適用テスト**（`supabase/migrations/__tests__` の既存パターンに従う）:
-  他施設に所属するユーザーとして `get_news_feed` をAPI層を経由せず**直接RPC呼び出し**し、
-  `p_facility_id` に他施設のIDを渡しても `hospital_price_change` 系イベントが0件になる
-  （RLSにより黙って除外される。DEFINERなしのため例外ではなく単に結果に含まれないことを検証する）
-  ことを確認する。API Route側のモックやスタブでは検出できないため、Next.jsを経由しない
-  DB層単独のテストとして書く
+- **マイグレーションSQLの静的検証テスト**（`supabase/migrations/__tests__/news_feed_rpc.test.ts`）:
+  `supabase/migrations/__tests__` 配下の既存テスト（`admin_rls.test.ts` 等）と同じ規約に従う。
+  ローカルSupabaseが無く実DB適用したRLS動作確認はできないため、生成したSQLファイルの中身を
+  文字列レベルで静的検証する回帰テストとして書く。検証項目:
+  - `get_news_feed` 関数定義に `security definer` を**含まない**こと（DEFINERなし方針の固定）
+  - `grant execute on function get_news_feed` の対象に `anon` を**含まない**こと
+  - `hospital_price` 分岐のクエリに `p_facility_id` によるフィルタ条件が含まれること
+  （RLSの実際の絞り込み動作そのものは、既存の `price_histories`/`distributor_products`/`facilities`
+  ポリシーに委譲しており、それらは `20260628010001_update_rls_admin.sql` 等で既にテスト済みのため
+  再検証しない）
 
 ## スコープ外
 
