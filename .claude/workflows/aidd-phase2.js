@@ -11,7 +11,7 @@ export const meta = {
 }
 
 // args: { specPath: string }
-// specPath: 承認済みSPEC.mdのパス（例: "docs/specs/SPEC.md"）
+// specPath: 承認済みSPEC.mdのパス（例: "SPEC.md"。feature-specスキルはリポジトリルートに出力する）
 //
 // ── 前提条件（呼び出し前に人間が確認すること）──────────────────────────
 // 1. SPEC.md Part 2 に以下が明記されていること
@@ -25,7 +25,7 @@ export const meta = {
 //    （structured-review は Claude から勝手に呼ばない）
 // ────────────────────────────────────────────────────────────────────
 
-const specPath = args?.specPath ?? 'docs/specs/SPEC.md'
+const specPath = args?.specPath ?? 'SPEC.md'
 
 // ─── Phase A: Contract Write + DB（並列）─────────────────────────────
 // contract-writer: src/types/ の型定義を確定（implementerの「契約」）
@@ -72,7 +72,7 @@ log('Implement完了')
 phase('Integrate')
 
 const integrationResult = await agent(
-  `並列実装が完了しました。以下の順で作業してください。\n1. マイグレーションが適用済みか確認する（未適用ならSupabase CLIで適用する）\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. 全テスト・lint緑を確認して報告\n\n## 各完了報告\n### contract-writer\n${contractResult}\n### db-impl\n${dbResult}\n### data-impl\n${dataResult}\n### api-impl\n${apiResult}\n### ui-impl\n${uiResult}`,
+  `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用ならSupabase CLIで適用する）\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. 全テスト・lint緑を確認して報告\n\n## 各完了報告\n### contract-writer\n${contractResult}\n### db-impl\n${dbResult}\n### data-impl\n${dataResult}\n### api-impl\n${apiResult}\n### ui-impl\n${uiResult}`,
   { label: 'integrator', phase: 'Integrate', agentType: 'integrator' }
 )
 
