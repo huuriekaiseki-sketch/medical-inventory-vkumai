@@ -55,9 +55,60 @@ new_value       NUMERIC
 facility_name   TEXT   -- hospital_price_change系のみ。他はNULL
 ```
 
-RLS: SECURITY DEFINER関数として実装し、`anon, authenticated` にGRANT EXECUTE
-（既存の `get_distributor_product_price_history` と同様）。施設スコープの絞り込みは
-関数内の `p_facility_id` 条件と、呼び出し元APIの `requireFacilityAccess` の二重防御で担保する。
+**認可（重要）**: この関数は `SECURITY DEFINER` であり、RLSをバイパスする。SECURITY DEFINER関数に
+`GRANT EXECUTE TO anon/authenticated` を付けると `/rest/v1/rpc/get_news_feed` として
+Next.jsのAPI Routeを経由せず直接呼び出せるため、「関数内の `p_facility_id` 条件」は
+単なるフィルタであり認可チェックではない。他施設のユーザー（または未認証者）が
+任意の `p_facility_id` を渡して直接RPCを叩けば、`hospital_price_change`（施設スコープの
+機微データ）を他施設分も取得できてしまう。
+
+そのため、関数内で以下の認可チェックを**必ず**行う（既存の `get_distributor_product_price_history`
+が `is_facility_member(hp.facility_id)` を関数内でチェックしているのと同じ考え方。詳細は
+[`docs/agents/decisions.md`](../../agents/decisions.md) の facility RLS ポリシー方針を参照）:
+
+```sql
+CREATE OR REPLACE FUNCTION get_news_feed(
+  p_facility_id UUID,
+  p_limit INT DEFAULT 20,
+  p_offset INT DEFAULT 0
+)
+RETURNS TABLE (...)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF p_facility_id IS NOT NULL
+     AND NOT (is_facility_member(p_facility_id) OR is_admin()) THEN
+    RAISE EXCEPTION 'FORBIDDEN' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN QUERY
+  SELECT ... -- distributor_price_change（全施設公開・facility_id条件なし）
+  UNION ALL
+  SELECT ... -- new_product（全施設公開・facility_id条件なし）
+  UNION ALL
+  SELECT ...
+  FROM price_histories ph
+  JOIN hospital_prices hp ON hp.id = ph.entity_id
+  JOIN facilities f ON f.id = hp.facility_id
+  WHERE ph.entity_type = 'hospital_price'
+    AND p_facility_id IS NOT NULL
+    AND hp.facility_id = p_facility_id  -- 直前のIF文で認可済みのfacility_idのみ通る
+  ORDER BY occurred_at DESC
+  LIMIT p_limit OFFSET p_offset;
+END;
+$$;
+```
+
+`p_facility_id` がNULLなら認可チェックをスキップして全体公開イベントのみ返す（未指定は許可された
+挙動であり、`hospital_price_change` 枝は `p_facility_id IS NOT NULL` 条件で自動的に除外される）。
+
+GRANT: `anon` には付与しない。ニュースページはログイン必須ページであり、`hospital_price_change`
+は機微データのため `GRANT EXECUTE ON get_news_feed TO authenticated, service_role` のみとする
+（`get_distributor_product_price_history` がanonにも許可しているのは全施設公開データのみを
+返す関数だからであり、同じ判断をそのまま流用しない）。
+
+呼び出し元APIの `requireFacilityAccess` は、上記DB関数側チェックとは独立した**UXのための
+早期リターン**（400/403を早く返す）と位置づける。最終防御はDB関数側の
+`is_facility_member(p_facility_id) OR is_admin()` チェックであり、これを省略しない。
 
 ### API: `GET /api/news`
 
@@ -115,6 +166,10 @@ export type NewsFeedItem = {
   facilityId省略時に全体公開イベントのみ返る、正常系のレスポンス形状
 - `src/app/news/page.tsx` のコンポーネントテスト: 施設切替でフィードが再取得される、
   「もっと見る」でoffsetが加算される、空状態の表示
+- **DB関数の認可バイパステスト**（`supabase/migrations/__tests__` に追加、pgTAP等の既存パターンに
+  従う）: 他施設に所属するユーザーとして `get_news_feed` をAPI層を経由せず**直接RPC呼び出し**し、
+  他施設の `p_facility_id` を渡すと例外（`FORBIDDEN`）になることを検証する。API Route側のモックや
+  スタブでは検出できないため、Next.jsを経由しないDB層単独のテストとして書く
 
 ## スコープ外
 
