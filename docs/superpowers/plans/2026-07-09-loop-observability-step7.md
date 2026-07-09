@@ -20,7 +20,7 @@
 
 - このタスクは `supabase/migrations/`・`src/lib/supabase/`・`middleware.ts`・auth/facility/tenant/organization/inventory/RLS/policy のいずれにも触れないため、TRI/RISK機械判定の対象外（軽量レーンで進めてよい）
 - `logs/loop-observability.jsonl` の既存スキーマ（フィールド構成）は変更しない。値の埋め込みのみ行う（設計ドキュメント原則を維持）
-- モデル単価表の数値は本計画作成時点の目安であり未検証。Task 1で明示的に確認手順を踏む
+- モデル単価表の数値は2026-07-09に `platform.claude.com/docs/en/about-claude/pricing` を直接取得して確認済み（Task 1参照）。ただしSonnet 5は2026-08-31までの導入価格($2/$10)と2026-09-01以降の標準価格($3/$15)が切り替わるため、イベントのtimestampで判定する
 - 実在の施設名・実データをテストフィクスチャに含めない（`docs/agents/common.md` のテスト衛生ルール）
 
 ---
@@ -45,11 +45,19 @@
 
 **Interfaces:**
 - Produces: `export interface ModelPricing { inputPerMTok: number; outputPerMTok: number; cacheWritePerMTok: number; cacheReadPerMTok: number }`
-- Produces: `export function getPricing(model: string): ModelPricing | null`
+- Produces: `export function getPricing(model: string, atISOTimestamp?: string): ModelPricing | null`
 
-- [ ] **Step 1: 単価表の数値をAnthropic公式price page（console.anthropic.com/pricing）で確認する**
+- [ ] **Step 1: 単価表の数値（確認済み）**
 
-このステップはコードを書く前の人間確認が必要。実装者は以下の値をベストエフォートの初期値として使い、必ず実装完了前に公式ページと突き合わせて修正すること（未検証のまま放置しない）。
+2026-07-09に `https://platform.claude.com/docs/en/about-claude/pricing` を直接取得して確認した公式価格（100万トークンあたりUSD、Base Input / 5m Cache Write / Cache Hit / Output）。Sonnet 5のみ2026-08-31までの導入価格と2026-09-01以降の標準価格が異なるため、イベントのtimestampで判定する。
+
+| モデル | input | 5m cache write | cache read | output |
+|---|---|---|---|---|
+| claude-opus-4-8 | $5 | $6.25 | $0.50 | $25 |
+| claude-fable-5 | $10 | $12.50 | $1 | $50 |
+| claude-haiku-4-5-20251001 | $1 | $1.25 | $0.10 | $5 |
+| claude-sonnet-5（〜2026-08-31、導入価格） | $2 | $2.50 | $0.20 | $10 |
+| claude-sonnet-5（2026-09-01〜、標準価格） | $3 | $3.75 | $0.30 | $15 |
 
 - [ ] **Step 2: 失敗するテストを書く**
 
@@ -60,7 +68,7 @@ import { getPricing } from './model-pricing'
 
 describe('getPricing', () => {
   it('known model名に対して単価を返す', () => {
-    const pricing = getPricing('claude-sonnet-5')
+    const pricing = getPricing('claude-opus-4-8')
     expect(pricing).not.toBeNull()
     expect(pricing?.inputPerMTok).toBeGreaterThan(0)
     expect(pricing?.outputPerMTok).toBeGreaterThan(pricing?.inputPerMTok ?? 0)
@@ -72,6 +80,21 @@ describe('getPricing', () => {
 
   it('モデル名のバリエーション（バージョンサフィックス付き）も解決できる', () => {
     expect(getPricing('claude-haiku-4-5-20251001')).not.toBeNull()
+  })
+
+  it('sonnet-5は2026-08-31以前のtimestampでは導入価格を返す', () => {
+    const pricing = getPricing('claude-sonnet-5', '2026-07-08T00:00:00.000Z')
+    expect(pricing).toEqual({ inputPerMTok: 2, outputPerMTok: 10, cacheWritePerMTok: 2.5, cacheReadPerMTok: 0.2 })
+  })
+
+  it('sonnet-5は2026-09-01以降のtimestampでは標準価格を返す', () => {
+    const pricing = getPricing('claude-sonnet-5', '2026-09-02T00:00:00.000Z')
+    expect(pricing).toEqual({ inputPerMTok: 3, outputPerMTok: 15, cacheWritePerMTok: 3.75, cacheReadPerMTok: 0.3 })
+  })
+
+  it('sonnet-5でtimestamp省略時は標準価格（保守的フォールバック）を返す', () => {
+    const pricing = getPricing('claude-sonnet-5')
+    expect(pricing?.inputPerMTok).toBe(3)
   })
 })
 ```
@@ -92,23 +115,31 @@ export interface ModelPricing {
   cacheReadPerMTok: number
 }
 
-// 単価は 100万トークンあたりのUSD。要検証: console.anthropic.com/pricing で最新値を確認すること。
-const MODEL_PRICING_TABLE: Record<string, ModelPricing> = {
-  'claude-opus-4-8': { inputPerMTok: 15, outputPerMTok: 75, cacheWritePerMTok: 18.75, cacheReadPerMTok: 1.5 },
-  'claude-sonnet-5': { inputPerMTok: 3, outputPerMTok: 15, cacheWritePerMTok: 3.75, cacheReadPerMTok: 0.3 },
-  'claude-fable-5': { inputPerMTok: 3, outputPerMTok: 15, cacheWritePerMTok: 3.75, cacheReadPerMTok: 0.3 },
+// 単価は100万トークンあたりのUSD。出典: https://platform.claude.com/docs/en/about-claude/pricing（2026-07-09取得）
+const SONNET_5_INTRO_CUTOFF = '2026-09-01T00:00:00Z'
+const SONNET_5_INTRO: ModelPricing = { inputPerMTok: 2, outputPerMTok: 10, cacheWritePerMTok: 2.5, cacheReadPerMTok: 0.2 }
+const SONNET_5_STANDARD: ModelPricing = { inputPerMTok: 3, outputPerMTok: 15, cacheWritePerMTok: 3.75, cacheReadPerMTok: 0.3 }
+
+const STATIC_PRICING_TABLE: Record<string, ModelPricing> = {
+  'claude-opus-4-8': { inputPerMTok: 5, outputPerMTok: 25, cacheWritePerMTok: 6.25, cacheReadPerMTok: 0.5 },
+  'claude-fable-5': { inputPerMTok: 10, outputPerMTok: 50, cacheWritePerMTok: 12.5, cacheReadPerMTok: 1 },
   'claude-haiku-4-5-20251001': { inputPerMTok: 1, outputPerMTok: 5, cacheWritePerMTok: 1.25, cacheReadPerMTok: 0.1 },
 }
 
-export function getPricing(model: string): ModelPricing | null {
-  return MODEL_PRICING_TABLE[model] ?? null
+export function getPricing(model: string, atISOTimestamp?: string): ModelPricing | null {
+  if (model === 'claude-sonnet-5') {
+    // timestamp省略時は標準価格（高い方）を返し、コストを過小評価しない
+    const at = atISOTimestamp ?? SONNET_5_INTRO_CUTOFF
+    return at < SONNET_5_INTRO_CUTOFF ? SONNET_5_INTRO : SONNET_5_STANDARD
+  }
+  return STATIC_PRICING_TABLE[model] ?? null
 }
 ```
 
 - [ ] **Step 5: テストを実行してパスを確認する**
 
 Run: `npx vitest run scripts/lib/model-pricing.test.ts`
-Expected: PASS（3件）
+Expected: PASS（6件）
 
 - [ ] **Step 6: コミット**
 
@@ -360,7 +391,7 @@ export function matchUsage(
 export function computeCost(events: UsageEvent[]): number | null {
   let total = 0
   for (const event of events) {
-    const pricing = getPricing(event.model)
+    const pricing = getPricing(event.model, event.timestamp)
     if (!pricing) return null
     total +=
       (event.inputTokens / 1_000_000) * pricing.inputPerMTok +
