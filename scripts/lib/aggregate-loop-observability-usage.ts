@@ -116,20 +116,36 @@ export function aggregate(
   return { updated, stats }
 }
 
+interface RawTranscriptLine {
+  timestamp: string
+  attributionAgent?: string | null
+  requestId?: string
+  uuid?: string
+  message?: {
+    model?: string
+    usage?: {
+      input_tokens?: number
+      output_tokens?: number
+      cache_creation_input_tokens?: number
+      cache_read_input_tokens?: number
+    }
+  }
+}
+
 export function parseTranscriptLine(line: string): UsageEvent | null {
-  let parsed: any
+  let parsed: RawTranscriptLine
   try {
     parsed = JSON.parse(line)
   } catch {
     return null
   }
-  const usage = parsed?.message?.usage
+  const usage = parsed.message?.usage
   if (!usage || typeof usage.input_tokens !== 'number') return null
   return {
     timestamp: parsed.timestamp,
-    model: parsed.message.model,
+    model: parsed.message?.model ?? '',
     attributionAgent: parsed.attributionAgent ?? null,
-    requestId: parsed.requestId ?? parsed.uuid,
+    requestId: parsed.requestId ?? parsed.uuid ?? '',
     inputTokens: usage.input_tokens ?? 0,
     outputTokens: usage.output_tokens ?? 0,
     cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
