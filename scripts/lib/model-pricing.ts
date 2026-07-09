@@ -12,7 +12,9 @@ const SONNET_5_STANDARD: ModelPricing = { inputPerMTok: 3, outputPerMTok: 15, ca
 
 const STATIC_PRICING_TABLE: Record<string, ModelPricing> = {
   'claude-opus-4-8': { inputPerMTok: 5, outputPerMTok: 25, cacheWritePerMTok: 6.25, cacheReadPerMTok: 0.5 },
+  'claude-opus-4-6': { inputPerMTok: 5, outputPerMTok: 25, cacheWritePerMTok: 6.25, cacheReadPerMTok: 0.5 },
   'claude-fable-5': { inputPerMTok: 10, outputPerMTok: 50, cacheWritePerMTok: 12.5, cacheReadPerMTok: 1 },
+  'claude-sonnet-4-6': { inputPerMTok: 3, outputPerMTok: 15, cacheWritePerMTok: 3.75, cacheReadPerMTok: 0.3 },
   'claude-haiku-4-5-20251001': { inputPerMTok: 1, outputPerMTok: 5, cacheWritePerMTok: 1.25, cacheReadPerMTok: 0.1 },
 }
 

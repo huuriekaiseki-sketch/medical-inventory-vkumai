@@ -31,4 +31,22 @@ describe('getPricing', () => {
     const pricing = getPricing('claude-sonnet-5')
     expect(pricing?.inputPerMTok).toBe(3)
   })
+
+  it('claude-sonnet-4-6の単価を返す（実データで使用実績あり）', () => {
+    expect(getPricing('claude-sonnet-4-6')).toEqual({
+      inputPerMTok: 3,
+      outputPerMTok: 15,
+      cacheWritePerMTok: 3.75,
+      cacheReadPerMTok: 0.3,
+    })
+  })
+
+  it('claude-opus-4-6の単価を返す（実データで使用実績あり）', () => {
+    expect(getPricing('claude-opus-4-6')).toEqual({
+      inputPerMTok: 5,
+      outputPerMTok: 25,
+      cacheWritePerMTok: 6.25,
+      cacheReadPerMTok: 0.5,
+    })
+  })
 })
