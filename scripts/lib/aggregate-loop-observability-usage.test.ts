@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   computeWindow,
   dedupeUsageEvents,
   matchUsage,
   computeCost,
   aggregate,
+  parseTranscriptLine,
+  loadUsageEventsFromTranscripts,
+  loadLogEntries,
+  writeLogEntries,
   type LoopObservabilityEntry,
   type UsageEvent,
 } from './aggregate-loop-observability-usage'
@@ -137,5 +144,76 @@ describe('aggregate', () => {
     const result = aggregate(entries, [])
     expect(result.stats.skippedNoUsage).toBe(1)
     expect(result.updated[0].tokens).toBeNull()
+  })
+})
+
+describe('parseTranscriptLine', () => {
+  it('assistantメッセージのusage行をUsageEventに変換する', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      attributionAgent: 'implementer',
+      requestId: 'req_abc',
+      timestamp: '2026-07-08T00:15:00.000Z',
+      message: {
+        model: 'claude-sonnet-5',
+        usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      },
+    })
+    const event = parseTranscriptLine(line)
+    expect(event).toEqual({
+      timestamp: '2026-07-08T00:15:00.000Z',
+      model: 'claude-sonnet-5',
+      attributionAgent: 'implementer',
+      requestId: 'req_abc',
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    })
+  })
+
+  it('usageの無い行（userメッセージ等）はnullを返す', () => {
+    expect(parseTranscriptLine(JSON.stringify({ type: 'user' }))).toBeNull()
+  })
+
+  it('壊れたJSON行はnullを返す（クラッシュしない）', () => {
+    expect(parseTranscriptLine('{not valid json')).toBeNull()
+  })
+})
+
+describe('loadUsageEventsFromTranscripts + loadLogEntries + writeLogEntries', () => {
+  it('ディレクトリ配下の*.jsonlを再帰的に読み込む', () => {
+    const root = mkdtempSync(join(tmpdir(), 'loop-obs-test-'))
+    mkdirSync(join(root, 'session1', 'subagents'), { recursive: true })
+    writeFileSync(
+      join(root, 'session1', 'subagents', 'agent-1.jsonl'),
+      JSON.stringify({
+        type: 'assistant',
+        attributionAgent: 'implementer',
+        requestId: 'req_x',
+        timestamp: '2026-07-08T00:15:00.000Z',
+        message: { model: 'claude-sonnet-5', usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } },
+      }) + '\n',
+    )
+    const events = loadUsageEventsFromTranscripts(root)
+    expect(events).toHaveLength(1)
+    expect(events[0].requestId).toBe('req_x')
+  })
+
+  it('loadLogEntriesとwriteLogEntriesはラウンドトリップでフィールドを保持する', () => {
+    const root = mkdtempSync(join(tmpdir(), 'loop-obs-log-test-'))
+    const logPath = join(root, 'loop-observability.jsonl')
+    const original = [
+      {
+        timestamp: '2026-07-08T00:30:00Z', loop: 'agentic', agent: 'implementer', feature: 'a',
+        attempt: 1, model: 'claude-sonnet-5', tokens: null, costUsd: null,
+        intent: 'ダミー', scenario: 'ダミー', result: 'pass', reason: 'ダミー',
+      },
+    ]
+    writeLogEntries(logPath, original)
+    const reloaded = loadLogEntries(logPath)
+    expect(reloaded).toEqual(original)
+    const raw = readFileSync(logPath, 'utf-8').trim().split('\n')
+    expect(raw).toHaveLength(1)
   })
 })

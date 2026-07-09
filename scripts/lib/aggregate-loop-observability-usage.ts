@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { getPricing } from './model-pricing'
 
 export interface LoopObservabilityEntry {
@@ -112,4 +114,82 @@ export function aggregate(
   })
 
   return { updated, stats }
+}
+
+export function parseTranscriptLine(line: string): UsageEvent | null {
+  let parsed: any
+  try {
+    parsed = JSON.parse(line)
+  } catch {
+    return null
+  }
+  const usage = parsed?.message?.usage
+  if (!usage || typeof usage.input_tokens !== 'number') return null
+  return {
+    timestamp: parsed.timestamp,
+    model: parsed.message.model,
+    attributionAgent: parsed.attributionAgent ?? null,
+    requestId: parsed.requestId ?? parsed.uuid,
+    inputTokens: usage.input_tokens ?? 0,
+    outputTokens: usage.output_tokens ?? 0,
+    cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+    cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
+  }
+}
+
+function findJsonlFiles(root: string): string[] {
+  const result: string[] = []
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name)
+      const stat = statSync(full)
+      if (stat.isDirectory()) {
+        walk(full)
+      } else if (name.endsWith('.jsonl')) {
+        result.push(full)
+      }
+    }
+  }
+  walk(root)
+  return result
+}
+
+export function loadUsageEventsFromTranscripts(projectsRoot: string): UsageEvent[] {
+  const events: UsageEvent[] = []
+  for (const file of findJsonlFiles(projectsRoot)) {
+    const lines = readFileSync(file, 'utf-8').split('\n').filter(Boolean)
+    for (const line of lines) {
+      const event = parseTranscriptLine(line)
+      if (event) events.push(event)
+    }
+  }
+  return events
+}
+
+export function loadLogEntries(logFilePath: string): LoopObservabilityEntry[] {
+  const lines = readFileSync(logFilePath, 'utf-8').split('\n').filter(Boolean)
+  return lines.map((line) => JSON.parse(line) as LoopObservabilityEntry)
+}
+
+export function writeLogEntries(logFilePath: string, entries: LoopObservabilityEntry[]): void {
+  const content = entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n'
+  writeFileSync(logFilePath, content, 'utf-8')
+}
+
+function main() {
+  const logFilePath = process.argv[2] ?? 'logs/loop-observability.jsonl'
+  const projectsRoot = process.argv[3] ?? join(process.env.HOME ?? '', '.claude/projects')
+
+  const entries = loadLogEntries(logFilePath)
+  const events = loadUsageEventsFromTranscripts(projectsRoot)
+  const { updated, stats } = aggregate(entries, events)
+  writeLogEntries(logFilePath, updated)
+
+  console.log(
+    `total=${stats.total} matched=${stats.matched} skippedNoTarget(human/e2e-runner)=${stats.skippedNoTarget} skippedNoUsage(突合失敗)=${stats.skippedNoUsage}`,
+  )
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main()
 }
