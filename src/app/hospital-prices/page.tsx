@@ -1,46 +1,56 @@
 'use client'
 
-import { useEffect, useState, useReducer, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState, useReducer, useMemo } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import type { HospitalPrice } from '@/types/hospitalPrice'
 import type { Facility } from '@/types/facility'
 import type { DistributorProduct } from '@/types/distributorProduct'
 import { HospitalPriceList } from '@/components/hospitalPrices/HospitalPriceList'
 
-export default function HospitalPricesPage() {
+function HospitalPricesPageInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const urlFacilityId = searchParams.get('facilityId')
+
   const [prices, setPrices] = useState<HospitalPrice[]>([])
   const [facilities, setFacilities] = useState<Facility[]>([])
   const [distributorProducts, setDistributorProducts] = useState<DistributorProduct[]>([])
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, refresh] = useReducer((x: number) => x + 1, 0)
 
+  // 初回ロード用: facilities・distributorProducts を取得し、選択施設IDを決定する
   useEffect(() => {
     let cancelled = false
     async function load() {
       try {
-        const facilitiesRes = await fetch('/api/facilities')
+        const [facilitiesRes, distributorProductsRes] = await Promise.all([
+          fetch('/api/facilities'),
+          fetch('/api/distributor-products'),
+        ])
         if (!facilitiesRes.ok) throw new Error()
+        if (!distributorProductsRes.ok) throw new Error()
         const facilitiesData = await facilitiesRes.json()
+        const dpData = await distributorProductsRes.json()
         const loadedFacilities = facilitiesData.facilities as Facility[]
-        const firstFacilityId = loadedFacilities[0]?.id
-
-        const pricesPromise = firstFacilityId
-          ? fetch(`/api/hospital-prices?facilityId=${encodeURIComponent(firstFacilityId)}`).then((r) => {
-              if (!r.ok) throw new Error()
-              return r.json()
-            })
-          : Promise.resolve({ prices: [] })
-        const distributorProductsPromise = fetch('/api/distributor-products').then((r) => {
-          if (!r.ok) throw new Error()
-          return r.json()
-        })
-
-        const [pricesData, dpData] = await Promise.all([pricesPromise, distributorProductsPromise])
         if (cancelled) return
-        setPrices(pricesData.prices)
+
         setFacilities(loadedFacilities)
         setDistributorProducts(dpData.items)
+
+        const isValidUrlFacility =
+          urlFacilityId !== null && loadedFacilities.some((f) => f.id === urlFacilityId)
+        const resolvedFacilityId = isValidUrlFacility
+          ? urlFacilityId
+          : (loadedFacilities[0]?.id ?? null)
+
+        setSelectedFacilityId(resolvedFacilityId)
+
+        if (resolvedFacilityId !== urlFacilityId) {
+          if (resolvedFacilityId) {
+            router.replace(`/hospital-prices?facilityId=${encodeURIComponent(resolvedFacilityId)}`)
+          }
+        }
       } catch {
         if (!cancelled) setError('データの取得に失敗しました')
       }
@@ -49,7 +59,32 @@ export default function HospitalPricesPage() {
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey])
+
+  // 価格取得用: selectedFacilityId が変わるたびに（削除後の再取得も含め）価格一覧を取得する
+  useEffect(() => {
+    let cancelled = false
+    async function loadPrices() {
+      if (!selectedFacilityId) {
+        setPrices([])
+        return
+      }
+      try {
+        const res = await fetch(`/api/hospital-prices?facilityId=${encodeURIComponent(selectedFacilityId)}`)
+        if (!res.ok) throw new Error()
+        const data = await res.json()
+        if (cancelled) return
+        setPrices(data.prices)
+      } catch {
+        if (!cancelled) setError('データの取得に失敗しました')
+      }
+    }
+    loadPrices()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedFacilityId, refreshKey])
 
   async function handleDelete(id: string) {
     setError(null)
@@ -60,6 +95,11 @@ export default function HospitalPricesPage() {
       return
     }
     refresh()
+  }
+
+  function handleFacilityChange(newId: string) {
+    setSelectedFacilityId(newId)
+    router.replace(`/hospital-prices?facilityId=${encodeURIComponent(newId)}`)
   }
 
   const facilityNameById = useMemo(
@@ -92,6 +132,24 @@ export default function HospitalPricesPage() {
         </button>
       </div>
 
+      <div className="mb-4">
+        <label htmlFor="facility-select" className="sr-only">
+          施設を選択
+        </label>
+        <select
+          id="facility-select"
+          value={selectedFacilityId ?? ''}
+          onChange={(e) => handleFacilityChange(e.target.value)}
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {facilities.map((facility) => (
+            <option key={facility.id} value={facility.id}>
+              {facility.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {error && <p className="mb-4 text-red-600">{error}</p>}
 
       <div className="rounded-lg bg-white shadow">
@@ -102,5 +160,13 @@ export default function HospitalPricesPage() {
         />
       </div>
     </div>
+  )
+}
+
+export default function HospitalPricesPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-5xl px-4 py-8">読み込み中...</div>}>
+      <HospitalPricesPageInner />
+    </Suspense>
   )
 }
