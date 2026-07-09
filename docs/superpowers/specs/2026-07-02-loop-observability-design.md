@@ -85,8 +85,10 @@ Loop Engineering（Agentic coding loop / Developer feedback loop / External feed
 
 ### 第二段階（Step 7・任意、落ち着いてから着手）
 - `~/.claude/projects/` 配下のtranscript jsonl（実際のusageが記録済み）から集計するスクリプトを追加
-- `timestamp` + `agent` + `attempt` をキーに該当レコードを特定し、`tokens` / `costUsd` を後付けで更新
+- **突合方式（2026-07-09改訂）:** 当初想定していた「timestamp + agent + attempt」でのキー突合は、transcript側に`attempt`情報が存在しないため不採用。代わりに、同一`feature`内でtimestamp昇順に並べた「直前レコード〜自レコード」の時間窓と、transcriptの`attributionAgent`フィールド（agent種別名と一致）でのフィルタにより、ベストエフォートで該当usageイベントを特定する
+- 突合できなかったレコードは`tokens`/`costUsd`を`null`のまま残し、突合できた件数・できなかった件数を必ずログ出力する（サイレントな取りこぼしを避ける）
 - 既存レコードのスキーマ（フィールド構成）は変更しない。値の埋め込みのみ行う
+- 実装: `scripts/lib/aggregate-loop-observability-usage.ts`（`scripts/update-loop-observability-usage.sh` 経由で実行）
 
 ---
 
@@ -101,7 +103,7 @@ Loop Engineering（Agentic coding loop / Developer feedback loop / External feed
 | 4 | 溜まったログを人間が読める要約に変換するコマンド/スクリプトを作る | 新規スクリプト |
 | 5（任意・MCP） | implementerのブラウザ確認箇所でPlaywright MCPを使わせ、利用ログも記録（完了・2026-07-03） | `.mcp.json`, `.claude/agents/implementer.md` |
 | 6（任意・MCP） | 実装前にContext7 MCPで最新ドキュメント参照させ、参照有無をログに残す（縮小版で完了・2026-07-03。`resolve-library-id`のみ利用。`query-docs`はサブエージェントのツール可視性制約〔deferredツールをロードする`ToolSearch`がサブエージェントに提供されない〕により保留、環境側の仕様変更後に再挑戦） | `.mcp.json`, `.claude/agents/implementer.md` |
-| 7（任意・後日） | transcript集計スクリプトで`tokens`/`costUsd`を後付け更新（第二段階） | 新規スクリプト |
+| 7（任意・後日） | transcript集計スクリプトで`tokens`/`costUsd`を後付け更新（第二段階、完了・2026-07-09。突合方式はattempt→timestamp窓+attributionAgentに変更） | `scripts/lib/aggregate-loop-observability-usage.ts`, `scripts/update-loop-observability-usage.sh` |
 
 ---
 
