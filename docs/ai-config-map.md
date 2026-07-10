@@ -49,9 +49,10 @@ medical-inventory-vkumai/               ← このプロジェクト
     │   ├── structured-review/SKILL.md  ← 最終構造化レビュー（Phase 5後）
     │   └── e2e-runner/SKILL.md         ← E2Eテスト・スクリーンショット
     └── workflows/
-        ├── aidd-phase1.js              ← Phase 1 調査ワークフロー
+        ├── aidd-phase1-router.js       ← Phase 1 入口。TRI/RISKキーワードでaidd-phase1/aidd-1-1-deep-taskへ自動振り分け
+        ├── aidd-phase1.js              ← Phase 1 調査ワークフロー（軽量Sweep。routerから呼ばれる）
         ├── aidd-phase2.js              ← Phase 3-5 実装〜検証ワークフロー
-        ├── aidd-1-1-deep-task.js       ← 深掘り調査・仕様検証（オンデマンド）
+        ├── aidd-1-1-deep-task.js       ← 深掘り調査・仕様検証（routerから高リスク判定時に呼ばれる）
         └── aidd-session-report.js      ← セッションレポート生成
 ```
 
@@ -111,10 +112,22 @@ medical-inventory-vkumai/               ← このプロジェクト
 ## 開発フロー（Phase 1-5）とエージェントの対応
 
 ```
-Phase 1: 調査（並列 4軸 Sweep）  ← aidd-phase1.js
-  → sweep-ui / sweep-data / sweep-db / sweep-types を並列起動
+Phase 1: 調査  ← aidd-phase1-router.js（正式な入口）
+  → taskDescriptionをTRI/RISKキーワード（migrations/auth/facility/tenant/
+    organization/inventory/RLS/policy等）に照合し、機械的に自動振り分け
+  → 該当なし: aidd-phase1.js（軽量Sweep、4エージェント）
+     sweep-ui / sweep-data / sweep-db / sweep-types を並列起動
+  → 該当あり: aidd-1-1-deep-task.js（深掘り、adversarial-verify / judge-panel / proposer 等）
+     Sweep+Loop Until Dry→Draft Spec→Find→Adversarial Verify→Completeness Critic
+     →Judge Panel→Synthesizeの8フェーズをフル実行
   → completeness-critic で網羅性チェック・終了判定
-  ※ 深掘りが必要なら aidd-1-1-deep-task.js（adversarial-verify / judge-panel / proposer）
+
+  ⚠️ コスト差は一桁以上ある（実測値、2026-07-10検証）：
+     軽量版: 4エージェント / 数分
+     深掘り版: 75エージェント / 約27分 / 約217万トークン
+  false positive（軽微なタスクが深掘りに誤って回ること）は意図的に許容している
+  （common.md TRI/RISK原則「迷ったら高リスク側に倒す」）。false negative（高リスク
+  変更の見逃し）よりコスト増の方が安全という判断。理由は decisions.md 参照。
 
 Phase 2: 仕様書  [skill: feature-spec]
   → SPEC.md 生成（Part 1 を人間にレビューしてもらう）
@@ -153,7 +166,8 @@ Phase 5: 検証 [agent: reviewer × 並列 4観点]  ← aidd-phase2.js
 | `CLAUDE.md` | Phase 1-5 の詳細フロー定義・絶対ルール |
 | `AGENTS.md` | AIツール向けクイックリファレンス |
 | `.claude/settings.json` | Bash/MCP 権限リスト（Supabase・npm・git） |
-| `.claude/workflows/aidd-phase1.js` | Phase 1 ワークフロー実装（args・完了後手順） |
+| `.claude/workflows/aidd-phase1-router.js` | Phase 1 正式入口。TRI/RISK自動振り分け（argsのJSON.parse防御理由はdecisions.md参照） |
+| `.claude/workflows/aidd-phase1.js` | Phase 1 軽量Sweepワークフロー実装（routerから呼ばれる） |
 | `.claude/workflows/aidd-phase2.js` | Phase 3-5 ワークフロー実装（args・完了後手順） |
 | `.claude/workflows/aidd-1-1-deep-task.js` | 深掘り調査ワークフロー（オンデマンド） |
 | `docs/ai-config-map.md` | このファイル（全体マップ） |

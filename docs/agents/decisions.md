@@ -71,6 +71,22 @@ migrationファイルだけがスキーマの唯一のソースオブトゥル�
 直接実行を禁止し、既存の未記録スキーマ変更を見つけた場合は必ずキャッチアップmigrationとして
 記録するルールにした。
 
+## なぜaidd-phase1-router.jsでargsをJSON.parseする防御コードを入れたか
+
+`.claude/workflows/aidd-phase1-router.js` は、`typeof args === 'string'` の場合に
+`JSON.parse(args)` してから使う防御コードを持つ。これはスクリプト側のバグ対応ではなく、
+**Workflowツール自体の未解決の不具合への回避策**。
+
+実測では、Workflowツールに `args: {"taskDescription": "..."}` をオブジェクトとして渡しても、
+スクリプト内で受け取った `args` が `typeof args === 'string'` になる（JSON文字列化された状態で
+渡ってくる）ことを診断用スクリプトで確認した。ツールの仕様上は「argsをverbatim（そのまま）で
+渡す」とされているが、実際の挙動は仕様と食い違っている。
+
+ツール本体の不具合は自分たちの管理外のため直接修正できない。将来Workflowツール側の実装が
+修正された場合、この防御コードは不要になる可能性がある。ただし後方互換のため、修正確認が
+取れるまでは外さないこと（`typeof args === 'string'` のガードがあるため、objectで正しく届く
+ようになっても副作用なく動作し続ける）。
+
 ## なぜE2E/BSGはテスト専用Supabaseのみに接続する設計にしたか
 
 `NODE_ENV=test` では `.env.local`（本番接続情報）を読み込ませず、`e2e/env-guard.ts` で
