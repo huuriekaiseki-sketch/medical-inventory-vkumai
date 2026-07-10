@@ -22,7 +22,7 @@ Phase 5 検証(並列) →
 **SDD・AIDD・手動実装など、フロー種別を問わず**以下のタイミングで必ず Bash 実行する（Stop hook が自動でレポート生成）：
 
 ```bash
-# 1. AIDDフロー開始時（aidd-phase1.js を呼ぶ前）
+# 1. AIDDフロー開始時（aidd-phase1-router.js を呼ぶ前）
 echo '' | ~/write_aidd_stats.sh start "<feature>" "$(pwd)"
 
 # 2. phase1 開始直前
