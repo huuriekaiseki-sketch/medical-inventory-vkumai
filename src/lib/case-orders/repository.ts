@@ -77,14 +77,12 @@ export async function createCaseOrder(db: SupabaseClient, facilityId: string, in
     p_patient_initials: input.patientInitials,
     p_gender: input.gender,
     p_doctor_name: input.doctorName,
-    p_items: JSON.stringify(
-      input.items.map(item => ({
-        jan: item.jan,
-        lot: item.lot ?? null,
-        ubd: item.ubd ?? null,
-        quantity: item.quantity,
-      }))
-    ),
+    p_items: input.items.map(item => ({
+      jan: item.jan,
+      lot: item.lot ?? null,
+      ubd: item.ubd ?? null,
+      quantity: item.quantity,
+    })),
   })
   if (error) throw new Error(error.message)
 

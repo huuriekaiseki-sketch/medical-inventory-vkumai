@@ -36,8 +36,8 @@ describe('createConsumableOrder', () => {
       p_facility_id: 'f-1',
     }))
     const args = rpc.mock.calls[0][1] as Record<string, unknown>
-    expect(typeof args.p_items).toBe('string')
-    expect(JSON.parse(args.p_items as string)).toEqual([
+    // p_items はJSONB引数のため配列のまま渡す（JSON.stringifyしない。issue #287）
+    expect(args.p_items).toEqual([
       { consumable_id: 'c-1', quantity: 3 },
     ])
   })
