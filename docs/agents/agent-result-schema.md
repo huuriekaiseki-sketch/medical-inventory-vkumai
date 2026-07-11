@@ -58,3 +58,16 @@ AgentResult = {
 - 何を見つけたか（セッションレポートの件数指標用）→ `detail`の内容（例: `status === 'pass' && detail !== '指摘なし'`）
 
 両者を必要に応じて組み合わせて使う（例: `aidd-phase1.js`の`findingCount`は両方を参照する）。
+
+## 品質ゲート（`aidd-phase2.js`）
+
+対応issue: #42
+
+`aidd-phase2.js`は各フェーズ完了直後に、そのフェーズのエージェント結果に`status === 'fail'`または`status === 'blocked'`が1件でもあれば後続フェーズへ進まず中断する。
+`blocked`は「試みたが不完全」な`fail`よりも情報量が少なく、そもそも着手できていない状態のため、`fail`と同様に後続へは進めない（進めると存在しない前提のまま無駄な実装・レビューが走る）。
+中断時は`{ blocked: true, blockedAt: '<フェーズ名>', ... }`を返し、`stats.blocked`で観測できる。
+
+判定ロジック（`results.some(r => r?.status === 'fail' || r?.status === 'blocked')`）の正本は [`.claude/workflows/lib/quality-gate.js`](../../.claude/workflows/lib/quality-gate.js)（`shouldBlock`）にあり、vitestで単体テストする。
+`aidd-phase2.js`はWorkflow DSLのためrequireできず、同一ロジックをインラインで複製している（3箇所: Contract + DB後・Implement後・Integrate後）。
+
+`implSuccessCount`は`status === 'pass'`の件数、`implBlockedCount`は`status === 'blocked'`の件数を集計する。

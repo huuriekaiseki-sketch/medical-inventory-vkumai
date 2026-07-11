@@ -71,6 +71,20 @@ const [contractResult, dbResult] = await parallel([
 
 log('Contract + DB完了')
 
+// 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック
+// （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
+// blockedもfail同様に後続へ進めない（着手不能な前提のまま実装を続けさせない）
+if ([contractResult, dbResult].some(r => r?.status === 'fail' || r?.status === 'blocked')) {
+  log('品質ゲート: Contract + DBでfail/blockedを検知したため中断（Implement以降へは進みません）')
+  return {
+    contractResult,
+    dbResult,
+    blocked: true,
+    blockedAt: 'Contract + DB',
+    stats: { phase: 'phase2', blocked: true, blockedAt: 'Contract + DB' },
+  }
+}
+
 // ─── Phase B: data / api / ui（並列）─────────────────────────────────
 // 3グループは contract-writer の出力（src/types/）を契約として参照する
 // api-impl は SPEC.md Part 2 記載の関数シグネチャに従って呼び出すだけ（data-impl の完了を待たない）
@@ -100,6 +114,21 @@ const [dataResult, apiResult, uiResult] = await parallel([
 
 log('Implement完了')
 
+// 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック
+if ([dataResult, apiResult, uiResult].some(r => r?.status === 'fail' || r?.status === 'blocked')) {
+  log('品質ゲート: Implementでfail/blockedを検知したため中断（統合ゲートへは進みません）')
+  return {
+    contractResult,
+    dbResult,
+    dataResult,
+    apiResult,
+    uiResult,
+    blocked: true,
+    blockedAt: 'Implement',
+    stats: { phase: 'phase2', blocked: true, blockedAt: 'Implement' },
+  }
+}
+
 // ─── Phase C: 統合ゲート ──────────────────────────────────────────────
 phase('Integrate')
 
@@ -113,6 +142,22 @@ const integrationResult = await agent(
 )
 
 log('統合完了')
+
+// 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック
+if ([integrationResult].some(r => r?.status === 'fail' || r?.status === 'blocked')) {
+  log('品質ゲート: Integrateでfail/blockedを検知したため中断（Reviewへは進みません）')
+  return {
+    contractResult,
+    dbResult,
+    dataResult,
+    apiResult,
+    uiResult,
+    integration: integrationResult,
+    blocked: true,
+    blockedAt: 'Integrate',
+    stats: { phase: 'phase2', blocked: true, blockedAt: 'Integrate' },
+  }
+}
 
 // ─── Phase D: 4観点並列レビュー ───────────────────────────────────────
 phase('Review')
