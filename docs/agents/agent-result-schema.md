@@ -8,6 +8,10 @@ AIDDワークフロー（`.claude/workflows/`）の`agent()`呼び出しが、�
 AgentResult = {
   status: 'pass' | 'fail' | 'blocked',
   detail: string   // 人間可読の要約(自由記述文字列)
+  findings?: Array<{             // status==='fail'時の重大度分類（任意）
+    severity: 'critical' | 'important' | 'minor',
+    description: string,
+  }>
 }
 ```
 
@@ -15,6 +19,9 @@ AgentResult = {
 - `fail`: 完遂を試みたが、成果物が要件を満たさない
 - `blocked`: 前提条件が欠けており着手・完遂できなかった
 - 呼び出し種別によっては`fail`が存在しない設計のものがある（下記参照）
+- `findings`: `status === 'fail'`のときに指摘ごとの重大度を明記する（`aidd-phase2.js`のAGENT_RESULT_SCHEMA対象呼び出しのみ）。
+  Sweep/Draft/Adversarial Verify（`aidd-1-1-deep-task.js`のFINDING_SCHEMA）と同じ`critical`/`important`/`minor`を使う。
+  省略した場合、または`severity`が不正・欠損の指摘が1件でもある場合はcritical相当としてブロック側に倒す（deny-by-default、下記参照）。
 
 ## 判定基準（agent呼び出しごと）
 
@@ -61,13 +68,15 @@ AgentResult = {
 
 ## 品質ゲート（`aidd-phase2.js`）
 
-対応issue: #42
+対応issue: #42（deny-by-default化）、AIDD品質ゲートへの重大度分類導入（本セクション）
 
-`aidd-phase2.js`は各フェーズ完了直後に、そのフェーズのエージェント結果に`status === 'fail'`または`status === 'blocked'`が1件でもあれば後続フェーズへ進まず中断する。
-`blocked`は「試みたが不完全」な`fail`よりも情報量が少なく、そもそも着手できていない状態のため、`fail`と同様に後続へは進めない（進めると存在しない前提のまま無駄な実装・レビューが走る）。
-中断時は`{ blocked: true, blockedAt: '<フェーズ名>', ... }`を返し、`stats.blocked`で観測できる。
+`aidd-phase2.js`は各フェーズ完了直後に、そのフェーズのエージェント結果を品質ゲートで判定する。
+`status === 'blocked'`、または`status`がnull/未返却/未知の値は、情報量が無い・着手すらできていない状態のため常にブロックする。
+`status === 'fail'`は、`findings`が省略されている場合、または`findings`に`critical`/`important`の指摘が1件でもある場合はブロックする。
+`findings`が明記されていて全件`minor`の場合のみブロックせず後続へ進む（DB/ロジックのクリティカルな問題は厳しく止め、UIの軽微な指摘だけで差し戻しループを回さないための線引き）。
+中断時は`{ blocked: true, blockedAt: '<フェーズ名>', ... }`を返し、`stats.blocked`で観測できる。minor指摘のみで通過した場合はログに記録される（`logMinorOnlyPassThrough`）。
 
-判定ロジック（`results.some(r => r?.status === 'fail' || r?.status === 'blocked')`）の正本は [`.claude/workflows/lib/quality-gate.js`](../../.claude/workflows/lib/quality-gate.js)（`shouldBlock`）にあり、vitestで単体テストする。
-`aidd-phase2.js`はWorkflow DSLのためrequireできず、同一ロジックをインラインで複製している（3箇所: Contract + DB後・Implement後・Integrate後）。
+判定ロジックの正本は [`.claude/workflows/lib/severity.js`](../../.claude/workflows/lib/severity.js)（`isMinorOnlyFailure`）と、それを使う [`quality-gate.js`](../../.claude/workflows/lib/quality-gate.js)（`shouldBlock`、Contract + DB / Implement / Integrateゲート）・[`review-retry.js`](../../.claude/workflows/lib/review-retry.js)（`classifyReviewRound`、Reviewフェーズの差し戻し判定）・[`phase2-done.js`](../../.claude/workflows/lib/phase2-done.js)（`computeDone`、最終DONE判定）にあり、vitestで単体テストする。
+`aidd-phase2.js`はWorkflow DSLのためrequireできず、同一ロジックをインラインで複製している（`shouldBlock`呼び出し3箇所: Contract + DB後・Implement後・Integrate後、`classifyReviewRound`・`computeDone`相当の`allPass`は各1箇所）。
 
-`implSuccessCount`は`status === 'pass'`の件数、`implBlockedCount`は`status === 'blocked'`の件数を集計する。
+`implSuccessCount`は`status === 'pass'`の件数、`implBlockedCount`は`status === 'blocked'`の件数を集計する（`findings`全件minorの`fail`は現状この2カウントに含まれない）。

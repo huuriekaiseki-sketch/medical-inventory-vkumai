@@ -50,4 +50,38 @@ describe('classifyReviewRound', () => {
     expect(finalResult.blocked).toBe(true)
     expect(finalResult.failingDimensions).toHaveLength(1)
   })
+
+  it('failだがfindings全件がminorなら差し戻し対象外でdone=true, blocked=false（UIの軽微な指摘だけで修正ループを回さない）', () => {
+    const result = classifyReviewRound(
+      [
+        { status: 'fail', findings: [{ severity: 'minor', description: 'ボタンの余白が気になる' }] },
+        { status: 'pass', detail: '指摘なし' },
+      ],
+      DIMENSIONS, 1, 3
+    )
+    expect(result.done).toBe(true)
+    expect(result.blocked).toBe(false)
+    expect(result.failingDimensions).toHaveLength(0)
+  })
+
+  it('failでfindingsにimportant/criticalが混ざれば従来通り差し戻し対象になる', () => {
+    const result = classifyReviewRound(
+      [
+        { status: 'fail', findings: [{ severity: 'critical', description: 'RLSポリシー漏れ' }] },
+        { status: 'pass', detail: '指摘なし' },
+      ],
+      DIMENSIONS, 1, 3
+    )
+    expect(result.done).toBe(false)
+    expect(result.failingDimensions).toHaveLength(1)
+  })
+
+  it('failでfindingsを省略した場合は従来通り差し戻し対象になる（deny-by-default）', () => {
+    const result = classifyReviewRound(
+      [{ status: 'fail', detail: '指摘あり（findings無し）' }, { status: 'pass', detail: '指摘なし' }],
+      DIMENSIONS, 1, 3
+    )
+    expect(result.done).toBe(false)
+    expect(result.failingDimensions).toHaveLength(1)
+  })
 })
