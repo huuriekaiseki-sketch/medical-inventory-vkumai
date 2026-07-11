@@ -20,32 +20,52 @@ export const meta = {
 
 const taskDescription = args?.taskDescription ?? '現在のコードベース全体の調査'
 
+// docs/agents/agent-result-schema.md 参照。調査系エージェントに「失敗」概念は無いため pass/blocked の2値
+const AGENT_RESULT_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['pass', 'blocked'] },
+    detail: { type: 'string' },
+  },
+  required: ['status', 'detail'],
+}
+
+const STATUS_GUIDE = `
+
+## 出力形式
+status と detail を返すこと。
+- status: "pass"=調査を最後まで実行できた(指摘の有無は問わない) / "blocked"=権限不足・対象コード不在等で調査自体が実行できなかった
+- detail: 調査結果の本文(指摘が無ければ「指摘なし」と書く)`
+
 phase('Sweep')
 log('4軸並列Sweep 開始（1ラウンド）')
 
-const sweepPrompt = `タスク: ${taskDescription}`
+const sweepPrompt = `タスク: ${taskDescription}${STATUS_GUIDE}`
 
 const [uiResult, dataResult, dbResult, typesResult] = await parallel([
-  () => agent(sweepPrompt, { label: 'sweep-ui',    agentType: 'sweep-ui',    phase: 'Sweep' }),
-  () => agent(sweepPrompt, { label: 'sweep-data',  agentType: 'sweep-data',  phase: 'Sweep' }),
-  () => agent(sweepPrompt, { label: 'sweep-db',    agentType: 'sweep-db',    phase: 'Sweep' }),
-  () => agent(sweepPrompt, { label: 'sweep-types', agentType: 'sweep-types', phase: 'Sweep' }),
+  () => agent(sweepPrompt, { label: 'sweep-ui',    agentType: 'sweep-ui',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA }),
+  () => agent(sweepPrompt, { label: 'sweep-data',  agentType: 'sweep-data',  phase: 'Sweep', schema: AGENT_RESULT_SCHEMA }),
+  () => agent(sweepPrompt, { label: 'sweep-db',    agentType: 'sweep-db',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA }),
+  () => agent(sweepPrompt, { label: 'sweep-types', agentType: 'sweep-types', phase: 'Sweep', schema: AGENT_RESULT_SCHEMA }),
 ])
 
 log('Sweep 完了')
 
+const results = [uiResult, dataResult, dbResult, typesResult]
+
 return {
   findings: {
-    ui:    uiResult    ?? '指摘なし',
-    data:  dataResult  ?? '指摘なし',
-    db:    dbResult    ?? '指摘なし',
-    types: typesResult ?? '指摘なし',
+    ui:    uiResult?.detail    ?? '指摘なし',
+    data:  dataResult?.detail  ?? '指摘なし',
+    db:    dbResult?.detail    ?? '指摘なし',
+    types: typesResult?.detail ?? '指摘なし',
   },
   stats: {
     phase: 'phase1',
     agents: 4,
     rounds: 1,
-    findingCount: [uiResult, dataResult, dbResult, typesResult]
-      .filter(r => r && r !== '指摘なし').length,
+    // findingCount: 完遂できた調査のうち、実際に指摘が見つかった本数(status/detailの2軸判定。docs/agents/agent-result-schema.md参照)
+    findingCount: results.filter(r => r?.status === 'pass' && r?.detail !== '指摘なし').length,
+    blockedCount: results.filter(r => r?.status === 'blocked').length,
   },
 }
