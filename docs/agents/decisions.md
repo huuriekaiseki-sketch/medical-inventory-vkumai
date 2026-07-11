@@ -95,3 +95,20 @@ migrationファイルだけがスキーマの唯一のソースオブトゥル�
 E2Eテストやシード投入は本番相当の操作（データ作成・削除・RLSトリガー実行）を伴うため、
 設定ミス1つで本番DBに書き込まれるリスクがある。環境変数の設定ミスだけに頼らず、実行時に
 接続先を機械的に検証することで、ヒューマンエラーが起きても本番事故に直結しないようにした。
+
+## なぜスキーマドリフト検知を自前cronではなくSupabase GitHub Integrationで始めたか
+
+`supabase db diff --linked` を独自のGitHub Actions cronで定期実行する案（issue #30原案）も
+検討したが、これは本番の `SUPABASE_ACCESS_TOKEN` とDBパスワードをGitHub Secretsに追加する
+必要があり、e2e.ymlが徹底している「CIに本番Supabase接続情報を一切渡さない」方針
+（このファイルの「なぜE2E/BSGはテスト専用Supabaseのみに接続する設計にしたか」）と正面から
+矛盾する。
+
+Supabase公式のGitHub Integration（Dashboard側でOAuth認可するだけで、GitHub Secretsへの
+手動登録が不要）を先に有効化する方針にした。これはPR/ブランチトリガーで動く「required
+check」であり、migrationとリモートDBの差分チェックをシークレット管理ゼロで機械的に担保できる。
+
+ただし弱点として、PRを介さない変更（SQL Editor等での直接操作、rls_auto_enableの実際の事故
+パターン）はPRが発生するまで検知が遅延する。この「PRの外側の変更」をどう定期検知するかは
+未解決のまま残しており、シークレットをGitHub側に置かない代替案（Supabase Edge Functionの
+スケジュール実行など）を含めて別issueで検討する前提にしている。
