@@ -14,11 +14,19 @@ describe('shouldBlock', () => {
     expect(shouldBlock([{ status: 'pass' }, { status: 'blocked' }])).toBe(true)
   })
 
-  it('nullish要素があってもエラーにならない', () => {
-    expect(shouldBlock([null, undefined, { status: 'pass' }])).toBe(false)
+  it('nullish要素があればtrue（deny-by-default: passと確認できないものは止める）', () => {
+    expect(shouldBlock([null, undefined, { status: 'pass' }])).toBe(true)
   })
 
-  it('空配列ならfalse', () => {
+  it('未知のstatus値があればtrue（deny-by-default）', () => {
+    expect(shouldBlock([{ status: 'weird' }, { status: 'pass' }])).toBe(true)
+  })
+
+  it('全結果がpassの場合のみfalse', () => {
+    expect(shouldBlock([{ status: 'pass' }, { status: 'pass' }])).toBe(false)
+  })
+
+  it('空配列ならfalse（判定対象自体が無い）', () => {
     expect(shouldBlock([])).toBe(false)
   })
 })

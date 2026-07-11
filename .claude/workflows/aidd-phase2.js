@@ -73,8 +73,8 @@ log('Contract + DB完了')
 
 // 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック
 // （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
-// blockedもfail同様に後続へ進めない（着手不能な前提のまま実装を続けさせない）
-if ([contractResult, dbResult].some(r => r?.status === 'fail' || r?.status === 'blocked')) {
+// deny-by-default: 全員がpassでない限り止める（fail/blockedはもちろんnull・未知の値も止める。issue #289）
+if (![contractResult, dbResult].every(r => r?.status === 'pass')) {
   log('品質ゲート: Contract + DBでfail/blockedを検知したため中断（Implement以降へは進みません）')
   return {
     contractResult,
@@ -114,8 +114,8 @@ const [dataResult, apiResult, uiResult] = await parallel([
 
 log('Implement完了')
 
-// 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック
-if ([dataResult, apiResult, uiResult].some(r => r?.status === 'fail' || r?.status === 'blocked')) {
+// 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック（deny-by-default）
+if (![dataResult, apiResult, uiResult].every(r => r?.status === 'pass')) {
   log('品質ゲート: Implementでfail/blockedを検知したため中断（統合ゲートへは進みません）')
   return {
     contractResult,
@@ -143,8 +143,8 @@ const integrationResult = await agent(
 
 log('統合完了')
 
-// 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック
-if ([integrationResult].some(r => r?.status === 'fail' || r?.status === 'blocked')) {
+// 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック（deny-by-default）
+if (![integrationResult].every(r => r?.status === 'pass')) {
   log('品質ゲート: Integrateでfail/blockedを検知したため中断（Reviewへは進みません）')
   return {
     contractResult,
