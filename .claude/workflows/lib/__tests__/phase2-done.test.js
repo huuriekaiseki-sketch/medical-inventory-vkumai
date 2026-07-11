@@ -42,4 +42,21 @@ describe('computeDone', () => {
     expect(computeDone([], pass, [pass], pass)).toBe(false)
     expect(computeDone(implAllPass, pass, [], pass)).toBe(false)
   })
+
+  it('implResultsにfindings全件minorのfailが混ざっていてもtrue（軽微な指摘のみは完了扱い）', () => {
+    const minorOnlyFail = { status: 'fail', findings: [{ severity: 'minor', description: '軽微' }] }
+    const implWithMinorFail = [pass, minorOnlyFail, pass, pass, pass]
+    expect(computeDone(implWithMinorFail, pass, [pass, pass, pass, pass], pass)).toBe(true)
+  })
+
+  it('reviewResultsにfindings全件minorのfailが混ざっていてもtrue（軽微な指摘のみは完了扱い）', () => {
+    const minorOnlyFail = { status: 'fail', findings: [{ severity: 'minor', description: '軽微' }] }
+    expect(computeDone(implAllPass, pass, [pass, minorOnlyFail, pass, pass], pass)).toBe(true)
+  })
+
+  it('implResultsにfindingsでimportantが混ざるfailがあればfalse（従来通りブロック）', () => {
+    const importantFail = { status: 'fail', findings: [{ severity: 'important', description: '重要' }] }
+    const implWithImportantFail = [pass, importantFail, pass, pass, pass]
+    expect(computeDone(implWithImportantFail, pass, [pass, pass, pass, pass], pass)).toBe(false)
+  })
 })

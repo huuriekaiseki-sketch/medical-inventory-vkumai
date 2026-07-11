@@ -28,14 +28,48 @@ export const meta = {
 
 const specPath = args?.specPath ?? 'SPEC.md'
 
-// docs/agents/agent-result-schema.md 参照。実装/統合/レビュー系はpass/fail/blockedの3値
+// docs/agents/agent-result-schema.md 参照。実装/統合/レビュー系はpass/fail/blockedの3値。
+// findingsはfail時の重大度分類（severity.js参照）。Sweep/Draft/Adversarial Verify
+// （aidd-1-1-deep-task.js FINDING_SCHEMA）と同じcritical/important/minorを使い、
+// 実装後ゲート（Contract+DB/Implement/Integrate/Review）にも重大度の概念を展開する。
 const AGENT_RESULT_SCHEMA = {
   type: 'object',
   properties: {
     status: { type: 'string', enum: ['pass', 'fail', 'blocked'] },
     detail: { type: 'string' },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          severity: { type: 'string', enum: ['critical', 'important', 'minor'] },
+          description: { type: 'string' },
+        },
+        required: ['severity', 'description'],
+      },
+    },
   },
   required: ['status', 'detail'],
+}
+
+// 重大度判定（.claude/workflows/lib/severity.js の isMinorOnlyFailure と同一発想）。
+// Workflow DSLはrequire不可のためインライン複製している。ロジックの正本・テストはlib側。
+function isMinorOnlyFailure(result) {
+  if (result?.status !== 'fail') return false
+  if (!Array.isArray(result.findings) || result.findings.length === 0) return false
+  return result.findings.every(f => f?.severity === 'minor')
+}
+
+function shouldBlock(results) {
+  if (results.length === 0) return false
+  return !results.every(r => r?.status === 'pass' || isMinorOnlyFailure(r))
+}
+
+function logMinorOnlyPassThrough(label, results) {
+  const minorOnly = results.filter(isMinorOnlyFailure)
+  if (minorOnly.length > 0) {
+    log(`品質ゲート: ${label}でminor指摘のみのfailが${minorOnly.length}件あったが通過扱い（critical/important指摘なし）`)
+  }
 }
 
 const guide = (pass, fail, blocked) => `
@@ -44,7 +78,12 @@ const guide = (pass, fail, blocked) => `
 status と detail を返すこと。
 - pass: ${pass}
 - fail: ${fail}
-- blocked: ${blocked}`
+- blocked: ${blocked}
+
+failの場合はfindings配列（{ severity: critical/important/minor, description }）で指摘ごとに
+重大度を明記すること。findings全件がminorならこのゲートは通過扱いになる。
+findingsを省略した場合、またはcritical/important指摘が1件でもあれば差し戻し対象になる
+（severity不明・欠損はcritical扱い。fail-open防止）。`
 
 // ─── Phase 0: Manifest Check ─────────────────────────────────────────
 // issue #44/#294: docs/agents/run-manifest.md にPhase 2開始時のspecHash突合が
@@ -114,8 +153,9 @@ log('Contract + DB完了')
 
 // 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック
 // （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
-// deny-by-default: 全員がpassでない限り止める（fail/blockedはもちろんnull・未知の値も止める。issue #289）
-if (![contractResult, dbResult].every(r => r?.status === 'pass')) {
+// deny-by-default: 全員がpass（またはfindings全件minorのfail）でない限り止める
+// （fail/blockedはもちろんnull・未知の値も止める。issue #289）
+if (shouldBlock([contractResult, dbResult])) {
   log('品質ゲート: Contract + DBでfail/blockedを検知したため中断（Implement以降へは進みません）')
   return {
     done: false,
@@ -126,6 +166,7 @@ if (![contractResult, dbResult].every(r => r?.status === 'pass')) {
     stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Contract + DB' },
   }
 }
+logMinorOnlyPassThrough('Contract + DB', [contractResult, dbResult])
 
 // ─── Phase B: data / api / ui（並列）─────────────────────────────────
 // 3グループは contract-writer の出力（src/types/）を契約として参照する
@@ -157,7 +198,7 @@ const [dataResult, apiResult, uiResult] = await parallel([
 log('Implement完了')
 
 // 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック（deny-by-default）
-if (![dataResult, apiResult, uiResult].every(r => r?.status === 'pass')) {
+if (shouldBlock([dataResult, apiResult, uiResult])) {
   log('品質ゲート: Implementでfail/blockedを検知したため中断（統合ゲートへは進みません）')
   return {
     done: false,
@@ -171,6 +212,7 @@ if (![dataResult, apiResult, uiResult].every(r => r?.status === 'pass')) {
     stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Implement' },
   }
 }
+logMinorOnlyPassThrough('Implement', [dataResult, apiResult, uiResult])
 
 // ─── Phase C: 統合ゲート ──────────────────────────────────────────────
 phase('Integrate')
@@ -187,7 +229,7 @@ const integrationResult = await agent(
 log('統合完了')
 
 // 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック（deny-by-default）
-if (![integrationResult].every(r => r?.status === 'pass')) {
+if (shouldBlock([integrationResult])) {
   log('品質ゲート: Integrateでfail/blockedを検知したため中断（Reviewへは進みません）')
   return {
     done: false,
@@ -202,6 +244,7 @@ if (![integrationResult].every(r => r?.status === 'pass')) {
     stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Integrate' },
   }
 }
+logMinorOnlyPassThrough('Integrate', [integrationResult])
 
 // ─── Phase D: 4観点並列レビュー（fail時はImplementerへ差し戻す修正ループ、最大3回）──
 // issue #45/#292: 従来はReviewのstatus(fail)を一切見ずdetailのみ使い、指摘があっても
@@ -210,6 +253,8 @@ if (![integrationResult].every(r => r?.status === 'pass')) {
 // 残る場合はblockedとして人間（停止②の構造化レビュー）に引き渡す。
 // 判定ロジック: .claude/workflows/lib/review-retry.js の classifyReviewRound と同一
 // （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
+// 重大度分類: findings全件がminorの指摘だけでは差し戻さない（UIの軽微な指摘で修正ループを
+// 回さない。DB/ロジックのcritical/important指摘は従来通り差し戻し対象）
 phase('Review')
 
 const REVIEW_DIMENSIONS = [
@@ -228,7 +273,7 @@ const reviewGuide = guide(
 function classifyReviewRound(results, dimensions, attempt, maxRetries) {
   const failingDimensions = dimensions
     .map((dim, i) => ({ dim, result: results[i] }))
-    .filter(({ result }) => result?.status === 'fail')
+    .filter(({ result }) => result?.status === 'fail' && !isMinorOnlyFailure(result))
   if (failingDimensions.length === 0) return { done: true, blocked: false, failingDimensions: [] }
   if (attempt > maxRetries) return { done: true, blocked: true, failingDimensions }
   return { done: false, blocked: false, failingDimensions }
@@ -254,6 +299,7 @@ while (true) {
 
   if (done && !blocked) {
     log(`Review完了: ラウンド${reviewAttempt}で全観点pass（指摘なし、またはblockedのみ）`)
+    logMinorOnlyPassThrough('Review', reviewResults)
     break
   }
 
@@ -305,11 +351,11 @@ const implResults = [contractResult, dbResult, dataResult, apiResult, uiResult]
 // DONE判定: .claude/workflows/lib/phase2-done.js の computeDone と同一ロジック
 // （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
 // issue #46: 修正ループ（Review差し戻し等）を実装しても、最終的な完了条件(DONE)が
-// 明示されていないと「いつ止まっていいか」が曖昧になる。DONE = 全実装がpass AND
-// 統合ゲート(test/lint/tsc)がpass AND 全観点Reviewがpass AND specHashが一致、の
-// すべてを満たした場合のみtrueにする。
+// 明示されていないと「いつ止まっていいか」が曖昧になる。DONE = 全実装がpass（またはfindings
+// 全件minorのfail） AND 統合ゲート(test/lint/tsc)がpass AND 全観点Reviewがpass AND
+// specHashが一致、のすべてを満たした場合のみtrueにする。
 function allPass(results) {
-  return results.length > 0 && results.every(r => r?.status === 'pass')
+  return results.length > 0 && results.every(r => r?.status === 'pass' || isMinorOnlyFailure(r))
 }
 const done =
   allPass(implResults) &&

@@ -29,4 +29,27 @@ describe('shouldBlock', () => {
   it('空配列ならfalse（判定対象自体が無い）', () => {
     expect(shouldBlock([])).toBe(false)
   })
+
+  it('failだがfindings全件がminorならfalse（軽微な指摘のみでは差し戻さない）', () => {
+    expect(shouldBlock([
+      { status: 'pass' },
+      { status: 'fail', findings: [{ severity: 'minor', description: 'UIの些細な指摘' }] },
+    ])).toBe(false)
+  })
+
+  it('failでfindingsにimportantが混ざればtrue（従来通りブロック）', () => {
+    expect(shouldBlock([
+      { status: 'fail', findings: [{ severity: 'minor', description: 'a' }, { severity: 'important', description: 'b' }] },
+    ])).toBe(true)
+  })
+
+  it('failでfindingsにcriticalが混ざればtrue（従来通りブロック）', () => {
+    expect(shouldBlock([
+      { status: 'fail', findings: [{ severity: 'critical', description: 'DBスキーマ不整合' }] },
+    ])).toBe(true)
+  })
+
+  it('failでfindingsを省略した場合はtrue（deny-by-default: 重大度不明はブロック側）', () => {
+    expect(shouldBlock([{ status: 'fail', detail: 'findings無し' }])).toBe(true)
+  })
 })
