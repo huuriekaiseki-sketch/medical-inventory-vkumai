@@ -338,11 +338,41 @@ const proposals = await parallel(
 const validProposals = proposals.filter(Boolean)
 
 // 設計判断が実質同じ提案しかない場合は採点パネル（3案 x 3観点 = 9エージェント）を省略する。
-// 正規化したkeyDecisionsの重複率が高い（=判断が割れていない）ほど採点の価値が低いため。
-const normalizeDecision = (d) => d.trim().toLowerCase()
-const allDecisions = validProposals.flatMap(p => p.keyDecisions.map(normalizeDecision))
-const uniqueDecisions = new Set(allDecisions)
-const divergenceRatio = allDecisions.length > 0 ? uniqueDecisions.size / allDecisions.length : 0
+// 品質ゲート: .claude/workflows/lib/judge-panel.js の computeDivergence と同一ロジック
+// （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
+// 旧実装は正規化文字列の完全一致でしか重複を判定できず、別々のLLM提案が表現違いなだけでも
+// 常に「分岐あり」と判定され、不要な採点パネルが起動していた（issue #295）。
+// 文字bigramのJaccard類似度に基づくクラスタリングに変更する。
+function toBigrams(text) {
+  const cleaned = String(text).replace(/\s+/g, '')
+  const grams = new Set()
+  if (cleaned.length < 2) {
+    if (cleaned.length > 0) grams.add(cleaned)
+    return grams
+  }
+  for (let i = 0; i <= cleaned.length - 2; i++) {
+    grams.add(cleaned.slice(i, i + 2))
+  }
+  return grams
+}
+function decisionSimilarity(a, b) {
+  const setA = toBigrams(a)
+  const setB = toBigrams(b)
+  if (setA.size === 0 && setB.size === 0) return 1
+  let intersection = 0
+  for (const gram of setA) {
+    if (setB.has(gram)) intersection++
+  }
+  const union = setA.size + setB.size - intersection
+  return union === 0 ? 0 : intersection / union
+}
+const allDecisions = validProposals.flatMap(p => p.keyDecisions)
+const clusterRepresentatives = []
+for (const decision of allDecisions) {
+  const isDuplicate = clusterRepresentatives.some(rep => decisionSimilarity(rep, decision) >= 0.5)
+  if (!isDuplicate) clusterRepresentatives.push(decision)
+}
+const divergenceRatio = allDecisions.length > 0 ? clusterRepresentatives.length / allDecisions.length : 0
 const hasDivergence = validProposals.length > 1 && divergenceRatio >= 0.5
 
 let validScored
