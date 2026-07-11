@@ -55,12 +55,10 @@ export async function createConsumableOrder(db: SupabaseClient, facilityId: stri
   // 単一トランザクションで完結させるため RPC を呼ぶ（ヘッダー+明細を原子的に INSERT）
   const { data, error } = await db.rpc('create_consumable_order_atomic', {
     p_facility_id: facilityId,
-    p_items: JSON.stringify(
-      input.items.map(item => ({
-        consumable_id: item.consumableId,
-        quantity: item.quantity,
-      }))
-    ),
+    p_items: input.items.map(item => ({
+      consumable_id: item.consumableId,
+      quantity: item.quantity,
+    })),
   })
   if (error) throw new Error(error.message)
 
