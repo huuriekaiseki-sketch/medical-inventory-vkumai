@@ -27,6 +27,24 @@ export const meta = {
 
 const specPath = args?.specPath ?? 'SPEC.md'
 
+// docs/agents/agent-result-schema.md 参照。実装/統合/レビュー系はpass/fail/blockedの3値
+const AGENT_RESULT_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['pass', 'fail', 'blocked'] },
+    detail: { type: 'string' },
+  },
+  required: ['status', 'detail'],
+}
+
+const guide = (pass, fail, blocked) => `
+
+## 出力形式
+status と detail を返すこと。
+- pass: ${pass}
+- fail: ${fail}
+- blocked: ${blocked}`
+
 // ─── Phase A: Contract Write + DB（並列）─────────────────────────────
 // contract-writer: src/types/ の型定義を確定（implementerの「契約」）
 // db-impl: supabase/migrations/ を実装（SPEC.mdから直接、contract-writerと並行）
@@ -34,12 +52,20 @@ phase('Contract + DB')
 
 const [contractResult, dbResult] = await parallel([
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに src/types/ の型定義・APIインターフェース型を確定させてください。`,
-    { label: 'contract-writer', phase: 'Contract + DB', agentType: 'contract-writer' }
+    `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに src/types/ の型定義・APIインターフェース型を確定させてください。${guide(
+      '型定義・APIインターフェース型を確定できた',
+      '型定義を試みたが不完全・矛盾がある',
+      'SPEC.mdが存在しない/読めない'
+    )}`,
+    { label: 'contract-writer', phase: 'Contract + DB', agentType: 'contract-writer', schema: AGENT_RESULT_SCHEMA }
   ),
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに supabase/migrations/ のマイグレーションファイルを実装してください。src/types/ / src/lib/ / src/app/ は触らないこと。`,
-    { label: 'db-impl', phase: 'Contract + DB', agentType: 'implementer' }
+    `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに supabase/migrations/ のマイグレーションファイルを実装してください。src/types/ / src/lib/ / src/app/ は触らないこと。${guide(
+      'マイグレーション実装が完了した',
+      'マイグレーションを試みたがエラー・矛盾がある',
+      'SPEC.mdが存在しない、またはPart2にマイグレーション情報が無く着手不能'
+    )}`,
+    { label: 'db-impl', phase: 'Contract + DB', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   ),
 ])
 
@@ -51,18 +77,24 @@ log('Contract + DB完了')
 // db-impl の完了報告も渡す（スキーマ変更があった場合に追従できるよう）
 phase('Implement')
 
+const implGuide = guide(
+  '担当範囲の実装を完了できた',
+  '実装したが明らかに不完全、またはcontract-writer/db-implの結果と矛盾する',
+  'SPEC.mdが見つからない、またはcontract-writer/db-implの完了報告が空で着手できなかった'
+)
+
 const [dataResult, apiResult, uiResult] = await parallel([
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/lib/supabase/ のデータアクセス関数を実装してください。\n型定義（src/types/）は確定済みです。\n触ってよいファイル: src/lib/supabase/ と src/lib/*/repository.ts。\n\n## contract-writer完了報告\n${contractResult}\n\n## db-impl完了報告\n${dbResult}`,
-    { label: 'data-impl', phase: 'Implement', agentType: 'implementer' }
+    `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/lib/supabase/ のデータアクセス関数を実装してください。\n型定義（src/types/）は確定済みです。\n触ってよいファイル: src/lib/supabase/ と src/lib/*/repository.ts。\n\n## contract-writer完了報告\n${contractResult?.detail}\n\n## db-impl完了報告\n${dbResult?.detail}${implGuide}`,
+    { label: 'data-impl', phase: 'Implement', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   ),
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/app/**/route.ts（/api配下に限らない）を実装してください。\n型定義（src/types/）は確定済みです。\nPart 2 に記載の関数シグネチャに従って src/lib/ の関数を呼ぶこと（実装がまだでも名前・型が確定していれば前進可）。\n触ってよいファイル: src/app/**/route.ts のみ。\n\n## contract-writer完了報告\n${contractResult}\n\n## db-impl完了報告\n${dbResult}`,
-    { label: 'api-impl', phase: 'Implement', agentType: 'implementer' }
+    `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/app/**/route.ts（/api配下に限らない）を実装してください。\n型定義（src/types/）は確定済みです。\nPart 2 に記載の関数シグネチャに従って src/lib/ の関数を呼ぶこと（実装がまだでも名前・型が確定していれば前進可）。\n触ってよいファイル: src/app/**/route.ts のみ。\n\n## contract-writer完了報告\n${contractResult?.detail}\n\n## db-impl完了報告\n${dbResult?.detail}${implGuide}`,
+    { label: 'api-impl', phase: 'Implement', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   ),
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/app/(pages)/ と src/components/ のUIを実装してください。\n型定義（src/types/）は確定済みです。\n触ってよいファイル: src/app/(pages)/ と src/components/ のみ。\n\n## contract-writer完了報告\n${contractResult}`,
-    { label: 'ui-impl', phase: 'Implement', agentType: 'implementer' }
+    `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/app/(pages)/ と src/components/ のUIを実装してください。\n型定義（src/types/）は確定済みです。\n触ってよいファイル: src/app/(pages)/ と src/components/ のみ。\n\n## contract-writer完了報告\n${contractResult?.detail}${implGuide}`,
+    { label: 'ui-impl', phase: 'Implement', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   ),
 ])
 
@@ -72,8 +104,12 @@ log('Implement完了')
 phase('Integrate')
 
 const integrationResult = await agent(
-  `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用ならSupabase CLIで適用する）\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. 全テスト・lint緑を確認して報告\n\n## 各完了報告\n### contract-writer\n${contractResult}\n### db-impl\n${dbResult}\n### data-impl\n${dataResult}\n### api-impl\n${apiResult}\n### ui-impl\n${uiResult}`,
-  { label: 'integrator', phase: 'Integrate', agentType: 'integrator' }
+  `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用ならSupabase CLIで適用する）\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. 全テスト・lint緑を確認して報告\n\n## 各完了報告\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${guide(
+    'npm test・npm run lintが最終的に緑で統合完了',
+    '3回の修正試行後もtest/lintが赤のまま',
+    'SPEC.mdが見つからない、またはいずれかのimplエージェントの完了報告に「仕様書が見つからない」「作業を開始できない」旨の記述がある'
+  )}`,
+  { label: 'integrator', phase: 'Integrate', agentType: 'integrator', schema: AGENT_RESULT_SCHEMA }
 )
 
 log('統合完了')
@@ -88,14 +124,22 @@ const REVIEW_DIMENSIONS = [
   { key: 'type-safety', label: '型安全・データ層の整合' },
 ]
 
+const reviewGuide = guide(
+  'レビューを完了し指摘なし',
+  'レビューを完了し1件以上の指摘がある',
+  'レビュー対象のコード・SPEC.mdが見つからずレビュー自体ができなかった'
+)
+
 const reviewResults = await parallel(
   REVIEW_DIMENSIONS.map(dim => () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\n観点「${dim.label}」の視点のみでレビューしてください。\n指摘のみを箇条書きで返す。修正はしない。問題なければ「指摘なし」と返す。`,
-    { label: `review:${dim.key}`, agentType: 'reviewer', phase: 'Review' }
+    `まず ${specPath} を Read ツールで読んでください。\n観点「${dim.label}」の視点のみでレビューしてください。\n指摘のみを箇条書きで返す。修正はしない。問題なければ「指摘なし」と返す。${reviewGuide}`,
+    { label: `review:${dim.key}`, agentType: 'reviewer', phase: 'Review', schema: AGENT_RESULT_SCHEMA }
   ))
 )
 
 log('検証完了。/structured-review でレビュー結果を確認してください。')
+
+const implResults = [contractResult, dbResult, dataResult, apiResult, uiResult]
 
 return {
   contractResult,
@@ -106,13 +150,14 @@ return {
   integration:  integrationResult,
   reviewFindings: REVIEW_DIMENSIONS.map((dim, i) => ({
     dimension: dim.label,
-    findings:  reviewResults[i] ?? '指摘なし',
+    findings:  reviewResults[i]?.detail ?? '指摘なし',
   })),
   stats: {
     phase: 'phase2',
     implAgents: 5,
     reviewAgents: REVIEW_DIMENSIONS.length,
     totalAgents: 5 + 1 + REVIEW_DIMENSIONS.length,
-    implSuccessCount: [contractResult, dbResult, dataResult, apiResult, uiResult].filter(Boolean).length,
+    implSuccessCount: implResults.filter(r => r?.status === 'pass').length,
+    implBlockedCount: implResults.filter(r => r?.status === 'blocked').length,
   },
 }

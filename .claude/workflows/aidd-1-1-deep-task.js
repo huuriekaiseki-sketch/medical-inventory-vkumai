@@ -25,6 +25,39 @@ export const meta = {
 const taskDescription = args?.taskDescription ?? '現在のコードベース全体の調査'
 const maxRounds = args?.maxRounds ?? 3
 
+// docs/agents/agent-result-schema.md 参照
+const AGENT_RESULT_SCHEMA_PB = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['pass', 'blocked'] },
+    detail: { type: 'string' },
+  },
+  required: ['status', 'detail'],
+}
+
+const AGENT_RESULT_SCHEMA_PFB = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['pass', 'fail', 'blocked'] },
+    detail: { type: 'string' },
+  },
+  required: ['status', 'detail'],
+}
+
+const SWEEP_GUIDE = `
+
+## 出力形式
+status と detail を返すこと。
+- status: "pass"=調査を最後まで実行できた(指摘の有無は問わない) / "blocked"=権限不足・対象コード不在等で調査自体が実行できなかった
+- detail: 調査結果の本文(指摘が無ければ「指摘なし」と書く)`
+
+const CRITIC_GUIDE = `
+
+## 出力形式
+status と detail を返すこと。
+- status: "pass"=批評を完了した(追加調査の要否は問わない) / "blocked"=Sweep結果が空で批評に着手できなかった
+- detail: 批評の本文。追加調査が必要な場合は「追加調査対象:」に続けて記述すること`
+
 // ─── Phase 1-2: Sweep + Completeness Critic ──────────────────────────
 let round = 1
 let dryRounds = 0
@@ -35,46 +68,48 @@ while (dryRounds < 2 && round <= maxRounds) {
   log(`Sweepラウンド ${round}/${maxRounds} 開始`)
   phase('Sweep')
 
-  const sweepPrompt = additionalContext
+  const sweepPrompt = (additionalContext
     ? `タスク: ${taskDescription}\n\n前ラウンドのCritic追加指示:\n${additionalContext}`
-    : `タスク: ${taskDescription}`
+    : `タスク: ${taskDescription}`) + SWEEP_GUIDE
 
   const [uiResult, dataResult, dbResult, typesResult] = await parallel([
-    () => agent(sweepPrompt, { label: `sweep-ui:R${round}`,    agentType: 'sweep-ui',    phase: 'Sweep' }),
-    () => agent(sweepPrompt, { label: `sweep-data:R${round}`,  agentType: 'sweep-data',  phase: 'Sweep' }),
-    () => agent(sweepPrompt, { label: `sweep-db:R${round}`,    agentType: 'sweep-db',    phase: 'Sweep' }),
-    () => agent(sweepPrompt, { label: `sweep-types:R${round}`, agentType: 'sweep-types', phase: 'Sweep' }),
+    () => agent(sweepPrompt, { label: `sweep-ui:R${round}`,    agentType: 'sweep-ui',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB }),
+    () => agent(sweepPrompt, { label: `sweep-data:R${round}`,  agentType: 'sweep-data',  phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB }),
+    () => agent(sweepPrompt, { label: `sweep-db:R${round}`,    agentType: 'sweep-db',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB }),
+    () => agent(sweepPrompt, { label: `sweep-types:R${round}`, agentType: 'sweep-types', phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB }),
   ])
 
-  const isNew = (r) => r && r.trim() !== '指摘なし'
-  if (isNew(uiResult))    allFindings.ui.push(`[R${round}]\n${uiResult}`)
-  if (isNew(dataResult))  allFindings.data.push(`[R${round}]\n${dataResult}`)
-  if (isNew(dbResult))    allFindings.db.push(`[R${round}]\n${dbResult}`)
-  if (isNew(typesResult)) allFindings.types.push(`[R${round}]\n${typesResult}`)
+  // isNew: 完遂できた(status==='pass')うえで、実際に新規の指摘がある(detail!=='指摘なし')場合のみ新規findingsとみなす(2軸判定)
+  const isNew = (r) => r?.status === 'pass' && r?.detail !== '指摘なし'
+  if (isNew(uiResult))    allFindings.ui.push(`[R${round}]\n${uiResult.detail}`)
+  if (isNew(dataResult))  allFindings.data.push(`[R${round}]\n${dataResult.detail}`)
+  if (isNew(dbResult))    allFindings.db.push(`[R${round}]\n${dbResult.detail}`)
+  if (isNew(typesResult)) allFindings.types.push(`[R${round}]\n${typesResult.detail}`)
 
   const hasNewFindings = isNew(uiResult) || isNew(dataResult) || isNew(dbResult) || isNew(typesResult)
 
   const roundSummary = [
-    `## UI層\n${uiResult ?? '指摘なし'}`,
-    `## データ取得層\n${dataResult ?? '指摘なし'}`,
-    `## DB層\n${dbResult ?? '指摘なし'}`,
-    `## 型整合性\n${typesResult ?? '指摘なし'}`,
+    `## UI層\n${uiResult?.detail ?? '指摘なし'}`,
+    `## データ取得層\n${dataResult?.detail ?? '指摘なし'}`,
+    `## DB層\n${dbResult?.detail ?? '指摘なし'}`,
+    `## 型整合性\n${typesResult?.detail ?? '指摘なし'}`,
   ].join('\n\n')
 
   phase('Completeness Critic')
   const criticResult = await agent(
-    `タスク: ${taskDescription}\n\n## 今ラウンドのSweep結果\n${roundSummary}\n\n## 累積発見\nUI: ${allFindings.ui.join('\n')}\nData: ${allFindings.data.join('\n')}\nDB: ${allFindings.db.join('\n')}\nTypes: ${allFindings.types.join('\n')}`,
-    { label: `critic:R${round}`, agentType: 'completeness-critic', phase: 'Completeness Critic' }
+    `タスク: ${taskDescription}\n\n## 今ラウンドのSweep結果\n${roundSummary}\n\n## 累積発見\nUI: ${allFindings.ui.join('\n')}\nData: ${allFindings.data.join('\n')}\nDB: ${allFindings.db.join('\n')}\nTypes: ${allFindings.types.join('\n')}${CRITIC_GUIDE}`,
+    { label: `critic:R${round}`, agentType: 'completeness-critic', phase: 'Completeness Critic', schema: AGENT_RESULT_SCHEMA_PB }
   )
 
-  const hasNewCriticFindings = criticResult != null && criticResult.includes('追加調査対象:')
+  // hasNewCriticFindings: 完遂できた(status==='pass')うえで、detail内に「追加調査対象:」の記述がある場合のみ継続トリガーとする(2軸判定)
+  const hasNewCriticFindings = criticResult?.status === 'pass' && criticResult.detail?.includes('追加調査対象:')
 
   if (!hasNewFindings && !hasNewCriticFindings) {
     dryRounds++
     log(`Dry ラウンド ${dryRounds}/2`)
   } else {
     dryRounds = 0
-    additionalContext = hasNewCriticFindings ? criticResult : ''
+    additionalContext = hasNewCriticFindings ? criticResult.detail : ''
   }
   round++
 }
@@ -92,8 +127,14 @@ log(`Sweep完了: ${round - 1}ラウンド`)
 phase('Draft Spec')
 
 const draftSpec = await agent(
-  `以下の調査結果をもとに、機能仕様書ドラフトを生成してください。\n\nタスク: ${taskDescription}\n\n## 調査結果\n${sweepSummary}\n\n## 出力形式\n### Part 1 — 仕様（人間レビュー用）\n- 何ができるようになるか（利用者目線）\n- 操作の流れ・受け入れ条件（チェックリスト）\n\n### Part 2 — 実装計画（AI用）\n- 実装セット一覧（依存順）\n- 各セットのテスト観点・型・データアクセス層の方針\n- 並列グループ宣言（触るファイルを明記）`,
-  { label: 'draft-spec', phase: 'Draft Spec', model: 'claude-sonnet-4-6', effort: 'medium' }
+  `以下の調査結果をもとに、機能仕様書ドラフトを生成してください。\n\nタスク: ${taskDescription}\n\n## 調査結果\n${sweepSummary}\n\n## 出力形式\n### Part 1 — 仕様（人間レビュー用）\n- 何ができるようになるか（利用者目線）\n- 操作の流れ・受け入れ条件（チェックリスト）\n\n### Part 2 — 実装計画（AI用）\n- 実装セット一覧（依存順）\n- 各セットのテスト観点・型・データアクセス層の方針\n- 並列グループ宣言（触るファイルを明記）${''}
+
+## status/detail
+上記の仕様書ドラフト本文は detail に格納し、status も返すこと。
+- pass: 仕様書ドラフトを生成できた
+- fail: 生成されたが調査結果を反映していない等明らかに不完全
+- blocked: Sweep結果が空でドラフト生成に着手できなかった`,
+  { label: 'draft-spec', phase: 'Draft Spec', model: 'claude-sonnet-4-6', effort: 'medium', schema: AGENT_RESULT_SCHEMA_PFB }
 )
 
 log('仕様書ドラフト生成完了。Deep Spec 検証を開始します。')
@@ -131,7 +172,7 @@ const FINDERS = [
 
 const findResults = await parallel(
   FINDERS.map(f => () => agent(
-    `${f.prompt}、以下の仕様書ドラフトの問題点を列挙せよ。\n\n${draftSpec}`,
+    `${f.prompt}、以下の仕様書ドラフトの問題点を列挙せよ。\n\n${draftSpec?.detail}`,
     { label: `find:${f.lens}`, phase: 'Find', schema: FINDING_SCHEMA, model: 'claude-haiku-4-5-20251001', effort: 'low' }
   ))
 )
@@ -166,7 +207,7 @@ if (autoSurvivedMinor.length > 0) {
 
 const verdicts = await parallel(
   toVerify.map((f, i) => () => agent(
-    `次の仕様指摘を反証しようとせよ。仕様書のどこかで既に対処されているか、問題が成立しない理由があれば refuted=true にせよ。不確かなら refuted=false にせよ（疑わしいものは生存させる）。\n\nタイトル: ${f.title}\n説明: ${f.description}\n\n仕様書ドラフト:\n${draftSpec}`,
+    `次の仕様指摘を反証しようとせよ。仕様書のどこかで既に対処されているか、問題が成立しない理由があれば refuted=true にせよ。不確かなら refuted=false にせよ（疑わしいものは生存させる）。\n\nタイトル: ${f.title}\n説明: ${f.description}\n\n仕様書ドラフト:\n${draftSpec?.detail}`,
     { label: `verify:${i}`, phase: 'Adversarial Verify', schema: VERDICT_SCHEMA, model: 'claude-sonnet-4-6', effort: 'medium' }
   ))
 )
@@ -198,7 +239,7 @@ const CRITIC_SCHEMA = {
 }
 
 const criticResult2 = await agent(
-  `以下の仕様書ドラフトと生存した指摘リストを見て、まだ検証されていない領域・抜け漏れ・未回答の設計判断を指摘せよ。\n\n## 仕様書ドラフト\n${draftSpec}\n\n## 生存した指摘\n${survived.map(f => `- [${f.severity}] ${f.title}: ${f.description}`).join('\n')}`,
+  `以下の仕様書ドラフトと生存した指摘リストを見て、まだ検証されていない領域・抜け漏れ・未回答の設計判断を指摘せよ。\n\n## 仕様書ドラフト\n${draftSpec?.detail}\n\n## 生存した指摘\n${survived.map(f => `- [${f.severity}] ${f.title}: ${f.description}`).join('\n')}`,
   { label: 'completeness-critic-2', phase: 'Completeness Critic', schema: CRITIC_SCHEMA, model: 'claude-sonnet-4-6', effort: 'medium' }
 )
 
@@ -240,7 +281,7 @@ const PROPOSERS = [
 
 const proposals = await parallel(
   PROPOSERS.map(p => () => agent(
-    `${p.prompt}\n\n## 仕様書ドラフト\n${draftSpec}\n\n## 生存した問題点\n${survived.map(f => `- [${f.severity}] ${f.title}`).join('\n')}\n\n## ギャップ\n${gaps.map(g => `- ${g.area}: ${g.description}`).join('\n')}`,
+    `${p.prompt}\n\n## 仕様書ドラフト\n${draftSpec?.detail}\n\n## 生存した問題点\n${survived.map(f => `- [${f.severity}] ${f.title}`).join('\n')}\n\n## ギャップ\n${gaps.map(g => `- ${g.area}: ${g.description}`).join('\n')}`,
     { label: `propose:${p.stance}`, phase: 'Judge Panel', schema: PROPOSAL_SCHEMA, model: 'claude-sonnet-4-6', effort: 'medium' }
   ))
 )
@@ -286,8 +327,8 @@ log(`Judge Panel完了: 最高スコア案 "${winner?.proposal?.name}" (${winner
 phase('Synthesize')
 
 const synthesis = await agent(
-  `以下の全検証結果を統合して、仕様書ドラフトへの具体的な修正提案を出力せよ。\n\n## 元の仕様書ドラフト\n${draftSpec}\n\n## 生存した問題点 (${survived.length}件)\n${survived.map(f => `- [${f.severity}][${f.category}] ${f.title}: ${f.description}`).join('\n')}\n\n## ギャップ (${gaps.length}件)\n${gaps.map(g => `- [${g.area}] ${g.description} → 提案: ${g.suggestion}`).join('\n')}\n\n## Judge Panel結果\n### 採用推奨案: ${winner?.proposal?.name} (スコア: ${Math.round(winner?.avgScore ?? 0)})\n${winner?.proposal?.description}\n主要判断: ${winner?.proposal?.keyDecisions?.join(' / ')}\n\n### 他案のグラフト候補\n${runnerUps.map(r => `- ${r.proposal?.name}: ${r.proposal?.keyDecisions?.join(' / ')}`).join('\n')}\n\n## 出力形式\n1. **必須修正** (critical/important の問題点)\n2. **推奨修正** (minor・ギャップ)\n3. **設計判断** (採用推奨アプローチとその理由)\n4. **未解決事項** (人間が判断すべきポイント)`,
-  { label: 'synthesize', phase: 'Synthesize', model: 'claude-opus-4-8', effort: 'high' }
+  `以下の全検証結果を統合して、仕様書ドラフトへの具体的な修正提案を出力せよ。\n\n## 元の仕様書ドラフト\n${draftSpec?.detail}\n\n## 生存した問題点 (${survived.length}件)\n${survived.map(f => `- [${f.severity}][${f.category}] ${f.title}: ${f.description}`).join('\n')}\n\n## ギャップ (${gaps.length}件)\n${gaps.map(g => `- [${g.area}] ${g.description} → 提案: ${g.suggestion}`).join('\n')}\n\n## Judge Panel結果\n### 採用推奨案: ${winner?.proposal?.name} (スコア: ${Math.round(winner?.avgScore ?? 0)})\n${winner?.proposal?.description}\n主要判断: ${winner?.proposal?.keyDecisions?.join(' / ')}\n\n### 他案のグラフト候補\n${runnerUps.map(r => `- ${r.proposal?.name}: ${r.proposal?.keyDecisions?.join(' / ')}`).join('\n')}\n\n## 出力形式\n1. **必須修正** (critical/important の問題点)\n2. **推奨修正** (minor・ギャップ)\n3. **設計判断** (採用推奨アプローチとその理由)\n4. **未解決事項** (人間が判断すべきポイント)\n\n## status/detail\n上記の統合提案本文は detail に格納し、status も返すこと。\n- pass: 統合提案を生成できた\n- fail: 生成されたが必須修正等のセクションが欠落するなど明らかに不完全\n- blocked: survived/gaps/winnerのいずれかが揃わず統合に着手できなかった`,
+  { label: 'synthesize', phase: 'Synthesize', model: 'claude-opus-4-8', effort: 'high', schema: AGENT_RESULT_SCHEMA_PFB }
 )
 
 return {

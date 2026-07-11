@@ -1,85 +1,85 @@
-# SPEC: /hospital-prices に施設セレクタUIを追加（Issue #29）
+# SPEC: AIDDフェーズの返却値をpass/fail/blockedに統一する型を定義する
 
----
+対応issue: #41
 
-## Part 1 — 仕様（★人間がレビューする部分）
+## 背景（Phase 1調査結果）
 
-### 何ができるようになるか
+現状、`.claude/workflows/` 配下のAIDDワークフロースクリプトは、`agent()`呼び出しの成否を機械的に判定していない。
 
-- 複数の施設に所属しているユーザー、および管理者(admin)が、「施設別価格管理」画面(`/hospital-prices`)で見たい施設を切り替えられるようになります。
-- これまでは常に「先頭の施設」の価格しか表示されませんでしたが、画面上部に施設を選ぶプルダウンが追加され、選んだ施設の価格一覧に切り替わります。
-- 管理者も含めて、必ずどれか1つの施設を選んだ状態で価格一覧を見る、という単純な仕組みに統一します（「全施設まとめて表示」という特別モードは今回は作りません。将来的に必要になれば別issueで検討します）。**[人間承認済み: 施設選択必須のみ]**
-- 施設を切り替えた状態はURLに記録されるため、リロードしたり、URLをブックマーク・共有したりしても選択していた施設が保持されます。**[人間承認済み: URLクエリパラメータで保持]**
+- `aidd-phase1.js`（sweep-db/data/ui/types L28-33）: `agent()`の返却値をそのまま`?? '指摘なし'`で受け取るだけ。`findingCount`は`r !== '指摘なし'`という**固定文字列一致**で判定している（L48-49）
+- `aidd-phase2.js`（contract-writer/db-impl L36-43, data-impl/api-impl/ui-impl L54-67, integrator L74-77, reviewer L91-96）: `implSuccessCount`は`filter(Boolean).length`という**truthy判定のみ**（L116）。エージェントが失敗を報告する文章を返しても、文字列が空でなければ成功としてカウントされてしまう
+- `aidd-1-1-deep-task.js`: `isNew()`(L49)や`criticResult.includes('追加調査対象:')`(L70)など、**キーワード文字列一致による分岐**が2箇所あり、いずれもSweepループの継続/終了という制御フローに直結している
+- `aidd-phase1-router.js`: `workflow()`の結果をそのまま返すだけで、自身は成否判定をしていない（下流workflowの結果を素通しするため、本issueの型導入により自動的に恩恵を受ける想定。本issueの直接対象外）
+- `aidd-session-report.js`: `phase1Stats`/`phase2Stats`から`agents`/`rounds`/`findingCount`/`implSuccessCount`等の**件数集計のみ**を読んでおり、個々のagentが「なぜ失敗したか」「ブロックされたか」を区別できない
 
-### 画面イメージ / 操作の流れ
+## やること（Part 1: 型定義）
 
-1. `/hospital-prices` を開く（例: `/hospital-prices?facilityId=<施設名昇順の先頭施設ID>`）
-2. 画面上部（見出し「施設別価格管理」の下）に施設選択プルダウンが表示される 📸
-3. 初期状態では、URLに`facilityId`が無ければ自分が所属する施設のうち施設名の昇順で一番先頭の施設が選ばれており、その施設の価格一覧が表示されている（`listFacilities()`は`name`昇順ソートのため順序は安定している）
-4. プルダウンから別の施設を選ぶと、その施設の価格一覧に切り替わり、URLの`facilityId`クエリパラメータも更新される 📸
-5. その状態でリロード、または他ページから戻ってくると、URLの`facilityId`で指定した施設が選択されたまま表示される
-6. 1施設にしか所属していないユーザーの場合、プルダウンは1件だけの選択肢になる（切り替え自体は可能）
+### 1-1. 共通型
 
-### 受け入れ条件（チェックリスト）
+`docs/agents/agent-result-schema.md`に以下を新設する。
 
-- [ ] `/hospital-prices` 画面上部に施設選択プルダウンが表示される
-- [ ] 初期表示時、URLに`facilityId`クエリパラメータが無ければ、自分が所属する施設一覧を施設名の昇順で並べた先頭施設が選択され、その施設の価格が表示される（既存動作を維持）
-- [ ] URLに`facilityId`クエリパラメータがある場合は、それに対応する施設が初期選択される（自分がアクセス権を持つ施設に限る。不正・アクセス不可なfacilityIdの場合は先頭施設にフォールバックする）
-- [ ] プルダウンで別の施設を選ぶと、選択した施設の価格一覧に切り替わり（`/api/hospital-prices?facilityId=...` を選択施設IDで再取得）、URLの`facilityId`クエリパラメータも更新される
-- [ ] admin（全施設が選択肢に並ぶ）も同じプルダウンUIで施設を切り替えられる。「全件表示」オプションは設けない
-- [ ] 所属施設が0件の場合、プルダウンは空表示となり、価格一覧も空のまま（エラーにはしない。既存の「先頭施設なし→空配列」の挙動を踏襲）
-- [ ] 既存の新規登録・編集・削除の導線（各行のボタン、`+ 新規価格を登録`）は施設切り替え後も同様に動作する
-- [ ] `requireFacilityAccess` / RLS（`facility_member_or_admin`）による施設ごとのアクセス制御は変更しない（プルダウンの選択肢は `/api/facilities` が返す＝アクセス可能な施設のみになる）
+```
+AgentResult = {
+  status: 'pass' | 'fail' | 'blocked',
+  detail: string        // 人間可読の要約(現状の自由記述文字列をそのまま格納)
+}
+```
 
----
+### 1-2. status追加対象と判定基準（agent呼び出しごとに1行）
 
-## Part 2 — 実装計画（AI用・レビュー不要）
+**`aidd-phase1.js`**
 
-### 実装セット一覧（依存順）
+| 呼び出し (L28-33) | pass | fail | blocked |
+|---|---|---|---|
+| sweep-ui / sweep-data / sweep-db / sweep-types（4本） | 調査を最後まで実行できた（指摘の有無は問わない。指摘内容はstatusではなくdetailで表現） | 該当なし（調査系エージェントに「失敗」概念は無く、常にpass/blockedいずれかを返す） | 権限不足・対象コード不在等で調査そのものが実行できなかった |
 
-**Set A: 施設セレクタ状態管理とURL連動・データ取得の分離**
-- `src/app/hospital-prices/page.tsx` を改修
-  - 現状: 1つの `useEffect` で facilities・prices（先頭施設固定）・distributorProducts をまとめて取得
-  - 変更後:
-    - `useSearchParams()`（next/navigation）でURLの `facilityId` クエリパラメータを読む
-    - 初回ロード用 `useEffect`（`refreshKey` 依存）: facilities・distributorProducts を取得。取得後、選択施設IDを次の優先順で決定する
-      1. URLの `facilityId` が取得済み facilities に含まれていればそれを採用
-      2. 含まれていない（未指定・不正・アクセス不可）場合は施設名昇順の先頭施設を採用
-      3. facilities が空なら `null`
-      決定した施設IDが現在のURLの`facilityId`と異なる場合は `router.replace()` でURLを同期する（履歴を汚さないため push ではなく replace）
-    - `selectedFacilityId` state はURLの `facilityId` を信頼できる情報源(source of truth)とし、上記で決定した値で初期化・更新する
-    - 施設セレクタの `onChange` では `router.replace(`/hospital-prices?facilityId=${newId}`)` のように URLを更新する。URL変更 → `useSearchParams()` の再評価 → `selectedFacilityId` 反映という流れにする
-    - 価格取得用 `useEffect`（`selectedFacilityId` 依存）: `selectedFacilityId` が truthy なら `/api/hospital-prices?facilityId=...` を取得、falsy（施設0件）なら `prices` を空配列にする
-  - `<select>` 要素を見出し行の下に追加。`value={selectedFacilityId ?? ''}`
-  - 削除後の `refresh()` は現在の `selectedFacilityId` を維持したまま価格のみ再取得されればよい（`refreshKey` は初回ロード用 useEffect のみに紐付け、価格再取得用 useEffect の依存に `refreshKey` は含めない。削除操作は同一施設内の話なので、削除後の再取得は価格取得用 useEffect の依存に `refreshKey` も追加して対応する）
+**`aidd-phase2.js`**
 
-**Set B: テスト追加**
-- `src/app/hospital-prices/__tests__/page.test.tsx` に以下を追加
-  - 複数施設が返る場合、プルダウンに全施設が選択肢として表示されること
-  - URLに`facilityId`が無い場合、施設名昇順の先頭施設が初期選択されること
-  - URLに有効な`facilityId`がある場合、その施設が初期選択されること
-  - URLに不正・アクセス不可な`facilityId`がある場合、先頭施設にフォールバックすること
-  - プルダウンで施設を切り替えると `/api/hospital-prices?facilityId=<選択したID>` が呼ばれ、表示される価格一覧が切り替わること、かつURLの`facilityId`が更新されること（`useRouter`のモックで`replace`呼び出しを検証）
-  - 施設が0件の場合、プルダウンが空・価格一覧も空で表示されること（エラーにならない）
+| 呼び出し | pass | fail | blocked |
+|---|---|---|---|
+| contract-writer (L36-39) | 型定義・APIインターフェース型を確定できた | 型定義を試みたが不完全・矛盾がある | SPEC.mdが存在しない/読めない |
+| db-impl (L40-43) | マイグレーション実装が完了した | マイグレーションを試みたがエラー・矛盾がある | SPEC.mdが存在しない、またはPart2にマイグレーション情報が無く着手不能 |
+| data-impl (L55-58) / api-impl (L59-62) / ui-impl (L63-66) | 担当範囲の実装を完了できた | 実装したが明らかに不完全、またはcontract-writer/db-implの結果と矛盾する | SPEC.mdが見つからない、またはcontract-writer/db-implの完了報告が空で着手できなかった |
+| integrator (L74-77) | npm test・npm run lintが最終的に緑で統合完了 | 3回の修正試行後もtest/lintが赤のまま | SPEC.mdが見つからない、またはいずれかのimplエージェントの完了報告に「仕様書が見つからない」「作業を開始できない」旨の記述がある（現行プロンプトL75の異常検知指示に対応） |
+| review:correctness / coverage / redundancy / type-safety（4本, L91-96） | レビューを完了し指摘なし | レビューを完了し1件以上の指摘がある（重大度による絞り込みは#42のスコープとし、ここではpass/failの二値のみ） | レビュー対象のコード・SPEC.mdが見つからずレビュー自体ができなかった |
 
-### 並列グループ宣言
+**`aidd-1-1-deep-task.js`**：Part 1-3で表として詳細化する。
 
-- Set A（`src/app/hospital-prices/page.tsx`）と Set B（`src/app/hospital-prices/__tests__/page.test.tsx`）は別ファイルだが、Bのテストは Aの実装（stateの持ち方・selectのDOM構造）に依存するため、同一の波では実装せず **Set A → Set B の順で直列実装**する（TDDなので実際は「Bのテストを先に書いて赤にし、Aを実装して緑にする」進め方でも良い。ファイルは別だが内容的に密結合なため統合ゲート不要・1セット扱いとする）
+## やること（Part 1-3: `aidd-1-1-deep-task.js`のstatus対象／対象外 一覧）
 
-### テスト観点
+このファイルはagent呼び出しが9系統ある。呼び出し元（本ファイル自身）が使う判定方法ごとに、status追加の要否を以下の表で確定する。
 
-- 初期表示（URLパラメータなし）: facilities配列を名前昇順で並べた先頭が選択され、対応するfacilityIdでprices取得APIが呼ばれる
-- 初期表示（URLパラメータあり・有効）: URLのfacilityIdが選択され、それでprices取得APIが呼ばれる
-- 初期表示（URLパラメータあり・不正/アクセス不可）: 先頭施設にフォールバックし、URLも先頭施設のfacilityIdに補正される
-- 切り替え: select の onChange 発火で正しいfacilityIdを指定して再フェッチされ、URLの`facilityId`も更新される（`router.replace`が呼ばれる）
-- 空施設: facilities が空配列のとき、fetchが `facilityId` なしで呼ばれない（またはスキップされる）こと、エラー表示にならないこと
-- 既存の削除・編集導線が回帰しないこと（既存テストのまま通ること）
+| # | 呼び出し（行番号） | 現状の判定方法 | status追加 | 理由 |
+|---|---|---|---|---|
+| 1 | sweep-ui/data/db/types（L43-46, 4本） | `isNew()`＝`r.trim() !== '指摘なし'` という文字列一致で**ループ継続判定**に使用 | **対象** | 制御フロー（Loop Until Dry の継続要否）が文字列一致に依存しており、本issueが解消すべき典型例。基準: pass=調査完了(指摘有無問わず)/blocked=調査不能/fail=該当なし |
+| 2 | completeness-critic 1周目（L65-68） | `criticResult.includes('追加調査対象:')` という文字列一致で**ループ継続判定**に使用 | **対象** | 同上。基準: pass=批評を完了した(追加調査の要否は問わない)/blocked=Sweep結果が空で批評に着手できなかった/fail=該当なし |
+| 3 | draft-spec（L94-97） | 判定なし。生成結果をそのまま次フェーズに渡すのみ | **対象** | 現状schemaなしの自由記述で、生成失敗（空・調査結果を反映できない内容）を呼び出し元が検知できない。基準: pass=仕様書ドラフトを生成できた/fail=生成されたが調査結果を反映していない等明らかに不完全/blocked=Sweep結果が空でドラフト生成に着手できなかった |
+| 4 | find（L133-136, lens×5） | 既存の`FINDING_SCHEMA`（severity等）で完結。呼び出し元はfindings配列のseverityを直接参照 | **対象外** | 汎用statusを読む消費先が本ファイル内に存在しない（ドメインschemaで完結済み） |
+| 5 | verify（Adversarial Verify, L162-166） | 既存の`VERDICT_SCHEMA`（refuted/reason）で完結 | **対象外** | 同上 |
+| 6 | completeness-critic 2周目（L193-196） | 既存の`CRITIC_SCHEMA`（gaps）で完結。1周目(#2)と異なり制御フロー分岐には使われない | **対象外** | 同上 |
+| 7 | propose（Judge Panel, L235-239, stance×3） | 既存の`PROPOSAL_SCHEMA`で完結 | **対象外** | 同上 |
+| 8 | score（Judge Panel, L246-249, lens×3×proposal数） | 既存の`SCORE_SCHEMA`で完結。avgScore集計に使用 | **対象外** | 同上 |
+| 9 | synthesize（L266-269） | 判定なし。最終成果物として`return`されるのみ | **対象** | 自由記述かつワークフローの最終出力。生成失敗（必須セクション欠落等）を呼び出し元が検知できない。基準: pass=統合提案を生成できた/fail=生成されたが必須修正等のセクションが欠落するなど明らかに不完全/blocked=survived/gaps/winnerのいずれかが揃わず統合に着手できなかった |
 
-### 型・データアクセス層の方針
+**まとめ**: 9系統中、status追加対象は **#1・#2・#3・#9（4系統）**。#4-8（find/verify/critic-2周目/propose/score）はドメイン固有schemaで完結しており対象外。
 
-- API層（`src/app/api/hospital-prices/route.ts`）・データアクセス層（`src/lib/hospital-prices/repository.ts`）・RLSは変更しない（Phase1調査で確認済み: `facilityId` によるクエリ絞り込みは既に実装済み）
-- `Facility` 型（`src/types/facility.ts`）も変更なし。既存の `facilities` state をそのままプルダウンの選択肢に使う
+## やること（Part 2: 集計ロジックの置き換え）
 
-### 実装上の注意
+1. `aidd-phase1.js`の`findingCount`（L48-49）は、**statusとは別軸**として維持する。sweep系は「fail」を返さない設計（Part 1-2参照）のため、`status`だけでは「指摘が見つかった本数」を表現できない。よって以下の2つを両方stats（L44-50）に持たせる
+   - `findingCount`（従来通り、意味は変えない）: `[uiResult, dataResult, dbResult, typesResult].filter(r => r.status === 'pass' && r.detail !== '指摘なし').length`（＝完遂できた調査のうち、実際に指摘が見つかった本数。`status === 'pass'`の条件を加えるのは、blocked時の`detail`（エラーメッセージ等）がたまたま`'指摘なし'`と一致しない場合に誤って「指摘あり」として数えてしまう既存の潜在バグを防ぐため）
+   - `blockedCount`（新規追加）: `[uiResult, dataResult, dbResult, typesResult].filter(r => r.status === 'blocked').length`（Part 2-4でaidd-session-report.jsに表示するblocked件数の集計元）
+2. `aidd-phase2.js`の`implSuccessCount`（L116）を、`filter(Boolean).length`から`filter(r => r.status === 'pass').length`に置き換える
+3. `aidd-1-1-deep-task.js`の`isNew()`（L49）・`hasNewCriticFindings`（L70）を、上記表#1・#2のstatusベース判定に置き換える（ループ継続条件: 新規findingsまたはcriticのstatusがpass以外だった場合、等に再設計）
+4. `aidd-session-report.js`のテンプレートに、pass/fail/blocked件数の内訳表示を追加する（既存の「実装成功: X/Yグループ」表示に加えて、blocked件数を明示）
 
-- `useSearchParams()` を使うクライアントコンポーネントはNext.jsの推奨に従い `<Suspense>` で囲む（Phase1調査で `src/app/login/page.tsx:111` に同種の指摘があった＝Suspense fallback未設定のパターンを繰り返さないこと）
+## スコープ外（別issue）
+
+- `aidd-phase2.js`にstatusベースの品質ゲート（fail時に後続フェーズをブロックする）を実装するのは **issue #42** の範囲。本issueでは型定義とAgentResultの集計置き換えまでとし、ゲート制御ロジック自体は追加しない
+- reviewerの指摘に重大度(critical/important/minor)を持たせてfail判定を絞り込むのも**issue #42**の範囲とする
+
+## 完了条件
+
+- 上表で「対象」とした呼び出し（`aidd-phase1.js`全4本、`aidd-phase2.js`全10本、`aidd-1-1-deep-task.js`の4系統）が`status`フィールドを持つ構造化オブジェクトを返すようになっている
+- `findingCount`（status+detailの組み合わせ）・`implSuccessCount`（status参照）・Loop Until Dryの継続判定が、文字列一致・truthy判定から置き換わっている
+- 既存のnpm testが引き続きグリーンである
+- `docs/agents/agent-result-schema.md`に型定義と、各agent呼び出しの判定基準（本SPECの表の内容）が記載されている
