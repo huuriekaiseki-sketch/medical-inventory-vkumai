@@ -78,10 +78,11 @@ log(`Manifest Check完了: status=${manifestCheck?.status ?? 'なし'}`)
 if (manifestCheck?.status !== 'pass') {
   log(`品質ゲート: Run Manifestのspec Hash突合に失敗したため中断（${manifestCheck?.detail ?? '詳細不明'}）`)
   return {
+    done: false,
     manifestCheck,
     blocked: true,
     blockedAt: 'Manifest Check',
-    stats: { phase: 'phase2', blocked: true, blockedAt: 'Manifest Check' },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Manifest Check' },
   }
 }
 
@@ -117,11 +118,12 @@ log('Contract + DB完了')
 if (![contractResult, dbResult].every(r => r?.status === 'pass')) {
   log('品質ゲート: Contract + DBでfail/blockedを検知したため中断（Implement以降へは進みません）')
   return {
+    done: false,
     contractResult,
     dbResult,
     blocked: true,
     blockedAt: 'Contract + DB',
-    stats: { phase: 'phase2', blocked: true, blockedAt: 'Contract + DB' },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Contract + DB' },
   }
 }
 
@@ -158,6 +160,7 @@ log('Implement完了')
 if (![dataResult, apiResult, uiResult].every(r => r?.status === 'pass')) {
   log('品質ゲート: Implementでfail/blockedを検知したため中断（統合ゲートへは進みません）')
   return {
+    done: false,
     contractResult,
     dbResult,
     dataResult,
@@ -165,7 +168,7 @@ if (![dataResult, apiResult, uiResult].every(r => r?.status === 'pass')) {
     uiResult,
     blocked: true,
     blockedAt: 'Implement',
-    stats: { phase: 'phase2', blocked: true, blockedAt: 'Implement' },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Implement' },
   }
 }
 
@@ -173,9 +176,9 @@ if (![dataResult, apiResult, uiResult].every(r => r?.status === 'pass')) {
 phase('Integrate')
 
 const integrationResult = await agent(
-  `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用ならSupabase CLIで適用する）\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. 全テスト・lint緑を確認して報告\n6. .aidd/run-manifest.json をReadツールで読み、manifest.baseCommitを取得する（無ければこのステップはスキップしてよい）。取得できた場合、Bashツールで \`git diff --name-only \${baseCommit}\`（baseCommitはmanifestの値に置き換える）を実行し、変更されたファイル一覧を取得する。取得できたら .aidd/run-manifest.json の changedFiles フィールドをその一覧で上書きし、Writeツールで保存する（docs/agents/run-manifest.md 参照。他フィールドは変更しないこと）。\n\n## 各完了報告\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${guide(
-    'npm test・npm run lintが最終的に緑で統合完了',
-    '3回の修正試行後もtest/lintが赤のまま',
+  `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用ならSupabase CLIで適用する）\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. npx tsc --noEmit を実行 → 型エラーがあれば修正（3回まで。issue #46のDONE基準に型検査を含める）\n6. 全テスト・lint・tsc緑を確認して報告\n7. .aidd/run-manifest.json をReadツールで読み、manifest.baseCommitを取得する（無ければこのステップはスキップしてよい）。取得できた場合、Bashツールで \`git diff --name-only \${baseCommit}\`（baseCommitはmanifestの値に置き換える）を実行し、変更されたファイル一覧を取得する。取得できたら .aidd/run-manifest.json の changedFiles フィールドをその一覧で上書きし、Writeツールで保存する（docs/agents/run-manifest.md 参照。他フィールドは変更しないこと）。\n\n## 各完了報告\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${guide(
+    'npm test・npm run lint・npx tsc --noEmitが最終的に全て緑で統合完了',
+    '3回の修正試行後もtest/lint/tscのいずれかが赤のまま',
     'SPEC.mdが見つからない、またはいずれかのimplエージェントの完了報告に「仕様書が見つからない」「作業を開始できない」旨の記述がある'
   )}`,
   { label: 'integrator', phase: 'Integrate', agentType: 'integrator', schema: AGENT_RESULT_SCHEMA }
@@ -187,6 +190,7 @@ log('統合完了')
 if (![integrationResult].every(r => r?.status === 'pass')) {
   log('品質ゲート: Integrateでfail/blockedを検知したため中断（Reviewへは進みません）')
   return {
+    done: false,
     contractResult,
     dbResult,
     dataResult,
@@ -195,7 +199,7 @@ if (![integrationResult].every(r => r?.status === 'pass')) {
     integration: integrationResult,
     blocked: true,
     blockedAt: 'Integrate',
-    stats: { phase: 'phase2', blocked: true, blockedAt: 'Integrate' },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Integrate' },
   }
 }
 
@@ -256,6 +260,7 @@ while (true) {
   if (blocked) {
     log(`品質ゲート: Reviewで${MAX_REVIEW_RETRIES}回の差し戻し後もfailが残るため中断（blockedとして人間に引き渡します）`)
     return {
+      done: false,
       contractResult,
       dbResult,
       dataResult,
@@ -270,6 +275,7 @@ while (true) {
       blockedAt: 'Review',
       stats: {
         phase: 'phase2',
+        done: false,
         blocked: true,
         blockedAt: 'Review',
         reviewRetries: reviewRetryAgentCount,
@@ -294,11 +300,27 @@ while (true) {
   reviewRetryAgentCount++
 }
 
-log('検証完了。/structured-review でレビュー結果を確認してください。')
-
 const implResults = [contractResult, dbResult, dataResult, apiResult, uiResult]
 
+// DONE判定: .claude/workflows/lib/phase2-done.js の computeDone と同一ロジック
+// （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
+// issue #46: 修正ループ（Review差し戻し等）を実装しても、最終的な完了条件(DONE)が
+// 明示されていないと「いつ止まっていいか」が曖昧になる。DONE = 全実装がpass AND
+// 統合ゲート(test/lint/tsc)がpass AND 全観点Reviewがpass AND specHashが一致、の
+// すべてを満たした場合のみtrueにする。
+function allPass(results) {
+  return results.length > 0 && results.every(r => r?.status === 'pass')
+}
+const done =
+  allPass(implResults) &&
+  integrationResult?.status === 'pass' &&
+  allPass(reviewResults) &&
+  manifestCheck?.status === 'pass'
+
+log(`検証完了（DONE=${done}）。/structured-review でレビュー結果を確認してください。`)
+
 return {
+  done,
   manifestCheck,
   contractResult,
   dbResult,
@@ -312,6 +334,7 @@ return {
   })),
   stats: {
     phase: 'phase2',
+    done,
     implAgents: 5,
     reviewAgents: REVIEW_DIMENSIONS.length,
     reviewRetries: reviewRetryAgentCount,
