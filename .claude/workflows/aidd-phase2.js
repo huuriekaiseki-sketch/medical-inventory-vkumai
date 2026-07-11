@@ -3,6 +3,7 @@ export const meta = {
   description: 'Phase 3-5: contract-first並列実装 → 統合ゲート → 4観点並列検証。仕様書承認後（停止①の後）に実行。',
   whenToUse: '人間が仕様書（SPEC.md）を承認した後、Phase 3 実装に入るときに使う。aidd-1-1-deep-task.jsの後続として使う。',
   phases: [
+    { title: 'Manifest Check', detail: 'Run Manifestのspecハッシュ突合（レビュー後のSPEC.md改変を検知）' },
     { title: 'Contract + DB', detail: 'contract-writer（型定義）とdb-impl（migrations）を並列実行' },
     { title: 'Implement',     detail: 'data-impl / api-impl / ui-impl を並列実行' },
     { title: 'Integrate',     detail: '統合ゲート：マイグレーション確認・結線・テスト・lint' },
@@ -44,6 +45,45 @@ status と detail を返すこと。
 - pass: ${pass}
 - fail: ${fail}
 - blocked: ${blocked}`
+
+// ─── Phase 0: Manifest Check ─────────────────────────────────────────
+// issue #44/#294: docs/agents/run-manifest.md にPhase 2開始時のspecHash突合が
+// 設計として定義されているが、実行コードには存在しなかった。レビュー後にSPEC.mdが
+// 改変されるケースを検知できないまま実装が進んでしまう。
+// Workflow DSL自体はfilesystem/Node.js APIアクセスが無いため、Read/Bashツールを持つ
+// エージェントにマニフェスト読み込み・ハッシュ再計算・突合を行わせる。
+phase('Manifest Check')
+
+const MANIFEST_CHECK_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['pass', 'blocked'] },
+    detail: { type: 'string' },
+  },
+  required: ['status', 'detail'],
+}
+
+const manifestCheck = await agent(
+  `.aidd/run-manifest.json を Read ツールで読んでください（docs/agents/run-manifest.md にスキーマの説明があります）。\n\n以下を順に確認してください。\n1. .aidd/run-manifest.json が存在しない → blocked。detailに「Run Manifestが存在しません」と書く。\n2. manifest.approval（approvedBy/approvedAt）が無い → blocked。detailに「停止①の承認が記録されていません」と書く。\n3. manifest.specHash が無い → blocked。detailに「specHashが記録されていません」と書く。\n4. 上記が揃っていれば、${specPath} の現在の内容からsha256ハッシュを計算し（Bashツールで shasum -a 256 ${specPath} 等を使ってよい）、manifest.specHash と比較する。\n   - 一致すれば pass。detailに「specHash一致（承認後にSPEC.mdの変更なし）」と書く。\n   - 不一致であれば blocked。detailに「specHash不一致: レビュー承認後にSPEC.mdが変更された可能性があります（manifestの値と実際の値の両方を明記）」と書く。${guide(
+    'specHashが一致し、承認記録も揃っている',
+    '（未使用: このエージェントはpass/blockedの2値のみ返す）',
+    'manifestが存在しない、承認記録が無い、またはspecHashが不一致'
+  )}`,
+  { label: 'manifest-check', phase: 'Manifest Check', agentType: 'reviewer', schema: MANIFEST_CHECK_SCHEMA }
+)
+
+log(`Manifest Check完了: status=${manifestCheck?.status ?? 'なし'}`)
+
+// 品質ゲート: deny-by-default（.claude/workflows/lib/quality-gate.js shouldBlockと同一発想）
+if (manifestCheck?.status !== 'pass') {
+  log(`品質ゲート: Run Manifestのspec Hash突合に失敗したため中断（${manifestCheck?.detail ?? '詳細不明'}）`)
+  return {
+    manifestCheck,
+    blocked: true,
+    blockedAt: 'Manifest Check',
+    stats: { phase: 'phase2', blocked: true, blockedAt: 'Manifest Check' },
+  }
+}
 
 // ─── Phase A: Contract Write + DB（並列）─────────────────────────────
 // contract-writer: src/types/ の型定義を確定（implementerの「契約」）
@@ -133,7 +173,7 @@ if (![dataResult, apiResult, uiResult].every(r => r?.status === 'pass')) {
 phase('Integrate')
 
 const integrationResult = await agent(
-  `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用ならSupabase CLIで適用する）\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. 全テスト・lint緑を確認して報告\n\n## 各完了報告\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${guide(
+  `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用ならSupabase CLIで適用する）\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. 全テスト・lint緑を確認して報告\n6. .aidd/run-manifest.json をReadツールで読み、manifest.baseCommitを取得する（無ければこのステップはスキップしてよい）。取得できた場合、Bashツールで \`git diff --name-only \${baseCommit}\`（baseCommitはmanifestの値に置き換える）を実行し、変更されたファイル一覧を取得する。取得できたら .aidd/run-manifest.json の changedFiles フィールドをその一覧で上書きし、Writeツールで保存する（docs/agents/run-manifest.md 参照。他フィールドは変更しないこと）。\n\n## 各完了報告\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${guide(
     'npm test・npm run lintが最終的に緑で統合完了',
     '3回の修正試行後もtest/lintが赤のまま',
     'SPEC.mdが見つからない、またはいずれかのimplエージェントの完了報告に「仕様書が見つからない」「作業を開始できない」旨の記述がある'
@@ -259,6 +299,7 @@ log('検証完了。/structured-review でレビュー結果を確認してく�
 const implResults = [contractResult, dbResult, dataResult, apiResult, uiResult]
 
 return {
+  manifestCheck,
   contractResult,
   dbResult,
   dataResult,
@@ -274,7 +315,7 @@ return {
     implAgents: 5,
     reviewAgents: REVIEW_DIMENSIONS.length,
     reviewRetries: reviewRetryAgentCount,
-    totalAgents: 5 + 1 + REVIEW_DIMENSIONS.length + reviewRetryAgentCount,
+    totalAgents: 1 + 5 + 1 + REVIEW_DIMENSIONS.length + reviewRetryAgentCount,
     implSuccessCount: implResults.filter(r => r?.status === 'pass').length,
     implBlockedCount: implResults.filter(r => r?.status === 'blocked').length,
   },
