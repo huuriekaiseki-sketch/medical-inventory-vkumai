@@ -1,9 +1,12 @@
-// AgentResult（docs/agents/agent-result-schema.md）のstatus='fail'|'blocked'を検知する品質ゲート判定。
-// blockedはfailより情報量が少ない「そもそも着手不能」な状態のため、failと同様に後続フェーズへ
-// 進めてはならない（進めると存在しない前提を元にした無駄な実装・レビューが走る）。
+// AgentResult（docs/agents/agent-result-schema.md）の品質ゲート判定。
+// deny-by-default: 全員がstatus==='pass'でない限り止める（fail/blockedはもちろん、
+// null・未返却（エージェントが致命的エラーで死んだ場合）・未知のstatus値も含めて
+// 「passと確認できないものは全て止める」。fail-open（failを探す方式）だと、
+// 想定外の値がすべて素通りしてしまう（issue #289）。
 // aidd-phase2.js（Workflow DSL、require不可）にも同一ロジックをインラインで複製している。
 // このファイルはvitestでの単体テスト用の正本。
 
 export function shouldBlock(results) {
-  return results.some(r => r?.status === 'fail' || r?.status === 'blocked')
+  if (results.length === 0) return false
+  return !results.every(r => r?.status === 'pass')
 }
