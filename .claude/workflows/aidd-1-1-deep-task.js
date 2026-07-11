@@ -7,9 +7,9 @@ export const meta = {
     { title: 'Completeness Critic', detail: '未調査領域検出' },
     { title: 'Draft Spec',          detail: '調査結果から仕様書ドラフト生成' },
     { title: 'Find',                detail: '仕様書ドラフトへの5軸問題発見' },
-    { title: 'Adversarial Verify',  detail: '偽陽性除去' },
+    { title: 'Adversarial Verify',  detail: '偽陽性除去（critical/importantのみ）' },
     { title: 'Completeness Critic', detail: 'ギャップ検出' },
-    { title: 'Judge Panel',         detail: '3案生成・採点' },
+    { title: 'Judge Panel',         detail: '3案生成・分岐時のみ採点' },
     { title: 'Synthesize',          detail: '全結果統合・仕様修正案出力' },
   ],
 }
@@ -199,15 +199,22 @@ const VERDICT_SCHEMA = {
   required: ['refuted', 'reason'],
 }
 
+const toVerify = dedupedFindings.filter(f => f.severity !== 'minor')
+const autoSurvivedMinor = dedupedFindings.filter(f => f.severity === 'minor')
+if (autoSurvivedMinor.length > 0) {
+  log(`Adversarial Verify: minor ${autoSurvivedMinor.length}件はcritical/important対象外のためverifyせず生存扱い`)
+}
+
 const verdicts = await parallel(
-  dedupedFindings.map((f, i) => () => agent(
+  toVerify.map((f, i) => () => agent(
     `次の仕様指摘を反証しようとせよ。仕様書のどこかで既に対処されているか、問題が成立しない理由があれば refuted=true にせよ。不確かなら refuted=false にせよ（疑わしいものは生存させる）。\n\nタイトル: ${f.title}\n説明: ${f.description}\n\n仕様書ドラフト:\n${draftSpec?.detail}`,
     { label: `verify:${i}`, phase: 'Adversarial Verify', schema: VERDICT_SCHEMA, model: 'claude-sonnet-4-6', effort: 'medium' }
   ))
 )
 
-const survived = dedupedFindings.filter((_, i) => !verdicts[i]?.refuted)
-log(`Adversarial Verify完了: ${dedupedFindings.length}件 → ${survived.length}件生存`)
+const survivedFromVerify = toVerify.filter((_, i) => !verdicts[i]?.refuted)
+const survived = [...survivedFromVerify, ...autoSurvivedMinor]
+log(`Adversarial Verify完了: critical/important ${toVerify.length}件検証 → ${survivedFromVerify.length}件生存（+minor自動生存${autoSurvivedMinor.length}件、計${survived.length}件）`)
 
 // ─── Phase 6: Completeness Critic ────────────────────────────────────
 phase('Completeness Critic')
@@ -281,25 +288,40 @@ const proposals = await parallel(
 
 const validProposals = proposals.filter(Boolean)
 
-const scoredProposals = await parallel(
-  validProposals.map((proposal, pi) => () =>
-    parallel(
-      ['correctness', 'security', 'ux'].map(lens => () => agent(
-        `次の設計案を「${lens}」の視点で採点せよ（各項目0-100、totalは加重平均）。\n\n## 案名: ${proposal.name}\n${proposal.description}\n\n主要判断:\n${proposal.keyDecisions.join('\n')}\n\nトレードオフ: ${proposal.tradeoffs}`,
-        { label: `score:${pi}:${lens}`, phase: 'Judge Panel', schema: SCORE_SCHEMA, model: 'claude-haiku-4-5-20251001', effort: 'low' }
-      ))
-    ).then(scores => {
-      const validScores = scores.filter(Boolean)
-      const avgTotal = validScores.reduce((s, sc) => s + sc.total, 0) / (validScores.length || 1)
-      return { proposal, scores: validScores, avgScore: avgTotal }
-    })
-  )
-)
+// 設計判断が実質同じ提案しかない場合は採点パネル（3案 x 3観点 = 9エージェント）を省略する。
+// 正規化したkeyDecisionsの重複率が高い（=判断が割れていない）ほど採点の価値が低いため。
+const normalizeDecision = (d) => d.trim().toLowerCase()
+const allDecisions = validProposals.flatMap(p => p.keyDecisions.map(normalizeDecision))
+const uniqueDecisions = new Set(allDecisions)
+const divergenceRatio = allDecisions.length > 0 ? uniqueDecisions.size / allDecisions.length : 0
+const hasDivergence = validProposals.length > 1 && divergenceRatio >= 0.5
 
-const validScored = scoredProposals.filter(Boolean).sort((a, b) => b.avgScore - a.avgScore)
+let validScored
+if (hasDivergence) {
+  const scoredProposals = await parallel(
+    validProposals.map((proposal, pi) => () =>
+      parallel(
+        ['correctness', 'security', 'ux'].map(lens => () => agent(
+          `次の設計案を「${lens}」の視点で採点せよ（各項目0-100、totalは加重平均）。\n\n## 案名: ${proposal.name}\n${proposal.description}\n\n主要判断:\n${proposal.keyDecisions.join('\n')}\n\nトレードオフ: ${proposal.tradeoffs}`,
+          { label: `score:${pi}:${lens}`, phase: 'Judge Panel', schema: SCORE_SCHEMA, model: 'claude-haiku-4-5-20251001', effort: 'low' }
+        ))
+      ).then(scores => {
+        const validScores = scores.filter(Boolean)
+        const avgTotal = validScores.reduce((s, sc) => s + sc.total, 0) / (validScores.length || 1)
+        return { proposal, scores: validScores, avgScore: avgTotal }
+      })
+    )
+  )
+  validScored = scoredProposals.filter(Boolean).sort((a, b) => b.avgScore - a.avgScore)
+  log(`Judge Panel: 設計判断の分岐を検出（重複率${Math.round(divergenceRatio * 100)}%）→ 採点パネルを実行`)
+} else {
+  validScored = validProposals.map(proposal => ({ proposal, scores: [], avgScore: null }))
+  log(`Judge Panel: 設計判断がほぼ一致（重複率${Math.round(divergenceRatio * 100)}%）→ 採点パネルを省略し先頭案を採用`)
+}
+
 const winner = validScored[0]
 const runnerUps = validScored.slice(1)
-log(`Judge Panel完了: 最高スコア案 "${winner?.proposal?.name}" (${Math.round(winner?.avgScore ?? 0)}点)`)
+log(`Judge Panel完了: 最高スコア案 "${winner?.proposal?.name}" (${winner?.avgScore != null ? Math.round(winner.avgScore) + '点' : '採点省略'})`)
 
 // ─── Phase 8: Synthesize ──────────────────────────────────────────────
 phase('Synthesize')

@@ -61,3 +61,4 @@ any code. Heed deprecation notices.
 | `src/components/` | UI コンポーネント |
 | `src/lib/supabase/` | Supabase クライアント・データ取得層 |
 | `supabase/migrations/` | DBマイグレーション |
+| [`docs/agents/run-manifest.md`](./run-manifest.md) | AIDDフローのspecHash/baseCommit突合用Run Manifestのスキーマ |
