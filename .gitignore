@@ -53,3 +53,6 @@ e2e/.auth/user.json
 
 # Stop hookのセッション内重複提案抑止用の一時状態（ローカル専用）
 /.claude/.doc-suggest-state/
+
+# AIDD Run Manifest（フロー実行ごとに生成される一時状態。スキーマはdocs/agents/run-manifest.md参照）
+/.aidd/
