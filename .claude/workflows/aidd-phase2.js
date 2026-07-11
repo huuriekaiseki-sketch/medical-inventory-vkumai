@@ -159,7 +159,13 @@ if (![integrationResult].every(r => r?.status === 'pass')) {
   }
 }
 
-// ─── Phase D: 4観点並列レビュー ───────────────────────────────────────
+// ─── Phase D: 4観点並列レビュー（fail時はImplementerへ差し戻す修正ループ、最大3回）──
+// issue #45/#292: 従来はReviewのstatus(fail)を一切見ずdetailのみ使い、指摘があっても
+// 後続に何も反映されず「検証完了」として終わっていた。fail検出時はImplementerへ
+// 差し戻して再修正させ、再度4観点レビューし直す。最大3回再試行し、それでもfailが
+// 残る場合はblockedとして人間（停止②の構造化レビュー）に引き渡す。
+// 判定ロジック: .claude/workflows/lib/review-retry.js の classifyReviewRound と同一
+// （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
 phase('Review')
 
 const REVIEW_DIMENSIONS = [
@@ -175,12 +181,78 @@ const reviewGuide = guide(
   'レビュー対象のコード・SPEC.mdが見つからずレビュー自体ができなかった'
 )
 
-const reviewResults = await parallel(
-  REVIEW_DIMENSIONS.map(dim => () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\n観点「${dim.label}」の視点のみでレビューしてください。\n指摘のみを箇条書きで返す。修正はしない。問題なければ「指摘なし」と返す。${reviewGuide}`,
-    { label: `review:${dim.key}`, agentType: 'reviewer', phase: 'Review', schema: AGENT_RESULT_SCHEMA }
-  ))
-)
+function classifyReviewRound(results, dimensions, attempt, maxRetries) {
+  const failingDimensions = dimensions
+    .map((dim, i) => ({ dim, result: results[i] }))
+    .filter(({ result }) => result?.status === 'fail')
+  if (failingDimensions.length === 0) return { done: true, blocked: false, failingDimensions: [] }
+  if (attempt > maxRetries) return { done: true, blocked: true, failingDimensions }
+  return { done: false, blocked: false, failingDimensions }
+}
+
+const MAX_REVIEW_RETRIES = 3
+let reviewResults
+let reviewAttempt = 0
+let reviewRetryAgentCount = 0
+
+while (true) {
+  reviewAttempt++
+  log(`Reviewラウンド ${reviewAttempt}/${MAX_REVIEW_RETRIES + 1} 開始`)
+
+  reviewResults = await parallel(
+    REVIEW_DIMENSIONS.map(dim => () => agent(
+      `まず ${specPath} を Read ツールで読んでください。\n観点「${dim.label}」の視点のみでレビューしてください。\n指摘のみを箇条書きで返す。修正はしない。問題なければ「指摘なし」と返す。${reviewGuide}`,
+      { label: `review:${dim.key}:R${reviewAttempt}`, agentType: 'reviewer', phase: 'Review', schema: AGENT_RESULT_SCHEMA }
+    ))
+  )
+
+  const { done, blocked, failingDimensions } = classifyReviewRound(reviewResults, REVIEW_DIMENSIONS, reviewAttempt, MAX_REVIEW_RETRIES)
+
+  if (done && !blocked) {
+    log(`Review完了: ラウンド${reviewAttempt}で全観点pass（指摘なし、またはblockedのみ）`)
+    break
+  }
+
+  if (blocked) {
+    log(`品質ゲート: Reviewで${MAX_REVIEW_RETRIES}回の差し戻し後もfailが残るため中断（blockedとして人間に引き渡します）`)
+    return {
+      contractResult,
+      dbResult,
+      dataResult,
+      apiResult,
+      uiResult,
+      integration: integrationResult,
+      reviewFindings: REVIEW_DIMENSIONS.map((dim, i) => ({
+        dimension: dim.label,
+        findings:  reviewResults[i]?.detail ?? '指摘なし',
+      })),
+      blocked: true,
+      blockedAt: 'Review',
+      stats: {
+        phase: 'phase2',
+        blocked: true,
+        blockedAt: 'Review',
+        reviewRetries: reviewRetryAgentCount,
+      },
+    }
+  }
+
+  log(`Review: ${failingDimensions.length}件の観点でfailを検知（試行${reviewAttempt}/${MAX_REVIEW_RETRIES + 1}）→ Implementerへ差し戻します`)
+
+  const retryFindings = failingDimensions
+    .map(({ dim, result }) => `## ${dim.label}\n${result.detail}`)
+    .join('\n\n')
+
+  await agent(
+    `まず ${specPath} を Read ツールで読んでください。\n以下はコードレビューで検出された指摘です。該当箇所を修正してください（修正のみ、レビューはしない）。\n\n${retryFindings}${guide(
+      '指摘箇所をすべて修正できた',
+      '修正を試みたが解決できない指摘が残る',
+      '指摘内容から修正対象・該当ファイルが特定できない'
+    )}`,
+    { label: `implementer-retry:R${reviewAttempt}`, phase: 'Review', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
+  )
+  reviewRetryAgentCount++
+}
 
 log('検証完了。/structured-review でレビュー結果を確認してください。')
 
@@ -201,7 +273,8 @@ return {
     phase: 'phase2',
     implAgents: 5,
     reviewAgents: REVIEW_DIMENSIONS.length,
-    totalAgents: 5 + 1 + REVIEW_DIMENSIONS.length,
+    reviewRetries: reviewRetryAgentCount,
+    totalAgents: 5 + 1 + REVIEW_DIMENSIONS.length + reviewRetryAgentCount,
     implSuccessCount: implResults.filter(r => r?.status === 'pass').length,
     implBlockedCount: implResults.filter(r => r?.status === 'blocked').length,
   },
