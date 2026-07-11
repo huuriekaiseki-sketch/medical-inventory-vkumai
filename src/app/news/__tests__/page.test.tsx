@@ -128,6 +128,70 @@ describe('NewsPage', () => {
     expect(screen.queryByRole('button', { name: 'もっと見る' })).not.toBeInTheDocument()
   })
 
+  it('管理者はfacilityId未指定時「全施設」がデフォルトで選択され、facilityId無しでニュースを取得する（issue #40）', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities, isAdmin: true }))
+      if (url === '/api/news?limit=20&offset=0') {
+        return Promise.resolve(
+          jsonResponse({ items: [makeItem('1', '2026-07-08T00:00:00Z'), makeItem('2', '2026-07-08T00:00:00Z')] })
+        )
+      }
+      return Promise.resolve(jsonResponse({ error: `unexpected ${url}` }, { status: 500 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<NewsPage />)
+
+    expect(await screen.findByText('商品1', { exact: false })).toBeInTheDocument()
+    expect(screen.getByText('商品2', { exact: false })).toBeInTheDocument()
+
+    const select = screen.getByRole('combobox') as HTMLSelectElement
+    expect(select.value).toBe('')
+    expect(screen.getByRole('option', { name: '全施設' })).toBeInTheDocument()
+
+    // 管理者の「全施設」モードではURLにfacilityIdクエリを付与しない
+    expect(replace).not.toHaveBeenCalledWith(expect.stringContaining('facilityId='))
+  })
+
+  it('管理者が「全施設」から特定施設に切り替えるとfacilityId付きで再取得しURLも更新される（issue #40）', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities, isAdmin: true }))
+      if (url === '/api/news?limit=20&offset=0') return Promise.resolve(jsonResponse({ items: [] }))
+      if (url.startsWith('/api/news?facilityId=f1')) {
+        return Promise.resolve(jsonResponse({ items: [makeItem('1', '2026-07-08T00:00:00Z')] }))
+      }
+      return Promise.resolve(jsonResponse({ error: `unexpected ${url}` }, { status: 500 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<NewsPage />)
+    const select = await screen.findByRole('combobox') as HTMLSelectElement
+    await waitFor(() => expect(select.value).toBe(''))
+
+    await user.selectOptions(select, 'f1')
+
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalledWith('/news?facilityId=f1')
+    })
+    expect(await screen.findByText('商品1', { exact: false })).toBeInTheDocument()
+  })
+
+  it('非adminには「全施設」の選択肢が表示されない', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities, isAdmin: false }))
+      if (url.startsWith('/api/news?facilityId=f1')) {
+        return Promise.resolve(jsonResponse({ items: [makeItem('1', '2026-07-08T00:00:00Z')] }))
+      }
+      return Promise.resolve(jsonResponse({ error: `unexpected ${url}` }, { status: 500 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<NewsPage />)
+    await screen.findByText('商品1', { exact: false })
+    expect(screen.queryByRole('option', { name: '全施設' })).not.toBeInTheDocument()
+  })
+
   it('施設が0件の場合、お知らせはありませんと表示される', async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities: [] }))
