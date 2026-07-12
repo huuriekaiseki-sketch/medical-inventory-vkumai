@@ -65,6 +65,17 @@ function shouldBlock(results) {
   return !results.every(r => r?.status === 'pass' || isMinorOnlyFailure(r))
 }
 
+// ログ記録漏れ検知（.claude/workflows/lib/loop-observability-expectation.js の
+// isLoggableAgentType と同一ロジック。Workflow DSLはrequire不可のためインライン複製）。
+// reviewer/implementer/judge-panelのみ scripts/log-loop-observability.sh 呼び出し指示を
+// システムプロンプトに持つ（.claude/agents/*.md参照）。この件数を「期待される記録件数」として
+// 返し、フロー完了後に scripts/check-loop-observability-gap.sh で実際のログ行数と突き合わせる。
+const LOGGABLE_AGENT_TYPES = new Set(['reviewer', 'implementer', 'judge-panel'])
+let loggableAgentCount = 0
+function countLoggable(agentType) {
+  if (LOGGABLE_AGENT_TYPES.has(agentType)) loggableAgentCount++
+}
+
 function logMinorOnlyPassThrough(label, results) {
   const minorOnly = results.filter(isMinorOnlyFailure)
   if (minorOnly.length > 0) {
@@ -111,6 +122,7 @@ const manifestCheck = await agent(
   { label: 'manifest-check', phase: 'Manifest Check', agentType: 'reviewer', schema: MANIFEST_CHECK_SCHEMA }
 )
 
+countLoggable('reviewer')
 log(`Manifest Check完了: status=${manifestCheck?.status ?? 'なし'}`)
 
 // 品質ゲート: deny-by-default（.claude/workflows/lib/quality-gate.js shouldBlockと同一発想）
@@ -121,7 +133,7 @@ if (manifestCheck?.status !== 'pass') {
     manifestCheck,
     blocked: true,
     blockedAt: 'Manifest Check',
-    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Manifest Check' },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Manifest Check', expectedLoopObservabilityRecords: loggableAgentCount },
   }
 }
 
@@ -149,6 +161,8 @@ const [contractResult, dbResult] = await parallel([
   ),
 ])
 
+countLoggable('contract-writer')
+countLoggable('implementer')
 log('Contract + DB完了')
 
 // 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック
@@ -163,7 +177,7 @@ if (shouldBlock([contractResult, dbResult])) {
     dbResult,
     blocked: true,
     blockedAt: 'Contract + DB',
-    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Contract + DB' },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Contract + DB', expectedLoopObservabilityRecords: loggableAgentCount },
   }
 }
 logMinorOnlyPassThrough('Contract + DB', [contractResult, dbResult])
@@ -195,6 +209,9 @@ const [dataResult, apiResult, uiResult] = await parallel([
   ),
 ])
 
+countLoggable('implementer')
+countLoggable('implementer')
+countLoggable('implementer')
 log('Implement完了')
 
 // 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック（deny-by-default）
@@ -209,7 +226,7 @@ if (shouldBlock([dataResult, apiResult, uiResult])) {
     uiResult,
     blocked: true,
     blockedAt: 'Implement',
-    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Implement' },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Implement', expectedLoopObservabilityRecords: loggableAgentCount },
   }
 }
 logMinorOnlyPassThrough('Implement', [dataResult, apiResult, uiResult])
@@ -226,6 +243,7 @@ const integrationResult = await agent(
   { label: 'integrator', phase: 'Integrate', agentType: 'integrator', schema: AGENT_RESULT_SCHEMA }
 )
 
+countLoggable('integrator')
 log('統合完了')
 
 // 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック（deny-by-default）
@@ -241,7 +259,7 @@ if (shouldBlock([integrationResult])) {
     integration: integrationResult,
     blocked: true,
     blockedAt: 'Integrate',
-    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Integrate' },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Integrate', expectedLoopObservabilityRecords: loggableAgentCount },
   }
 }
 logMinorOnlyPassThrough('Integrate', [integrationResult])
@@ -295,6 +313,8 @@ while (true) {
     ))
   )
 
+  REVIEW_DIMENSIONS.forEach(() => countLoggable('reviewer'))
+
   const { done, blocked, failingDimensions } = classifyReviewRound(reviewResults, REVIEW_DIMENSIONS, reviewAttempt, MAX_REVIEW_RETRIES)
 
   if (done && !blocked) {
@@ -325,6 +345,7 @@ while (true) {
         blocked: true,
         blockedAt: 'Review',
         reviewRetries: reviewRetryAgentCount,
+        expectedLoopObservabilityRecords: loggableAgentCount,
       },
     }
   }
@@ -343,6 +364,7 @@ while (true) {
     )}`,
     { label: `implementer-retry:R${reviewAttempt}`, phase: 'Review', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   )
+  countLoggable('implementer')
   reviewRetryAgentCount++
 }
 
@@ -387,5 +409,6 @@ return {
     totalAgents: 1 + 5 + 1 + REVIEW_DIMENSIONS.length + reviewRetryAgentCount,
     implSuccessCount: implResults.filter(r => r?.status === 'pass').length,
     implBlockedCount: implResults.filter(r => r?.status === 'blocked').length,
+    expectedLoopObservabilityRecords: loggableAgentCount,
   },
 }
