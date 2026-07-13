@@ -10,7 +10,7 @@ export default function NewLoanReturnPage({ params }: { params: Promise<{ id: st
   const router = useRouter()
 
   const [returnDatetime, setReturnDatetime] = useState('')
-  const [items, setItems] = useState<ItemRow[]>([{ jan: '', lot: '', ubd: '', quantity: 1 }])
+  const [items, setItems] = useState<ItemRow[]>(() => [{ id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

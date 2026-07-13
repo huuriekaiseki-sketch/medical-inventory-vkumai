@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { ItemRowInput, type ItemRow } from '../ItemRowInput'
 
 describe('ItemRowInput quantity NaNガード', () => {
-  const rows: ItemRow[] = [{ jan: '', lot: '', ubd: '', quantity: 1 }]
+  const rows: ItemRow[] = [{ id: 'row-1', jan: '', lot: '', ubd: '', quantity: 1 }]
 
   it('数量を空文字にしてもNaNではなく0以上の数値がonChangeに渡る', () => {
     const onChange = vi.fn()

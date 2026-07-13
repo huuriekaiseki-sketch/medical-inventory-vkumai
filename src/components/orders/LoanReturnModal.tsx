@@ -12,13 +12,13 @@ type Props = {
 
 export function LoanReturnModal({ facilityId, isOpen, onClose, onSuccess }: Props) {
   const [returnDatetime, setReturnDatetime] = useState('')
-  const [items, setItems] = useState<ItemRow[]>([{ jan: '', lot: '', ubd: '', quantity: 1 }])
+  const [items, setItems] = useState<ItemRow[]>(() => [{ id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const resetForm = () => {
     setReturnDatetime('')
-    setItems([{ jan: '', lot: '', ubd: '', quantity: 1 }])
+    setItems([{ id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
     setError(null)
   }
 
