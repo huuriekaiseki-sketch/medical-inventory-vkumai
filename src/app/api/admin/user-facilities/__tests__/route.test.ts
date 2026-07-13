@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { POST, DELETE } from '../route'
 import { NextRequest } from 'next/server'
 
-const mockInsert = vi.fn() // DELETE テストで使用
 const mockGetUser = vi.fn()
 const mockFrom = vi.fn()
 
