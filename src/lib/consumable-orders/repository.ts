@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { asString, asNumber } from '@/lib/mapping'
+import { asString, asNumber, asEnum } from '@/lib/mapping'
 import type { ConsumableOrder, ConsumableOrderInput, ConsumableOrderItem } from '@/types/order'
+
+const STATUSES = ['draft', 'submitted'] as const
 
 interface ConsumableOrderItemRow {
   id?: unknown
@@ -44,7 +46,7 @@ export async function listConsumableOrders(
   return ((data ?? []) as (ConsumableOrderRow & { consumable_order_items?: ConsumableOrderItemRow[] })[]).map(o => ({
     id: asString(o.id),
     facilityId: asString(o.facility_id),
-    status: asString(o.status) as 'draft' | 'submitted',
+    status: asEnum(o.status, STATUSES, 'draft'),
     items: (o.consumable_order_items ?? []).map(mapItem),
     createdAt: asString(o.created_at),
     updatedAt: asString(o.updated_at),
@@ -68,7 +70,7 @@ export async function createConsumableOrder(db: SupabaseClient, facilityId: stri
   return {
     id: asString(o.id),
     facilityId: asString(o.facility_id),
-    status: asString(o.status) as 'draft' | 'submitted',
+    status: asEnum(o.status, STATUSES, 'draft'),
     items: itemRows.map(mapItem),
     createdAt: asString(o.created_at),
     updatedAt: asString(o.updated_at),

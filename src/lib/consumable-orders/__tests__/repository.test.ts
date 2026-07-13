@@ -49,4 +49,10 @@ describe('createConsumableOrder', () => {
       createConsumableOrder(db, 'f-1', { items: [] })
     ).rejects.toThrow('DB error')
   })
+
+  it('DBのstatusが想定外の値の場合はdraftにフォールバックする', async () => {
+    const db = makeMockRpcDb({ data: { ...mockRpcResult, status: 'invalid' }, error: null })
+    const result = await createConsumableOrder(db, 'f-1', { items: [] })
+    expect(result.status).toBe('draft')
+  })
 })

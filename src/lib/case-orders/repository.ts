@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { asString, asOptionalString, asNumber } from '@/lib/mapping'
+import { asString, asOptionalString, asNumber, asEnum } from '@/lib/mapping'
 import type { CaseOrder, CaseOrderInput, CaseOrderItem } from '@/types/order'
+
+const GENDERS = ['male', 'female', 'other'] as const
+const STATUSES = ['draft', 'submitted'] as const
 
 interface CaseOrderItemRow {
   id?: unknown
@@ -58,9 +61,9 @@ export async function listCaseOrders(
     procedureName: asString(o.procedure_name),
     patientId: asString(o.patient_id),
     patientInitials: asString(o.patient_initials),
-    gender: asString(o.gender) as 'male' | 'female' | 'other',
+    gender: asEnum(o.gender, GENDERS, 'other'),
     doctorName: asString(o.doctor_name),
-    status: asString(o.status) as 'draft' | 'submitted',
+    status: asEnum(o.status, STATUSES, 'draft'),
     items: (o.case_order_items ?? []).map(mapItem),
     createdAt: asString(o.created_at),
     updatedAt: asString(o.updated_at),
@@ -96,9 +99,9 @@ export async function createCaseOrder(db: SupabaseClient, facilityId: string, in
     procedureName: asString(o.procedure_name),
     patientId: asString(o.patient_id),
     patientInitials: asString(o.patient_initials),
-    gender: asString(o.gender) as 'male' | 'female' | 'other',
+    gender: asEnum(o.gender, GENDERS, 'other'),
     doctorName: asString(o.doctor_name),
-    status: asString(o.status) as 'draft' | 'submitted',
+    status: asEnum(o.status, STATUSES, 'draft'),
     items: itemRows.map(mapItem),
     createdAt: asString(o.created_at),
     updatedAt: asString(o.updated_at),

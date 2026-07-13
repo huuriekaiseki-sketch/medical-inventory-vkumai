@@ -85,4 +85,22 @@ describe('createCaseOrder', () => {
       })
     ).rejects.toThrow('DB error')
   })
+
+  it('DBのgender/statusが想定外の値の場合はフォールバックする', async () => {
+    const db = makeMockRpcDb({
+      data: { ...mockRpcResult, gender: 'unknown', status: 'invalid' },
+      error: null,
+    })
+    const result = await createCaseOrder(db, 'f-1', {
+      caseDatetime: '2026-06-24T10:00:00Z',
+      procedureName: 'TAVI',
+      patientId: 'P001',
+      patientInitials: 'T.S.',
+      gender: 'male',
+      doctorName: '田中医師',
+      items: [],
+    })
+    expect(result.gender).toBe('other')
+    expect(result.status).toBe('draft')
+  })
 })
