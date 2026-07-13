@@ -47,6 +47,27 @@ describe('mapProduct 型ガード', () => {
       updatedAt: 'u',
     })
   })
+  it('name/maker にスラッシュ・スペース等の記号を含む値をそのまま保持する', () => {
+    expect(
+      mapProduct({
+        id: '1',
+        jan: 'J',
+        ref: 'R',
+        name: 'カテーテル AB/C型',
+        maker: 'テルモ・メディカル/日本',
+        created_at: 'c',
+        updated_at: 'u',
+      })
+    ).toEqual({
+      id: '1',
+      jan: 'J',
+      ref: 'R',
+      name: 'カテーテル AB/C型',
+      maker: 'テルモ・メディカル/日本',
+      createdAt: 'c',
+      updatedAt: 'u',
+    })
+  })
   it('maker が null の場合は null を保持する（空文字に丸めない）', () => {
     expect(
       mapProduct({
