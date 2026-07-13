@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { asString, asOptionalString, asNumber } from '@/lib/mapping'
+import { asString, asOptionalString, asNumber, asEnum } from '@/lib/mapping'
 import type { LoanOrder, LoanOrderInput, LoanOrderItem } from '@/types/order'
+
+const STATUSES = ['draft', 'submitted'] as const
 
 interface LoanOrderItemRow {
   id?: unknown
@@ -50,7 +52,7 @@ export async function listLoanOrders(
     facilityId: asString(o.facility_id),
     procedureName: asString(o.procedure_name),
     maker: asString(o.maker),
-    status: asString(o.status) as 'draft' | 'submitted',
+    status: asEnum(o.status, STATUSES, 'draft'),
     items: (o.loan_order_items ?? []).map(mapItem),
     createdAt: asString(o.created_at),
     updatedAt: asString(o.updated_at),
@@ -79,7 +81,7 @@ export async function createLoanOrder(db: SupabaseClient, facilityId: string, in
     facilityId: asString(o.facility_id),
     procedureName: asString(o.procedure_name),
     maker: asString(o.maker),
-    status: asString(o.status) as 'draft' | 'submitted',
+    status: asEnum(o.status, STATUSES, 'draft'),
     items: itemRows.map(mapItem),
     createdAt: asString(o.created_at),
     updatedAt: asString(o.updated_at),
