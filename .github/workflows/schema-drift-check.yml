@@ -42,14 +42,27 @@ jobs:
           curl -sf "${SUPABASE_URL}/rest/v1/drift_alert_view?select=drift_type,object_name,detected_at" \
             -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
-            -o drift.json
-          echo "未解決ドリフト件数: $(jq 'length' drift.json)"
-          jq -r '.[] | "[schema-drift] " + .drift_type + ": " + .object_name' drift.json > expected_titles.txt
+            -o drift_raw.json
+          echo "未解決ドリフト件数: $(jq 'length' drift_raw.json)"
+
+          # titleをここで一度だけ生成し、以降の全ステップはこのフィールドだけを参照する
+          # (フォーマット文字列を複数箇所に重複させない)。rls_disabledはSPEC.md記載の
+          # 優先度が最も高いドリフト種別のため、タイトルにも明示する
+          jq '[.[] | . + {
+                title: (if .drift_type == "rls_disabled"
+                        then "[schema-drift][priority:high] " + .drift_type + ": " + .object_name
+                        else "[schema-drift] " + .drift_type + ": " + .object_name end)
+              }]' drift_raw.json > drift.json
+          jq -r '.[].title' drift.json > expected_titles.txt
 
       - name: Reconcile GitHub Issues (create new / close resolved)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # WHY: --limit 100は既知の制約。100件を超えるopen issueが積み上がった場合、
+          # 古いissueが取得漏れし重複作成・クローズ漏れが起こりうる（v1では許容。
+          # 20260714000003マイグレーションでbaseline恒久誤検知バグを是正済みのため
+          # 実運用でこの上限に達する可能性は低いと判断）
           gh issue list --label schema-drift --state open --json title,number --limit 100 > open_issues.json
 
           while IFS= read -r title; do
@@ -57,7 +70,7 @@ jobs:
             if jq -e --arg t "$title" 'any(.[]; .title == $t)' open_issues.json > /dev/null; then
               continue
             fi
-            row=$(jq -c --arg t "$title" 'map(select("[schema-drift] " + .drift_type + ": " + .object_name == $t)) | .[0]' drift.json)
+            row=$(jq -c --arg t "$title" 'map(select(.title == $t)) | .[0]' drift.json)
             drift_type=$(echo "$row" | jq -r '.drift_type')
             object_name=$(echo "$row" | jq -r '.object_name')
             detected_at=$(echo "$row" | jq -r '.detected_at')

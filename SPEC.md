@@ -63,9 +63,11 @@ SQL Editor等でPRを介さず本番DBのスキーマが直接変更された場
 
 #### GitHub Issue連携
 
-- [x] 未解決ドリフトが1件以上ある状態でGitHub Actionsを実行すると、`schema-drift`・`bug`ラベル付きのIssueが作成される（モックデータでロジックのドライラン検証済み。実際のSupabase本番環境での動作は`PROD_SUPABASE_URL`/`PROD_SUPABASE_ANON_KEY`のSecrets登録後に確認要）
-- [x] 既にIssueが作成済みの未解決ドリフトについては、再実行してもIssueが重複作成されない（タイトルベースの突合ロジックをドライラン検証済み）
-- [x] ドリフトが解消された後の実行で、対応するIssueが自動でクローズされる（ドライラン検証済み）
+> 以下4項目のロジック自体は`scripts/schema-drift-reconcile.test.sh`（gh CLIをスタブ化した回帰テスト、リポジトリにコミット済み・実行して4アサーション全通過を確認済み）で検証済み。ただし実際のSupabase本番環境に対する動作は`PROD_SUPABASE_URL`/`PROD_SUPABASE_ANON_KEY`のGitHub Secrets登録後、`workflow_dispatch`での手動実行で別途確認が必要（**未実施**。マージ後の運用開始タスクとして残る）。
+
+- [x] 未解決ドリフトが1件以上ある状態でGitHub Actionsを実行すると、`schema-drift`・`bug`ラベル付きのIssueが作成される（ロジックはテストで検証済み。本番環境での実地確認は上記の通り未実施）
+- [x] 既にIssueが作成済みの未解決ドリフトについては、再実行してもIssueが重複作成されない（タイトルベースの突合ロジックをテストで検証済み）
+- [x] ドリフトが解消された後の実行で、対応するIssueが自動でクローズされる（テストで検証済み）
 - [x] GitHub Actions用のトークンは標準の`GITHUB_TOKEN`（`issues:write`権限のみ）を使い、個人アクセストークンの発行・管理は不要である（`permissions: issues: write`のみ宣言、PAT不使用）
 
 #### セキュリティ
@@ -98,17 +100,19 @@ SQL Editor等でPRを介さず本番DBのスキーマが直接変更された場
 - RISK判定: `supabase/migrations/`・RLS・policyドメインに触れるため **RISK=はい（M/Lレーン必須）**
 - 既存方針の継承: 本番Supabase接続情報をGitHub Secretsに置かない（`docs/agents/decisions.md`「なぜスキーマドリフト検知を自前cronではなくSupabase GitHub Integrationで始めたか」と同じ制約を維持する。本仕様はそれを補完するもので、置き換えではない）
 - `check_schema_drift()`のテーブル追加/削除判定は、`schema_baseline_snapshots`にmigration適用時点の`pg_tables`実データをそのまま記録する方式（手動でのテーブル名列挙はしない。導出漏れリスクを構造的に避けるため）
+- **[Phase 5レビューで追加]** 今後publicスキーマのテーブル構成を変える（テーブルを追加/削除する）migrationは、末尾で`SELECT refresh_schema_baseline_snapshot('<そのmigrationのタイムスタンプ>');`を呼ぶこと（`20260714000003_schema_drift_v1_hardening.sql`で追加）。呼ばないと、正規のPRレビュー済み変更でもtable_added/table_removedとして恒久的に誤検知され続ける（`docs/agents/common.md`にも運用ルールとして明記）
 
 ### drift_type / event_kind の値と判定基準（Part 3セルフチェック対応）
 
-**`drift_type`**（`schema_drift_log.drift_type`、TEXT）
+**`drift_type`**（`schema_drift_log.drift_type`、TEXT、CHECK制約で下記3値に限定）
 
 | 値 | 判定基準 | 下流の反応 |
 |---|---|---|
-| `rls_disabled` | `pg_class.relrowsecurity = false` のpublicスキーマテーブルが1件でもある | `drift_alert_view`に表示 → GitHub Actionsが`priority: high`としてIssue本文に明記 |
+| `rls_disabled` | `pg_class.relrowsecurity = false` のpublicスキーマテーブルが1件でもある | `drift_alert_view`に表示 → GitHub Actionsが`[priority:high]`をタイトルに付与してIssue作成 |
 | `table_added` | 最新snapshotの`snapshot`配列に存在しないテーブルが`pg_tables`に存在する | `drift_alert_view`に表示 → 通常のIssue作成対象 |
 | `table_removed` | 最新snapshotの`snapshot`配列に存在するテーブルが`pg_tables`に存在しない | `drift_alert_view`に表示 → 通常のIssue作成対象 |
-| `error` | `check_schema_drift()`内部で想定外の例外を捕捉した場合（基盤テーブル消失以外） | `drift_alert_view`には出さない（object_nameがNULLになりうるため）。`schema_drift_log`への記録のみとし、`cron.job_run_details`の失敗ログと合わせて別途確認する運用とする |
+
+**[Phase 5レビューで削除]** 原案にあった`error`種別（想定外例外の捕捉）は、対応する例外ハンドラが実装されておらず実装と乖離したドキュメントのみの状態だったため、v1スコープから削除した。基盤テーブル消失・baseline空の2ケースは`check_schema_drift()`が`RAISE EXCEPTION`で直接失敗する設計のままとし（`cron.job_run_details`に残る）、それ以外の想定外例外を`schema_drift_log`に記録する機能はv2以降の検討課題とする。
 
 **`event_kind`**（`schema_drift_log.event_kind`、TEXT CHECK IN ('detected','acknowledged','resolved')）
 
