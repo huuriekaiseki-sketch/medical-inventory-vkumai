@@ -27,19 +27,23 @@ export default function EditCategoryPage({ params }: { params: Promise<{ id: str
 
   async function handleSubmit(data: CategoryInput) {
     setSubmitError(null)
-    const res = await fetch(`/api/categories/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
+    try {
+      const res = await fetch(`/api/categories/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      setSubmitError(body.error ?? '更新に失敗しました')
-      return
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setSubmitError(body.error ?? '更新に失敗しました')
+        return
+      }
+
+      router.push('/categories')
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : '更新に失敗しました')
     }
-
-    router.push('/categories')
   }
 
   if (fetchError && !category) {

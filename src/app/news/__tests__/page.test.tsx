@@ -192,6 +192,40 @@ describe('NewsPage', () => {
     expect(screen.queryByRole('option', { name: '全施設' })).not.toBeInTheDocument()
   })
 
+  it('一度エラーが表示された後、「もっと見る」の再取得が成功したらエラーメッセージが消える（issue #25）', async () => {
+    const page0 = Array.from({ length: 20 }, (_, i) => makeItem(`p0-${i}`, '2026-07-08T00:00:00Z'))
+    const page1 = [makeItem('p1-0', '2026-07-07T00:00:00Z')]
+    let loadMoreCallCount = 0
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities: [facilities[0]] }))
+      if (url === '/api/news?facilityId=f1&limit=20&offset=0') return Promise.resolve(jsonResponse({ items: page0 }))
+      if (url === '/api/news?facilityId=f1&limit=20&offset=20') {
+        loadMoreCallCount += 1
+        if (loadMoreCallCount === 1) {
+          return Promise.resolve(jsonResponse({ error: 'server error' }, { status: 500 }))
+        }
+        return Promise.resolve(jsonResponse({ items: page1 }))
+      }
+      return Promise.resolve(jsonResponse({ error: `unexpected ${url}` }, { status: 500 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<NewsPage />)
+    const loadMoreButton = await screen.findByRole('button', { name: 'もっと見る' })
+
+    // 1回目: もっと見るの取得が失敗し、エラーメッセージが表示される
+    await user.click(loadMoreButton)
+    expect(await screen.findByText('データの取得に失敗しました')).toBeInTheDocument()
+
+    // 2回目: 再度もっと見るを押して取得が成功すると、古いエラーメッセージが消える
+    await user.click(loadMoreButton)
+    await waitFor(() => {
+      expect(screen.queryByText('データの取得に失敗しました')).not.toBeInTheDocument()
+    })
+    expect(await screen.findByText('商品p1-0', { exact: false })).toBeInTheDocument()
+  })
+
   it('施設が0件の場合、お知らせはありませんと表示される', async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities: [] }))

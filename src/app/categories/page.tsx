@@ -23,13 +23,17 @@ export default function CategoriesPage() {
   async function handleDelete(id: string) {
     if (!confirm('削除しますか？')) return
     setError(null)
-    const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      setError(body.error ?? '削除に失敗しました')
-      return
+    try {
+      const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setError(body.error ?? '削除に失敗しました')
+        return
+      }
+      refresh()
+    } catch {
+      setError('削除に失敗しました')
     }
-    refresh()
   }
 
   return (

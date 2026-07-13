@@ -45,81 +45,97 @@ export default function AdminUsersPage() {
   }, [refreshKey])
 
   const handleToggleFacility = async (userId: string, facilityId: string, add: boolean) => {
-    const res = await fetch('/api/admin/user-facilities', {
-      method: add ? 'POST' : 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      // add=true 時は role='staff' をデフォルト送信
-      body: JSON.stringify(add ? { userId, facilityId, role: 'staff' } : { userId, facilityId }),
-    })
-    if (!res.ok) {
-      const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
-      showToast(`エラー: ${error}`)
-      return
-    }
-    setUsers(prev =>
-      prev.map(u =>
-        u.id !== userId ? u : {
-          ...u,
-          facilities: add
-            ? [...u.facilities, { id: facilityId, role: 'staff' as const }]
-            : u.facilities.filter(f => f.id !== facilityId),
-        }
+    try {
+      const res = await fetch('/api/admin/user-facilities', {
+        method: add ? 'POST' : 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        // add=true 時は role='staff' をデフォルト送信
+        body: JSON.stringify(add ? { userId, facilityId, role: 'staff' } : { userId, facilityId }),
+      })
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
+        showToast(`エラー: ${error}`)
+        return
+      }
+      setUsers(prev =>
+        prev.map(u =>
+          u.id !== userId ? u : {
+            ...u,
+            facilities: add
+              ? [...u.facilities, { id: facilityId, role: 'staff' as const }]
+              : u.facilities.filter(f => f.id !== facilityId),
+          }
+        )
       )
-    )
+    } catch {
+      showToast('エラー: 通信に失敗しました')
+    }
   }
 
   const handleChangeRole = async (userId: string, facilityId: string, role: 'admin' | 'staff') => {
-    const res = await fetch('/api/admin/user-facilities', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, facilityId, role }),
-    })
-    if (!res.ok) {
-      const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
-      showToast(`エラー: ${error}`)
-      return
-    }
-    setUsers(prev =>
-      prev.map(u =>
-        u.id !== userId ? u : {
-          ...u,
-          facilities: u.facilities.map(f =>
-            f.id === facilityId ? { ...f, role } : f
-          ),
-        }
+    try {
+      const res = await fetch('/api/admin/user-facilities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, facilityId, role }),
+      })
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
+        showToast(`エラー: ${error}`)
+        return
+      }
+      setUsers(prev =>
+        prev.map(u =>
+          u.id !== userId ? u : {
+            ...u,
+            facilities: u.facilities.map(f =>
+              f.id === facilityId ? { ...f, role } : f
+            ),
+          }
+        )
       )
-    )
+    } catch {
+      showToast('エラー: 通信に失敗しました')
+    }
   }
 
   const handleDeleteUser = async (userId: string, email: string) => {
     if (!confirm(`${email} を削除しますか？`)) return
-    const res = await fetch('/api/admin/users', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId }),
-    })
-    if (!res.ok) {
-      const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
-      showToast(`エラー: ${error}`)
-      return
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
+        showToast(`エラー: ${error}`)
+        return
+      }
+      setUsers(prev => prev.filter(u => u.id !== userId))
+      showToast('ユーザーを削除しました')
+    } catch {
+      showToast('エラー: 通信に失敗しました')
     }
-    setUsers(prev => prev.filter(u => u.id !== userId))
-    showToast('ユーザーを削除しました')
   }
 
   const handleInvite = async (email: string) => {
-    const res = await fetch('/api/admin/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    })
-    if (res.ok) {
-      setInviteOpen(false)
-      showToast(`${email} に招待メールを送信しました`)
-      reload()
-    } else {
-      const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
-      showToast(`エラー: ${error}`)
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      if (res.ok) {
+        setInviteOpen(false)
+        showToast(`${email} に招待メールを送信しました`)
+        reload()
+      } else {
+        const { error } = await res.json().catch(() => ({ error: 'エラーが発生しました' }))
+        showToast(`エラー: ${error}`)
+      }
+    } catch {
+      showToast('エラー: 通信に失敗しました')
     }
   }
 
