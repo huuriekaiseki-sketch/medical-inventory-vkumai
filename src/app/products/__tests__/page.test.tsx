@@ -40,4 +40,26 @@ describe('ProductsPage handleDelete', () => {
     await waitFor(() => expect(calls.filter((c) => c === 'list')).toHaveLength(2))
     expect(calls.indexOf('delete-end')).toBeLessThan(calls.lastIndexOf('list'))
   })
+
+  it('一覧取得(GET)が失敗した場合、エラーバナーを表示する', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500, json: () => Promise.resolve({}) }) as unknown as typeof fetch
+
+    render(<ProductsPage />)
+
+    expect(await screen.findByText('一覧の取得に失敗しました')).toBeInTheDocument()
+  })
+
+  it('削除(DELETE)がネットワーク例外を投げた場合、alertでユーザーに通知する', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (init?.method === 'DELETE') return Promise.reject(new Error('network error'))
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ products: [{ id: '1', jan: '4900000000001', ref: 'R1' }] }) })
+    }) as unknown as typeof fetch
+
+    render(<ProductsPage />)
+    await screen.findByText('4900000000001')
+
+    await userEvent.click(screen.getAllByRole('button', { name: '削除' })[0])
+
+    await waitFor(() => expect(global.alert).toHaveBeenCalledWith('削除に失敗しました'))
+  })
 })

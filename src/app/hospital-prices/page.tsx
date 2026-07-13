@@ -88,13 +88,17 @@ function HospitalPricesPageInner() {
 
   async function handleDelete(id: string) {
     setError(null)
-    const res = await fetch(`/api/hospital-prices/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const body = await res.json()
-      setError(body.error ?? '削除に失敗しました')
-      return
+    try {
+      const res = await fetch(`/api/hospital-prices/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const body = await res.json()
+        setError(body.error ?? '削除に失敗しました')
+        return
+      }
+      refresh()
+    } catch {
+      setError('削除に失敗しました')
     }
-    refresh()
   }
 
   function handleFacilityChange(newId: string) {

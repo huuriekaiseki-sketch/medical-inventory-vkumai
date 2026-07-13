@@ -30,14 +30,18 @@ export default function DistributorProductsPage() {
 
   async function handleDelete(id: string) {
     if (!window.confirm('削除しますか？')) return
-    const res = await fetch(`/api/distributor-products/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      setError(body.error ?? '削除に失敗しました')
-      return
+    try {
+      const res = await fetch(`/api/distributor-products/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setError(body.error ?? '削除に失敗しました')
+        return
+      }
+      setError(null)
+      refresh()
+    } catch {
+      setError('削除に失敗しました')
     }
-    setError(null)
-    refresh()
   }
 
   return (

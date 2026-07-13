@@ -111,4 +111,19 @@ describe('DistributorProductsPage', () => {
     await userEvent.click(screen.getByText('削除'))
     expect(await screen.findByText('削除に失敗しました')).toBeInTheDocument()
   })
+
+  it('削除でfetchが例外を投げた場合もエラーバナーを表示する', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (init?.method === 'DELETE') return Promise.reject(new Error('network error'))
+      if (url === '/api/distributor-products') return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ items }) })
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ categories }) })
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(<DistributorProductsPage />)
+    await screen.findByText('商品A')
+    await userEvent.click(screen.getByText('削除'))
+    expect(await screen.findByText('削除に失敗しました')).toBeInTheDocument()
+  })
 })

@@ -21,10 +21,14 @@ export function ConsumableOrderModal({ facilityId, isOpen, onClose, onSuccess }:
 
   useEffect(() => {
     if (!isOpen) return
+    let cancelled = false
     fetch(`/api/consumables?facilityId=${facilityId}`)
       .then(r => r.json())
-      .then(d => setConsumables(d.consumables ?? []))
-      .catch(() => setError('消耗品の取得に失敗しました'))
+      .then(d => { if (!cancelled) setConsumables(d.consumables ?? []) })
+      .catch(() => { if (!cancelled) setError('消耗品の取得に失敗しました') })
+    return () => {
+      cancelled = true
+    }
   }, [isOpen, facilityId])
 
   const resetForm = () => {

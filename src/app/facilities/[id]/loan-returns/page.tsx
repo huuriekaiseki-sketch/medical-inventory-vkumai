@@ -16,11 +16,15 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     fetch(`/api/loan-returns?facility_id=${id}`)
       .then(r => { if (!r.ok) throw new Error(); return r.json() })
-      .then(d => setReturns(d.returns ?? []))
-      .catch(() => setError('一覧の取得に失敗しました'))
-      .finally(() => setLoading(false))
+      .then(d => { if (!cancelled) setReturns(d.returns ?? []) })
+      .catch(() => { if (!cancelled) setError('一覧の取得に失敗しました') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => {
+      cancelled = true
+    }
   }, [id])
 
   const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }

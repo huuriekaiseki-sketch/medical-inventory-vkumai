@@ -8,26 +8,32 @@ import { ProductList } from '@/components/products/ProductList'
 export default function ProductsPage() {
   const router = useRouter()
   const [products, setProducts] = useState<Product[]>([])
+  const [error, setError] = useState<string | null>(null)
   const [refreshKey, refresh] = useReducer((x: number) => x + 1, 0)
 
   useEffect(() => {
     let cancelled = false
     fetch('/api/products')
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(); return r.json() })
       .then((d) => { if (!cancelled) setProducts(d.products) })
+      .catch(() => { if (!cancelled) setError('一覧の取得に失敗しました') })
     return () => { cancelled = true }
   }, [refreshKey])
 
   async function handleDelete(id: string) {
     if (!confirm('削除しますか？')) return
-    // WHY: DELETE完了をawaitで待ってから再取得しないと、削除前のデータが再描画され不整合が起きるため
-    const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const body = await res.json()
-      alert(body.error ?? '削除に失敗しました')
-      return
+    try {
+      // WHY: DELETE完了をawaitで待ってから再取得しないと、削除前のデータが再描画され不整合が起きるため
+      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const body = await res.json()
+        alert(body.error ?? '削除に失敗しました')
+        return
+      }
+      refresh()
+    } catch {
+      alert('削除に失敗しました')
     }
-    refresh()
   }
 
   return (
@@ -49,6 +55,8 @@ export default function ProductsPage() {
           + 新規登録
         </button>
       </div>
+
+      {error && <p className="mb-4 text-red-600">{error}</p>}
 
       <div className="rounded bg-white shadow-sm overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
         <ProductList
