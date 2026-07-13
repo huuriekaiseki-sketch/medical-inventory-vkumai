@@ -52,4 +52,12 @@ describe('shouldBlock', () => {
   it('failでfindingsを省略した場合はtrue（deny-by-default: 重大度不明はブロック側）', () => {
     expect(shouldBlock([{ status: 'fail', detail: 'findings無し' }])).toBe(true)
   })
+
+  it('issue #313: SPEC.md欠如でspec-checkがblockedを返した場合はtrue（後続の全エージェントを起動せず中断する）', () => {
+    expect(shouldBlock([{ status: 'blocked', detail: 'SPEC.mdが存在しない' }])).toBe(true)
+  })
+
+  it('issue #313: SPEC.mdが存在しspec-checkがpassを返した場合はfalse（後続フェーズへ進む）', () => {
+    expect(shouldBlock([{ status: 'pass', detail: 'SPEC.mdが存在し読み込めた' }])).toBe(false)
+  })
 })

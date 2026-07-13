@@ -3,6 +3,7 @@ export const meta = {
   description: 'Phase 3-5: contract-first並列実装 → 統合ゲート → 4観点並列検証。仕様書承認後（停止①の後）に実行。',
   whenToUse: '人間が仕様書（SPEC.md）を承認した後、Phase 3 実装に入るときに使う。aidd-1-1-deep-task.jsの後続として使う。',
   phases: [
+    { title: 'Spec Check',     detail: 'SPEC.md存在チェック（欠如時は後続の全エージェントを起動せず中断）' },
     { title: 'Manifest Check', detail: 'Run Manifestのspecハッシュ突合（レビュー後のSPEC.md改変を検知）' },
     { title: 'Contract + DB', detail: 'contract-writer（型定義）とdb-impl（migrations）を並列実行' },
     { title: 'Implement',     detail: 'data-impl / api-impl / ui-impl を並列実行' },
@@ -95,6 +96,48 @@ failの場合はfindings配列（{ severity: critical/important/minor, descripti
 重大度を明記すること。findings全件がminorならこのゲートは通過扱いになる。
 findingsを省略した場合、またはcritical/important指摘が1件でもあれば差し戻し対象になる
 （severity不明・欠損はcritical扱い。fail-open防止）。`
+
+// ─── Phase -1: Spec Check ────────────────────────────────────────────
+// issue #313: 2026-07-10時点の分析で「20回のreviewer呼び出しのうち9回はSPECファイル欠如で
+// 失敗し、145万トークン・$81.25を浪費した」ことが判明していた。その後の品質ゲート強化で
+// SPEC欠如時はblocked判定されるようになったが、それは「まず各エージェントを起動し、
+// エージェント自身がSPECファイルを読めずに気づいてblockedを自己申告する」方式のままだった。
+// Workflow DSLはfilesystem APIを持たないため fs.existsSync 等は使えず、Manifest Checkと
+// 同じパターン（軽量な単一エージェントによるReadツール確認）で最初にSPEC.mdの存在だけを
+// 確認し、無ければ後続の全エージェント（Manifest Check以降）を一切起動せず即座に返す。
+phase('Spec Check')
+
+const SPEC_CHECK_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['pass', 'blocked'] },
+    detail: { type: 'string' },
+  },
+  required: ['status', 'detail'],
+}
+
+const specCheck = await agent(
+  `Readツールで ${specPath} が存在し読み込めるか確認してください。それ以外は何もしないでください。${guide(
+    `${specPath}が存在し読み込めた`,
+    '（未使用: このエージェントはpass/blockedの2値のみ返す）',
+    `${specPath}が存在しない、または読み込めない`
+  )}`,
+  { label: 'spec-check', phase: 'Spec Check', agentType: 'reviewer', schema: SPEC_CHECK_SCHEMA }
+)
+
+countLoggable('reviewer')
+log(`Spec Check完了: status=${specCheck?.status ?? 'なし'}`)
+
+if (shouldBlock([specCheck])) {
+  log(`品質ゲート: ${specPath}が存在しないため中断（Manifest Check以降のエージェントは起動しません）`)
+  return {
+    done: false,
+    specCheck,
+    blocked: true,
+    blockedAt: 'Spec Check',
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Spec Check', expectedLoopObservabilityRecords: loggableAgentCount },
+  }
+}
 
 // ─── Phase 0: Manifest Check ─────────────────────────────────────────
 // issue #44/#294: docs/agents/run-manifest.md にPhase 2開始時のspecHash突合が
