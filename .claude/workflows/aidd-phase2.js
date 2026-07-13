@@ -145,6 +145,11 @@ if (shouldBlock([specCheck])) {
 // 改変されるケースを検知できないまま実装が進んでしまう。
 // Workflow DSL自体はfilesystem/Node.js APIアクセスが無いため、Read/Bashツールを持つ
 // エージェントにマニフェスト読み込み・ハッシュ再計算・突合を行わせる。
+// issue #316: 下記プロンプトの1〜4の判定テーブルは .claude/workflows/lib/manifest-check.js の
+// classifyManifestCheck にテスト可能な形で文書化している。ただし実行パス自体はプロンプト依存の
+// ままであり（Workflow DSLの制約上、実際のmanifest読込・ハッシュ計算はエージェントに委譲する
+// 必要がある）、このプロンプト文言を変更した場合はmanifest-check.js側も手動で追従させること
+// （自動では同期されない）。
 phase('Manifest Check')
 
 const MANIFEST_CHECK_SCHEMA = {
@@ -275,6 +280,9 @@ if (shouldBlock([dataResult, apiResult, uiResult])) {
 logMinorOnlyPassThrough('Implement', [dataResult, apiResult, uiResult])
 
 // ─── Phase C: 統合ゲート ──────────────────────────────────────────────
+// issue #316: 手順7のchangedFiles上書き（「他フィールドは変更しないこと」）は
+// .claude/workflows/lib/manifest-check.js の applyChangedFiles にテスト可能な形で
+// 文書化している。こちらもプロンプト依存の実行パス自体は変わらない（上記Manifest Check参照）。
 phase('Integrate')
 
 const integrationResult = await agent(

@@ -37,6 +37,15 @@ Run ManifestはこのズレをPhase間で検出するための唯一の正とす
   一致しない場合はPhase 2を起動せずエラーにする（レビュー後にSPEC.mdが変更されたことを検出するため）。
 - **Phase 3〜4完了時**: `changedFiles` を実際の変更ファイル一覧で更新する。
 
+## 突合・更新ロジックのテスト（issue #316）
+
+specHash突合（Phase 2開始時）・changedFiles更新（Phase 3〜4完了時）の判定・更新ロジックは、
+`.claude/workflows/lib/manifest-check.js`（`classifyManifestCheck`/`applyChangedFiles`）に
+テスト可能な形で文書化している。ただしWorkflow DSL（`aidd-phase2.js`）自体はfilesystem/Node.js
+APIアクセスが無いため、実際のmanifest読込・ハッシュ再計算・ファイル書き込みは今もエージェントへの
+自然言語プロンプト指示として実行される。`aidd-phase2.js`内のプロンプト文言を変更した場合、
+`manifest-check.js`とそのテストは自動では追従しないため、手動で同期させること。
+
 ## 関連ファイル
 
 - [`common.md`](./common.md) — 全AIエージェント共通ルール
