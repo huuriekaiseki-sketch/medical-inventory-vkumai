@@ -17,7 +17,7 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
   const [patientInitials, setPatientInitials] = useState('')
   const [gender, setGender] = useState<'male' | 'female' | 'other'>('male')
   const [doctorName, setDoctorName] = useState('')
-  const [items, setItems] = useState<ItemRow[]>([{ jan: '', lot: '', ubd: '', quantity: 1 }])
+  const [items, setItems] = useState<ItemRow[]>(() => [{ id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,7 +28,7 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
     setPatientInitials('')
     setGender('male')
     setDoctorName('')
-    setItems([{ jan: '', lot: '', ubd: '', quantity: 1 }])
+    setItems([{ id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
     setError(null)
   }
 

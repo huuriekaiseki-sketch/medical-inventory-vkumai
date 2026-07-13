@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { asString, asOptionalString, asNumber } from '@/lib/mapping'
+import { asString, asOptionalString, asNumber, asEnum } from '@/lib/mapping'
 import type { LoanReturn, LoanReturnInput, LoanReturnItem } from '@/types/order'
+
+const STATUSES = ['draft', 'returned'] as const
 
 const LOAN_RETURN_COLUMNS = 'id, facility_id, return_datetime, status, created_at, updated_at'
 // 注: updated_at は Group A のマイグレーション適用前のため明細列挙には含めない
@@ -54,7 +56,7 @@ export async function listLoanReturns(
     id: asString(r.id),
     facilityId: asString(r.facility_id),
     returnDatetime: asString(r.return_datetime),
-    status: asString(r.status) as 'draft' | 'returned',
+    status: asEnum(r.status, STATUSES, 'draft'),
     items: (r.loan_return_items ?? []).map(mapItem),
     createdAt: asString(r.created_at),
     updatedAt: asString(r.updated_at),
@@ -89,7 +91,7 @@ export async function createLoanReturn(db: SupabaseClient, facilityId: string, i
     id: asString(r.id),
     facilityId: asString(r.facility_id),
     returnDatetime: asString(r.return_datetime),
-    status: asString(r.status) as 'draft' | 'returned',
+    status: asEnum(r.status, STATUSES, 'draft'),
     items: (items as LoanReturnItemRow[]).map(mapItem),
     createdAt: asString(r.created_at),
     updatedAt: asString(r.updated_at),
