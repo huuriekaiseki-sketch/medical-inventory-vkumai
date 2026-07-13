@@ -52,3 +52,26 @@ _Avoid_: 商品、product単体（hospital_priceとの対比で使う場合はdi
 
 すべての発注系テーブル（`case_orders` / `consumable_orders` / `loan_orders` / `loan_returns`）は
 `facility_id` を持ち、`is_facility_member` によるRLSで施設外からのアクセスを遮断する。
+
+**lot（ロット番号）**:
+医療機器・消耗品の製造ロット番号。`case_order_items.lot` / `loan_return_items.lot` に記録。
+リコール発生時のトレーサビリティ目的で発注・返却明細に個体単位で記録する自由入力フィールド。
+在庫テーブル自体をロット単位で区分する在庫管理（ロット別在庫追跡）は現状未実装。
+
+**ubd（使用期限）**:
+"Use By Date" の略（医療材料業界の一般的な略語）。`case_order_items.ubd` / `loan_return_items.ubd`
+に記録。`lot` 同様、発注・返却明細の付帯情報として記録されるのみで、期限切れアラート等の機能は
+現状未実装。
+
+**jan（JANコード）**:
+商品バーコード。`case_order_items.jan` / `loan_order_items.jan` / `loan_return_items.jan` /
+`consumables.jan` に記録。`distributor_product` との突合キーとしては現状使われていない
+（発注明細の自由入力フィールド）。
+
+## 未実装のドメイン概念（2026-07時点）
+
+医療材料業界で一般的だが、本リポジトリのスキーマには対応するテーブル・カラムが存在しない用語。
+実装済みと誤認して設計・レビューしないよう明記する。
+
+- **預託在庫**: 卸業者が施設内に置く在庫（所有権は卸業者のまま）。対応テーブルなし。
+- **棚卸**: 実地在庫数と台帳の突合作業。対応テーブル・機能なし。
