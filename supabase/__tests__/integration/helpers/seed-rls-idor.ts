@@ -28,7 +28,7 @@ export interface SeedRlsIdorFixtures {
 // テスト用パスワード。ローカル/テスト専用DBでのみ使う使い捨て値のため機密情報ではない。
 const TEST_USER_PASSWORD = 'rls-idor-test-password-0000'
 
-function createServiceRoleClient(): SupabaseClient {
+export function createServiceRoleClient(): SupabaseClient {
   // 本番Supabaseへの誤接続を防ぐ多層防御（globalSetupとの二重チェック）
   assertTestSupabaseEnv()
 
@@ -70,7 +70,7 @@ async function createSignedInClient(
   return client
 }
 
-async function createFacility(serviceClient: SupabaseClient, dummyName: string) {
+export async function createFacility(serviceClient: SupabaseClient, dummyName: string) {
   const { data, error } = await serviceClient
     .from('facilities')
     .insert({ name: dummyName })
@@ -82,7 +82,7 @@ async function createFacility(serviceClient: SupabaseClient, dummyName: string) 
   return { id: data.id as string, name: data.name as string }
 }
 
-async function createSeededUser(
+export async function createSeededUser(
   serviceClient: SupabaseClient,
   emailPrefix: string,
   facilityId: string
@@ -148,14 +148,124 @@ export async function seedRlsIdorFixtures(): Promise<SeedRlsIdorFixtures> {
   }
 }
 
-/** シードしたユーザー・施設を後始末する（service role clientで直接削除） */
-export async function cleanupRlsIdorFixtures(fixtures: SeedRlsIdorFixtures): Promise<void> {
+/**
+ * ユーザーA・B、施設A・Bを後始末する共通処理（issue #315: loan_orders専用だった
+ * cleanupRlsIdorFixturesから、case_orders/consumable_orders版でも再利用できるよう切り出した）。
+ * auth.usersの削除はON DELETE CASCADEでuser_facilitiesも連動して消える。
+ * facilitiesの削除はloan_orders/case_orders/consumable_orders等を
+ * ON DELETE CASCADEで連動して消す。
+ */
+export async function cleanupFacilitiesAndUsers(
+  userA: SeededUser,
+  userB: SeededUser,
+  facilityA: { id: string },
+  facilityB: { id: string }
+): Promise<void> {
   const serviceClient = createServiceRoleClient()
 
-  // auth.users の削除は ON DELETE CASCADE で user_facilities も連動して消える。
-  // facilities の削除は loan_orders 等を ON DELETE CASCADE で連動して消す。
-  await serviceClient.auth.admin.deleteUser(fixtures.userA.id)
-  await serviceClient.auth.admin.deleteUser(fixtures.userB.id)
-  await serviceClient.from('facilities').delete().eq('id', fixtures.facilityA.id)
-  await serviceClient.from('facilities').delete().eq('id', fixtures.facilityB.id)
+  await serviceClient.auth.admin.deleteUser(userA.id)
+  await serviceClient.auth.admin.deleteUser(userB.id)
+  await serviceClient.from('facilities').delete().eq('id', facilityA.id)
+  await serviceClient.from('facilities').delete().eq('id', facilityB.id)
+}
+
+/** シードしたユーザー・施設を後始末する（service role clientで直接削除） */
+export async function cleanupRlsIdorFixtures(fixtures: SeedRlsIdorFixtures): Promise<void> {
+  await cleanupFacilitiesAndUsers(fixtures.userA, fixtures.userB, fixtures.facilityA, fixtures.facilityB)
+}
+
+export interface SeedCaseOrdersRlsIdorFixtures {
+  facilityA: { id: string; name: string }
+  facilityB: { id: string; name: string }
+  userA: SeededUser
+  userB: SeededUser
+  caseOrderA: { id: string }
+}
+
+/**
+ * 施設A・施設B、ユーザーA（施設Aのみ）・ユーザーB（施設Bのみ）、
+ * 施設Aに紐づく case_orders 1件を作成する（issue #315: loan_ordersと同様の横展開）。
+ */
+export async function seedCaseOrdersRlsIdorFixtures(): Promise<SeedCaseOrdersRlsIdorFixtures> {
+  const serviceClient = createServiceRoleClient()
+  const runId = randomUUID()
+
+  const facilityA = await createFacility(serviceClient, `テスト施設A-${runId}`)
+  const facilityB = await createFacility(serviceClient, `テスト施設B-${runId}`)
+
+  const userA = await createSeededUser(serviceClient, 'rls-idor-case-user-a', facilityA.id)
+  const userB = await createSeededUser(serviceClient, 'rls-idor-case-user-b', facilityB.id)
+
+  const { data: caseOrder, error: caseOrderError } = await serviceClient
+    .from('case_orders')
+    .insert({
+      facility_id: facilityA.id,
+      case_datetime: new Date().toISOString(),
+      procedure_name: 'シード用術式',
+      patient_id: 'IDOR-TEST-PATIENT-0000',
+      patient_initials: 'IDORテスト患者',
+      gender: 'other',
+      doctor_name: 'IDORテスト医師',
+    })
+    .select('id')
+    .single()
+  if (caseOrderError || !caseOrder) {
+    throw new Error(`[seed-rls-idor] case_orders シード作成失敗: ${caseOrderError?.message}`)
+  }
+
+  return {
+    facilityA,
+    facilityB,
+    userA,
+    userB,
+    caseOrderA: { id: caseOrder.id as string },
+  }
+}
+
+export async function cleanupCaseOrdersRlsIdorFixtures(fixtures: SeedCaseOrdersRlsIdorFixtures): Promise<void> {
+  await cleanupFacilitiesAndUsers(fixtures.userA, fixtures.userB, fixtures.facilityA, fixtures.facilityB)
+}
+
+export interface SeedConsumableOrdersRlsIdorFixtures {
+  facilityA: { id: string; name: string }
+  facilityB: { id: string; name: string }
+  userA: SeededUser
+  userB: SeededUser
+  consumableOrderA: { id: string }
+}
+
+/**
+ * 施設A・施設B、ユーザーA（施設Aのみ）・ユーザーB（施設Bのみ）、
+ * 施設Aに紐づく consumable_orders 1件を作成する（issue #315: loan_ordersと同様の横展開）。
+ */
+export async function seedConsumableOrdersRlsIdorFixtures(): Promise<SeedConsumableOrdersRlsIdorFixtures> {
+  const serviceClient = createServiceRoleClient()
+  const runId = randomUUID()
+
+  const facilityA = await createFacility(serviceClient, `テスト施設A-${runId}`)
+  const facilityB = await createFacility(serviceClient, `テスト施設B-${runId}`)
+
+  const userA = await createSeededUser(serviceClient, 'rls-idor-consumable-user-a', facilityA.id)
+  const userB = await createSeededUser(serviceClient, 'rls-idor-consumable-user-b', facilityB.id)
+
+  const { data: consumableOrder, error: consumableOrderError } = await serviceClient
+    .from('consumable_orders')
+    .insert({ facility_id: facilityA.id })
+    .select('id')
+    .single()
+  if (consumableOrderError || !consumableOrder) {
+    throw new Error(`[seed-rls-idor] consumable_orders シード作成失敗: ${consumableOrderError?.message}`)
+  }
+
+  return {
+    facilityA,
+    facilityB,
+    userA,
+    userB,
+    consumableOrderA: { id: consumableOrder.id as string },
+  }
+}
+
+export async function cleanupConsumableOrdersRlsIdorFixtures(fixtures: SeedConsumableOrdersRlsIdorFixtures): Promise<void> {
+  await cleanupFacilitiesAndUsers(fixtures.userA, fixtures.userB, fixtures.facilityA, fixtures.facilityB)
 }

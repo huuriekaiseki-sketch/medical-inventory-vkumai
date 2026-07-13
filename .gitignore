@@ -42,7 +42,7 @@ yarn-error.log*
 next-env.d.ts
 
 # playwright
-e2e/.auth/user.json
+e2e/.auth/*.json
 
 # loop observability
 /logs/

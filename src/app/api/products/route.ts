@@ -28,6 +28,10 @@ export async function POST(request: NextRequest) {
     return apiError('JAN と REF は必須です', 400)
   }
 
+  if (!input.name || !input.name.trim()) {
+    return apiError('製品名は必須です', 400)
+  }
+
   try {
     const db = await createServerSupabase()
     try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }

@@ -65,7 +65,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       <h1 className="mb-6 text-2xl font-bold text-gray-900">製品編集</h1>
       <div className="rounded-lg bg-white p-6 shadow">
         <ProductForm
-          defaultValues={{ jan: product.jan, ref: product.ref }}
+          defaultValues={{ jan: product.jan, ref: product.ref, name: product.name, maker: product.maker }}
           onSubmit={handleSubmit}
           submitLabel="更新"
         />

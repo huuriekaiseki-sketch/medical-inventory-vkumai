@@ -45,7 +45,7 @@ describe('GET /api/products/[id]', () => {
 describe('PUT /api/products/[id]', () => {
   it('未認証の場合は401を返す', async () => {
     unauthenticated()
-    const req = new Request('http://localhost', { method: 'PUT', body: JSON.stringify({ jan: '1', ref: 'r' }) })
+    const req = new Request('http://localhost', { method: 'PUT', body: JSON.stringify({ jan: '1', ref: 'r', name: '製品A' }) })
     const res = await PUT(req as never, context)
     expect(res.status).toBe(401)
     expect(mockUpdateProduct).not.toHaveBeenCalled()
@@ -54,7 +54,7 @@ describe('PUT /api/products/[id]', () => {
   it('認証済みで正常に更新できる', async () => {
     authenticated()
     mockUpdateProduct.mockResolvedValue({ id: 'p1', jan: '1', ref: 'r' })
-    const req = new Request('http://localhost', { method: 'PUT', body: JSON.stringify({ jan: '1', ref: 'r' }) })
+    const req = new Request('http://localhost', { method: 'PUT', body: JSON.stringify({ jan: '1', ref: 'r', name: '製品A' }) })
     const res = await PUT(req as never, context)
     expect(res.status).toBe(200)
   })

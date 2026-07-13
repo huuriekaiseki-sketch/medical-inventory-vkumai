@@ -3,6 +3,7 @@ export const meta = {
   description: 'Phase 3-5: contract-first並列実装 → 統合ゲート → 4観点並列検証。仕様書承認後（停止①の後）に実行。',
   whenToUse: '人間が仕様書（SPEC.md）を承認した後、Phase 3 実装に入るときに使う。aidd-1-1-deep-task.jsの後続として使う。',
   phases: [
+    { title: 'Spec Check',     detail: 'SPEC.md存在チェック（欠如時は後続の全エージェントを起動せず中断）' },
     { title: 'Manifest Check', detail: 'Run Manifestのspecハッシュ突合（レビュー後のSPEC.md改変を検知）' },
     { title: 'Contract + DB', detail: 'contract-writer（型定義）とdb-impl（migrations）を並列実行' },
     { title: 'Implement',     detail: 'data-impl / api-impl / ui-impl を並列実行' },
@@ -96,12 +97,59 @@ failの場合はfindings配列（{ severity: critical/important/minor, descripti
 findingsを省略した場合、またはcritical/important指摘が1件でもあれば差し戻し対象になる
 （severity不明・欠損はcritical扱い。fail-open防止）。`
 
+// ─── Phase -1: Spec Check ────────────────────────────────────────────
+// issue #313: 2026-07-10時点の分析で「20回のreviewer呼び出しのうち9回はSPECファイル欠如で
+// 失敗し、145万トークン・$81.25を浪費した」ことが判明していた。その後の品質ゲート強化で
+// SPEC欠如時はblocked判定されるようになったが、それは「まず各エージェントを起動し、
+// エージェント自身がSPECファイルを読めずに気づいてblockedを自己申告する」方式のままだった。
+// Workflow DSLはfilesystem APIを持たないため fs.existsSync 等は使えず、Manifest Checkと
+// 同じパターン（軽量な単一エージェントによるReadツール確認）で最初にSPEC.mdの存在だけを
+// 確認し、無ければ後続の全エージェント（Manifest Check以降）を一切起動せず即座に返す。
+phase('Spec Check')
+
+const SPEC_CHECK_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['pass', 'blocked'] },
+    detail: { type: 'string' },
+  },
+  required: ['status', 'detail'],
+}
+
+const specCheck = await agent(
+  `Readツールで ${specPath} が存在し読み込めるか確認してください。それ以外は何もしないでください。${guide(
+    `${specPath}が存在し読み込めた`,
+    '（未使用: このエージェントはpass/blockedの2値のみ返す）',
+    `${specPath}が存在しない、または読み込めない`
+  )}`,
+  { label: 'spec-check', phase: 'Spec Check', agentType: 'reviewer', schema: SPEC_CHECK_SCHEMA }
+)
+
+countLoggable('reviewer')
+log(`Spec Check完了: status=${specCheck?.status ?? 'なし'}`)
+
+if (shouldBlock([specCheck])) {
+  log(`品質ゲート: ${specPath}が存在しないため中断（Manifest Check以降のエージェントは起動しません）`)
+  return {
+    done: false,
+    specCheck,
+    blocked: true,
+    blockedAt: 'Spec Check',
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Spec Check', expectedLoopObservabilityRecords: loggableAgentCount },
+  }
+}
+
 // ─── Phase 0: Manifest Check ─────────────────────────────────────────
 // issue #44/#294: docs/agents/run-manifest.md にPhase 2開始時のspecHash突合が
 // 設計として定義されているが、実行コードには存在しなかった。レビュー後にSPEC.mdが
 // 改変されるケースを検知できないまま実装が進んでしまう。
 // Workflow DSL自体はfilesystem/Node.js APIアクセスが無いため、Read/Bashツールを持つ
 // エージェントにマニフェスト読み込み・ハッシュ再計算・突合を行わせる。
+// issue #316: 下記プロンプトの1〜4の判定テーブルは .claude/workflows/lib/manifest-check.js の
+// classifyManifestCheck にテスト可能な形で文書化している。ただし実行パス自体はプロンプト依存の
+// ままであり（Workflow DSLの制約上、実際のmanifest読込・ハッシュ計算はエージェントに委譲する
+// 必要がある）、このプロンプト文言を変更した場合はmanifest-check.js側も手動で追従させること
+// （自動では同期されない）。
 phase('Manifest Check')
 
 const MANIFEST_CHECK_SCHEMA = {
@@ -232,6 +280,9 @@ if (shouldBlock([dataResult, apiResult, uiResult])) {
 logMinorOnlyPassThrough('Implement', [dataResult, apiResult, uiResult])
 
 // ─── Phase C: 統合ゲート ──────────────────────────────────────────────
+// issue #316: 手順7のchangedFiles上書き（「他フィールドは変更しないこと」）は
+// .claude/workflows/lib/manifest-check.js の applyChangedFiles にテスト可能な形で
+// 文書化している。こちらもプロンプト依存の実行パス自体は変わらない（上記Manifest Check参照）。
 phase('Integrate')
 
 const integrationResult = await agent(
@@ -288,13 +339,21 @@ const reviewGuide = guide(
   'レビュー対象のコード・SPEC.mdが見つからずレビュー自体ができなかった'
 )
 
+// issue #314: blockedの観点はImplementerへの差し戻しでは解決しない（レビュー対象自体が
+// 見つからない等）ため、fail判定より先に見て即座に打ち切る。従来はblockedのみの回を
+// done=true,blocked=falseとして素通りしており、最終returnにblockedAtが付かず追跡できなかった。
 function classifyReviewRound(results, dimensions, attempt, maxRetries) {
+  const blockedDimensions = dimensions
+    .map((dim, i) => ({ dim, result: results[i] }))
+    .filter(({ result }) => result?.status === 'blocked')
+  if (blockedDimensions.length > 0) return { done: true, blocked: true, failingDimensions: [], blockedDimensions }
+
   const failingDimensions = dimensions
     .map((dim, i) => ({ dim, result: results[i] }))
     .filter(({ result }) => result?.status === 'fail' && !isMinorOnlyFailure(result))
-  if (failingDimensions.length === 0) return { done: true, blocked: false, failingDimensions: [] }
-  if (attempt > maxRetries) return { done: true, blocked: true, failingDimensions }
-  return { done: false, blocked: false, failingDimensions }
+  if (failingDimensions.length === 0) return { done: true, blocked: false, failingDimensions: [], blockedDimensions: [] }
+  if (attempt > maxRetries) return { done: true, blocked: true, failingDimensions, blockedDimensions: [] }
+  return { done: false, blocked: false, failingDimensions, blockedDimensions: [] }
 }
 
 const MAX_REVIEW_RETRIES = 3
@@ -315,16 +374,19 @@ while (true) {
 
   REVIEW_DIMENSIONS.forEach(() => countLoggable('reviewer'))
 
-  const { done, blocked, failingDimensions } = classifyReviewRound(reviewResults, REVIEW_DIMENSIONS, reviewAttempt, MAX_REVIEW_RETRIES)
+  const { done, blocked, failingDimensions, blockedDimensions } = classifyReviewRound(reviewResults, REVIEW_DIMENSIONS, reviewAttempt, MAX_REVIEW_RETRIES)
 
   if (done && !blocked) {
-    log(`Review完了: ラウンド${reviewAttempt}で全観点pass（指摘なし、またはblockedのみ）`)
+    log(`Review完了: ラウンド${reviewAttempt}で全観点pass（指摘なし）`)
     logMinorOnlyPassThrough('Review', reviewResults)
     break
   }
 
   if (blocked) {
-    log(`品質ゲート: Reviewで${MAX_REVIEW_RETRIES}回の差し戻し後もfailが残るため中断（blockedとして人間に引き渡します）`)
+    const reason = blockedDimensions.length > 0
+      ? `${blockedDimensions.length}件の観点でレビュー自体が実行できなかった（blocked）ため`
+      : `${MAX_REVIEW_RETRIES}回の差し戻し後もfailが残るため`
+    log(`品質ゲート: Reviewで${reason}中断（blockedとして人間に引き渡します）`)
     return {
       done: false,
       contractResult,
@@ -344,6 +406,7 @@ while (true) {
         done: false,
         blocked: true,
         blockedAt: 'Review',
+        reviewBlockedDimensions: blockedDimensions.length,
         reviewRetries: reviewRetryAgentCount,
         expectedLoopObservabilityRecords: loggableAgentCount,
       },

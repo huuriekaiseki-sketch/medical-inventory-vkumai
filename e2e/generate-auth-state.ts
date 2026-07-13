@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { chromium } from '@playwright/test'
 import { loadEnvConfig } from '@next/env'
 import * as fs from 'fs'
@@ -14,32 +14,18 @@ loadEnvConfig(process.cwd())
 // 万一 .env.test やCI secretsに本番URLが設定されていても、ここで即失敗させる
 assertTestSupabaseEnv()
 
-export async function generateAuthState() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const testEmail = process.env.E2E_TEST_EMAIL
-
-  const authFilePath = path.join(process.cwd(), 'e2e', '.auth', 'user.json')
+/**
+ * 既存ユーザー（email_confirm済み）に対してマジックリンクでサインインし、
+ * 認証済みのPlaywright storageStateを authFilePath に書き出す。
+ * issue #321: 複数ユーザー分のstorageStateを生成する必要があるため、
+ * generateAuthState（単一の固定テストユーザー用）から共通処理として切り出した。
+ */
+export async function signInAndSaveStorageState(
+  supabase: SupabaseClient,
+  email: string,
+  authFilePath: string
+): Promise<void> {
   fs.mkdirSync(path.dirname(authFilePath), { recursive: true })
-
-  if (!supabaseUrl || !serviceRoleKey || !testEmail) {
-    console.warn('[E2E auth] E2E_TEST_EMAIL / SUPABASE_SERVICE_ROLE_KEY が未設定。認証なしで実行します。')
-    // 空のstorageStateを書く（Playwrightがファイル不在でクラッシュするのを防ぐ）
-    fs.writeFileSync(authFilePath, JSON.stringify({ cookies: [], origins: [] }))
-    return
-  }
-
-  const supabase = createClient(supabaseUrl, serviceRoleKey)
-
-  // テストユーザーが未登録でもgenerateLinkが失敗しないよう、先に明示的に作成しておく。
-  // 既に存在する場合はエラーになるが、その場合は「既存ユーザーを使う」で問題ないため無視する。
-  const { error: createUserError } = await supabase.auth.admin.createUser({
-    email: testEmail,
-    email_confirm: true,
-  })
-  if (createUserError && createUserError.code !== 'email_exists') {
-    throw new Error(`テストユーザー作成失敗: ${createUserError.message}`)
-  }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
   const siteOrigin = new URL(siteUrl).origin
@@ -49,12 +35,12 @@ export async function generateAuthState() {
   // Cookieドメインがずれる事故が起きるため、必ずテストのbaseURLと同じオリジンを指定する
   const { data, error } = await supabase.auth.admin.generateLink({
     type: 'magiclink',
-    email: testEmail,
+    email,
     options: { redirectTo: `${siteUrl}/` },
   })
 
   if (error || !data.properties?.action_link) {
-    throw new Error(`テストセッション生成失敗: ${error?.message}`)
+    throw new Error(`テストセッション生成失敗 (${email}): ${error?.message}`)
   }
 
   // ブラウザでリンクを開いてセッションCookieを取得。
@@ -83,7 +69,7 @@ export async function generateAuthState() {
     }
     if (!authenticated) {
       throw new Error(
-        '[E2E auth] 認証Cookie（sb-*-auth-token）が30秒以内に設定されませんでした。' +
+        `[E2E auth] 認証Cookie（sb-*-auth-token）が30秒以内に設定されませんでした (${email})。` +
           'マジックリンクのリダイレクト先とログインフロー（/login のhash処理）を確認してください。'
       )
     }
@@ -93,6 +79,67 @@ export async function generateAuthState() {
   } finally {
     await browser.close()
   }
+}
+
+export async function generateAuthState() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const testEmail = process.env.E2E_TEST_EMAIL
+
+  const authFilePath = path.join(process.cwd(), 'e2e', '.auth', 'user.json')
+  fs.mkdirSync(path.dirname(authFilePath), { recursive: true })
+
+  if (!supabaseUrl || !serviceRoleKey || !testEmail) {
+    console.warn('[E2E auth] E2E_TEST_EMAIL / SUPABASE_SERVICE_ROLE_KEY が未設定。認証なしで実行します。')
+    // 空のstorageStateを書く（Playwrightがファイル不在でクラッシュするのを防ぐ）
+    fs.writeFileSync(authFilePath, JSON.stringify({ cookies: [], origins: [] }))
+    return
+  }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey)
+
+  // テストユーザーが未登録でもgenerateLinkが失敗しないよう、先に明示的に作成しておく。
+  // 既に存在する場合はエラーになるが、その場合は「既存ユーザーを使う」で問題ないため無視する。
+  const { data: createdUser, error: createUserError } = await supabase.auth.admin.createUser({
+    email: testEmail,
+    email_confirm: true,
+  })
+  if (createUserError && createUserError.code !== 'email_exists') {
+    throw new Error(`テストユーザー作成失敗: ${createUserError.message}`)
+  }
+
+  let testUserId = createdUser?.user?.id
+  if (!testUserId) {
+    // 既存ユーザーの場合はcreateUserがuserを返さないため、一覧から拾う
+    const { data: userList, error: listError } = await supabase.auth.admin.listUsers()
+    if (listError) throw new Error(`テストユーザー検索失敗: ${listError.message}`)
+    testUserId = userList.users.find((u) => u.email === testEmail)?.id
+    if (!testUserId) throw new Error(`テストユーザーが見つかりません: ${testEmail}`)
+  }
+
+  // products等のマスタデータ書き込みテストにはadmin権限が必要（is_admin()はuser_facilities.role参照、
+  // docs/agents/decisions.md「なぜマスタデータの書き込みをadmin限定にしたか」）。
+  // ダミー施設（実在施設名を使わない、docs/agents/common.mdのデータ衛生ルール）にadminとして所属させる。
+  const { data: facility, error: facilityError } = await supabase
+    .from('facilities')
+    .upsert({ name: 'E2Eテスト施設' }, { onConflict: 'name' })
+    .select('id')
+    .single()
+  if (facilityError || !facility) {
+    throw new Error(`E2Eテスト施設の作成失敗: ${facilityError?.message}`)
+  }
+
+  const { error: membershipError } = await supabase
+    .from('user_facilities')
+    .upsert(
+      { user_id: testUserId, facility_id: facility.id, role: 'admin' },
+      { onConflict: 'user_id,facility_id' }
+    )
+  if (membershipError) {
+    throw new Error(`E2Eテストユーザーへのadmin権限付与失敗: ${membershipError.message}`)
+  }
+
+  await signInAndSaveStorageState(supabase, testEmail, authFilePath)
 }
 
 // CLIから直接実行された場合（npm run e2e:auth 等）にも動くようにする。
