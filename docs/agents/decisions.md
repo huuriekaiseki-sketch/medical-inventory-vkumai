@@ -143,3 +143,32 @@ admin限定にすることで、共有マスタの一貫性を管理者の統制
 CI（本番相当RLS）で初めて失敗するまで気づかれなかった。**SPEC.mdの受け入れ条件でマスタデータ
 （products/categories/distributor_products等）のCUD操作に触れる場合は、着手前にこのセクションと
 該当migrationの `-- WHY:` コメントを必ず確認すること。**
+
+## なぜスキーマドリフト検知（issue #305）にEdge Functionを使わずpg_cron + GitHub Actionsポーリングを採用したか
+
+issue #305（PRを介さない本番スキーマ変更の定期ドリフト検知）は、Phase 1深掘り調査（98エージェント）
+のJudge Panelが「最小スコープv1設計」を採用推奨案として選定した。Edge Function + pg_net経由の
+リアルタイム通知案は、pg_net拡張の有無が未確認・Edge Functionのデプロイパイプライン未定義・
+GITHUB_TOKENのSupabase環境変数管理という3つの未確認依存を抱えており、v1では不採用とした。
+
+代わりに、DB内部（pg_cron）が`check_schema_drift()`を毎日呼んで`schema_drift_log`に記録するだけに
+とどめ、通知はGitHub Actionsの日次ポーリング（`drift_alert_view`をanon keyで読み、`gh issue create`）
+に委譲する構成にした。これによりSUPABASE_ACCESS_TOKEN・DBパスワード・service role keyのいずれも
+GitHub Secretsに置く必要がなくなり、既存方針（本セクション冒頭「なぜE2E/BSGはテスト専用Supabase
+のみに接続する設計にしたか」等）と完全に整合する。
+
+**実装時に発覚した矛盾とその解決:** 仕様ドラフトでは、GitHub Actionsが作成したIssue URLを
+`record_issue_url()` RPC経由でDBに書き戻す設計だったが、その関数はservice_role限定であり、
+anon keyのみで動くGitHub Actionsからは本来呼び出せない（「本番接続情報をGitHub Secretsに置かない」
+という制約と直接矛盾する）。この矛盾はPhase 2の仕様レビュー（Part 3セルフチェック）でも見逃され、
+Phase 3の実装時（db-impl・api実装担当がそれぞれ別々にSPECを読んだ際）に初めて発覚した。
+
+解決として、DBへの書き込みを一切行わない設計に変更した。GitHub Issueのタイトルを
+`[schema-drift] <drift_type>: <object_name>`という決定的な形式にし、既存のopen issueとの
+タイトル突合だけで冪等性（重複作成防止）とクローズ判定を実現する。GitHub Issue自体を
+状態源（state source）とすることで、Supabase側への書き込み権限が一切不要になった。
+
+**教訓:** 「anon keyのみで完結させる」という制約は、通知の"作成"だけでなく"状態更新（書き戻し）"
+にも同じ制約がかかることをSPEC作成時点で見落としやすい。read-onlyなanon key経由の設計を書く際は、
+「この設計のどこかにwrite操作が紛れ込んでいないか」をPart 3セルフチェックの追加観点として
+確認すべきだった（現行のPart 3チェックリストにはこの観点が明示的に含まれていない）。
