@@ -57,3 +57,37 @@ Next.js API Route（`requireFacilityAccess`等）を経由せず直接呼び出�
 `Number('abc')` は静かに `NaN` を生成し、バリデーションなしで下流のクエリ・RPC呼び出しに
 渡ると不可解な500エラーや想定外の挙動になる。素の `Number(...)` 変換を見たら、
 上記3点を満たすガード節があるか必ず確認する。
+
+## RLS/テナント分離層
+
+### 「動いたからOK」でfacility_idフィルタ漏れ・RLS未設定を見逃す（issue #24再発防止）
+
+**チェック内容:** facility/tenant/organizationに触れる新規・変更API（`route.ts`のGET/POST/PUT/
+DELETE、RPC関数）をレビューする際は、以下を**攻撃者視点**で確認する
+（「自分の施設で正常に動く」ことの確認だけでは不十分）：
+
+1. `requireAuth`（未認証拒否）が全メソッドに付いているか
+2. `requireFacilityAccess` 相当（呼び出しユーザーが対象の `facility_id` に所属しているか）の
+   チェックがあるか。`facility_id` をクエリパラメータ／パスパラメータ／リクエストボディから
+   受け取る箇所は、それを鵜呑みにせず検証しているか
+3. **実際に他施設・他テナントの実在するリソースID（例: 他施設の `case_order.id`）を渡して
+   アクセスし、403/404で拒否されることを目視確認したか。** 「他施設のIDを知らなければ
+   アクセスできない」という推測ではなく、実際にIDを渡して弾かれることを確認する
+4. `SECURITY DEFINER` 関数を経由する場合は、上記「SECURITY DEFINER + GRANT EXECUTEの認可
+   バイパス」の項目も併せて確認する
+
+**なぜ再発したか:** issue #24で、`products/[id]`・`facilities/[id]`・`categories/[id]`・
+`distributor-products/[id]`・`hospital-prices/[id]` のGET/PUT/DELETE、
+`distributor-products/[id]/price-history` のGET、`consumables` のPOSTに `requireAuth` が
+欠落していたことが、実装から時間が経ってから（別issueのPhase 1調査中に）発覚した。
+「エンドポイントを叩いて意図通りのデータが返ってきた」という確認だけでは、認証・認可チェック
+自体が存在しないケースを検出できない。
+
+**既存の実装パターン:** `case_orders`/`consumable_orders`/`loan_orders` には他施設IDでの
+アクセスを実際に試行するRLS/IDOR統合テストが既にある
+（`supabase/__tests__/integration/*-rls-idor.integration.test.ts`、
+`e2e/cross-facility-boundary.spec.ts`）。facility/tenantに触れる新規テーブル・APIを
+追加する際は同種のテストを追加する。
+
+引き継ぎメモの「検証済み」欄には、他テナントIDでのアクセス確認結果を明示する
+（詳細は [`common.md`](./common.md#引き継ぎフォーマット) 参照）。

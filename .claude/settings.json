@@ -62,6 +62,7 @@
       "Bash(scripts/log-loop-observability.sh *)",
       "Bash(/Users/masanori/medical-inventory-vkumai/scripts/log-loop-observability.sh *)",
       "Bash(scripts/doc-suggest-check.sh *)",
+      "Bash(scripts/ai-check-suggest.sh *)",
       "Bash(curl -s http://localhost:*)",
       "Bash(sort *)",
       "Bash(ps *)",
@@ -120,6 +121,12 @@
             "command": "scripts/doc-suggest-check.sh",
             "timeout": 15,
             "statusMessage": "domain.md/decisions.md更新候補を確認中..."
+          },
+          {
+            "type": "command",
+            "command": "scripts/ai-check-suggest.sh",
+            "timeout": 15,
+            "statusMessage": "ai:check実行有無を確認中..."
           }
         ]
       }
