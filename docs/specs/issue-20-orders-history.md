@@ -1,7 +1,7 @@
 # 機能仕様書: 発注履歴ページ新設（issue #20）
 
 作成日: 2026-07-13
-ステータス: ドラフト（人間レビュー待ち）
+ステータス: ドラフト（人間レビュー待ち、Adversarial Verifyのcritical指摘4件を反映済み）
 
 ---
 
@@ -82,11 +82,11 @@ URL: `/orders`（グローバルナビゲーションからアクセス、施設
 
 #### フィルタ
 
-- [ ] 開始日を指定すると、指定日以降の発注のみが表示される
-- [ ] 終了日を指定すると、指定日以前の発注のみが表示される
-- [ ] キーワードを入力すると、製品名・JAN・手技名・メーカー名に部分一致する行が表示される
+- [ ] 開始日を指定すると、指定日（日本時間 0:00）以降の発注のみが表示される
+- [ ] 終了日を指定すると、指定日（日本時間 23:59:59）以前の発注のみが表示される
+- [ ] キーワードを入力すると、製品名・JAN・手技名・メーカー名に部分一致する行が表示される（消耗品発注の場合も消耗品名で検索できる）
 - [ ] 「クリア」ボタンでフィルタをリセットすると全件表示に戻る
-- [ ] タブ変更後もフィルタ条件が保持される
+- [ ] タブ変更後もフィルタ条件（期間・キーワード）は保持されるが、ページ位置（offset）はタブ・期間・キーワードのいずれかを変更するたびに先頭（0件目）にリセットされる
 
 #### エラー・エッジケース
 
@@ -211,8 +211,10 @@ export type LoanReturn = {
 
 ```typescript
 // 追加クエリ例（case_orders）
-if (filter?.dateFrom) query = query.gte('created_at', filter.dateFrom)
-if (filter?.dateTo)   query = query.lte('created_at', filter.dateTo + 'T23:59:59Z')
+// WHY: created_at は timestamptz(UTC)だが、日付入力は施設の運用時間帯(JST)基準。
+//      UTC固定で扱うと日付境界が最大9時間ずれるため、+09:00を明示してJSTの一日として解釈する
+if (filter?.dateFrom) query = query.gte('created_at', `${filter.dateFrom}T00:00:00+09:00`)
+if (filter?.dateTo)   query = query.lte('created_at', `${filter.dateTo}T23:59:59+09:00`)
 if (filter?.keyword) {
   query = query.ilike('procedure_name', `%${filter.keyword}%`)
   // items の JAN は後段の JS 側フィルタで補完（SELECT * で items を取得済みのため）
@@ -221,7 +223,7 @@ if (filter?.keyword) {
 
 keyword の種別ごとの対象列:
 - `case_orders`: `procedure_name`、取得した `case_order_items[].jan` を JS でフィルタ
-- `consumable_orders`: 取得した `consumable_order_items[].consumable_id` をもとに JS でフィルタ（consumable 名は JOIN が複雑なため、Set C では概要テキスト生成で対応）
+- `consumable_orders`: `.select('*, consumable_order_items(*, consumables(name, jan))')` で consumables をネストJOINして取得し、`consumables.name` / `consumables.jan` を JS でフィルタ（`summary` にも消耗品名を使う。既存の `listConsumableOrders` の戻り値には影響しない別クエリとして実装する）
 - `loan_orders`: `procedure_name`, `maker`、取得した `loan_order_items[].name` を JS でフィルタ
 - `loan_returns`: 取得した `loan_return_items[].jan` を JS でフィルタ
 
@@ -239,20 +241,28 @@ export async function listOrders(
 
 内部実装:
 - `filter.kind` が指定された場合は該当種別のみをクエリ（残りはスキップ）
-- 全件取得後 createdAt 降順でソートし、`offset` から `offset + limit` 件を返す
+- **性能上の上限（v1スコープ）**: 各テーブルへのクエリは `ORDER BY created_at DESC LIMIT 500` を必ず付与してから
+  取得する（4テーブル合計で最大2000行）。全件取得はしない。取得した最大2000行をメモリ内で
+  createdAt 降順にマージソートし、`offset` から `offset + limit` 件を切り出す。
+  施設単位の発注件数が2000件を大きく超える運用が確認された場合は、cursor-based pagination か
+  UNION ビューへの置き換えを別issueで検討する（本issueのスコープ外）
 - `unreturned` フラグ: loan_orders クエリ時に `.select('*, loan_returns!left(id)')` で LEFT JOIN し、
   `loan_returns` が空かつ `status === 'submitted'` なら `unreturned: true`
 - `summary` 生成:
   - `case_order`: `procedureName`
-  - `consumable_order`: `消耗品 ${items.length} 品目`
+  - `consumable_order`: 取得した `consumable_order_items[].consumables.name` を `、` 区切りで連結（例: `シリンジ、ガーゼ`）。1件も名前が取れない場合のみ `消耗品 ${items.length} 品目` にフォールバック
   - `loan_order`: `${procedureName}（${maker}）`
   - `loan_return`: `返却 ${new Date(returnDatetime).toLocaleDateString('ja-JP')}`
+- **offsetのリセット**: `kind` / `dateFrom` / `dateTo` / `keyword` のいずれかが前回呼び出しと異なる場合、
+  呼び出し元（UI）が `offset` を 0 にリセットしてから呼び出す。`listOrders` 自体は渡された `offset` を
+  そのまま使うのみで、リセット判定はUI側（Set E）の責務とする
 
 **テスト観点**:
-- `dateFrom` / `dateTo` が正しく絞り込みに反映される
-- `keyword` が各種別の対象列に対して機能する
+- `dateFrom` / `dateTo` が JST の日境界で正しく絞り込みに反映される（例: `dateTo=2026-07-13` を指定した場合、`2026-07-13T23:59:59+09:00` = UTCで`2026-07-13T14:59:59Z`より前の行のみ含まれる）
+- `keyword` が各種別の対象列に対して機能する（consumable_orderは消耗品名でも一致する）
 - `kind` 指定時は指定種別のみ返す
 - `unreturned: true` になる行 = submitted かつ loan_returns が 0 件の loan_order のみ
+- 各テーブルへのクエリに `LIMIT 500` が付与されている
 - 既存の `listCaseOrders` 等がデフォルト引数で動作する
 
 ---
@@ -330,12 +340,12 @@ export default function OrdersPage() {
 **タブ実装方針**:
 - タブ状態は URL searchParams（`?kind=loan_order`）で管理 → ブラウザバック対応
 - `useSearchParams` で現在の kind を読み、タブ UI に反映
-- タブ変更時は `router.push` で URL を更新
+- タブ変更時は `router.push` で URL を更新し、`offset` パラメータを URL から削除する（先頭ページに戻す）
 
 **フィルタ実装方針**:
 - `OrderHistoryFilters` コンポーネントに `dateFrom`, `dateTo`, `keyword` の入力欄
-- 変更時に `router.push` で URL を更新
-- 「クリア」ボタンで全 searchParams を削除
+- 変更時に `router.push` で URL を更新し、`offset` パラメータを URL から削除する（先頭ページに戻す）
+- 「クリア」ボタンで全 searchParams を削除（`offset` も含めて全リセット）
 
 **データ取得**:
 - `useEffect` 内で `/api/orders?facility_id=...` を fetch
