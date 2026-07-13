@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     return apiError('JAN と REF は必須です', 400)
   }
 
-  if (!input.name) {
+  if (!input.name || !input.name.trim()) {
     return apiError('製品名は必須です', 400)
   }
 

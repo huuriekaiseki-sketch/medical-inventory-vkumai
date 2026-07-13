@@ -91,6 +91,15 @@ describe('POST /api/products', () => {
     expect(res.status).toBe(400)
   })
 
+  it('name が空白のみなら 400 を返す', async () => {
+    const req = makeRequest('/api/products', {
+      method: 'POST',
+      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-001', name: '   ' }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(400)
+  })
+
   it('未認証なら POST も 401 を返す', async () => {
     const { requireAuth } = await import('@/lib/supabase/require-auth')
     vi.mocked(requireAuth).mockRejectedValueOnce(new Error('UNAUTHORIZED'))
@@ -142,6 +151,24 @@ describe('PUT /api/products/[id]', () => {
     })
     const res = await PUT(req, makeParams('x'))
     expect(res.status).toBe(404)
+  })
+
+  it('name が空なら 400 を返す', async () => {
+    const req = makeRequest('/api/products/test-id', {
+      method: 'PUT',
+      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-001', name: '' }),
+    })
+    const res = await PUT(req, makeParams('test-id'))
+    expect(res.status).toBe(400)
+  })
+
+  it('name が空白のみなら 400 を返す', async () => {
+    const req = makeRequest('/api/products/test-id', {
+      method: 'PUT',
+      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-001', name: '   ' }),
+    })
+    const res = await PUT(req, makeParams('test-id'))
+    expect(res.status).toBe(400)
   })
 })
 

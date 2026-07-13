@@ -30,7 +30,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'JAN と REF は必須です' }, { status: 400 })
   }
 
-  if (!input.name) {
+  if (!input.name || !input.name.trim()) {
     return NextResponse.json({ error: '製品名は必須です' }, { status: 400 })
   }
 
