@@ -125,3 +125,21 @@ private repoでGitHub Free（Org）プランのため、classic branch protectio
 パターン）はPRが発生するまで検知が遅延する。この「PRの外側の変更」をどう定期検知するかは
 未解決のまま残しており、シークレットをGitHub側に置かない代替案（Supabase Edge Functionの
 スケジュール実行など）を含めて別issue（#305）で検討する前提にしている。
+
+## なぜマスタデータ（products/categories/distributor_products）の書き込みをadmin限定にしたか
+
+`20260629000001_fix_master_rls.sql` で、これらのテーブルのRLSを「SELECTは全認証ユーザー可、
+INSERT/UPDATE/DELETEはadmin（`is_admin()`）のみ可」に変更した。それ以前は `auth_only` という
+FOR ALLポリシー（`USING (true) WITH CHECK (true)`）で、書き込みも全認証ユーザーに許可されて
+いたが、これは設計意図と一致しない状態だった（`SPEC-tech-debt.md` SET F、2026-06-29）。
+
+マスタデータ（製品・カテゴリ・代理店製品）は施設横断で共有される単一の真実源であり、
+どこか1施設のスタッフが自由に編集できると、他の全施設の在庫管理・発注に影響する。書き込みを
+admin限定にすることで、共有マスタの一貫性を管理者の統制下に置く設計にした。
+
+**教訓（2026-07-13、issue #39のSPEC.mdレビューで発覚）:** この決定がdecisions.mdに記録されて
+いなかったため、後続のSPEC.md（在庫マスタへのカラム追加）が「管理者・施設スタッフ双方が
+登録・編集できる」という汎用テンプレート文言のまま受け入れ条件に書かれ、E2Eテストが実際の
+CI（本番相当RLS）で初めて失敗するまで気づかれなかった。**SPEC.mdの受け入れ条件でマスタデータ
+（products/categories/distributor_products等）のCUD操作に触れる場合は、着手前にこのセクションと
+該当migrationの `-- WHY:` コメントを必ず確認すること。**

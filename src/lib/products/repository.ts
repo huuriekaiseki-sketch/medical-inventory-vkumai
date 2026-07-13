@@ -1,13 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { asString } from '@/lib/mapping'
+import { asNullableString, asString } from '@/lib/mapping'
 import type { Product, ProductInput } from '@/types/product'
 
-const PRODUCT_COLUMNS = 'id, jan, ref, created_at, updated_at'
+const PRODUCT_COLUMNS = 'id, jan, ref, name, maker, created_at, updated_at'
 
 interface ProductRow {
   id?: unknown
   jan?: unknown
   ref?: unknown
+  name?: unknown
+  maker?: unknown
   created_at?: unknown
   updated_at?: unknown
 }
@@ -17,6 +19,8 @@ export function mapProduct(row: ProductRow): Product {
     id: asString(row.id),
     jan: asString(row.jan),
     ref: asString(row.ref),
+    name: asString(row.name),
+    maker: asNullableString(row.maker),
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   }
@@ -47,7 +51,7 @@ export async function getProduct(db: SupabaseClient, id: string): Promise<Produc
 export async function createProduct(db: SupabaseClient, input: ProductInput): Promise<Product> {
   const { data, error } = await db
     .from('products')
-    .insert({ jan: input.jan, ref: input.ref })
+    .insert({ jan: input.jan, ref: input.ref, name: input.name, maker: input.maker ?? null })
     .select(PRODUCT_COLUMNS)
     .single()
   if (error) {
@@ -60,7 +64,7 @@ export async function createProduct(db: SupabaseClient, input: ProductInput): Pr
 export async function updateProduct(db: SupabaseClient, id: string, input: ProductInput): Promise<Product> {
   const { data, error } = await db
     .from('products')
-    .update({ jan: input.jan, ref: input.ref })
+    .update({ jan: input.jan, ref: input.ref, name: input.name, maker: input.maker ?? null })
     .eq('id', id)
     .select(PRODUCT_COLUMNS)
     .single()
