@@ -76,10 +76,44 @@ any code. Heed deprecation notices.
   ただし`feature`は呼び出し時に手動指定が必要、`intent`はプロンプト冒頭1文の抜粋、
   `scenario`は復元不能である旨の固定文言になる（自己申告時点の情報粒度には及ばない）。
 
+## 引き継ぎフォーマット
+
+「できました」で終わる完了報告は禁止。作業完了時（PR本文・セッション終了報告・
+`docs/sessions/` への記録のいずれか）は、以下のフォーマットで引き継ぎメモを残す。
+確認範囲がAIごとにブレる問題・後任AIがスコープ外を「重大な見落とし」と誤認する問題を防ぐ。
+
+```
+## 作業サマリ
+- 変更した目的:
+- 変更した範囲:
+- 触っていない範囲:
+
+## 検証済み
+- 実行したコマンド:（`npm run ai:check` の実行有無を含む）
+- 確認した画面:
+- 確認したDB/RLS:
+- 他テナントのIDでアクセスし、弾かれることを確認したか:（RLS/facility境界に触れた場合は必須）
+
+## 既知の未対応
+- 今回あえて対応しなかったこと:
+- 理由:
+- 次に触るなら見る場所:
+
+## 後任AIへの注意
+- この実装で壊してはいけない前提:
+- 似ているが別物の用語:
+- 勝手にリファクタしない場所:
+```
+
+- auth/facility/tenant/organization/inventory/RLS/policy に触れた変更は、「検証済み」の
+  他テナントIDアクセス確認を省略しない（Issue #24再発防止。チェック観点は
+  [`known-failure-patterns.md`](./known-failure-patterns.md) 参照）
+
 ## 重要ファイルへのパス
 
 | ファイル | 目的 |
 |---|---|
+| [`docs/agents/common.md`](./common.md) | 全AIエージェント共通ルール（本ファイル）・引き継ぎフォーマット |
 | `docs/ai-config-map.md` | エージェント・スキル全体マップ |
 | `src/app/` | Next.js App Router のページ・API Routes |
 | `src/components/` | UI コンポーネント |
