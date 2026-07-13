@@ -11,6 +11,14 @@ describe('ProductsPage handleDelete', () => {
     vi.stubGlobal('alert', vi.fn())
   })
 
+  it('一覧取得が失敗した場合はエラーメッセージを表示する（catch漏れ防止）', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('network error')) as unknown as typeof fetch
+
+    render(<ProductsPage />)
+
+    await screen.findByText('デバイスの取得に失敗しました')
+  })
+
   it('削除はDELETEの完了(await)を待ってから再取得する', async () => {
     const calls: string[] = []
     let resolveDelete: (v: unknown) => void = () => {}

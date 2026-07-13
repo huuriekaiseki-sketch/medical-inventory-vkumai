@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/server'
 import { apiError } from '@/lib/api-error'
 import { requireAdmin } from '@/lib/admin-auth'
+import { asEnum } from '@/lib/mapping'
 import type { AdminUser } from '@/types/admin'
 
 export async function GET() {
@@ -26,7 +27,7 @@ export async function GET() {
   const facilityMap = new Map<string, { id: string; role: 'admin' | 'staff' }[]>()
   for (const row of (facilityRows ?? [])) {
     const list = facilityMap.get(row.user_id) ?? []
-    list.push({ id: row.facility_id, role: row.role as 'admin' | 'staff' })
+    list.push({ id: row.facility_id, role: asEnum(row.role, ['admin', 'staff'] as const, 'staff') })
     facilityMap.set(row.user_id, list)
   }
 
