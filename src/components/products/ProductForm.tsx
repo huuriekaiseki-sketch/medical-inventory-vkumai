@@ -16,6 +16,8 @@ export function ProductForm({ defaultValues, onSubmit, submitLabel = '保存' }:
     onSubmit({
       jan: formData.get('jan') as string,
       ref: formData.get('ref') as string,
+      name: formData.get('name') as string,
+      maker: (formData.get('maker') as string) || null,
     })
   }
 
@@ -47,6 +49,35 @@ export function ProductForm({ defaultValues, onSubmit, submitLabel = '保存' }:
           required
           defaultValue={defaultValues?.ref ?? ''}
           placeholder="REF-001"
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+          製品名
+        </label>
+        <input
+          id="name"
+          name="name"
+          type="text"
+          required
+          defaultValue={defaultValues?.name ?? ''}
+          placeholder="カテーテルAB型"
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="maker" className="block text-sm font-medium text-gray-700">
+          メーカー名
+        </label>
+        <input
+          id="maker"
+          name="maker"
+          type="text"
+          defaultValue={defaultValues?.maker ?? ''}
+          placeholder="テルモ"
           className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
       </div>

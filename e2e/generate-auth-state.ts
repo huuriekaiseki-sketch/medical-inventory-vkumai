@@ -33,12 +33,43 @@ export async function generateAuthState() {
 
   // テストユーザーが未登録でもgenerateLinkが失敗しないよう、先に明示的に作成しておく。
   // 既に存在する場合はエラーになるが、その場合は「既存ユーザーを使う」で問題ないため無視する。
-  const { error: createUserError } = await supabase.auth.admin.createUser({
+  const { data: createdUser, error: createUserError } = await supabase.auth.admin.createUser({
     email: testEmail,
     email_confirm: true,
   })
   if (createUserError && createUserError.code !== 'email_exists') {
     throw new Error(`テストユーザー作成失敗: ${createUserError.message}`)
+  }
+
+  let testUserId = createdUser?.user?.id
+  if (!testUserId) {
+    // 既存ユーザーの場合はcreateUserがuserを返さないため、一覧から拾う
+    const { data: userList, error: listError } = await supabase.auth.admin.listUsers()
+    if (listError) throw new Error(`テストユーザー検索失敗: ${listError.message}`)
+    testUserId = userList.users.find((u) => u.email === testEmail)?.id
+    if (!testUserId) throw new Error(`テストユーザーが見つかりません: ${testEmail}`)
+  }
+
+  // products等のマスタデータ書き込みテストにはadmin権限が必要（is_admin()はuser_facilities.role参照、
+  // docs/agents/decisions.md「なぜマスタデータの書き込みをadmin限定にしたか」）。
+  // ダミー施設（実在施設名を使わない、docs/agents/common.mdのデータ衛生ルール）にadminとして所属させる。
+  const { data: facility, error: facilityError } = await supabase
+    .from('facilities')
+    .upsert({ name: 'E2Eテスト施設' }, { onConflict: 'name' })
+    .select('id')
+    .single()
+  if (facilityError || !facility) {
+    throw new Error(`E2Eテスト施設の作成失敗: ${facilityError?.message}`)
+  }
+
+  const { error: membershipError } = await supabase
+    .from('user_facilities')
+    .upsert(
+      { user_id: testUserId, facility_id: facility.id, role: 'admin' },
+      { onConflict: 'user_id,facility_id' }
+    )
+  if (membershipError) {
+    throw new Error(`E2Eテストユーザーへのadmin権限付与失敗: ${membershipError.message}`)
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
