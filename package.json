@@ -7,11 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "e2e:auth": "npx -y tsx e2e/generate-auth-state.ts",
+    "ai:check": "npm run typecheck && npm run lint && npm run test",
     "loop-summary": "bash scripts/summarize-loop-observability.sh"
   },
   "dependencies": {
