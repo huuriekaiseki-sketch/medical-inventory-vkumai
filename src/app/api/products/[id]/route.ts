@@ -30,6 +30,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'JAN と REF は必須です' }, { status: 400 })
   }
 
+  if (!input.name) {
+    return NextResponse.json({ error: '製品名は必須です' }, { status: 400 })
+  }
+
   try {
     const db = await createServerSupabase()
     try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }

@@ -23,6 +23,8 @@ const mockProduct = {
   id: 'test-id',
   jan: '4901234567890',
   ref: 'REF-001',
+  name: '製品A',
+  maker: null,
   createdAt: '2026-06-18T00:00:00Z',
   updatedAt: '2026-06-18T00:00:00Z',
 }
@@ -53,7 +55,7 @@ describe('POST /api/products', () => {
     vi.mocked(createProduct).mockResolvedValue(mockProduct)
     const req = makeRequest('/api/products', {
       method: 'POST',
-      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-001' }),
+      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-001', name: '製品A' }),
     })
     const res = await POST(req)
     expect(res.status).toBe(201)
@@ -74,10 +76,19 @@ describe('POST /api/products', () => {
     vi.mocked(createProduct).mockRejectedValue(new Error('JAN または REF が既に使用されています'))
     const req = makeRequest('/api/products', {
       method: 'POST',
-      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-001' }),
+      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-001', name: '製品A' }),
     })
     const res = await POST(req)
     expect(res.status).toBe(409)
+  })
+
+  it('name が空なら 400 を返す', async () => {
+    const req = makeRequest('/api/products', {
+      method: 'POST',
+      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-001', name: '' }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(400)
   })
 
   it('未認証なら POST も 401 を返す', async () => {
@@ -85,7 +96,7 @@ describe('POST /api/products', () => {
     vi.mocked(requireAuth).mockRejectedValueOnce(new Error('UNAUTHORIZED'))
     const req = makeRequest('/api/products', {
       method: 'POST',
-      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-001' }),
+      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-001', name: '製品A' }),
     })
     const res = await POST(req)
     expect(res.status).toBe(401)
@@ -115,7 +126,7 @@ describe('PUT /api/products/[id]', () => {
     vi.mocked(updateProduct).mockResolvedValue({ ...mockProduct, ref: 'REF-002' })
     const req = makeRequest('/api/products/test-id', {
       method: 'PUT',
-      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-002' }),
+      body: JSON.stringify({ jan: '4901234567890', ref: 'REF-002', name: '製品A' }),
     })
     const res = await PUT(req, makeParams('test-id'))
     expect(res.status).toBe(200)
@@ -127,7 +138,7 @@ describe('PUT /api/products/[id]', () => {
     vi.mocked(updateProduct).mockRejectedValue(new Error('製品ID "x" は存在しません'))
     const req = makeRequest('/api/products/x', {
       method: 'PUT',
-      body: JSON.stringify({ jan: '1234567890123', ref: 'REF-X' }),
+      body: JSON.stringify({ jan: '1234567890123', ref: 'REF-X', name: '製品X' }),
     })
     const res = await PUT(req, makeParams('x'))
     expect(res.status).toBe(404)
