@@ -76,6 +76,29 @@ any code. Heed deprecation notices.
   ただし`feature`は呼び出し時に手動指定が必要、`intent`はプロンプト冒頭1文の抜粋、
   `scenario`は復元不能である旨の固定文言になる（自己申告時点の情報粒度には及ばない）。
 
+## サブエージェント進捗の可視化（issue #18）
+
+- サブエージェント（sweep-db/sweep-ui/sweep-types/sweep-data/implementer/reviewer/integrator/
+  judge-panel/proposer/adversarial-verify/completeness-critic/contract-writer）は、
+  作業の**開始時**と**終了時**（成功・失敗いずれも）に `scripts/log-agent-progress.sh` を呼び、
+  `logs/agent-progress.jsonl` に進捗を記録すること。
+  ```
+  scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature名>" \
+    --status running --note "<今やっていることの短い説明>"
+  # ...作業...
+  scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature名>" \
+    --status done --note "<完了内容の短い説明>"    # 失敗時は --status failed
+  ```
+  `--status` は `starting|running|waiting|done|failed` のいずれか。`feature`名が
+  呼び出し元から与えられていない場合は `unknown` を使う。
+- 現在の状態は `scripts/show-agent-status.sh` で一覧できる（`--stale-seconds`未満は
+  既定180秒＝3分）。`running`/`waiting`のまま既定180秒以上更新がないエージェントは
+  「止まってる？」として表示される。
+- これも loop-observability と同じ構造的限界を持つ：**エージェントへの自然言語指示に
+  依存しており強制力がない**（オーケストレーター側から機械的に書き込ませることはできない）。
+  つまり「進捗が表示されない」ことは「本当に止まっている」のか「そもそも記録し忘れている」のか
+  区別できない。記録漏れの検知（loop-observability同様の仕組み）は今後の課題として残っている。
+
 ## 引き継ぎフォーマット
 
 「できました」で終わる完了報告は禁止。作業完了時（PR本文・セッション終了報告・
@@ -120,3 +143,4 @@ any code. Heed deprecation notices.
 | `src/lib/supabase/` | Supabase クライアント・データ取得層 |
 | `supabase/migrations/` | DBマイグレーション |
 | [`docs/agents/run-manifest.md`](./run-manifest.md) | AIDDフローのspecHash/baseCommit突合用Run Manifestのスキーマ |
+| `scripts/log-agent-progress.sh` / `scripts/show-agent-status.sh` | サブエージェント進捗の記録・一覧表示（issue #18） |

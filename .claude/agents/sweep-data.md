@@ -33,3 +33,11 @@ model: haiku
 - 箇条書きのみ
 - 「ファイルパス:行番号 — 問題の概要」形式
 - 問題がなければ「指摘なし」と返す
+
+## 進捗報告（issue #18）
+調査開始時と終了時に `scripts/log-agent-progress.sh` を呼ぶこと。`--feature` は呼び出し元から与えられた機能名（無ければ `unknown`）。
+```bash
+scripts/log-agent-progress.sh --agent sweep-data --feature "<feature名>" --status running --note "データ取得層調査中..."
+# ...調査...
+scripts/log-agent-progress.sh --agent sweep-data --feature "<feature名>" --status done --note "データ取得層調査完了"
+```

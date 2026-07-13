@@ -26,3 +26,11 @@ finding: [指摘の概要]
 refuted: true / false
 evidence: [コードを読んで確認した根拠。refuted=falseの場合は問題が実在する証拠]
 ```
+
+## 進捗報告（issue #18）
+検証開始時に `--status running`、出力を返す直前に `--status done` で `scripts/log-agent-progress.sh` を呼ぶこと。`--feature` は検証対象の機能名（無ければ `unknown`）。
+```bash
+scripts/log-agent-progress.sh --agent adversarial-verify --feature "<feature名>" --status running --note "反証検証中..."
+# ...検証...
+scripts/log-agent-progress.sh --agent adversarial-verify --feature "<feature名>" --status done --note "検証完了"
+```
