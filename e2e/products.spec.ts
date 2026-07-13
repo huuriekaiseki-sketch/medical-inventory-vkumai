@@ -78,7 +78,7 @@ test.describe('デバイス（製品）管理', () => {
       page.waitForResponse(
         (res) => res.url().includes('/api/products/') && res.request().method() === 'PUT'
       ),
-      page.getByRole('button', { name: '保存' }).click(),
+      page.getByRole('button', { name: '更新' }).click(),
     ])
     expect(response.ok(), `PUT /api/products/[id] failed (${response.status()}): ${await response.text()}`).toBe(true)
 
