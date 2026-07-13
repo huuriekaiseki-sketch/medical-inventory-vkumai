@@ -1,111 +1,324 @@
-# SPEC: CIに2ユーザー×2施設のRLS/IDOR統合テストを追加する（issue #165）
+# 機能仕様書 — issue #305: PRを介さない本番スキーマ変更の定期ドリフト検知
 
-## Part 1 — 仕様（人間レビュー対象）
+> ステータス: **承認済み（停止①クリア）— Phase 3実装へ**
+> 作成日: 2026-07-13 / 承認日: 2026-07-13
+> 由来: Phase 1深掘り調査（Sweep→Draft Spec→Adversarial Verify→Judge Panel→Synthesize、98エージェント）の統合提案
+> 承認内容: 5点の判断事項すべて提案通り（v1スコープ3種のみ・GitHub Issueのみ通知・既存ドリフト封印・drift_alert_view anon公開・pg_cron有効化）で承認
+
+---
+
+## Part 1 — 仕様（★人間がレビューする部分）
+
+### 背景・課題
+
+issue #30でSupabase GitHub Integrationを有効化したが、これはPR/ブランチトリガーでのみ動作する。SQL Editor等でPRを介さず直接本番DBに変更が入るケース（`rls_auto_enable`イベントトリガーが実際にPRを介さず入っていた事故パターン、`20260707000001_capture_rls_auto_enable_event_trigger.sql`参照）は、次にPRが発生するまで検知が遅延する。
 
 ### 何ができるようになるか
 
-現在、「施設Aのユーザーが施設Bのデータを見れてしまう／操作できてしまう」というバグが起きても、テストでは検知できません。既存のテストは以下のいずれかで、実際のデータベース越境チェックを一度も通していないためです。
+SQL Editor等でPRを介さず本番DBのスキーマが直接変更された場合、**翌日までに自動でGitHub Issueが作成され**、気づけるようになる。具体的には以下の3種類の変更を検知する（v1スコープ）：
 
-- RLS（行レベルセキュリティ）テスト → SQLの中身を文字列として読むだけ（本物のデータベースには繋がない）
-- APIテスト → 「施設アクセス許可チェック」を常にOKを返す偽物に差し替えている（本物のチェックを迂回している）
+1. **テーブルのRLS（行レベルセキュリティ）が無効化された**（最も危険な変更。他施設のデータが見えてしまう等の事故に直結する）
+2. **想定外のテーブルが追加された**
+3. **既存のテーブルが削除された**
 
-この仕様では、**本物のテスト用データベースに、本物の2人のユーザーと2つの施設を用意し、「施設Aのユーザーが施設Bの短貸発注（loan-orders）データにアクセスしようとしたら、必ず拒否される」ことを実際に確認するテスト**をCIに追加します。これにより、将来誰かがうっかり越境チェックを壊すコードを書いても、CIが赤くなって気づけるようになります。
+検知は毎日1回、自動で実行される。ドリフトがなければ何も起きない（誤通知なし）。
 
-対象は短貸発注（loan-orders）機能です。
+### 採用する方式（v1・最小スコープ）
 
-### 検証する越境シナリオ（受け入れ条件）
+- **DB内部の関数（`check_schema_drift()`）が毎日1回、自動実行**され、上記3種のドリフトをチェックしてログテーブルに記録する
+- **GitHub Actionsが毎日そのログを確認**し、未対応のドリフトがあれば自動でGitHub Issueを作成する
+- 本番DBへの接続情報（パスワード・アクセストークン）はGitHub Secretsに一切置かない（既存方針を継続。`docs/agents/decisions.md`参照）
+- Edge Function・外部HTTP通信は使わない（v1では省略し、実績のあるDB内部完結の仕組みに絞る）
 
-テスト専用データベースに以下を用意します。
-- 施設A・施設Bという2つのダミー施設
-- ユーザーA（施設Aのみ所属）・ユーザーB（施設Bのみ所属）という2人のダミーユーザー
-- 施設Aに紐づく短貸発注データを1件
+### 今回やらないこと（v2以降）
 
-これに対し、以下がすべてCIで自動確認されることをもって完了とします。
+- 関数の追加・削除・シグネチャ変更の検知
+- カラムの追加・削除の検知
+- イベントトリガーの追加・削除の検知
+- 制約（外部キー・一意制約・チェック制約）・インデックスの変更検知
+- RLSポリシー個別の削除検知（テーブルのRLS有効/無効のみを見る。ポリシーの中身までは見ない）
+- Slack通知等、GitHub Issue以外の通知経路
 
-- [ ] ユーザーBが施設Aの短貸発注一覧を取得しようとすると、施設Aのデータが1件も返ってこない（見えない）
-- [ ] ユーザーBが施設Aの短貸発注を新規作成しようとすると、拒否される（エラーになる）
-- [ ] ユーザーAが自分の施設Aの短貸発注一覧・作成は問題なく成功する（拒否が過剰でないことの確認）
-- [ ] 上記すべてがGitHub ActionsのCI上で自動実行され、失敗時はCIが赤くなる
+理由：これらを最初から全部やろうとすると実装・検証コストが跳ね上がり着手が遅れる。まずセキュリティ影響が最大の3種（RLS無効化・テーブル追加・削除）を確実に検知できる状態を最速で作り、対象を広げるのは次のissueで行う。
 
-📸 このテストはブラウザ画面を伴わない自動テストのため、スクリーンショット撮影ポイントはありません。
+### 操作の流れ（人間が見るもの）
 
-### 対象外（今回はやらないこと）
+1. 何もしなくてよい。毎日自動でチェックが走る
+2. ドリフトが検知されると、GitHub Issueが自動作成される（ラベル: `schema-drift`, `bug`）📸
+3. Issueには「何が」「いつ検知されたか」が書かれている
+4. 対応（マイグレーション作成 or 意図した変更なら追認）した後、次回チェックでドリフトが消えていれば自動でIssueがクローズされる
 
-- loan-orders以外の機能（consumable-orders等）への横展開は次のissueに切り出す
-- ブラウザ画面を操作するE2E（Playwright）としての越境確認は行わない（DBレベルの越境チェックを直接確認する方式を採用するため。理由はPart 2参照）
+> 📸 本機能はブラウザ画面を伴わない自動処理（DB関数 + GitHub Actions）のため、動作確認はGitHub Issue作成の実物とAction実行ログで行う。E2E（Playwright）のスクリーンショット撮影ポイントはない。
+
+### 受け入れ条件（チェックリスト）
+
+#### 検知の正確性
+
+- [ ] ローカルSupabaseで `SELECT * FROM check_schema_drift();` を実行し、ドリフトがない状態でゼロ行が返る
+- [ ] SQL Editorで `CREATE TABLE public.test_drift (id uuid);` を実行後に再実行すると、`table_added` の1行が検知される（その後 `DROP TABLE` で後片付け）
+- [ ] SQL Editorで既存テーブルの `ALTER TABLE ... DISABLE ROW LEVEL SECURITY;` を実行後に再実行すると、`rls_disabled` の1行が検知される（その後 `ENABLE ROW LEVEL SECURITY` で戻す）
+- [ ] baseline snapshotに存在するテーブルをSQL Editorで `DROP TABLE` すると、`table_removed` の1行が検知される
+- [ ] 同じドリフトが未解決のまま複数回チェックが走っても、ログに重複して記録されない（冪等性）
+- [ ] `schema_drift_log` / `schema_baseline_snapshots` テーブル自体が削除された場合、`check_schema_drift()` の実行がエラーとして失敗し、その失敗がpg_cronの実行履歴に残る
+
+#### GitHub Issue連携
+
+- [ ] 未解決ドリフトが1件以上ある状態でGitHub Actionsを実行すると、`schema-drift`・`bug`ラベル付きのIssueが作成される
+- [ ] 既にIssueが作成済みの未解決ドリフトについては、再実行してもIssueが重複作成されない
+- [ ] ドリフトが解消された後の実行で、対応するIssueが自動でクローズされる
+- [ ] GitHub Actions用のトークンは標準の`GITHUB_TOKEN`（`issues:write`権限のみ）を使い、個人アクセストークンの発行・管理は不要である
+
+#### セキュリティ
+
+- [ ] 本番DBの接続パスワード・Service Role Key・Supabase Access TokenはGitHub Secretsに一切登録しない
+- [ ] GitHub Actionsが読み取るビュー（`drift_alert_view`）はanon keyで読める設計だが、公開される情報はドリフトの種類・対象オブジェクト名・検知日時のみで、それ以上の詳細情報（`detail`列の中身）は公開されない
+- [ ] `check_schema_drift()`はservice_roleのみ実行可能（GRANT EXECUTEがservice_roleに限定されている）
+
+#### 運用
+
+- [ ] テスト専用Supabase環境ではこのスケジュールチェックは動作しない（本番環境限定）
+- [ ] `docs/agents/decisions.md` に本設計（Edge Function不使用・GitHub Actions日次ポーリング方式を選んだ理由）が追記される
 
 ---
 
-## Part 2 — 実装計画（AI用・レビュー不要）
+### 判断が必要な点（レビュー時に確認）
 
-### 技術方式の選定
+1. **pg_cron拡張の有効化を承認するか** — Supabase Dashboard → Database → Extensionsから有効化する。DB内部スケジューラとして必須。無効化できない/したくない場合は、GitHub Actions側からRPC経由で`check_schema_drift()`を直接呼ぶ代替方式に変更する（フォールバックとして実装計画には両方含める）
+2. **v1の検知スコープ（RLS無効化・テーブル追加・テーブル削除の3種のみ）で妥当か** — 関数・カラム・トリガー等はv2に先送りするが、これで最初の一歩として十分な価値があるか
+3. **通知先はGitHub Issueのみで確定してよいか**（Slack等は今回対象外）
+4. **本番の「既存の未記録ドリフト」の扱い** — 本仕様の初回マイグレーション適用時点のテーブル一覧を「あるべき状態」としてそのまま封印する設計にする（過去に本当にドリフトしていたものがあっても、そこは合格ラインとして扱われる）。適用前に本番の棚卸しを別途行うべきか、それともこのまま封印してよいか
+5. **`drift_alert_view`をanon keyで公開すること**への承認 — ドリフト種別・対象オブジェクト名・検知日時が匿名で読み取り可能になる（詳細情報は非公開）。この程度の情報公開は許容できるか
 
-**採用: 新設のVitest統合テスト設定で、Supabase JS ClientからPostgREST/RPCを直接叩く方式**
+---
 
-検討した選択肢:
+## Part 2 — 実装計画（AI用・技術詳細・レビュー不要）
 
-| 選択肢 | 概要 | 判定 |
+### 前提
+
+- RISK判定: `supabase/migrations/`・RLS・policyドメインに触れるため **RISK=はい（M/Lレーン必須）**
+- 既存方針の継承: 本番Supabase接続情報をGitHub Secretsに置かない（`docs/agents/decisions.md`「なぜスキーマドリフト検知を自前cronではなくSupabase GitHub Integrationで始めたか」と同じ制約を維持する。本仕様はそれを補完するもので、置き換えではない）
+- `check_schema_drift()`のテーブル追加/削除判定は、`schema_baseline_snapshots`にmigration適用時点の`pg_tables`実データをそのまま記録する方式（手動でのテーブル名列挙はしない。導出漏れリスクを構造的に避けるため）
+
+### drift_type / event_kind の値と判定基準（Part 3セルフチェック対応）
+
+**`drift_type`**（`schema_drift_log.drift_type`、TEXT）
+
+| 値 | 判定基準 | 下流の反応 |
 |---|---|---|
-| A. 既存vitest(`npm test`)にそのまま追加 | 既存`vitest.config.ts`は`jsdom`環境・DB非接続前提。混在させるとモックテストと統合テストが同一設定内で紛れ、誤って本物のDBに繋ぐテストがモック漏れで壊れるリスク | 不採用 |
-| **B. Vitestの新設定(`vitest.integration.config.ts`)+ 新スクリプト(`test:integration`)、supabase-jsで直接PostgREST/RPCを叩く** | Next.jsサーバー起動不要、CIの`supabase start`直後に実行可能で最軽量。issue文言の「直接REST/RPC呼び出し」に最も忠実 | **採用** |
-| C. Playwright E2Eの`request` APIコンテキストで直接叩く | Next.js `webServer`起動を待つ必要がありCIが重くなる。E2Eは画面スモーク用途と責務が混ざる | 不採用（将来、画面越しの越境確認をしたくなったら別途検討） |
+| `rls_disabled` | `pg_class.relrowsecurity = false` のpublicスキーマテーブルが1件でもある | `drift_alert_view`に表示 → GitHub Actionsが`priority: high`としてIssue本文に明記 |
+| `table_added` | 最新snapshotの`snapshot`配列に存在しないテーブルが`pg_tables`に存在する | `drift_alert_view`に表示 → 通常のIssue作成対象 |
+| `table_removed` | 最新snapshotの`snapshot`配列に存在するテーブルが`pg_tables`に存在しない | `drift_alert_view`に表示 → 通常のIssue作成対象 |
+| `error` | `check_schema_drift()`内部で想定外の例外を捕捉した場合（基盤テーブル消失以外） | `drift_alert_view`には出さない（object_nameがNULLになりうるため）。`schema_drift_log`への記録のみとし、`cron.job_run_details`の失敗ログと合わせて別途確認する運用とする |
+
+**`event_kind`**（`schema_drift_log.event_kind`、TEXT CHECK IN ('detected','acknowledged','resolved')）
+
+| 値 | 判定基準 | 下流の反応 |
+|---|---|---|
+| `detected` | `check_schema_drift()`が新規ドリフトを検知した瞬間にINSERTする初期値 | `drift_alert_view`の対象（`resolved_at IS NULL`かつ`event_kind='detected'`） |
+| `acknowledged` | 人間がドリフトを「意図した変更」と確認し、対応するmigrationを作らずクローズしたい場合に手動でUPDATEする（v1では専用UIなし、SQLで直接更新） | `drift_alert_view`の対象から除外（`resolved_at`が設定される想定、またはWHERE句で`event_kind != 'acknowledged'`も対象外にする） |
+| `resolved` | 次回`check_schema_drift()`実行時に、同一`drift_type`+`object_name`の組が再検知されなかった場合、対応する`detected`行の`resolved_at`を自動更新する | `drift_alert_view`の対象から除外。GitHub Actions側が対応するIssueをクローズする |
+
+**合計3種類の`drift_type`・3種類の`event_kind`、本文中の記載件数と一致することを確認済み。**
 
 ### 実装セット一覧（依存順）
 
-**セット1: シードヘルパー**
-- 新規: `supabase/__tests__/integration/helpers/seed-rls-idor.ts`
-  - service role clientで施設A・施設B、ユーザーA・ユーザーB（`auth.admin.createUser`）、`user_facilities`紐付け、施設Aの`loan_orders`1件を作成する関数群をexport
-  - 冪等性: 各テスト実行前に一意なメール（例 `rls-idor-user-a-${crypto.randomUUID()}@example.test`）を使うことで`db reset`前提に依存しすぎない設計にする
-  - ダミー名を使用（`テスト施設A`/`テスト施設B`等）。実在施設名を入れない（`docs/agents/common.md`のデータ衛生ルール準拠）
-  - **本番DB接続防止ガード（必須）**: service role clientを生成する前に、必ず`e2e/env-guard.ts`の`assertTestSupabaseEnv()`を呼び出す。このテストは**実DBに接続する初めてのVitestテスト**であり（既存`admin_rls.test.ts`はファイル文字列を読むだけで接続していない）、ガード漏れはそのまま本番Supabaseへの誤接続リスクに直結するため、既存のPlaywright E2Eと同じ防御を必須で流用する
-  - **接続用環境変数名は既存の`e2e/generate-auth-state.ts`（L18-19）と完全に一致させる**: URLは`process.env.NEXT_PUBLIC_SUPABASE_URL`、サービスキーは`process.env.SUPABASE_SERVICE_ROLE_KEY`。`assertTestSupabaseEnv()`は`NEXT_PUBLIC_SUPABASE_URL`という名前を固定で読むため、シードヘルパーが別名の環境変数（例: `SUPABASE_URL`・`TEST_SUPABASE_URL`）を使うと、ガードは「未設定」と誤認して素通りし（`e2e/env-guard.ts` L16-19の仕様）、二重防御のはずが両方とも同時に無効化される。実装時、変数名の一致をコードレビューで必ず確認する
-- テスト観点: このファイル自体はテスト対象ではなくテストヘルパーのため、単体テストは不要。セット2の統合テストが通ることで動作確認される
+#### セット1: DBスキーマ（マイグレーション、直列内で最初）
 
-**セット2: RLS/IDOR統合テスト本体**
-- 新規: `supabase/__tests__/integration/loan-orders-rls-idor.integration.test.ts`
-  - セット1のヘルパーでシード
-  - ユーザーBのJWTで`supabase.from('loan_orders').select().eq('facility_id', facilityA.id)` → 0件であることを検証
-  - ユーザーBのJWTで`supabase.rpc('create_loan_order_atomic', { p_facility_id: facilityA.id, ... })` → エラー（RAISE EXCEPTIONまたはRLS拒否）を検証
-  - ユーザーAのJWTで同様の操作 → 成功することを検証（過剰拒否でないことの確認）
-  - 依存: セット1のシードヘルパー
-- テスト観点: 上記3パターン（他施設SELECT拒否・他施設RPC拒否・自施設は成功）
+**触るファイル（新規）:**
+- `supabase/migrations/20260714000001_create_schema_drift_detection.sql`
 
-**セット3: CI実行基盤**
-- 新規: `vitest.integration.config.ts`（既存`vitest.config.ts`を参考に、`environment: 'node'`、`include: ['supabase/__tests__/integration/**/*.integration.test.ts']`、**`globalSetup`に`supabase/__tests__/integration/helpers/global-setup.ts`を指定**）
-- 新規: `supabase/__tests__/integration/helpers/global-setup.ts`
-  - Vitestの`globalSetup`フックとして、テストファイルが1つでも実行される前に`assertTestSupabaseEnv()`（`e2e/env-guard.ts`からimport）を呼ぶ。ここで例外を投げれば、個々のテストファイルに到達する前にスイート全体が即失敗する
-  - セット1（シードヘルパー内のガード呼び出し）との二重防御。片方の呼び出し漏れがあっても本番接続をブロックできるようにする
-- 変更: `package.json`（`scripts`に`"test:integration": "vitest run --config vitest.integration.config.ts"`を追加）
-- 変更: `.github/workflows/e2e.yml`（`supabase db reset`／`Export local Supabase connection info`ステップの直後、`npm run test:e2e`ステップの前に`npm run test:integration`ステップを新設で追加）
-  - **重要（GitHub Actionsのステップ`env:`は他ステップに継承されない）**: 既存の`Run E2E smoke tests`ステップ（e2e.yml L51-60）は`NEXT_PUBLIC_SUPABASE_URL`等を自分の`env:`ブロックだけに閉じて注入している。新設する`Run RLS/IDOR integration tests`ステップにも、**同じ3変数（`NEXT_PUBLIC_SUPABASE_URL`・`SUPABASE_SERVICE_ROLE_KEY`、SELECT検証用に`NEXT_PUBLIC_SUPABASE_ANON_KEY`）を独立した`env:`ブロックとして明示的に複製する**。これを怠ると当該ステップでは環境変数が未設定になり、`assertTestSupabaseEnv()`が「未設定だから素通り」する分岐に入ってしまい、セット1のガードが実質無効化される
-  - ローカル実行時は`.env.test`が`NODE_ENV=test`経由で読み込まれる既存の仕組み（`e2e/generate-auth-state.ts`と同じ`loadEnvConfig`パターン）に乗せる
-- 依存: セット1・セット2が存在すること（実行対象があって初めて意味を持つ）
+**内容（骨格）:**
+```sql
+-- 1. baseline snapshot（append-only）
+CREATE TABLE schema_baseline_snapshots (
+  epoch TEXT PRIMARY KEY,
+  snapshot JSONB NOT NULL,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE schema_baseline_snapshots ENABLE ROW LEVEL SECURITY;
+-- service_role以外ポリシーなし = service_roleのみアクセス可（既存パターンに合わせる）
 
-**セット4（独立・並列可）: `is_facility_member`のEXECUTE権限の明示化**
-- 前提の訂正: マイグレーションファイルに`GRANT EXECUTE`の記述が無いことは事実だが、PostgreSQLは関数作成時にデフォルトで`PUBLIC`へEXECUTE権限を自動付与する。本リポジトリのマイグレーションには`ALTER DEFAULT PRIVILEGES ... REVOKE EXECUTE FROM PUBLIC`に相当する記述が存在しない（`grep -rl REVOKE supabase/migrations`で確認済み、ヒットした2ファイルはいずれもテーブル直接アクセスやRPCの個別REVOKEで、デフォルト権限のREVOKEではない）。したがって`is_facility_member`は**現状すでに動作している可能性が高い**。これは「バグ修正」ではなく「他の関数（`create_loan_order_atomic`・`get_admin_status`等）と同様に明示的なGRANTで権限を可視化する」という**明示化**として扱う
-- 実装時の手順:
-  1. ローカルSupabase起動後、`information_schema.routine_privileges`（または`\df+ is_facility_member`相当）で`authenticated`ロールの実際のEXECUTE権限有無を確認する
-  2. 既に権限がある場合も無害なので、明示的な`GRANT EXECUTE ON FUNCTION is_facility_member TO authenticated;`を追加するマイグレーションを新設する（将来誰かが`REVOKE EXECUTE FROM PUBLIC`のような防御的変更を入れた際に、暗黙のPUBLIC権限だけに頼っていたことで静かに壊れるのを防ぐため）
-- 触るファイル: 新規マイグレーションファイルのみ（他セットと非依存）
+-- 2. ドリフトログ（append-only、冪等性は部分ユニーク制約で担保）
+CREATE TABLE schema_drift_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  drift_type TEXT NOT NULL,
+  object_name TEXT,
+  detail JSONB,
+  event_kind TEXT NOT NULL DEFAULT 'detected' CHECK (event_kind IN ('detected','acknowledged','resolved')),
+  detected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at TIMESTAMPTZ,
+  issue_url TEXT
+);
+CREATE UNIQUE INDEX schema_drift_log_open_unique
+  ON schema_drift_log (drift_type, object_name) WHERE resolved_at IS NULL;
+ALTER TABLE schema_drift_log ENABLE ROW LEVEL SECURITY;
 
-### 並列グループ宣言
+-- 3. 初期snapshot（このmigration適用時点の実データをそのまま封印）
+INSERT INTO schema_baseline_snapshots (epoch, snapshot)
+SELECT '20260714000001', jsonb_agg(tablename ORDER BY tablename)
+FROM pg_tables WHERE schemaname = 'public';
 
-- **波1（同時実装可）**: セット1（シードヘルパー）／セット4（GRANT EXECUTE調査・是正）— 互いに別ファイルのみを触るため並列可
-- **波2**: セット2（統合テスト本体）— セット1のヘルパーに依存するため波1完了後
-- **統合ゲート**: セット3（`package.json`・`vitest.integration.config.ts`・`.github/workflows/e2e.yml`という共有ファイルを触るため、単独実装者が波2完了後にまとめて実施）
+-- 4. check_schema_drift() 本体
+CREATE OR REPLACE FUNCTION check_schema_drift()
+RETURNS TABLE (drift_type TEXT, object_name TEXT, detail JSONB)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  latest_snapshot JSONB;
+BEGIN
+  -- 自己参照ガード: 基盤テーブル自体の消失を最優先で検知
+  IF to_regclass('public.schema_drift_log') IS NULL
+     OR to_regclass('public.schema_baseline_snapshots') IS NULL THEN
+    RAISE EXCEPTION 'schema drift detection base tables are missing (self-referential integrity failure)';
+  END IF;
 
-### 型・データアクセス層の方針
+  SELECT snapshot INTO latest_snapshot
+  FROM schema_baseline_snapshots ORDER BY epoch DESC LIMIT 1;
 
-- 新規コードは既存の`src/lib/supabase/`の型（`Database`型・`asEnum`等のヘルパー）を極力再利用する。ただしテストヘルパーは`supabase/__tests__/`配下に閉じ、本番コードの型定義に影響を与えない
-- service role clientの生成は`e2e/generate-auth-state.ts`の`loadEnvConfig`パターン（`NODE_ENV=test`で`.env.test`のみ読込）を踏襲する
+  -- 1. RLS無効化検知（ホワイトリスト不要、public全テーブル対象）
+  --    自テーブル(schema_baseline_snapshots/schema_drift_log)もRLS有効化前提のため対象に含む
+  RETURN QUERY
+  SELECT 'rls_disabled', c.relname, jsonb_build_object('schema', 'public')
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity = false;
+
+  -- 2. テーブル追加検知
+  RETURN QUERY
+  SELECT 'table_added', t.tablename, jsonb_build_object('schema', 'public')
+  FROM pg_tables t
+  WHERE t.schemaname = 'public'
+    AND NOT (latest_snapshot ? t.tablename);
+
+  -- 3. テーブル削除検知
+  RETURN QUERY
+  SELECT 'table_removed', s.name, jsonb_build_object('schema', 'public')
+  FROM jsonb_array_elements_text(latest_snapshot) AS s(name)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM pg_tables t WHERE t.schemaname = 'public' AND t.tablename = s.name
+  );
+END;
+$$;
+GRANT EXECUTE ON FUNCTION check_schema_drift TO service_role;
+
+-- 5. ドリフト記録関数（check_schema_drift()の結果をログに冪等insertし、resolved自動更新も行う）
+CREATE OR REPLACE FUNCTION record_schema_drift()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  -- 新規ドリフトを記録（既存の未解決行があればスキップ）
+  INSERT INTO schema_drift_log (drift_type, object_name, detail)
+  SELECT d.drift_type, d.object_name, d.detail FROM check_schema_drift() d
+  ON CONFLICT (drift_type, object_name) WHERE resolved_at IS NULL DO NOTHING;
+
+  -- 前回検知されたが今回検知されなかった行はresolvedにする
+  UPDATE schema_drift_log l
+  SET event_kind = 'resolved', resolved_at = now()
+  WHERE l.event_kind = 'detected' AND l.resolved_at IS NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM check_schema_drift() d
+      WHERE d.drift_type = l.drift_type AND d.object_name = l.object_name
+    );
+END;
+$$;
+GRANT EXECUTE ON FUNCTION record_schema_drift TO service_role;
+
+-- 6. GitHub Actions公開用ビュー（詳細非公開・未解決分のみ）
+CREATE VIEW drift_alert_view AS
+SELECT id, drift_type, object_name, detected_at, issue_url
+FROM schema_drift_log
+WHERE event_kind = 'detected' AND resolved_at IS NULL;
+GRANT SELECT ON drift_alert_view TO anon;
+```
+
+**テスト観点:**
+- `supabase/migrations/__tests__/schema_drift_detection.test.ts`（既存`tech_debt_migrations.test.ts`と同じ静的SQL検証方式）
+  - `record_schema_drift()`・`check_schema_drift()`・`drift_alert_view`が定義されていること
+  - `schema_drift_log_open_unique`部分ユニークインデックスの`WHERE resolved_at IS NULL`条件が含まれること
+  - `GRANT SELECT ON drift_alert_view TO anon`が含まれること（過剰付与ではなくSELECTのみであることも確認）
+- ローカル`supabase db reset`後、`SELECT * FROM check_schema_drift();`がゼロ行を返すことを手動確認（受け入れ条件1件目に対応）
+
+**触るファイル:**
+- `supabase/migrations/20260714000001_create_schema_drift_detection.sql`（新規）
+- `supabase/migrations/__tests__/schema_drift_detection.test.ts`（新規）
 
 ---
 
-## Part 3 — 仕様レビュー前セルフチェック（AI用・レビュー不要）
+#### セット2: pg_cronスケジュール設定（セット1完了後・直列）
 
-このセルフチェックは主にenum/statusフィールドを新設する仕様が対象だが、本仕様は新しいenum/statusフィールドを導入しないため、該当チェック項目は形式的に確認のみ行う。
+**触るファイル（新規）:**
+- `supabase/migrations/20260714000002_schedule_schema_drift_check.sql`
 
-- **判定基準の欠落**: 該当なし（新しいenum/statusフィールドを導入しない。テストのpass/fail判定はVitestの標準assert機構に委ねる）
-- **下流の反応の欠落**: 該当なし
-- **列挙の自己矛盾**: 「対象外」節に列挙したのはloan-orders以外の機能・画面越しE2Eの2点のみで、本文の対象範囲（loan-orders・REST/RPC直接呼び出し）と矛盾しないことを確認済み
-- **信号の意味変更**: 既存の`requireFacilityAccess`モックテスト・静的SQLテストは変更せず残す（置き換えではなく追加）。CIの既存`e2e.yml`ジョブの意味（画面スモーク確認）は変えず、新ステップを追加するのみであることを確認済み
+**内容（骨格）:**
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+SELECT cron.schedule(
+  'schema-drift-daily-check',
+  '0 23 * * *', -- UTC 23:00 = JST 8:00
+  $$ SELECT record_schema_drift(); $$
+);
+```
+
+**補足（pg_cronが有効化できない場合のフォールバック）:**
+- 前提確認1（Part 1参照）でpg_cron不可の判断が出た場合、このセットはスキップし、代わりにセット3（GitHub Actions）側から`record_schema_drift()`をRPC経由（service_role key使用、ただしこれはGitHub Secretsではなく別途安全な経路の検討が必要—**この場合は追加の人間判断が必要なため、pg_cron不可判定が出た時点でこのセットの実装者は着手せず、統合ゲートで報告すること**）
+
+**テスト観点:**
+- ローカルで`SELECT * FROM cron.job WHERE jobname = 'schema-drift-daily-check';`でスケジュール登録を確認
+- `SELECT cron.run_job((SELECT jobid FROM cron.job WHERE jobname = 'schema-drift-daily-check'));`で手動実行し、エラーが出ないことを確認
+
+**触るファイル:**
+- `supabase/migrations/20260714000002_schedule_schema_drift_check.sql`（新規）
+
+---
+
+#### セット3（セット1と並列可）: GitHub Actionsワークフロー
+
+**触るファイル（新規）:**
+- `.github/workflows/schema-drift-check.yml`
+
+**内容（骨格）:**
+- `schedule: cron: '0 0 * * *'`（UTC 0:00、DB側チェックより後に実行されるよう時刻をずらす）+ `workflow_dispatch`（手動実行可能に）
+- `curl`で`drift_alert_view`をanon keyで取得（本番Supabase URLとanon keyのみ使用。パスワード・service role key不使用）
+- 未解決ドリフト（`issue_url IS NULL`の行）ごとに`gh issue create`でIssue作成し、作成したURLを`schema_drift_log`に書き戻す（この書き戻しには専用のRPC関数が必要 → セット1に`record_issue_url(log_id UUID, url TEXT)`をSECURITY DEFINERで追加し、service_role権限で叩けるようにする。**この関数はセット1側の追加スコープとして実装者間で調整すること**）
+- 対応済み（`resolved`になった）ドリフトに紐づく`issue_url`があれば`gh issue close`する
+
+**テスト観点:**
+- `workflow_dispatch`での手動実行が成功すること（ローカルでは検証できないため、実装後に一度手動トリガーして確認する統合ゲート項目とする）
+- ダミーのドリフトデータに対してIssue作成・重複防止・クローズの3パターンをステージング的に確認する手順をREADME相当にコメントで残す
+
+**触るファイル:**
+- `.github/workflows/schema-drift-check.yml`（新規）
+
+---
+
+#### セット4（独立・並列可）: decisions.md更新
+
+**触るファイル（既存）:**
+- `docs/agents/decisions.md`
+
+**内容:**
+- 「なぜPRの外側のスキーマドリフト検知にEdge Functionを使わずpg_cron + GitHub Actionsポーリングを採用したか」を追記
+- 検討した代替案（Edge Function + Webhook方式）を不採用にした理由（pg_net依存・デプロイパイプライン未定義・GITHUB_TOKEN管理コストの3点）を記録
+
+---
+
+### 並列グループ宣言
+
+```
+Wave 1 ──┬── Set 1 (DBスキーマ)     supabase/migrations/20260714000001_*.sql + __tests__
+          └── Set 4 (decisions.md)  docs/agents/decisions.md
+             ↓ Set 1完了後
+Wave 2 ──┬── Set 2 (pg_cronスケジュール)  supabase/migrations/20260714000002_*.sql
+          └── Set 3 (GitHub Actions)      .github/workflows/schema-drift-check.yml
+             （Set 3はSet 1のrecord_issue_url関数シグネチャに依存するため、Set 1完了後に着手）
+統合ゲート:
+  - migrationのローカル適用確認（db reset）
+  - pg_cronジョブの手動実行確認
+  - GitHub Actionsのworkflow_dispatch手動実行確認（可能な範囲で）
+```
+
+Set 1とSet 4は互いに別ファイルのみを触るため並列可能。Set 2・Set 3はSet 1完了後（関数シグネチャ確定後）に着手する。
+
+### 型・データアクセス層の方針
+
+- 本機能はDB関数・SQLマイグレーション・GitHub Actionsのみで完結し、`src/`配下のTypeScriptコード・APIルートは一切変更しない
+- 型安全性はPostgreSQLのCHECK制約（`event_kind`）とSQLの静的検証テスト（既存`tech_debt_migrations.test.ts`パターン踏襲）で担保する
