@@ -288,13 +288,21 @@ const reviewGuide = guide(
   'レビュー対象のコード・SPEC.mdが見つからずレビュー自体ができなかった'
 )
 
+// issue #314: blockedの観点はImplementerへの差し戻しでは解決しない（レビュー対象自体が
+// 見つからない等）ため、fail判定より先に見て即座に打ち切る。従来はblockedのみの回を
+// done=true,blocked=falseとして素通りしており、最終returnにblockedAtが付かず追跡できなかった。
 function classifyReviewRound(results, dimensions, attempt, maxRetries) {
+  const blockedDimensions = dimensions
+    .map((dim, i) => ({ dim, result: results[i] }))
+    .filter(({ result }) => result?.status === 'blocked')
+  if (blockedDimensions.length > 0) return { done: true, blocked: true, failingDimensions: [], blockedDimensions }
+
   const failingDimensions = dimensions
     .map((dim, i) => ({ dim, result: results[i] }))
     .filter(({ result }) => result?.status === 'fail' && !isMinorOnlyFailure(result))
-  if (failingDimensions.length === 0) return { done: true, blocked: false, failingDimensions: [] }
-  if (attempt > maxRetries) return { done: true, blocked: true, failingDimensions }
-  return { done: false, blocked: false, failingDimensions }
+  if (failingDimensions.length === 0) return { done: true, blocked: false, failingDimensions: [], blockedDimensions: [] }
+  if (attempt > maxRetries) return { done: true, blocked: true, failingDimensions, blockedDimensions: [] }
+  return { done: false, blocked: false, failingDimensions, blockedDimensions: [] }
 }
 
 const MAX_REVIEW_RETRIES = 3
@@ -315,16 +323,19 @@ while (true) {
 
   REVIEW_DIMENSIONS.forEach(() => countLoggable('reviewer'))
 
-  const { done, blocked, failingDimensions } = classifyReviewRound(reviewResults, REVIEW_DIMENSIONS, reviewAttempt, MAX_REVIEW_RETRIES)
+  const { done, blocked, failingDimensions, blockedDimensions } = classifyReviewRound(reviewResults, REVIEW_DIMENSIONS, reviewAttempt, MAX_REVIEW_RETRIES)
 
   if (done && !blocked) {
-    log(`Review完了: ラウンド${reviewAttempt}で全観点pass（指摘なし、またはblockedのみ）`)
+    log(`Review完了: ラウンド${reviewAttempt}で全観点pass（指摘なし）`)
     logMinorOnlyPassThrough('Review', reviewResults)
     break
   }
 
   if (blocked) {
-    log(`品質ゲート: Reviewで${MAX_REVIEW_RETRIES}回の差し戻し後もfailが残るため中断（blockedとして人間に引き渡します）`)
+    const reason = blockedDimensions.length > 0
+      ? `${blockedDimensions.length}件の観点でレビュー自体が実行できなかった（blocked）ため`
+      : `${MAX_REVIEW_RETRIES}回の差し戻し後もfailが残るため`
+    log(`品質ゲート: Reviewで${reason}中断（blockedとして人間に引き渡します）`)
     return {
       done: false,
       contractResult,
@@ -344,6 +355,7 @@ while (true) {
         done: false,
         blocked: true,
         blockedAt: 'Review',
+        reviewBlockedDimensions: blockedDimensions.length,
         reviewRetries: reviewRetryAgentCount,
         expectedLoopObservabilityRecords: loggableAgentCount,
       },
