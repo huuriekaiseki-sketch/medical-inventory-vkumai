@@ -125,4 +125,19 @@ describe('GET /api/news', () => {
     expect(res.status).toBe(200)
     expect(mockListNewsFeed).toHaveBeenCalledWith(expect.anything(), { facilityId: 'f1', limit: 100, offset: 0 })
   })
+
+  it('admin・facilityId省略時は全施設データが返る（issue #40）', async () => {
+    authenticated()
+    mockRequireFacilityAccess.mockResolvedValue({ facilityId: null })
+    mockListNewsFeed.mockResolvedValue([
+      { id: 'n1', eventType: 'new_product', facilityName: '施設A' },
+      { id: 'n2', eventType: 'new_product', facilityName: '施設B' },
+    ])
+
+    const res = await GET(new NextRequest('http://localhost/api/news'))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.items).toHaveLength(2)
+    expect(mockListNewsFeed).toHaveBeenCalledWith(expect.anything(), { facilityId: null, limit: 20, offset: 0 })
+  })
 })

@@ -63,13 +63,11 @@ export async function createLoanOrder(db: SupabaseClient, facilityId: string, in
     p_facility_id: facilityId,
     p_procedure_name: input.procedureName,
     p_maker: input.maker,
-    p_items: JSON.stringify(
-      input.items.map(item => ({
-        jan: item.jan ?? null,
-        name: item.name,
-        quantity: item.quantity,
-      }))
-    ),
+    p_items: input.items.map(item => ({
+      jan: item.jan ?? null,
+      name: item.name,
+      quantity: item.quantity,
+    })),
   })
   if (error) throw new Error(error.message)
 

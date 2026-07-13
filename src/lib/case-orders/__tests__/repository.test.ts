@@ -64,9 +64,8 @@ describe('createCaseOrder', () => {
       p_procedure_name: 'TAVI',
     }))
     const args = rpc.mock.calls[0][1] as Record<string, unknown>
-    // items は JSON 文字列で渡す
-    expect(typeof args.p_items).toBe('string')
-    expect(JSON.parse(args.p_items as string)).toEqual([
+    // p_items はJSONB引数のため配列のまま渡す（JSON.stringifyしない。issue #287）
+    expect(args.p_items).toEqual([
       { jan: '4901234567890', lot: 'L001', ubd: '2027-01', quantity: 2 },
     ])
   })

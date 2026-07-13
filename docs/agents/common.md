@@ -52,6 +52,21 @@ any code. Heed deprecation notices.
   なっていた場合は、着手前に `git checkout -b <new-branch> main` で新しいブランチを切ってから進める。
   1つのPRに無関係なissueのコミットが混ざると、レビュアーが混乱し、片方だけ却下・差し戻しになった際に切り分けられなくなる
 
+## loop-observabilityログの記録漏れ検知
+
+- AIDDフロー（`aidd-phase2.js` 等）は reviewer/implementer/judge-panel を呼ぶたびに
+  `scripts/log-loop-observability.sh` を呼び出す想定だが、これはエージェントへの自然言語指示に
+  依存しており強制力がない（Workflow DSL自体がfilesystem API不可のため、ワークフロー本体側から
+  機械的にログを書き込むことはできない）。2026-07-07以降、実際に記録が5日分丸ごと欠落していた
+  事例がある。理由は [`decisions.md`](./decisions.md) 参照。
+- **AIDDフロー（Phase 2以降）を実行する前後で、必ず以下を行うこと。**
+  1. 実行前に `wc -l logs/loop-observability.jsonl` で行数を記録する（ファイルが無ければ0）
+  2. フロー完了後、戻り値の `stats.expectedLoopObservabilityRecords` を確認する
+  3. `scripts/check-loop-observability-gap.sh --before <1の値> --expected <2の値>` を実行する
+  4. `hasGap: true`（exit 1）になった場合、記録漏れとして扱い、issue化するか原因を調査する
+- これは「記録漏れを機械的に検知する」ものであり、記録そのものを保証する仕組みではない
+  （エージェント任せの記録に依存する構造自体の解消は別途検討中）。
+
 ## 重要ファイルへのパス
 
 | ファイル | 目的 |
@@ -61,3 +76,4 @@ any code. Heed deprecation notices.
 | `src/components/` | UI コンポーネント |
 | `src/lib/supabase/` | Supabase クライアント・データ取得層 |
 | `supabase/migrations/` | DBマイグレーション |
+| [`docs/agents/run-manifest.md`](./run-manifest.md) | AIDDフローのspecHash/baseCommit突合用Run Manifestのスキーマ |

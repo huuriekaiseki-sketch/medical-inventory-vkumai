@@ -95,3 +95,33 @@ migrationファイルだけがスキーマの唯一のソースオブトゥル�
 E2Eテストやシード投入は本番相当の操作（データ作成・削除・RLSトリガー実行）を伴うため、
 設定ミス1つで本番DBに書き込まれるリスクがある。環境変数の設定ミスだけに頼らず、実行時に
 接続先を機械的に検証することで、ヒューマンエラーが起きても本番事故に直結しないようにした。
+
+## なぜスキーマドリフト検知を自前cronではなくSupabase GitHub Integrationで始めたか
+
+`supabase db diff --linked` を独自のGitHub Actions cronで定期実行する案（issue #30原案）も
+検討したが、これは本番の `SUPABASE_ACCESS_TOKEN` とDBパスワードをGitHub Secretsに追加する
+必要があり、e2e.ymlが徹底している「CIに本番Supabase接続情報を一切渡さない」方針
+（このファイルの「なぜE2E/BSGはテスト専用Supabaseのみに接続する設計にしたか」）と正面から
+矛盾する。
+
+Supabase公式のGitHub Integration（Dashboard側でOAuth認可するだけで、GitHub Secretsへの
+手動登録が不要）を先に有効化する方針にした。「Deploy to production」（mainマージで本番DBへ
+自動でmigrationを適用する機能）はOFFのままにしている。issue #30の目的は検知であって
+デプロイ自動化ではなく、AIDD品質ゲート（重大度分類のImplement/Integrateゲート組み込み）が
+未実装の段階で、最もクリティカルな変更であるDBスキーマ変更を自動デプロイの対象にするのは
+時期尚早と判断した。調査の結果、これまでも本番へのmigration適用はCIではなくローカルCLIでの
+手動 `supabase link` → `supabase db push`（都度確認付き）で行われており、Integrationを
+ONにすることは既存フローの自動化ではなく新規のリスクを追加することになる、という点も判断
+材料にした。
+
+GitHub側で「required status check」によるマージブロックも検討したが、このリポジトリは
+private repoでGitHub Free（Org）プランのため、classic branch protectionもRulesets（新機能）も
+「強制」が有効にならないことが判明した（プライベートリポジトリでの強制にはGitHub Team以上の
+プランが必要）。有償プランへのアップグレードは費用判断のため今回は見送り、Supabaseの
+ステータスチェックがPR画面に表示される「検知のみ」の状態を許容する方針にした。マージの
+可否は引き続き人間のレビューに委ねる。
+
+弱点として、PRを介さない変更（SQL Editor等での直接操作、rls_auto_enableの実際の事故
+パターン）はPRが発生するまで検知が遅延する。この「PRの外側の変更」をどう定期検知するかは
+未解決のまま残しており、シークレットをGitHub側に置かない代替案（Supabase Edge Functionの
+スケジュール実行など）を含めて別issue（#305）で検討する前提にしている。
