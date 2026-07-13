@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { chromium } from '@playwright/test'
 import { loadEnvConfig } from '@next/env'
 import * as fs from 'fs'
@@ -13,6 +13,73 @@ loadEnvConfig(process.cwd())
 
 // 万一 .env.test やCI secretsに本番URLが設定されていても、ここで即失敗させる
 assertTestSupabaseEnv()
+
+/**
+ * 既存ユーザー（email_confirm済み）に対してマジックリンクでサインインし、
+ * 認証済みのPlaywright storageStateを authFilePath に書き出す。
+ * issue #321: 複数ユーザー分のstorageStateを生成する必要があるため、
+ * generateAuthState（単一の固定テストユーザー用）から共通処理として切り出した。
+ */
+export async function signInAndSaveStorageState(
+  supabase: SupabaseClient,
+  email: string,
+  authFilePath: string
+): Promise<void> {
+  fs.mkdirSync(path.dirname(authFilePath), { recursive: true })
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  const siteOrigin = new URL(siteUrl).origin
+
+  // Admin API でマジックリンクを直接生成（メール送信不要）。
+  // redirectToを明示しないとSupabase側のsite_url設定に依存し、127.0.0.1へ飛んで
+  // Cookieドメインがずれる事故が起きるため、必ずテストのbaseURLと同じオリジンを指定する
+  const { data, error } = await supabase.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+    options: { redirectTo: `${siteUrl}/` },
+  })
+
+  if (error || !data.properties?.action_link) {
+    throw new Error(`テストセッション生成失敗 (${email}): ${error?.message}`)
+  }
+
+  // ブラウザでリンクを開いてセッションCookieを取得。
+  // 環境変数が揃っているのに認証に失敗した場合は空のstorageStateで誤魔化さず即失敗させる
+  // （空stateだと後続テストが未認証のまま走り、原因が分かりにくいリダイレクト失敗として現れるため）
+  const browser = await chromium.launch()
+  try {
+    const page = await browser.newPage()
+    await page.goto(data.properties.action_link)
+
+    // マジックリンク検証後は /#access_token=... や /login#access_token=... など
+    // hash付きURLに着地するため、完全一致ではなくオリジン到達で判定する
+    await page.waitForURL((url) => url.origin === siteOrigin, { timeout: 30_000 })
+
+    // 認証完了はURLではなくSupabaseのauth Cookie（sb-*-auth-token）の出現で判定する
+    // （login/page.tsx のuseEffectがhashからsetSessionし終わるまで非同期のため）
+    const deadline = Date.now() + 30_000
+    let authenticated = false
+    while (Date.now() < deadline) {
+      const cookies = await page.context().cookies()
+      if (cookies.some((c) => /^sb-.+-auth-token/.test(c.name))) {
+        authenticated = true
+        break
+      }
+      await page.waitForTimeout(500)
+    }
+    if (!authenticated) {
+      throw new Error(
+        `[E2E auth] 認証Cookie（sb-*-auth-token）が30秒以内に設定されませんでした (${email})。` +
+          'マジックリンクのリダイレクト先とログインフロー（/login のhash処理）を確認してください。'
+      )
+    }
+
+    await page.context().storageState({ path: authFilePath })
+    console.log(`[E2E auth] 認証済みstorageStateを書き出しました: ${authFilePath}`)
+  } finally {
+    await browser.close()
+  }
+}
 
 export async function generateAuthState() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -72,58 +139,7 @@ export async function generateAuthState() {
     throw new Error(`E2Eテストユーザーへのadmin権限付与失敗: ${membershipError.message}`)
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
-  const siteOrigin = new URL(siteUrl).origin
-
-  // Admin API でマジックリンクを直接生成（メール送信不要）。
-  // redirectToを明示しないとSupabase側のsite_url設定に依存し、127.0.0.1へ飛んで
-  // Cookieドメインがずれる事故が起きるため、必ずテストのbaseURLと同じオリジンを指定する
-  const { data, error } = await supabase.auth.admin.generateLink({
-    type: 'magiclink',
-    email: testEmail,
-    options: { redirectTo: `${siteUrl}/` },
-  })
-
-  if (error || !data.properties?.action_link) {
-    throw new Error(`テストセッション生成失敗: ${error?.message}`)
-  }
-
-  // ブラウザでリンクを開いてセッションCookieを取得。
-  // 環境変数が揃っているのに認証に失敗した場合は空のstorageStateで誤魔化さず即失敗させる
-  // （空stateだと後続テストが未認証のまま走り、原因が分かりにくいリダイレクト失敗として現れるため）
-  const browser = await chromium.launch()
-  try {
-    const page = await browser.newPage()
-    await page.goto(data.properties.action_link)
-
-    // マジックリンク検証後は /#access_token=... や /login#access_token=... など
-    // hash付きURLに着地するため、完全一致ではなくオリジン到達で判定する
-    await page.waitForURL((url) => url.origin === siteOrigin, { timeout: 30_000 })
-
-    // 認証完了はURLではなくSupabaseのauth Cookie（sb-*-auth-token）の出現で判定する
-    // （login/page.tsx のuseEffectがhashからsetSessionし終わるまで非同期のため）
-    const deadline = Date.now() + 30_000
-    let authenticated = false
-    while (Date.now() < deadline) {
-      const cookies = await page.context().cookies()
-      if (cookies.some((c) => /^sb-.+-auth-token/.test(c.name))) {
-        authenticated = true
-        break
-      }
-      await page.waitForTimeout(500)
-    }
-    if (!authenticated) {
-      throw new Error(
-        '[E2E auth] 認証Cookie（sb-*-auth-token）が30秒以内に設定されませんでした。' +
-          'マジックリンクのリダイレクト先とログインフロー（/login のhash処理）を確認してください。'
-      )
-    }
-
-    await page.context().storageState({ path: authFilePath })
-    console.log(`[E2E auth] 認証済みstorageStateを書き出しました: ${authFilePath}`)
-  } finally {
-    await browser.close()
-  }
+  await signInAndSaveStorageState(supabase, testEmail, authFilePath)
 }
 
 // CLIから直接実行された場合（npm run e2e:auth 等）にも動くようにする。
