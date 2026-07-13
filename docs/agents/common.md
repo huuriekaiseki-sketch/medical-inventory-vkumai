@@ -66,6 +66,11 @@ any code. Heed deprecation notices.
   4. `hasGap: true`（exit 1）になった場合、記録漏れとして扱い、issue化するか原因を調査する
 - これは「記録漏れを機械的に検知する」ものであり、記録そのものを保証する仕組みではない
   （エージェント任せの記録に依存する構造自体の解消は別途検討中）。
+- 記録漏れが発生した過去分は、`scripts/lib/reconstruct-loop-observability.ts` で
+  `~/.claude/projects/**/subagents/workflows/wf_*/agent-<id>.jsonl` + `.meta.json` から
+  timestamp・model・tokens/costUsd・result(status/detail)を再構築できる（issue #312）。
+  ただし`feature`は呼び出し時に手動指定が必要、`intent`はプロンプト冒頭1文の抜粋、
+  `scenario`は復元不能である旨の固定文言になる（自己申告時点の情報粒度には及ばない）。
 
 ## 重要ファイルへのパス
 
