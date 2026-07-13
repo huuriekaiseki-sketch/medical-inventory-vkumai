@@ -72,7 +72,9 @@
       "Bash(/Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/review-package *)",
       "Bash(/Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/task-brief *)",
       "mcp__context7__resolve-library-id",
-      "mcp__playwright__browser_navigate"
+      "mcp__playwright__browser_navigate",
+      "WebFetch(domain:code.claude.com)",
+      "Bash(gh issue create*)"
     ],
     "ask": [
       "Bash(supabase db push*)",
@@ -92,7 +94,6 @@
       "Bash(gh pr edit*)",
       "Bash(gh pr close*)",
       "Bash(gh pr comment*)",
-      "Bash(gh issue create*)",
       "Bash(gh issue edit*)",
       "Bash(gh issue close*)",
       "Bash(gh issue comment*)",
