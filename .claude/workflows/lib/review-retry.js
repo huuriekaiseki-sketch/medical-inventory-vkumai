@@ -22,16 +22,28 @@ import { isMinorOnlyFailure } from './severity.js'
 // - blocked: true なら打ち切り（人間に引き渡す）。doneがfalseの場合は常にfalse
 // - failingDimensions: 差し戻し対象の観点（{ dim, result }[]）。status==='fail'かつ
 //   findings全件minorではないもの（findings省略時はcritical相当として差し戻し対象）
+// - blockedDimensions: status==='blocked'の観点（{ dim, result }[]）。レビュー対象自体が
+//   見つからない等、Implementerへの差し戻しでは解決しない状態のため常に即座に打ち切る
+//   （issue #314: 従来はblockedのみの回をdone=true,blocked=falseとして素通りしており、
+//   最終returnにblockedAtが付かず「なぜ止まったか」が追跡できなかった）
 export function classifyReviewRound(reviewResults, dimensions, attempt, maxRetries) {
+  const blockedDimensions = dimensions
+    .map((dim, i) => ({ dim, result: reviewResults[i] }))
+    .filter(({ result }) => result?.status === 'blocked')
+
+  if (blockedDimensions.length > 0) {
+    return { done: true, blocked: true, failingDimensions: [], blockedDimensions }
+  }
+
   const failingDimensions = dimensions
     .map((dim, i) => ({ dim, result: reviewResults[i] }))
     .filter(({ result }) => result?.status === 'fail' && !isMinorOnlyFailure(result))
 
   if (failingDimensions.length === 0) {
-    return { done: true, blocked: false, failingDimensions: [] }
+    return { done: true, blocked: false, failingDimensions: [], blockedDimensions: [] }
   }
   if (attempt > maxRetries) {
-    return { done: true, blocked: true, failingDimensions }
+    return { done: true, blocked: true, failingDimensions, blockedDimensions: [] }
   }
-  return { done: false, blocked: false, failingDimensions }
+  return { done: false, blocked: false, failingDimensions, blockedDimensions: [] }
 }

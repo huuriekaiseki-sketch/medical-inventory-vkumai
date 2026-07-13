@@ -12,16 +12,29 @@ describe('classifyReviewRound', () => {
       [{ status: 'pass', detail: '指摘なし' }, { status: 'pass', detail: '指摘なし' }],
       DIMENSIONS, 1, 3
     )
-    expect(result).toEqual({ done: true, blocked: false, failingDimensions: [] })
+    expect(result).toEqual({ done: true, blocked: false, failingDimensions: [], blockedDimensions: [] })
   })
 
-  it('blockedのみ(fail無し)ならdone=true, blocked=false（レビュー自体ができなかっただけで差し戻し対象ではない）', () => {
+  it('issue #314: blockedのみ(fail無し)でもdone=true, blocked=trueで即座に打ち切る（Implementerへの差し戻しでは解決しないため）', () => {
     const result = classifyReviewRound(
       [{ status: 'blocked', detail: '対象が見つからない' }, { status: 'pass', detail: '指摘なし' }],
       DIMENSIONS, 1, 3
     )
     expect(result.done).toBe(true)
-    expect(result.blocked).toBe(false)
+    expect(result.blocked).toBe(true)
+    expect(result.blockedDimensions).toHaveLength(1)
+    expect(result.blockedDimensions[0].dim.key).toBe('correctness')
+  })
+
+  it('issue #314: blockedとfailが同じラウンドに混在してもblockedを優先し即座に打ち切る（1回目の試行でも）', () => {
+    const result = classifyReviewRound(
+      [{ status: 'blocked', detail: '対象が見つからない' }, { status: 'fail', detail: 'バグあり' }],
+      DIMENSIONS, 1, 3
+    )
+    expect(result.done).toBe(true)
+    expect(result.blocked).toBe(true)
+    expect(result.blockedDimensions).toHaveLength(1)
+    expect(result.failingDimensions).toHaveLength(0)
   })
 
   it('failが1件でもあり、上限内ならdone=falseで差し戻し対象を返す', () => {
