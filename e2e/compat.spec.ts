@@ -92,7 +92,7 @@ test.describe('コンパチ（互換品）ページ（issue #21）', () => {
     await page.waitForLoadState('networkidle')
 
     await page.getByRole('button', { name: '＋互換品を追加' }).click()
-    await page.getByLabel('カテゴリ').selectOption({ label: category.name })
+    await page.getByLabel('カテゴリ', { exact: true }).selectOption({ label: category.name })
 
     const productASelect = page.getByLabel('製品A')
     await expect(productASelect).not.toBeDisabled({ timeout: 10_000 })
@@ -107,13 +107,13 @@ test.describe('コンパチ（互換品）ページ（issue #21）', () => {
     expect(postRes.ok(), `POST /api/compat failed: ${await postRes.text()}`).toBe(true)
 
     // 登録成功でフォームが閉じ、一覧に反映される
-    await expect(page.getByLabel('カテゴリ')).not.toBeVisible()
+    await expect(page.getByLabel('カテゴリ', { exact: true })).not.toBeVisible()
     await expect(page.getByText(new RegExp(productA.name))).toBeVisible()
     await expect(page.getByText(new RegExp(productB.name))).toBeVisible()
 
     // ③ 同じペアを再登録すると重複エラーになる
     await page.getByRole('button', { name: '＋互換品を追加' }).click()
-    await page.getByLabel('カテゴリ').selectOption({ label: category.name })
+    await page.getByLabel('カテゴリ', { exact: true }).selectOption({ label: category.name })
     await expect(page.getByLabel('製品A')).not.toBeDisabled({ timeout: 10_000 })
     await page.getByLabel('製品A').selectOption({ label: productOptionLabel(productA) })
     await page.getByLabel('製品B').selectOption({ label: productOptionLabel(productB) })
