@@ -170,6 +170,40 @@ MOCK_SHOULD_FAIL=0
 assert_eq "$EXIT_CODE" "0" "検証プロセス失敗時はfail-openでexit 0"
 assert_contains "$STDOUT_OUT" "実行に失敗" "fail-openの旨がsystemMessageに記録される"
 
+echo "=== scenario 8: 同時実行数が上限に達している → サーキットブレーカーでfail-open(LLM呼び出し無し) ==="
+rm -f "$MOCK_CALL_LOG"
+echo "line8" >> "$REPO/file.txt"
+echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
+LOCK_DIR="$WORKDIR/lock"
+mkdir -p "$LOCK_DIR"
+# 上限(2)ぶん、実際に生きているプロセス(sleepのバックグラウンドジョブ)のPIDでロックエントリを作る。
+# 死んだPIDだと「前回異常終了で残ったロックの掃除」ロジックで消費されてしまうため、テストでは
+# 意図的に生きたプロセスを使う。
+sleep 60 & DUMMY_PID_1=$!
+sleep 60 & DUMMY_PID_2=$!
+mkdir -p "$LOCK_DIR/$DUMMY_PID_1" "$LOCK_DIR/$DUMMY_PID_2"
+set +e
+STDOUT_OUT="$(
+  cd "$REPO"
+  input="$(jq -n --arg sid "s8" --arg tp "$WORKDIR/no-transcript.jsonl" '{session_id: $sid, transcript_path: $tp}')"
+  printf '%s' "$input" | \
+    VERIFY_CLAIMS_REPO_DIR="$REPO" \
+    VERIFY_CLAIMS_STATE_DIR="$STATE_DIR" \
+    VERIFY_CLAIMS_LOCK_DIR="$LOCK_DIR" \
+    VERIFY_CLAIMS_MAX_CONCURRENT=2 \
+    VERIFY_CLAIMS_VERIFIER_CMD="$MOCK_VERIFIER" \
+    MOCK_CALL_LOG="$MOCK_CALL_LOG" \
+    MOCK_FINDINGS_FILE="$MOCK_FINDINGS_FILE" \
+    bash "$SCRIPT" 2>"$WORKDIR/stderr8.tmp"
+)"
+EXIT_CODE=$?
+set -e
+kill "$DUMMY_PID_1" "$DUMMY_PID_2" 2>/dev/null || true
+wait "$DUMMY_PID_1" "$DUMMY_PID_2" 2>/dev/null || true
+assert_eq "$EXIT_CODE" "0" "同時実行数が上限のときはfail-openでexit 0"
+assert_eq "$(call_count)" "0" "上限到達時は検証エージェントを呼ばない(claude -pを増やさない)"
+assert_contains "$STDOUT_OUT" "サーキットブレーカー" "サーキットブレーカーが働いた旨がsystemMessageに記録される"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

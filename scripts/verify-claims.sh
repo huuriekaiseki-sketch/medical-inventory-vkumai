@@ -15,6 +15,14 @@ set -euo pipefail
 #   VERIFY_CLAIMS_MODEL         - 検証に使うモデル（省略時は claude-haiku-4-5-20251001）
 #   VERIFY_CLAIMS_VERIFIER_CMD  - 実際の`claude -p`呼び出しの代わりに使うコマンド（標準入力で
 #                                 プロンプトを受け取り、findings JSONを標準出力に返すこと）
+#   VERIFY_CLAIMS_LOCK_DIR      - サーキットブレーカー用ロック置き場（省略時は .claude/.verify-lock）
+#   VERIFY_CLAIMS_MAX_CONCURRENT - 同時実行を許す検証プロセス数の上限（省略時は4）
+#
+# サーキットブレーカー（issue #359）: --setting-sources ""等の個別修正が正しくても、
+# それが適用され忘れる・マージされ忘れることで同種の再帰暴走が繰り返された実績がある
+# (2026-07-14初回発生・2026-07-15に修正未マージのまま再発)。個別修正の正しさに依存せず、
+# 同時に生きている検証プロセス数を機械的に頭打ちにすることで被害を抑える。
+# 設計: docs/superpowers/specs/2026-07-14-verification-subagent-design.md の「サーキットブレーカー」節
 
 REPO_DIR="${VERIFY_CLAIMS_REPO_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 cd "$REPO_DIR"
@@ -23,8 +31,10 @@ STATE_DIR="${VERIFY_CLAIMS_STATE_DIR:-.claude/.verify-state}"
 MAX_RETRIES="${VERIFY_CLAIMS_MAX_RETRIES:-3}"
 TIMEOUT_SECONDS="${VERIFY_CLAIMS_TIMEOUT_SECONDS:-60}"
 MODEL="${VERIFY_CLAIMS_MODEL:-claude-haiku-4-5-20251001}"
+LOCK_DIR="${VERIFY_CLAIMS_LOCK_DIR:-.claude/.verify-lock}"
+MAX_CONCURRENT="${VERIFY_CLAIMS_MAX_CONCURRENT:-4}"
 
-mkdir -p "$STATE_DIR"
+mkdir -p "$STATE_DIR" "$LOCK_DIR"
 
 INPUT="$(cat)"
 SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // "unknown"')"
@@ -169,6 +179,26 @@ run_verifier_with_timeout() {
   rm -f "$out_file" "${out_file}.exit"
   return "$status"
 }
+
+# --- サーキットブレーカー: 同時実行中の検証プロセス数が上限を超えたら新規起動を拒否しfail-open ---
+# 死んだプロセスのロックエントリ(前回異常終了で残った分)を先に掃除する。
+# mkdirはPOSIX上atomicなのでロック用途に使える(claude_auto_issue.shと同じパターン)。
+for entry in "$LOCK_DIR"/*; do
+  [ -e "$entry" ] || continue
+  entry_pid="$(basename "$entry")"
+  if ! kill -0 "$entry_pid" 2>/dev/null; then
+    rmdir "$entry" 2>/dev/null || true
+  fi
+done
+
+CURRENT_CONCURRENT="$(find "$LOCK_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
+if [ "$CURRENT_CONCURRENT" -ge "$MAX_CONCURRENT" ]; then
+  emit_pass "$(printf 'verify-claims: 検証プロセスの同時実行数が上限(%d)に達しているため、サーキットブレーカーが働き今回の検証をスキップしました(暴走防止のfail-open)。' "$MAX_CONCURRENT")"
+fi
+
+LOCK_ENTRY="$LOCK_DIR/$$"
+mkdir "$LOCK_ENTRY" 2>/dev/null || true
+trap 'rmdir "$LOCK_ENTRY" 2>/dev/null || true' EXIT
 
 VERIFIER_EXIT=0
 VERIFIER_OUTPUT="$(run_verifier_with_timeout)" || VERIFIER_EXIT=$?
