@@ -63,7 +63,7 @@ SQL Editor等でPRを介さず本番DBのスキーマが直接変更された場
 
 #### GitHub Issue連携
 
-> 以下4項目のロジック自体は`scripts/schema-drift-reconcile.test.sh`（gh CLIをスタブ化した回帰テスト、リポジトリにコミット済み・実行して4アサーション全通過を確認済み）で検証済み。ただし実際のSupabase本番環境に対する動作は`PROD_SUPABASE_URL`/`PROD_SUPABASE_ANON_KEY`のGitHub Secrets登録後、`workflow_dispatch`での手動実行で別途確認が必要（**未実施**。マージ後の運用開始タスクとして残る）。
+> 以下4項目のロジック自体は`scripts/schema-drift-reconcile.test.sh`（gh CLIをスタブ化した回帰テスト、リポジトリにコミット済み・実行して4アサーション全通過を確認済み）で検証済み。実際のSupabase本番環境に対する動作確認は、本番プロジェクト（`dddwaoooqzrtlbtcnwso`）が既存Secrets `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` と一致することを確認できたため、新規Secrets登録は不要と判断し、ワークフロー側をこの既存Secrets参照に変更した。`workflow_dispatch`での実地確認は本変更後に実施する。
 
 - [x] 未解決ドリフトが1件以上ある状態でGitHub Actionsを実行すると、`schema-drift`・`bug`ラベル付きのIssueが作成される（ロジックはテストで検証済み。本番環境での実地確認は上記の通り未実施）
 - [x] 既にIssueが作成済みの未解決ドリフトについては、再実行してもIssueが重複作成されない（タイトルベースの突合ロジックをテストで検証済み）
@@ -72,7 +72,7 @@ SQL Editor等でPRを介さず本番DBのスキーマが直接変更された場
 
 #### セキュリティ
 
-- [x] 本番DBの接続パスワード・Service Role Key・Supabase Access TokenはGitHub Secretsに一切登録しない（`PROD_SUPABASE_URL`/`PROD_SUPABASE_ANON_KEY`の2つのみ使用。ワークフローファイルにコメントで明記）
+- [x] 本番DBの接続パスワード・Service Role Key・Supabase Access TokenはGitHub Secretsに一切登録しない（既存の`NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`の2つのみを再利用。新規Secrets登録は行わない。ワークフローファイルにコメントで明記）
 - [x] GitHub Actionsが読み取るビュー（`drift_alert_view`）はanon keyで読める設計だが、公開される情報はドリフトの種類・対象オブジェクト名・検知日時のみで、それ以上の詳細情報（`detail`列の中身）は公開されない（実装確認済み）
 - [x] `check_schema_drift()`はservice_roleのみ実行可能（GRANT EXECUTEがservice_roleに限定されている）（実装確認済み）
 
