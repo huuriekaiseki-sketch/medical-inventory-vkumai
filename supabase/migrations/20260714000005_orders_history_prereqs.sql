@@ -1,4 +1,4 @@
--- supabase/migrations/20260714000004_orders_history_prereqs.sql
+-- supabase/migrations/20260714000005_orders_history_prereqs.sql
 --
 -- WHY: issue #20（発注履歴ページ新設）SPEC.md Part2 Set A。
 --

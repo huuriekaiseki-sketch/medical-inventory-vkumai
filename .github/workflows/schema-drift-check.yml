@@ -2,7 +2,8 @@
 # DB側（20260714000001_create_schema_drift_detection.sql）が毎日pg_cronでドリフトを検知・記録し、
 # このワークフローはその結果を日次でポーリングしてGitHub Issueを自動作成・自動クローズする。
 #
-# secrets.PROD_SUPABASE_URL / secrets.PROD_SUPABASE_ANON_KEY は「公開して問題ない値」（anon key）
+# secrets.NEXT_PUBLIC_SUPABASE_URL / secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY は「公開して問題ない値」
+# （anon key。クライアントバンドルにも埋め込まれる値で、本番Next.jsアプリと同じSecretsを再利用する）
 # のみを使う。本番DBパスワード・service role key・SUPABASE_ACCESS_TOKENはこのワークフローに
 # 一切渡さない（docs/agents/decisions.md「なぜスキーマドリフト検知を自前cronではなく
 # Supabase GitHub Integrationで始めたか」と同じ制約を維持する）。
@@ -32,11 +33,11 @@ jobs:
     steps:
       - name: Fetch unresolved schema drifts
         env:
-          SUPABASE_URL: ${{ secrets.PROD_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.PROD_SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
-            echo "::error::PROD_SUPABASE_URL / PROD_SUPABASE_ANON_KEY が未設定です。リポジトリのSecretsを確認してください。"
+            echo "::error::NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY が未設定です。リポジトリのSecretsを確認してください。"
             exit 1
           fi
           curl -sf "${SUPABASE_URL}/rest/v1/drift_alert_view?select=drift_type,object_name,detected_at" \
@@ -58,6 +59,10 @@ jobs:
       - name: Reconcile GitHub Issues (create new / close resolved)
         env:
           GH_TOKEN: ${{ github.token }}
+          # WHY: このジョブはactions/checkoutを行わないため、ghコマンドがgitリモートから
+          # 対象リポジトリを推測できず「fatal: not a git repository」で失敗する。
+          # GH_REPOで対象リポジトリを明示することでcheckoutなしでも動作させる
+          GH_REPO: ${{ github.repository }}
         run: |
           # WHY: --limit 100は既知の制約。100件を超えるopen issueが積み上がった場合、
           # 古いissueが取得漏れし重複作成・クローズ漏れが起こりうる（v1では許容。

@@ -12,19 +12,23 @@ export default function NewCategoryPage() {
 
   async function handleSubmit(data: CategoryInput) {
     setSubmitError(null)
-    const res = await fetch('/api/categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      setSubmitError(body.error ?? '登録に失敗しました')
-      return
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setSubmitError(body.error ?? '登録に失敗しました')
+        return
+      }
+
+      router.push('/categories')
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : '登録に失敗しました')
     }
-
-    router.push('/categories')
   }
 
   return (
