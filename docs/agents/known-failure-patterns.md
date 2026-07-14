@@ -58,6 +58,20 @@ Next.js API Route（`requireFacilityAccess`等）を経由せず直接呼び出�
 渡ると不可解な500エラーや想定外の挙動になる。素の `Number(...)` 変換を見たら、
 上記3点を満たすガード節があるか必ず確認する。
 
+## エージェント/hook運用層
+
+### hookから`claude -p`を起動する際のsettings.json/hooks継承漏れ
+
+**チェック内容:** Stop/PreToolUse等のhookスクリプトが検証・裏取り目的で`claude -p`
+サブプロセスを起動している箇所を見つけたら、`--setting-sources ""`(または`--bare`)と
+`--no-session-persistence`が付いているか確認する。
+
+**なぜ再発したか:** これが無いと、サブプロセス自身のStopイベントで元のhook一式(サブプロセスを
+起動したhook自身やグローバルの通知hook等)が継承・再発火し、子プロセスが際限なく増殖する。
+2026-07-14に初回発生(15分で343セッション生成)、修正コミットがPR化されずmainに未マージだった
+ため2026-07-15に別worktreeで再発した。詳細: [`2026-07-14-verification-subagent-design.md`の
+「運用インシデント」節](../superpowers/specs/2026-07-14-verification-subagent-design.md#運用インシデントpostmortem)。
+
 ## RLS/テナント分離層
 
 ### 「動いたからOK」でfacility_idフィルタ漏れ・RLS未設定を見逃す（issue #24再発防止）
