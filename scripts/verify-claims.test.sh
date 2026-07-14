@@ -44,7 +44,7 @@ chmod +x "$MOCK_VERIFIER"
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF "$needle"; then
+  if printf '%s' "$haystack" | grep -qF -- "$needle"; then
     echo "  OK: $label"
   else
     echo "  NG: $label"
@@ -204,15 +204,25 @@ assert_eq "$EXIT_CODE" "0" "同時実行数が上限のときはfail-openでexit
 assert_eq "$(call_count)" "0" "上限到達時は検証エージェントを呼ばない(claude -pを増やさない)"
 assert_contains "$STDOUT_OUT" "サーキットブレーカー" "サーキットブレーカーが働いた旨がsystemMessageに記録される"
 
-echo "=== scenario 9: untrackedファイルのみ修正 → ハッシュが変わり再検証される(issue #352) ==="
+echo "=== scenario 9: 実際のclaude -p呼び出しがsettings.json/hooksを継承しない設定になっている(issue #350) ==="
+# 実際にclaude -pを起動するとコストがかかり、Stop hookを持たない環境ではそもそも
+# 再帰を再現できないため、E2Eではなく「run_verifier()の実装が必須フラグを含むか」を
+# 静的に確認する。2026-07-14/07-15に実際にこのフラグが欠落して再帰暴走した実績があるため
+# (docs/superpowers/specs/2026-07-14-verification-subagent-design.md「運用インシデント」節)、
+# 将来のリファクタで再度欠落することを防ぐための回帰テスト。
+RUN_VERIFIER_BLOCK="$(awk '/^run_verifier\(\)/,/^}/' "$SCRIPT")"
+assert_contains "$RUN_VERIFIER_BLOCK" '--setting-sources ""' "claude -p呼び出しに--setting-sources \"\"が付いている(Stop hook再帰発火防止)"
+assert_contains "$RUN_VERIFIER_BLOCK" '--no-session-persistence' "claude -p呼び出しに--no-session-persistenceが付いている"
+
+echo "=== scenario 10: untrackedファイルのみ修正 → ハッシュが変わり再検証される(issue #352) ==="
 rm -f "$MOCK_CALL_LOG"
 echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
 echo "new-content-v1" > "$REPO/new-file.txt"
-run_hook "s9"
+run_hook "s10"
 assert_eq "$EXIT_CODE" "0" "untracked新規ファイル追加時はpass"
 assert_eq "$(call_count)" "1" "untracked新規ファイル追加は検証エージェントが1回呼ばれる"
 echo "new-content-v2" > "$REPO/new-file.txt"
-run_hook "s9"
+run_hook "s10"
 assert_eq "$EXIT_CODE" "0" "untrackedファイルの中身を書き換えてもpass"
 assert_eq "$(call_count)" "2" "untrackedファイルの中身の変更だけでも再検証される(ハッシュが変わる)"
 rm -f "$REPO/new-file.txt"
