@@ -219,4 +219,23 @@ describe('HospitalPricesPage', () => {
     const select = screen.getByRole('combobox') as HTMLSelectElement
     expect(select.children.length).toBe(0)
   })
+
+  it('削除でfetchが例外を投げた場合もエラーバナーを表示する', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (init?.method === 'DELETE') return Promise.reject(new Error('network error'))
+      if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities: [facilities[0]] }))
+      if (url === '/api/distributor-products') return Promise.resolve(jsonResponse({ items: distributorProducts }))
+      const match = url.match(/^\/api\/hospital-prices\?facilityId=(.+)$/)
+      if (match) return Promise.resolve(jsonResponse({ prices }))
+      return Promise.resolve(jsonResponse({ error: `unexpected ${url}` }, { status: 500 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<HospitalPricesPage />)
+    await screen.findByText('テスト商品A')
+
+    await userEvent.click(screen.getAllByRole('button', { name: '削除' })[0])
+
+    expect(await screen.findByText('削除に失敗しました')).toBeInTheDocument()
+  })
 })

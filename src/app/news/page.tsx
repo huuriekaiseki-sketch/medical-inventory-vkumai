@@ -52,6 +52,8 @@ function NewsPageInner() {
         if (resolvedFacilityId !== urlFacilityId && resolvedFacilityId) {
           router.replace(`/news?facilityId=${encodeURIComponent(resolvedFacilityId)}`)
         }
+
+        setError(null)
       } catch {
         if (!cancelled) setError('データの取得に失敗しました')
       }
@@ -72,6 +74,7 @@ function NewsPageInner() {
       if (!selectedFacilityId && !isAdmin) {
         setItems([])
         setHasMore(false)
+        setError(null)
         return
       }
       try {
@@ -85,6 +88,7 @@ function NewsPageInner() {
         setItems(data.items)
         setOffset(PAGE_SIZE)
         setHasMore(data.items.length === PAGE_SIZE)
+        setError(null)
       } catch {
         if (!cancelled) setError('データの取得に失敗しました')
       }
@@ -107,6 +111,7 @@ function NewsPageInner() {
       setItems((prev) => [...prev, ...data.items])
       setOffset((prev) => prev + PAGE_SIZE)
       setHasMore(data.items.length === PAGE_SIZE)
+      setError(null)
     } catch {
       setError('データの取得に失敗しました')
     }
