@@ -59,6 +59,10 @@ jobs:
       - name: Reconcile GitHub Issues (create new / close resolved)
         env:
           GH_TOKEN: ${{ github.token }}
+          # WHY: このジョブはactions/checkoutを行わないため、ghコマンドがgitリモートから
+          # 対象リポジトリを推測できず「fatal: not a git repository」で失敗する。
+          # GH_REPOで対象リポジトリを明示することでcheckoutなしでも動作させる
+          GH_REPO: ${{ github.repository }}
         run: |
           # WHY: --limit 100は既知の制約。100件を超えるopen issueが積み上がった場合、
           # 古いissueが取得漏れし重複作成・クローズ漏れが起こりうる（v1では許容。
