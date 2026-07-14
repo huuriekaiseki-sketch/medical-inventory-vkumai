@@ -14,7 +14,9 @@ VS Code側で実装 → スクリーンショットをCLIセッションに貼�
 
 - Stop hookとして `scripts/verify-claims.sh` を追加する(既存の `scripts/doc-suggest-check.sh` と並走)
 - hookのJSON入力から `session_id` を取得する(既存の `doc-suggest-check.sh` と同じ形式)
-- `git diff HEAD` + `git status --porcelain` を連結した内容のSHA256ハッシュを「現在のdiffハッシュ」として計算する(既存パターンを流用)
+- `git diff HEAD` + `git status --porcelain` + untrackedファイル(`git ls-files --others --exclude-standard`)の中身を連結した内容のSHA256ハッシュを「現在のdiffハッシュ」として計算する(既存パターンを流用)
+  - **注意(issue #352)**: `git diff HEAD` はtrackedファイルの差分のみを含み、`git status --porcelain`はuntrackedファイルを `?? path` の1行としか出さず中身を含まない。そのため新規(untracked)ファイルの中身だけを直して再Stopしてもハッシュが変わらず、「何も直していない」ケース(上記スキップ・再判定ロジックの2)と誤判定されブロックが継続してしまう。これを防ぐため、`git ls-files --others --exclude-standard -z` で列挙したuntrackedファイルの中身(ファイル名込み)も直接読んでハッシュ対象に含める。`git add -N`等でindexを書き換える方式は採らない(このスクリプトがリポジトリ状態を副作用的に変えないようにするため)
+  - この方式により、既存の別Stop hook(`claude_stop_notify.sh`の`git add -A`)が先に走って untracked ファイルを tracked 化してくれることへの暗黙の依存が無くなる。`verify-claims.sh`単独でuntrackedファイルの中身を検知できるため、hookの実行順序に依存しない
 - 状態は `.claude/.verify-state/<session_id>.json` に保存する:
   ```json
   { "last_diff_hash": "...", "last_verdict": "pass" | "blocked", "retry_count": 0, "last_findings_message": "..." }
@@ -182,6 +184,8 @@ claude_auto_issue / aidd_session_report が並走する。Claude Codeのhook実�
   5. retry_countが3を超える → ブロック継続、エスケープハッチ案内が出力に含まれる
   6. `.skip`マーカーあり → 無条件pass、マーカーファイルが削除される
   7. 検証プロセス自体が失敗(モック) → fail-openでpass
+  8. 同時実行数が上限に達している → サーキットブレーカーでfail-open(LLM呼び出し無し)
+  9. **(issue #352)** untrackedファイルのみ追加・修正 → ハッシュが変わり再検証される(新規ファイル追加時に1回、その後中身を書き換えたときにもう1回、計2回LLM呼び出しが発生すること)
 - `claude -p` 呼び出し部分は実行コストがかかるため、テストではモック(固定のfindings JSONを返すダミースクリプト)に差し替えて検証する
 
 ## 対象範囲外(YAGNI)

@@ -204,6 +204,19 @@ assert_eq "$EXIT_CODE" "0" "同時実行数が上限のときはfail-openでexit
 assert_eq "$(call_count)" "0" "上限到達時は検証エージェントを呼ばない(claude -pを増やさない)"
 assert_contains "$STDOUT_OUT" "サーキットブレーカー" "サーキットブレーカーが働いた旨がsystemMessageに記録される"
 
+echo "=== scenario 9: untrackedファイルのみ修正 → ハッシュが変わり再検証される(issue #352) ==="
+rm -f "$MOCK_CALL_LOG"
+echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
+echo "new-content-v1" > "$REPO/new-file.txt"
+run_hook "s9"
+assert_eq "$EXIT_CODE" "0" "untracked新規ファイル追加時はpass"
+assert_eq "$(call_count)" "1" "untracked新規ファイル追加は検証エージェントが1回呼ばれる"
+echo "new-content-v2" > "$REPO/new-file.txt"
+run_hook "s9"
+assert_eq "$EXIT_CODE" "0" "untrackedファイルの中身を書き換えてもpass"
+assert_eq "$(call_count)" "2" "untrackedファイルの中身の変更だけでも再検証される(ハッシュが変わる)"
+rm -f "$REPO/new-file.txt"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
