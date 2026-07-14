@@ -15,7 +15,7 @@ export default function NewCaseOrderPage({ params }: { params: Promise<{ id: str
   const [patientInitials, setPatientInitials] = useState('')
   const [gender, setGender] = useState<'male' | 'female' | 'other'>('male')
   const [doctorName, setDoctorName] = useState('')
-  const [items, setItems] = useState<ItemRow[]>([{ jan: '', lot: '', ubd: '', quantity: 1 }])
+  const [items, setItems] = useState<ItemRow[]>(() => [{ id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

@@ -26,19 +26,23 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }, [id])
 
   async function handleSubmit(data: ProductInput) {
-    const res = await fetch(`/api/products/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
 
-    if (!res.ok) {
-      const body = await res.json()
-      alert(body.error ?? '更新に失敗しました')
-      return
+      if (!res.ok) {
+        const body = await res.json()
+        alert(body.error ?? '更新に失敗しました')
+        return
+      }
+
+      router.push('/products')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '更新に失敗しました')
     }
-
-    router.push('/products')
   }
 
   if (error) {
@@ -65,7 +69,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       <h1 className="mb-6 text-2xl font-bold text-gray-900">製品編集</h1>
       <div className="rounded-lg bg-white p-6 shadow">
         <ProductForm
-          defaultValues={{ jan: product.jan, ref: product.ref }}
+          defaultValues={{ jan: product.jan, ref: product.ref, name: product.name, maker: product.maker }}
           onSubmit={handleSubmit}
           submitLabel="更新"
         />

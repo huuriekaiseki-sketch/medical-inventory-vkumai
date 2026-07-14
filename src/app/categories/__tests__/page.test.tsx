@@ -108,4 +108,20 @@ describe('CategoriesPage', () => {
 
     expect(await screen.findByText('このカテゴリは使用中です')).toBeInTheDocument()
   })
+
+  it('削除でfetchが例外を投げた場合もエラーバナーを表示する', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const fetchMock = vi.spyOn(global, 'fetch')
+    // 初回 GET
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ categories }) } as Response)
+    // DELETE -> ネットワーク例外
+    fetchMock.mockRejectedValueOnce(new Error('network error'))
+
+    render(<CategoriesPage />)
+    await screen.findByText('消耗品')
+
+    await userEvent.click(screen.getAllByText('削除')[0])
+
+    expect(await screen.findByText('削除に失敗しました')).toBeInTheDocument()
+  })
 })

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, Suspense, FormEvent, useEffect } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 function LoginForm() {
@@ -12,7 +12,6 @@ function LoginForm() {
 
   const searchParams = useSearchParams()
   const urlError = searchParams.get('error')
-  const router = useRouter()
 
   useEffect(() => {
     const hash = window.location.hash

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LOG_FILE="logs/loop-observability.jsonl"
+BEFORE_COUNT=""
+EXPECTED_COUNT=""
+
+usage() {
+  echo "Usage: $0 --before N --expected M [--log-file PATH]" >&2
+  echo "  --before N    フロー実行前に計測した logs/loop-observability.jsonl の行数" >&2
+  echo "  --expected M  ワークフローの戻り値 expectedLoopObservabilityRecords" >&2
+  exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --before) BEFORE_COUNT="$2"; shift 2 ;;
+    --expected) EXPECTED_COUNT="$2"; shift 2 ;;
+    --log-file) LOG_FILE="$2"; shift 2 ;;
+    *) echo "Unknown argument: $1" >&2; usage ;;
+  esac
+done
+
+if [[ -z "$BEFORE_COUNT" || -z "$EXPECTED_COUNT" ]]; then
+  usage
+fi
+
+if [[ ! -f "$LOG_FILE" ]]; then
+  AFTER_COUNT=0
+else
+  AFTER_COUNT="$(wc -l < "$LOG_FILE" | tr -d ' ')"
+fi
+
+ACTUAL_COUNT=$(( AFTER_COUNT - BEFORE_COUNT ))
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+npx -y tsx "$SCRIPT_DIR/../.claude/workflows/lib/loop-observability-gap.js" --actual "$ACTUAL_COUNT" --expected "$EXPECTED_COUNT"

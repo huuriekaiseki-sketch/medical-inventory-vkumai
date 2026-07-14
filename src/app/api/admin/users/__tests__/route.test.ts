@@ -81,6 +81,24 @@ describe('GET /api/admin/users', () => {
     expect(body.users[1].facilities).toEqual([])
   })
 
+  it('DBのroleが想定外の値の場合はstaffにフォールバックする', async () => {
+    mockListUsers.mockResolvedValue({
+      data: { users: [{ id: 'u1', email: 'a@test.com', last_sign_in_at: null }] },
+      error: null,
+    })
+    const mockIn = vi.fn().mockResolvedValue({
+      data: [{ user_id: 'u1', facility_id: 'f1', role: 'superadmin' }],
+      error: null,
+    })
+    const mockSelect = vi.fn().mockReturnValue({ in: mockIn })
+    mockFrom.mockReturnValue({ select: mockSelect })
+
+    const res = await GET()
+    const body = await res.json()
+
+    expect(body.users[0].facilities).toEqual([{ id: 'f1', role: 'staff' }])
+  })
+
   it('非管理者は 403 を返す', async () => {
     mockGetUser.mockResolvedValue({
       data: { user: { email: 'other@test.com' } },

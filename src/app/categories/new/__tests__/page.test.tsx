@@ -49,6 +49,18 @@ describe('NewCategoryPage', () => {
     expect(push).not.toHaveBeenCalled()
   })
 
+  it('ネットワークエラーでエラーメッセージを表示し遷移しない', async () => {
+    vi.spyOn(global, 'fetch').mockRejectedValue(new Error('network error'))
+
+    render(<NewCategoryPage />)
+
+    await userEvent.type(screen.getByLabelText('カテゴリ名'), '消耗品')
+    await userEvent.click(screen.getByRole('button', { name: '登録' }))
+
+    expect(await screen.findByText('network error')).toBeInTheDocument()
+    expect(push).not.toHaveBeenCalled()
+  })
+
   it('一覧に戻るリンクがある', () => {
     render(<NewCategoryPage />)
     const link = screen.getByRole('link', { name: /カテゴリ一覧に戻る/ })

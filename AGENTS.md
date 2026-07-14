@@ -18,7 +18,17 @@ Phase 1 調査(並列) → Phase 2 仕様書 → [停止① 人間レビュー]
 
 | エージェント | モデル | 役割 | Phase |
 |---|---|---|---|
+| `sweep-ui` | haiku | src/app/・src/components/ を調査。コンポーネント・props・stateのバグ・型エラーを報告 | Phase 1 |
+| `sweep-data` | haiku | src/lib/supabase/ とAPIルートを調査。型エラー・セキュリティ問題・設計違反を報告 | Phase 1 |
+| `sweep-db` | haiku | Supabaseスキーマ・マイグレーション・RLSを調査。整合性・設計・セキュリティ問題を報告 | Phase 1 |
+| `sweep-types` | haiku | 型定義・mappers・DB列・UIプロップスを縦断調査。層をまたぐ型不一致・欠落を報告 | Phase 1 |
+| `completeness-critic` | sonnet | 未調査モダリティ・未検証クレーム・未読ソースを検出。網羅性チェック・終了判定 | Phase 1 / Phase 1深掘り |
+| `proposer` | sonnet | 設計アプローチを1案提案（スタンス指定で起動） | Phase 1深掘り |
+| `judge-panel` | sonnet | 複数の設計提案を評価・採点し、synthesis（統合提案）を作成。読み取り専用 | Phase 1深掘り |
+| `adversarial-verify` | opus | Sweep指摘に反論を試み、偽陽性を除去。読み取り専用 | Phase 1深掘り |
+| `contract-writer` | sonnet | src/types/ の型定義・APIインターフェース型を先行確定。implementerへの「契約」を書く | Phase 3 |
 | `implementer` | opus | TDD実装（RED→GREEN→REFACTOR）。テスト削除・期待値改ざん禁止 | Phase 3 |
+| `integrator` | sonnet | マイグレーション適用確認・共有ファイルの結線・npm test/lint確認 | Phase 4 |
 | `reviewer` | sonnet | TDD品質規約検証・4観点指摘（正しさ/仕様カバレッジ/重複/型安全）読み取り専用 | Phase 5 |
 
 ## プロジェクト固有スキル（`.claude/skills/`）
@@ -56,6 +66,7 @@ Phase 1 調査(並列) → Phase 2 仕様書 → [停止① 人間レビュー]
 | ファイル | 目的 |
 |---|---|
 | `CLAUDE.md` | Phase 1-5 の詳細フロー・絶対ルール |
+| [`docs/agents/common.md`](docs/agents/common.md) | 全AIエージェント共通ルール・**引き継ぎフォーマット**（作業完了時は必読） |
 | `docs/ai-config-map.md` | エージェント・スキル全体マップ |
 | `.claude/settings.json` | Bash/MCP 権限リスト |
 | `src/app/` | Next.js App Router のページ・API Routes |

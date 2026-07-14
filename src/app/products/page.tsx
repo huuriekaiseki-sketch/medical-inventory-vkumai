@@ -8,26 +8,32 @@ import { ProductList } from '@/components/products/ProductList'
 export default function ProductsPage() {
   const router = useRouter()
   const [products, setProducts] = useState<Product[]>([])
+  const [error, setError] = useState<string | null>(null)
   const [refreshKey, refresh] = useReducer((x: number) => x + 1, 0)
 
   useEffect(() => {
     let cancelled = false
     fetch('/api/products')
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(); return r.json() })
       .then((d) => { if (!cancelled) setProducts(d.products) })
+      .catch(() => { if (!cancelled) setError('デバイスの取得に失敗しました') })
     return () => { cancelled = true }
   }, [refreshKey])
 
   async function handleDelete(id: string) {
     if (!confirm('削除しますか？')) return
-    // WHY: DELETE完了をawaitで待ってから再取得しないと、削除前のデータが再描画され不整合が起きるため
-    const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const body = await res.json()
-      alert(body.error ?? '削除に失敗しました')
-      return
+    try {
+      // WHY: DELETE完了をawaitで待ってから再取得しないと、削除前のデータが再描画され不整合が起きるため
+      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const body = await res.json()
+        alert(body.error ?? '削除に失敗しました')
+        return
+      }
+      refresh()
+    } catch {
+      alert('削除に失敗しました')
     }
-    refresh()
   }
 
   return (
@@ -49,6 +55,13 @@ export default function ProductsPage() {
           + 新規登録
         </button>
       </div>
+
+      {error && (
+        <div className="mb-6 flex items-center gap-3 rounded px-4 py-3 text-sm font-medium text-white" style={{ backgroundColor: '#DC2626', borderRadius: '2px' }}>
+          <span>⚠</span>
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="rounded bg-white shadow-sm overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
         <ProductList

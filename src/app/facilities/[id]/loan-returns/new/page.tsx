@@ -1,18 +1,46 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ItemRowInput, type ItemRow } from '@/components/orders/ItemRowInput'
+import type { OrderListItem } from '@/types/order'
 
 export default function NewLoanReturnPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
 
   const [returnDatetime, setReturnDatetime] = useState('')
-  const [items, setItems] = useState<ItemRow[]>([{ jan: '', lot: '', ubd: '', quantity: 1 }])
+  const [items, setItems] = useState<ItemRow[]>(() => [{ id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loanOrderId, setLoanOrderId] = useState('')
+  const [unreturnedLoanOrders, setUnreturnedLoanOrders] = useState<OrderListItem[]>([])
+
+  // WHY: 「未返却」バッジ判定（loan_returns.loan_order_id、issue #20 Set A）は返却作成時に
+  //      対象の短貸発注を紐付けない限り、その短貸発注は永久に未返却のまま表示され続けるバグに
+  //      なる（レビュー指摘: critical。書き込み経路が配線されていなかった）。
+  //      返却フォームから対象の短貸発注（未返却のもの）を選べるようにする
+  useEffect(() => {
+    let cancelled = false
+    async function loadUnreturnedLoanOrders() {
+      try {
+        const res = await fetch(`/api/orders?facility_id=${id}&kind=loan_order`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        const orders = (data.orders ?? []) as OrderListItem[]
+        setUnreturnedLoanOrders(orders.filter(o => o.unreturned))
+      } catch {
+        // WHY: 対象選択肢の取得失敗は致命的ではない（対象を選ばずに返却自体は可能）ため、
+        //      フォームの利用を止めずにエラーを握りつぶす
+      }
+    }
+    loadUnreturnedLoanOrders()
+    return () => {
+      cancelled = true
+    }
+  }, [id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -26,6 +54,7 @@ export default function NewLoanReturnPage({ params }: { params: Promise<{ id: st
           facilityId: id,
           returnDatetime,
           items: items.map(r => ({ jan: r.jan, lot: r.lot || undefined, ubd: r.ubd || undefined, quantity: r.quantity })),
+          ...(loanOrderId ? { loanOrderId } : {}),
         }),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || '送信に失敗しました') }
@@ -69,6 +98,21 @@ export default function NewLoanReturnPage({ params }: { params: Promise<{ id: st
             className="border rounded px-3 py-2 text-sm w-full"
             style={{ borderColor: '#E5E7EB' }}
           />
+        </div>
+        <div className="mb-4">
+          <label htmlFor="loanOrderId" className={labelClass} style={labelStyle}>対象の短貸発注（任意）</label>
+          <select
+            id="loanOrderId"
+            value={loanOrderId}
+            onChange={e => setLoanOrderId(e.target.value)}
+            className="border rounded px-3 py-2 text-sm w-full"
+            style={{ borderColor: '#E5E7EB' }}
+          >
+            <option value="">選択しない</option>
+            {unreturnedLoanOrders.map(order => (
+              <option key={order.id} value={order.id}>{order.summary}</option>
+            ))}
+          </select>
         </div>
         <div className="mb-6">
           <p className={labelClass} style={labelStyle}>返却物品</p>
