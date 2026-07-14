@@ -17,8 +17,10 @@ VS Code側で実装 → スクリーンショットをCLIセッションに貼�
 - `git diff HEAD` + `git status --porcelain` を連結した内容のSHA256ハッシュを「現在のdiffハッシュ」として計算する(既存パターンを流用)
 - 状態は `.claude/.verify-state/<session_id>.json` に保存する:
   ```json
-  { "last_diff_hash": "...", "last_verdict": "pass" | "blocked", "retry_count": 0 }
+  { "last_diff_hash": "...", "last_verdict": "pass" | "blocked", "retry_count": 0, "last_findings_message": "..." }
   ```
+  `last_findings_message` は、ケース2(ハッシュ一致・前回blocked)で前回の指摘内容をLLM呼び出し
+  無しに再提示するために保持する(実装: `scripts/verify-claims.sh`の`write_state`/`block_with_retry_check`)
 - 7日より古い状態ファイルは `doc-suggest-check.sh` と同様に自動削除する
 
 ### スキップ・再判定ロジック
