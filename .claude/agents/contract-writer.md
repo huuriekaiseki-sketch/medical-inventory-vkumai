@@ -35,3 +35,11 @@ Lint: 0 errors
 TSC: 0 errors
 未解決の設計判断: [あれば]
 ```
+
+## 進捗報告（issue #18）
+作業開始時に `--status running`、完了報告の直前に `--status done` で `scripts/log-agent-progress.sh` を呼ぶこと。`--feature` はSPEC.mdの機能名（無ければ `unknown`）。
+```bash
+scripts/log-agent-progress.sh --agent contract-writer --feature "<feature名>" --status running --note "型定義作成中..."
+# ...型定義作成...
+scripts/log-agent-progress.sh --agent contract-writer --feature "<feature名>" --status done --note "契約定義完了"
+```
