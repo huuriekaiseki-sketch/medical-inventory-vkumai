@@ -50,11 +50,17 @@ SUMMARY="$(jq -s -r '
           ($g | map(select(.result == "pass")) | length) as $p |
           ($g | map(.model) | fmtList) as $models |
           ($g | map(.agent) | fmtList) as $agents |
+          ($g | map(.tokens // 0) | add) as $tokens |
+          ($g | map(select(.tokens != null)) | length) as $tokensKnown |
+          ($g | map(.costUsd // 0) | add) as $cost |
+          ($g | map(select(.costUsd != null)) | length) as $costKnown |
           "### \($feature)",
           "- 試行回数: \($attempts)",
           "- 成功: \($p)/\($attempts)",
           "- 使用モデル: \($models)",
           "- agent: \($agents)",
+          "- tokens合計: \($tokens)（\($tokensKnown)/\($attempts)件で判明）",
+          "- costUsd合計: \($cost | (.*100|round)/100)（\($costKnown)/\($attempts)件で判明）",
           ""
         )
       end
