@@ -16,11 +16,15 @@ export default function LoanOrdersPage({ params }: { params: Promise<{ id: strin
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     fetch(`/api/loan-orders?facility_id=${id}`)
       .then(r => { if (!r.ok) throw new Error(); return r.json() })
-      .then(d => setOrders(d.orders ?? []))
-      .catch(() => setError('一覧の取得に失敗しました'))
-      .finally(() => setLoading(false))
+      .then(d => { if (!cancelled) setOrders(d.orders ?? []) })
+      .catch(() => { if (!cancelled) setError('一覧の取得に失敗しました') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => {
+      cancelled = true
+    }
   }, [id])
 
   const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }

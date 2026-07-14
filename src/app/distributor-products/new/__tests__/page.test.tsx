@@ -66,4 +66,18 @@ describe('NewDistributorProductPage', () => {
     expect(await screen.findByText('登録に失敗しました')).toBeInTheDocument()
     expect(pushMock).not.toHaveBeenCalled()
   })
+
+  it('ネットワークエラーで submitError を表示する', async () => {
+    global.fetch = vi.fn((url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') return Promise.reject(new Error('network error'))
+      if (url === '/api/products') return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ products }) })
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ categories }) })
+    }) as unknown as typeof fetch
+    render(<NewDistributorProductPage />)
+    await screen.findByText('カテゴリA')
+    await fillForm()
+    await userEvent.click(screen.getByRole('button', { name: '登録' }))
+    expect(await screen.findByText('network error')).toBeInTheDocument()
+    expect(pushMock).not.toHaveBeenCalled()
+  })
 })

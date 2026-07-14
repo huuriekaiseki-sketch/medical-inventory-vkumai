@@ -84,6 +84,22 @@ describe('EditDistributorProductPage', () => {
     expect(pushMock).not.toHaveBeenCalled()
   })
 
+  it('ネットワークエラーで submitError を表示する', async () => {
+    global.fetch = vi.fn((url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') return Promise.reject(new Error('network error'))
+      if (url === '/api/distributor-products/dp1') {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ item }) })
+      }
+      if (url === '/api/products') return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ products }) })
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ categories }) })
+    }) as unknown as typeof fetch
+    render(<EditDistributorProductPage params={params()} />)
+    await screen.findByDisplayValue('商品A')
+    await userEvent.click(screen.getByRole('button', { name: '更新' }))
+    expect(await screen.findByText('network error')).toBeInTheDocument()
+    expect(pushMock).not.toHaveBeenCalled()
+  })
+
   it('item 取得失敗でエラーメッセージを表示する', async () => {
     global.fetch = setupFetch({ itemOk: false }) as unknown as typeof fetch
     render(<EditDistributorProductPage params={params()} />)

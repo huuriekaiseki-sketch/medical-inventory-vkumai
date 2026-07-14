@@ -33,25 +33,29 @@ export default function NewHospitalPricePage() {
 
   async function handleSubmit(data: HospitalPriceInput) {
     setError(null)
-    const res = await fetch('/api/hospital-prices', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
+    try {
+      const res = await fetch('/api/hospital-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
 
-    if (!res.ok) {
-      if (res.status === 409) {
-        setError('この施設と商品の組み合わせは既に登録されています')
-      } else if (res.status === 422) {
-        setError('施設または代理店商品が存在しません')
-      } else {
-        const body = await res.json()
-        setError(body.error ?? '登録に失敗しました')
+      if (!res.ok) {
+        if (res.status === 409) {
+          setError('この施設と商品の組み合わせは既に登録されています')
+        } else if (res.status === 422) {
+          setError('施設または代理店商品が存在しません')
+        } else {
+          const body = await res.json()
+          setError(body.error ?? '登録に失敗しました')
+        }
+        return
       }
-      return
-    }
 
-    router.push('/hospital-prices')
+      router.push('/hospital-prices')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '登録に失敗しました')
+    }
   }
 
   return (
