@@ -1,474 +1,325 @@
-# 機能仕様書: 発注履歴ページ新設（issue #20）
+# 機能仕様書: コンパチ（互換品）ページの実体化（issue #21）
 
-作成日: 2026-07-13
-ステータス: ドラフト（人間レビュー待ち、Adversarial Verifyのcritical指摘4件を反映済み）
+作成日: 2026-07-14
+ステータス: ドラフト（人間レビュー承認済み。Adversarial Verify 35件中35件生存＋Judge Panel統合案を反映済み）
+
+---
+
+## 人間レビューでの決定事項（2026-07-14）
+
+1. **施設スコープ**: 単一共有マスタで進める（決定）。互換性は「製品仕様上の客観的事実」であり施設ごとの運用判断ではないため。「施設ごとに採用可否を分けたい」という運用は、確認の結果**現時点ではあり得ない**と判断されたため、施設スコープ・採用可否フラグはいずれも今回は導入しない。
+2. **CASCADE削除**: 許容で進める（決定）。他マスタ（products/categories/distributor_products）と同じ物理削除+CASCADEパターンに揃える。論理削除化は全体アーキテクチャの話として別途検討。
+3. **migration タイムスタンプ**: 実装着手日に確定（レビュー時点では判断不要、ドラフトの `20260715000001` は仮置きのまま）。
+4. **UPDATE（備考編集）**: RLSは `FOR ALL` のまま進める（決定）。備考の入力ミス訂正需要があり、admin限定で既に保護されているため `INSERT/DELETE` に絞る実益は薄い。
+5. **ページネーション閾値**: **500件**を閾値として仕様に明記する（Set C 実装セクション参照）。初期実装はページネーションなしで進め、`product_compatibilities` の総件数が500件を超えたらページネーション導入を別issueで検討する。
+6. **既存の技術的負債の別issue化**: 承認。以下2件をissue化キューに追加済み（本issueとは独立して対応）。
+   - `products`/`categories`/`distributor-products`/`facilities` の PUT/DELETE に `requireAdmin()` 呼び出しが欠落
+   - `src/app/login/page.tsx:110` の `<Suspense>` に `fallback` が未設定
 
 ---
 
 ## Part 1 — 仕様（人間レビュー用）
 
-### 概要
+### 何ができるようになるか（利用者目線）
 
-施設内の発注履歴（症例発注・消耗品発注・短貸発注・短貸返却）を 1 つのページで横断して確認できるようにする。現在は種別ごとに別ページへ移動しないと履歴を確認できず、横断比較・検索ができない状態を解消する。
+「コンパチ」ページ（`/compat`）で、同一カテゴリ内の複数製品（JAN単位）が互いに代替品として使用可能かどうかを登録・検索できる。例えば「縫合糸カテゴリ」で A社製品と B社製品が互換であることを管理者が登録すると、一般ユーザーも検索して確認できる。現在 `src/app/compat/page.tsx` は「Coming Soon」のプレースホルダのままであり、これを**全面的に置き換える**。
 
-URL: `/orders`（グローバルナビゲーションからアクセス、施設ログイン後に表示）
-
----
-
-### できるようになること（利用者目線）
-
-1. **4種別の発注を1ページで一覧できる**
-   - 症例発注（手術・処置で使用した医療材料の発注）
-   - 消耗品発注（施設備品・消耗品の発注）
-   - 短貸発注（メーカーから一時的に借用する機器・材料の発注）
-   - 短貸返却（借用品の返却記録）
-
-2. **種別タブで表示を切り替えられる**
-   - タブ: 「すべて」「症例発注」「消耗品発注」「短貸発注」「短貸返却」
-   - タブ選択で一覧がフィルタされる
-
-3. **期間・キーワードで絞り込みできる**
-   - 開始日・終了日（created_at ベースの範囲指定、カレンダー UI）
-   - キーワード（製品名・JAN・手技名などに対するテキスト検索）
-
-4. **短貸発注に「未返却」バッジが表示される**
-   - 対応する返却記録（loan_returns）が存在しない短貸発注には「未返却」バッジを表示
-   - 返却済みの場合はバッジなし
-
-5. **ステータスが一目でわかる**
-   - 症例発注・消耗品発注・短貸発注: 「下書き」「提出済」
-   - 短貸返却: 「下書き」「返却済」
-
----
+- **一般ユーザー（施設メンバー）**: カテゴリで絞り込み、互換ペアを一覧表示・検索できる
+- **管理者**: 上記に加え、互換ペアの新規登録・削除ができる
 
 ### 操作の流れ
 
-```
-1. ログイン後、グローバルナビの「発注履歴」リンクをクリック → /orders へ遷移
-2. 施設に紐づく全発注が「作成日降順」で一覧表示される（初期タブ: すべて）
-📸 [スクリーンショット1] 初期表示（全タブ・フィルタなし状態）
+#### 検索フロー
+1. `/compat` を開く
+2. カテゴリドロップダウンで絞り込む（未選択時は全件表示、初期ソートは登録日時 `created_at` 降順）
+3. キーワード入力欄で製品名・JAN・メーカー名を部分一致で絞り込む
+4. 結果テーブルに「カテゴリ名 / 製品A（名称・JAN・メーカー）/ 製品B（名称・JAN・メーカー）/ 備考 / 登録日」が表示される
 
-3. タブ「短貸発注」をクリック → 短貸発注のみ絞り込み表示
-📸 [スクリーンショット2] 短貸発注タブ選択・「未返却」バッジ確認
+#### 登録フロー（管理者のみ表示）
+1. 「互換品を追加」ボタンをクリック
+2. カテゴリを選択する（未選択の間は製品A・B の選択欄は disabled、プレースホルダー「先にカテゴリを選択してください」を表示）
+3. 製品Aを選択（カテゴリ内の `distributor_products` に紐づく `products` に限定。選択肢ラベルは `{name}（JAN: {jan}、メーカー: {maker ?? '不明'}）` の形式で一覧テーブルと統一表記にする）
+4. 製品Bを選択（製品Aと同じ制約。製品Aで選択済みの製品は選択肢から除外し、自己参照を未然に防ぐ。送信時にも再検証する）
+5. 備考（任意、最大500文字）を入力して登録
+6. 送信成功後、フォームをクリアする（モーダル使用時は閉じる）。一覧は即時再取得される
+7. 重複ペア（順序問わず同一組み合わせ）は登録できず、「すでに登録済みです。【製品A名】と【製品B名】は既に互換登録されています」とエラー表示する
 
-4. 開始日・終了日を入力 → 期間絞り込みが反映される
-5. キーワードを入力（例: 製品名）→ 一致する行のみ表示
-📸 [スクリーンショット3] フィルタ適用後の絞り込み結果
-
-6. 「クリア」ボタンでフィルタをリセット → 全件表示に戻る
-```
+#### 削除フロー（管理者のみ）
+- 一覧の各行に「削除」ボタン → 確認ダイアログ（「【製品A名（JAN xxx / メーカーyyy）】と【製品B名（JAN zzz / メーカーwww）】の互換登録を削除しますか？」の具体的な文言）→ DELETE API
+- 既に削除済み（他管理者が先に削除した等）の場合は404を受けて「すでに削除されています」を表示し、一覧を自動再取得する
 
 ---
 
 ### 受け入れ条件チェックリスト
 
-#### 表示
+**機能**
+- [ ] 未ログイン状態でアクセスすると `/login` にリダイレクトされる
+- [ ] ログイン済みで `/compat` にアクセスすると互換品一覧が表示される（Coming Soon でなくなる）
+- [ ] カテゴリ未選択で全互換ペアが `created_at` 降順で表示される
+- [ ] カテゴリを選択すると同カテゴリの互換ペアのみに絞り込まれる
+- [ ] キーワード入力で製品A・製品Bの名称・JAN・メーカー名を部分一致（OR条件）で絞り込める
+- [ ] 管理者は「互換品を追加」フォームが表示される（一般ユーザーには表示されない）
+- [ ] 登録フォームはカテゴリ未選択時、製品A・B の選択が無効化されている
+- [ ] 管理者が有効なペアを登録すると一覧に即時反映され、フォームがクリアされる
+- [ ] 同じペア（順序問わず）を再登録しようとすると、対象製品名を含む重複エラーになる
+- [ ] 自己参照（製品A = 製品B）は、製品Bの選択肢から製品Aを除外することで防止される（送信時にも400で再検証）
+- [ ] 管理者が削除ボタンを押すと、削除対象の製品名・JAN・メーカーを含む確認ダイアログの後に行が消える
+- [ ] 削除対象が既に存在しない場合（404）、「すでに削除されています」と表示され一覧が再取得される
 
-- [ ] `/orders` にアクセスすると発注一覧が表示される
-- [ ] ログインしていない状態でアクセスすると `/login` にリダイレクトされる
-- [ ] 自施設の発注のみが表示される（他施設の発注は表示されない）
-- [ ] 一覧は created_at 降順で表示される
-- [ ] 各行に「種別」「作成日」「ステータス」「概要」が表示される
-- [ ] 短貸発注行のうち、対応する返却記録がないものに「未返却」バッジが表示される
-- [ ] 返却記録が存在する短貸発注には「未返却」バッジが表示されない
+**セキュリティ**
+- [ ] 一般ユーザーが POST /api/compat に直接リクエストすると 403 が返る
+- [ ] 一般ユーザーが DELETE /api/compat/[id] に直接リクエストすると 403 が返る
+- [ ] 未認証リクエストは 401 が返る
+- [ ] GET /api/compat/products も認証必須（未認証は401）。カテゴリに属さない製品情報の推測はカテゴリ内提示に限定されるため追加の施設スコープ制御は不要（本機能はテナント非分離。上記「未解決事項1」参照）
 
-#### タブ操作
+**DB**
+- [ ] `product_compatibilities` テーブルが migration で作成される
+- [ ] `(category_id, product_id_1, product_id_2)` に UNIQUE 制約がある
+- [ ] `product_id_1 < product_id_2` の CHECK 制約で順序正規化がある（(a,b)と(b,a)の二重登録防止）
+- [ ] RLS: SELECT は全認証ユーザー、CUD は `is_admin()` のみ
+- [ ] migration末尾で `refresh_schema_baseline_snapshot()` を呼んでいる（issue #305要件）
 
-- [ ] タブ「すべて」選択時は4種別すべてが一覧に表示される
-- [ ] タブ「症例発注」選択時は症例発注のみが表示される
-- [ ] タブ「消耗品発注」選択時は消耗品発注のみが表示される
-- [ ] タブ「短貸発注」選択時は短貸発注のみが表示される
-- [ ] タブ「短貸返却」選択時は短貸返却のみが表示される
-
-#### フィルタ
-
-- [ ] 開始日を指定すると、指定日（日本時間 0:00）以降の発注のみが表示される
-- [ ] 終了日を指定すると、指定日（日本時間 23:59:59）以前の発注のみが表示される
-- [ ] キーワードを入力すると、製品名・JAN・手技名・メーカー名に部分一致する行が表示される（消耗品発注の場合も消耗品名で検索できる）
-- [ ] 「クリア」ボタンでフィルタをリセットすると全件表示に戻る
-- [ ] タブ変更後もフィルタ条件（期間・キーワード）は保持されるが、ページ位置（offset）はタブ・期間・キーワードのいずれかを変更するたびに先頭（0件目）にリセットされる
-
-#### エラー・エッジケース
-
-- [ ] 発注が0件の場合「発注履歴がありません」と表示される
-- [ ] データ取得失敗時はエラーメッセージが表示される（画面が壊れない）
-- [ ] フィルタ結果が0件の場合「条件に一致する発注がありません」と表示される
-
-#### アクセシビリティ・レスポンシブ
-
-- [ ] モバイル幅（375px）でも表が崩れず水平スクロールで閲覧できる
-- [ ] タブがキーボード操作で切り替えられる
+**UI**
+- [ ] 本ページは `useSearchParams()` を使わない設計のため `<Suspense>` ラップは不要（URL連動フィルタは今回スコープ外）
+- [ ] 一覧が0件のとき、状況に応じて空状態メッセージが出し分けられる:
+  - 全体0件かつ管理者:「互換品が登録されていません」＋「＋互換品を追加」への導線
+  - 全体0件かつ一般ユーザー:「互換品はまだ登録されていません」
+  - フィルタ結果0件（登録は存在）:「条件に一致する互換品がありません」
+- [ ] 一覧初回表示・再取得中はテーブル領域にスケルトンまたはスピナーを表示する
+- [ ] カテゴリ変更時、製品候補取得中は製品Select近傍にインラインスピナーを表示し、Selectを一時disabledにする
+- [ ] 削除・製品候補取得・一覧再取得のいずれかでネットワークエラーが発生した場合、画面上部にエラーメッセージを表示する（既存 `products` ページと同一パターン）
 
 ---
 
-## Part 2 — 実装計画（AI用・レビュー不要）
+## Part 2 — 実装計画（AI用）
 
-### 前提: 現状の課題と対応方針
+### 設計方針の確定事項（Judge Panel採用: 保守的設計アプローチ、スコア78）
 
-| 課題 | 対応 |
-|---|---|
-| loan_returns に loan_order_id FK がない（「未返却」判定不能） | Set A でマイグレーション追加 |
-| 既存 repository に日付・キーワードフィルタなし | Set C で引数拡張 |
-| 横断一覧用 API エンドポイントがない | Set D で `/api/orders` 新設 |
-| Union 型・フィルタ型がない | Set B で型定義追加 |
-| `useSearchParams` 使用時の Suspense 必須（既知パターン） | Set E で Suspense ラップ必須 |
-| limit/offset バリデーション漏れ（既存4 route.ts） | Set D で合わせて修正 |
-| consumable_orders / loan_orders / loan_returns に created_at インデックスなし | Set A のマイグレーションで追加 |
+| 論点 | 採用 | 理由 |
+|---|---|---|
+| ページ構成 | 純 `'use client'` + `useReducer(refreshKey)` + `useEffect(fetch)` | Server/Client混在は本プロジェクト初の構成でrefreshKeyがServer再実行に繋がらないリスクがある。既存 `products/page.tsx` と同型にして実装差異を排除する |
+| Admin認可 | `requireAuth(db)` + `resolveIsAdmin(db, user)` を直接呼ぶ | `requireAdmin()`（`src/lib/admin-auth.ts`）は内部で `createServerSupabase()` を二重生成するため使わない。`facilities` API と同型でテストモックも整合する |
+| 製品候補取得 | `/api/compat/products` を新設 | 既存 `/api/products` のGET仕様変更によるクライアント影響を避け、責務を`/compat`ドメインに閉じる |
+| キーワード検索 | サーバサイド `.ilike`（Supabaseパラメータバインド） | raw SQL禁止でSQLiリスクを排除。GIN/pg_trgmは初期実装では不要（マスタ件数が少ない前提。件数増大時は別issueで検討） |
+| ON DELETE CASCADE | 許容 | 他マスタと同じ物理削除パターンに揃える（人間レビューで決定）。論理削除化は全体アーキ検討として別途 |
+| ページネーション | 初期実装では対応せず、初期ソートのみ `created_at DESC` を明記 | 500件超過で別issue検討（人間レビューで決定した閾値） |
+
+不採用（検討したが見送り）: **互換グループモデル**（`compat_groups` + `compat_group_members` の2テーブル方式）。N対N表現には優れるが、ペア追加時のグループ検索・マージ・孤立グループ自動削除のロジックが大幅に増え、issue #21 の要求（ペア登録・検索）に対し過剰設計と判断。将来「3製品以上の互換群」要件が出た場合の再検討候補として記録する。
+
+---
+
+### DB設計（テーブル定義）
+
+```sql
+-- migration: <実装日に合わせて確定>_create_product_compatibilities.sql
+-- (ドラフトでは 20260715000001 を仮置き。未解決事項3を参照し実装日で確定すること)
+
+CREATE TABLE product_compatibilities (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  category_id uuid        NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  product_id_1 uuid       NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  product_id_2 uuid       NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  note        text,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  -- 自己参照禁止
+  CONSTRAINT no_self_compat CHECK (product_id_1 <> product_id_2),
+  -- UUID文字列の辞書順で小さい方を必ず product_id_1 に入れる → (a,b)と(b,a)を同一視
+  CONSTRAINT ordered_pair  CHECK (product_id_1 < product_id_2),
+  -- 同カテゴリ内でのペア重複禁止
+  UNIQUE (category_id, product_id_1, product_id_2)
+);
+
+-- インデックス戦略（category_id・product_id_1/2 に対するFK/絞り込み用。
+-- keyword検索は products.name/jan/maker に対するJOIN後の.ilikeであり、
+-- このインデックスでは加速されない。マスタ件数が少ない前提のためGIN/pg_trgmは初期実装では未導入）
+CREATE INDEX idx_compat_category_id  ON product_compatibilities (category_id);
+CREATE INDEX idx_compat_product_id_1 ON product_compatibilities (product_id_1);
+CREATE INDEX idx_compat_product_id_2 ON product_compatibilities (product_id_2);
+
+-- RLS（products/categories/distributor_products と同じマスタテーブルパターン。
+-- 本機能はテナント非分離＝施設スコープなし。未解決事項1を参照）
+ALTER TABLE product_compatibilities ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "compat_select" ON product_compatibilities FOR SELECT TO authenticated USING (true);
+CREATE POLICY "compat_write"  ON product_compatibilities FOR ALL    TO authenticated
+  USING (is_admin()) WITH CHECK (is_admin());
+  -- 未解決事項4: UPDATE(備考編集)を提供しないなら FOR ALL ではなく
+  -- FOR INSERT / FOR DELETE の2ポリシーに分割し最小権限にする選択肢もある
+
+-- refresh_schema_baseline_snapshot 呼び出し（issue #305要件・テーブル新設のため必須）
+SELECT refresh_schema_baseline_snapshot('<実際のmigrationタイムスタンプ>');
+```
+
+**注意点（調査で判明した設計上の落とし穴）**
+- `products` テーブルに `category_id` は存在しない。カテゴリは `distributor_products.category_id` 経由で判定する。
+  → 「このカテゴリで有効な product 一覧」を取得するクエリは `distributor_products` を経由する必要がある。
+- DB制約では「両製品が当該カテゴリ内に存在するか」を強制できない。アプリケーション層（API route）でバリデーションとして実装する。
+- `product_id_1 < product_id_2` の CHECK により、リポジトリ層でペア挿入前に UUID を比較して小さい方を `product_id_1` に入れる正規化処理が必要。
+- `product_compatibilities` は `distributor_products` への直接FKを持たない。`distributor_products` が削除されても行は残存しうるが、表示時のカテゴリ有効性判定はアプリ層フィルタ（`listProductsInCategory`）で担保する。恒久対応は別issue化する。
 
 ---
 
 ### 実装セット一覧（依存順）
 
-#### Set A — DB マイグレーション（前提・最優先）
+#### Set A: DBマイグレーション（他セットのブロッカー）
+- **ファイル**: `supabase/migrations/<実装日>_create_product_compatibilities.sql`
+- **内容**: テーブル作成・インデックス・RLS・`refresh_schema_baseline_snapshot`
+- **テスト観点**:
+  - migration が clean apply できること（`supabase db reset` でエラーなし）
+  - `product_id_1 > product_id_2` で直接INSERTすると CHECK制約違反になること
+  - 自己参照（`product_id_1 = product_id_2`）で直接INSERTすると CHECK制約違反になること
 
-**触るファイル**:
-- `supabase/migrations/YYYYMMDD_orders_history_prereqs.sql`（新規）
+#### Set B: 型定義（Set A完了後）
+- **ファイル**: `src/types/compatibility.ts`
+  ```typescript
+  export type ProductCompatibility = {
+    id: string
+    categoryId: string
+    categoryName: string
+    productId1: string
+    product1: { jan: string; name: string; maker: string | null }
+    productId2: string
+    product2: { jan: string; name: string; maker: string | null }
+    note: string | null
+    createdAt: string
+    updatedAt: string
+  }
+  export type ProductCompatibilityInput = {
+    categoryId: string
+    productId1: string
+    productId2: string
+    note: string | null
+  }
+  ```
+- **テスト観点**: 型定義のみ（`tsc --noEmit` でコンパイルエラーなし）
 
-**内容**:
-1. `loan_returns` に `loan_order_id` 列を追加:
-   ```sql
-   ALTER TABLE loan_returns
-     ADD COLUMN loan_order_id UUID REFERENCES loan_orders(id) ON DELETE SET NULL;
-   ```
-   - NULL 許容（NOT NULL 不可。既存行は対応 loan_order が追跡できないため）
-2. 不足インデックスを追加:
-   ```sql
-   CREATE INDEX IF NOT EXISTS idx_consumable_orders_facility_created_at
-     ON consumable_orders (facility_id, created_at DESC);
-   CREATE INDEX IF NOT EXISTS idx_loan_orders_facility_created_at
-     ON loan_orders (facility_id, created_at DESC);
-   CREATE INDEX IF NOT EXISTS idx_loan_returns_facility_created_at
-     ON loan_returns (facility_id, created_at DESC);
-   ```
-3. `SELECT refresh_schema_baseline_snapshot('YYYYMMDD');` を末尾に記載
-   - loan_returns テーブルに列を追加するが、テーブル新設・削除ではないため
-     `known-failure-patterns.md` の「publicスキーマのテーブルを追加/削除する場合のみ必須」ルール
-     を確認の上、呼び出し要否を最終判断すること
+#### Set C: リポジトリ層（Set B完了後）
+- **ファイル**: `src/lib/compatibilities/repository.ts`
+- **内容**:
+  - `listCompatibilities(db, { categoryId?: string, keyword?: string }): Promise<ProductCompatibility[]>`
+    → `product_compatibilities` を JOIN（categories, products as p1, products as p2）して取得。`created_at DESC` でソート。keyword は product1/product2 の name/jan/maker を `.ilike` の OR検索（パラメータバインド、raw SQL禁止）。
+  - `createCompatibility(db, input: ProductCompatibilityInput): Promise<ProductCompatibility>`
+    → 挿入前に `product_id_1 < product_id_2` の正規化処理（文字列比較で小さい方を `product_id_1` に入れる）。
+  - `deleteCompatibility(db, id: string): Promise<void>`
+    → 対象が存在しない場合は呼び出し元（API route）で404判定できるよう、削除件数0件をハンドリング可能な形で返す。
+  - `listProductsInCategory(db, categoryId: string): Promise<Product[]>`
+    → `SELECT DISTINCT p.* FROM products p JOIN distributor_products dp ON dp.product_id = p.id WHERE dp.category_id = ?` で、フォームの製品選択肢取得に使用。
+- **ページネーション閾値（人間レビューで決定）**: 初期実装はページネーションなし（全件取得）。`product_compatibilities` の総件数が**500件**を超えたら、ページネーション（LIMIT/OFFSET）導入を別issueで検討する。閾値到達の監視方法は本issueのスコープ外（別issueで検討）。
+- **テスト観点**:
+  - `createCompatibility` で同じペアを2回挿入すると 23505 エラー
+  - `createCompatibility` で `productId1 > productId2` を渡した場合に正規化されること（`product_id_1 < product_id_2` になること）
+  - `listCompatibilities` で `categoryId` 指定時に他カテゴリの行が含まれないこと
+  - `listCompatibilities` の keyword検索が product1/product2 双方の name/jan/maker に対して機能すること
+  - `deleteCompatibility` で存在しないIDを渡した場合の挙動（0件削除として判定可能なこと）
 
-**テスト観点**:
-- `supabase migration up` でエラーなく適用できる
-- `loan_returns` に `loan_order_id` 列が追加され、loan_orders への FK が効いている
-- loan_order_id = NULL で INSERT できる（既存行の後方互換）
+#### Set D: APIルート（Set C完了後）
 
----
+**GET/POST: `src/app/api/compat/route.ts`**
+- GET: `requireAuth` のみ（全認証ユーザーが読める）。クエリパラメータ: `categoryId?`, `keyword?`（最大100文字、超過は400）
+- POST: `requireAuth` → `resolveIsAdmin(db, user)` → isAdmin でなければ 403
+  - body: `ProductCompatibilityInput`
+  - バリデーション:
+    - `categoryId` / `productId1` / `productId2` は null・undefined・空文字列いずれも400
+    - `categoryId` / `productId1` / `productId2` はUUID形式チェック（不正形式は400、FK到達前に弾く）
+    - 自己参照チェック: 正規化前の生の値で `productId1 === productId2` を判定 → 400
+    - `listProductsInCategory(db, categoryId)` の結果集合に両IDが含まれるか検証 → 含まれなければ400
+    - 存在しない `categoryId` はFK違反を捕捉し「カテゴリが見つかりません」400
+    - `note` は最大500文字（超過は400）
+  - 重複: DB 23505 → 409「すでに登録済みです（順序問わず）。【製品A名】と【製品B名】は既に互換登録されています」（具体的なペア名を含める）
+  - TOCTOU（カテゴリ検証後に対象製品がカテゴリから外れる競合）はDBのUNIQUE/FK制約を最終防壁として割り切る
 
-#### Set B — 型定義追加（Set A 完了後）
+**DELETE: `src/app/api/compat/[id]/route.ts`**
+- `requireAuth` → `resolveIsAdmin(db, user)` → isAdmin でなければ 403
+- `deleteCompatibility`、対象が存在しなければ 404
 
-**触るファイル**:
-- `src/types/order.ts`（追記）
-
-**追加する型**:
-```typescript
-// 発注種別識別子
-export type OrderKind = 'case_order' | 'consumable_order' | 'loan_order' | 'loan_return'
-
-// 横断一覧用サマリ型
-export type OrderListItem = {
-  id: string
-  kind: OrderKind
-  facilityId: string
-  status: string      // 各種別のステータス値をそのまま文字列で保持
-  summary: string     // 手技名 / 消耗品 N 品目 など、UI 表示用の概要テキスト
-  createdAt: string
-  unreturned?: boolean  // loan_order のみ: 対応 loan_returns が 0 件なら true
-}
-
-// フィルタ条件型
-export type OrderListFilter = {
-  kind?: OrderKind
-  dateFrom?: string   // YYYY-MM-DD
-  dateTo?: string     // YYYY-MM-DD
-  keyword?: string
-}
-```
-
-また `LoanReturn` 型に `loanOrderId?: string` を追加:
-```typescript
-export type LoanReturn = {
-  // ... 既存フィールド
-  loanOrderId?: string  // Set A で追加した loan_order_id FK に対応
-}
-```
-
-**テスト観点**:
-- `tsc --noEmit` でコンパイルエラーなし
-
----
-
-#### Set C — Repository 層フィルタ拡張（Set B 完了後）
-
-**触るファイル**:
-- `src/lib/case-orders/repository.ts`（引数拡張）
-- `src/lib/consumable-orders/repository.ts`（引数拡張）
-- `src/lib/loan-orders/repository.ts`（引数拡張）
-- `src/lib/loan-returns/repository.ts`（引数拡張 + `loanOrderId` フィールド追加）
-- `src/lib/orders/repository.ts`（新規: 横断一覧取得）
-
-**各既存 repository の変更方針**:
-
-`listXxxOrders` の引数に `filter?: { dateFrom?: string; dateTo?: string; keyword?: string }` を追加。
-既存の呼び出し元は引数省略でそのまま動作する。
-
-```typescript
-// 追加クエリ例（case_orders）
-// WHY: created_at は timestamptz(UTC)だが、日付入力は施設の運用時間帯(JST)基準。
-//      UTC固定で扱うと日付境界が最大9時間ずれるため、+09:00を明示してJSTの一日として解釈する
-if (filter?.dateFrom) query = query.gte('created_at', `${filter.dateFrom}T00:00:00+09:00`)
-if (filter?.dateTo)   query = query.lte('created_at', `${filter.dateTo}T23:59:59+09:00`)
-if (filter?.keyword) {
-  query = query.ilike('procedure_name', `%${filter.keyword}%`)
-  // items の JAN は後段の JS 側フィルタで補完（SELECT * で items を取得済みのため）
-}
-```
-
-keyword の種別ごとの対象列:
-- `case_orders`: `procedure_name`、取得した `case_order_items[].jan` を JS でフィルタ
-- `consumable_orders`: `.select('*, consumable_order_items(*, consumables(name, jan))')` で consumables をネストJOINして取得し、`consumables.name` / `consumables.jan` を JS でフィルタ（`summary` にも消耗品名を使う。既存の `listConsumableOrders` の戻り値には影響しない別クエリとして実装する）
-- `loan_orders`: `procedure_name`, `maker`、取得した `loan_order_items[].name` を JS でフィルタ
-- `loan_returns`: 取得した `loan_return_items[].jan` を JS でフィルタ
-
-**新規 `src/lib/orders/repository.ts`**:
-
-```typescript
-export async function listOrders(
-  db: SupabaseClient,
-  facilityId: string,
-  filter: OrderListFilter,
-  limit = 50,
-  offset = 0
-): Promise<OrderListItem[]>
-```
-
-内部実装:
-- `filter.kind` が指定された場合は該当種別のみをクエリ（残りはスキップ）
-- **性能上の上限（v1スコープ）**: 各テーブルへのクエリは `ORDER BY created_at DESC LIMIT 500` を必ず付与してから
-  取得する（4テーブル合計で最大2000行）。全件取得はしない。取得した最大2000行をメモリ内で
-  createdAt 降順にマージソートし、`offset` から `offset + limit` 件を切り出す。
-  施設単位の発注件数が2000件を大きく超える運用が確認された場合は、cursor-based pagination か
-  UNION ビューへの置き換えを別issueで検討する（本issueのスコープ外）
-- `unreturned` フラグ: loan_orders クエリ時に `.select('*, loan_returns!left(id)')` で LEFT JOIN し、
-  `loan_returns` が空かつ `status === 'submitted'` なら `unreturned: true`
-- `summary` 生成:
-  - `case_order`: `procedureName`
-  - `consumable_order`: 取得した `consumable_order_items[].consumables.name` を `、` 区切りで連結（例: `シリンジ、ガーゼ`）。1件も名前が取れない場合のみ `消耗品 ${items.length} 品目` にフォールバック
-  - `loan_order`: `${procedureName}（${maker}）`
-  - `loan_return`: `返却 ${new Date(returnDatetime).toLocaleDateString('ja-JP')}`
-- **offsetのリセット**: `kind` / `dateFrom` / `dateTo` / `keyword` のいずれかが前回呼び出しと異なる場合、
-  呼び出し元（UI）が `offset` を 0 にリセットしてから呼び出す。`listOrders` 自体は渡された `offset` を
-  そのまま使うのみで、リセット判定はUI側（Set E）の責務とする
+**GET: `src/app/api/compat/products/route.ts`**（フォームの製品候補取得用）
+- `requireAuth`、クエリパラメータ `categoryId` 必須（UUID形式チェック、不正・欠落は400）
+- `listProductsInCategory` 呼び出し
+- レスポンス: `{ products: Product[] }`
+- 新設理由: 既存 `/api/products` のGET仕様変更によるクライアント影響を避け、製品候補取得の責務を`/compat`ドメインに閉じるため
 
 **テスト観点**:
-- `dateFrom` / `dateTo` が JST の日境界で正しく絞り込みに反映される（例: `dateTo=2026-07-13` を指定した場合、`2026-07-13T23:59:59+09:00` = UTCで`2026-07-13T14:59:59Z`より前の行のみ含まれる）
-- `keyword` が各種別の対象列に対して機能する（consumable_orderは消耗品名でも一致する）
-- `kind` 指定時は指定種別のみ返す
-- `unreturned: true` になる行 = submitted かつ loan_returns が 0 件の loan_order のみ
-- 各テーブルへのクエリに `LIMIT 500` が付与されている
-- 既存の `listCaseOrders` 等がデフォルト引数で動作する
+- POST 一般ユーザー → 403
+- DELETE 一般ユーザー → 403
+- POST/DELETE/GET(products) 未認証 → 401
+- POST 自己参照 → 400
+- POST カテゴリ外製品 → 400
+- POST 不正UUID形式（categoryId/productId1/productId2）→ 400
+- POST note 501文字 → 400
+- POST 重複 → 409（レスポンスに製品A名・製品B名を含む）
+- DELETE 存在しないID → 404
+- GET /api/compat/products の categoryId 欠落・不正UUID → 400
+
+#### Set E: UIコンポーネント（Set D完了後）
+
+**並列グループ宣言（E-1 と E-2 は互いに独立、並列実装可）**
+
+**E-1: `src/components/compat/CompatList.tsx`**
+- props: `{ items: ProductCompatibility[]; isAdmin: boolean; onDelete: (id: string) => void; hasFilter: boolean }`
+- 表示カラム: カテゴリ名 / 製品A（名称・JAN・メーカー）/ 製品B（名称・JAN・メーカー）/ 備考 / 登録日
+- 0件時の空状態メッセージを3パターンで出し分け（`items.length === 0` かつ `hasFilter` で判定）:
+  - `!hasFilter && isAdmin`: 「互換品が登録されていません」＋「＋互換品を追加」導線
+  - `!hasFilter && !isAdmin`: 「互換品はまだ登録されていません」
+  - `hasFilter`: 「条件に一致する互換品がありません」
+- `isAdmin=true` 時のみ削除ボタン表示。削除ボタン押下で確認ダイアログ（対象製品名・JAN・メーカーを含む具体的文言）を表示
+- 既存 `ProductList` のテーブルスタイルを踏襲
+- 一覧再取得中はスケルトンまたはスピナーを表示
+
+**E-2: `src/components/compat/CompatForm.tsx`**
+- props: `{ categories: Category[]; isAdmin: boolean; onSuccess: () => void }`
+- 内部 state: `categoryId`, `productId1`, `productId2`, `note`, `productsInCategory`, `isLoadingProducts`
+- `categoryId` 変更時に `/api/compat/products?categoryId=xxx` を呼び `productsInCategory` を更新。取得中は製品Select近傍にインラインスピナーを表示し、Selectを一時disabledにする
+- カテゴリ未選択時は製品A・B の Select を disabled にし、プレースホルダー「先にカテゴリを選択してください」を表示
+- 選択肢ラベル: `{name}（JAN: {jan}、メーカー: {maker ?? '不明'}）` 形式（一覧テーブルと表記統一）
+- 製品Bの選択肢からは製品Aで選択済みの製品を除外（自己参照防止）。送信時にも `productId1 === productId2` を再検証
+- 送信成功後、フォームをクリアする（モーダル使用時は閉じる）。`onSuccess()` を呼んで一覧を再取得
+- 重複エラー（409）・ネットワークエラー時は画面上部にエラーメッセージを表示
+
+#### Set F: ページ統合（Set E完了後）
+
+**`src/app/compat/page.tsx`**（既存の Coming Soon プレースホルダを全面上書き）
+- 純 `'use client'` + `useReducer(refreshKey)` + `useEffect(fetch)` 構成（`products/page.tsx` と同型。Server Component併用はしない）
+- カテゴリ一覧は `useEffect` で `/api/categories` から取得
+- Admin判定: `requireAuth(db)` + `resolveIsAdmin(db, user)`（クライアント側で判定が必要な場合は、既存の管理者判定を返すAPI/propの取得パターンを既存コードから確認して踏襲する）
+- `categoryId`・`keyword` のフィルタ状態はコンポーネント内 state で保持（URL searchParams 連動・`useSearchParams()` は使わないため `<Suspense>` ラップは不要）
+- `CompatForm`（`isAdmin=true` の場合のみ表示）と `CompatList` を配置
+- ネットワークエラー時は `setError` で画面上部にエラーメッセージ表示（`products` ページと同一パターン）
+
+**テスト観点（Set E・F共通）**:
+- 一般ユーザーには「互換品を追加」フォームが表示されない
+- 管理者の登録フロー一連が動作する（カテゴリ選択→製品A/B選択→登録→一覧反映→フォームクリア）
+- 重複エラー時に具体的なペア名を含むメッセージが表示される
+- 削除確認ダイアログに対象製品名・JAN・メーカーが含まれる
+- 空状態メッセージが管理者/一般ユーザー/フィルタ結果で出し分けられる
+- ネットワークエラー時に画面が壊れずエラーメッセージが表示される
+
+#### Set G: E2Eテスト（Set F完了後）
+- **ファイル**: `e2e/compat.spec.ts`（新規、既存 `e2e/products.spec.ts` を踏襲）
+- 最低3シナリオ: ①一般ユーザーに「互換品を追加」ボタンが表示されない ②管理者の登録フロー ③重複登録時のエラー表示
+- ダミー施設・ダミー製品のみ使用（`docs/agents/common.md` のデータ衛生ルール準拠）
 
 ---
 
-#### Set D — API route 新設 + 既存バリデーション修正（Set C 完了後）
+### 並列グループ宣言（Phase 3 実装時の参考）
 
-**触るファイル**:
-- `src/app/api/orders/route.ts`（新規）
-- `src/app/api/case-orders/route.ts`（limit/offset バリデーション修正）
-- `src/app/api/consumable-orders/route.ts`（limit/offset バリデーション修正）
-- `src/app/api/loan-orders/route.ts`（limit/offset バリデーション修正）
-- `src/app/api/loan-returns/route.ts`（limit/offset バリデーション修正）
-
-注: Set D の既存 route.ts 修正（バリデーション追加のみ）は Set C と独立しているため、
-Wave 3 で Set C と並列実施も可能。ただし新規 `/api/orders/route.ts` は Set C 完了を要する。
-
-**`/api/orders` GET パラメータ**:
-
-| パラメータ | 型 | 必須 | 説明 |
-|---|---|---|---|
-| `facility_id` | string (UUID) | 必須 | 施設 ID |
-| `kind` | `case_order` / `consumable_order` / `loan_order` / `loan_return` | 任意 | 種別フィルタ |
-| `date_from` | YYYY-MM-DD | 任意 | 開始日（created_at >= date_from） |
-| `date_to` | YYYY-MM-DD | 任意 | 終了日（created_at <= date_to 23:59:59） |
-| `keyword` | string | 任意 | 部分一致検索 |
-| `limit` | number | 任意 | デフォルト 50、上限 200 |
-| `offset` | number | 任意 | デフォルト 0 |
-
-**limit/offset バリデーション（参考実装: `/src/app/api/news/route.ts`）**:
-```typescript
-const rawLimit = Number(params.get('limit') ?? '50')
-const rawOffset = Number(params.get('offset') ?? '0')
-if (!Number.isFinite(rawLimit) || rawLimit < 1 || rawLimit > 200)
-  return apiError('limit は 1〜200 の整数で指定してください', 400)
-if (!Number.isFinite(rawOffset) || rawOffset < 0)
-  return apiError('offset は 0 以上の整数で指定してください', 400)
-```
-
-**認可**: `requireAuth` + `requireFacilityAccess(facility_id)` — 既存パターン踏襲
-
-**レスポンス**: `{ orders: OrderListItem[] }`
-
-**テスト観点**:
-- `facility_id` なし → 400
-- 他施設の `facility_id` → 403
-- `limit=NaN` / `limit=-1` / `limit=9999` → 400
-- `kind=case_order` → case_orders のみが返る
-- `date_from` / `date_to` / `keyword` の絞り込みが機能する
-
----
-
-#### Set E — UI ページ・コンポーネント（Set D 完了後）
-
-**触るファイル**:
-- `src/app/orders/page.tsx`（新規）
-- `src/components/orders/OrderHistoryTable.tsx`（新規）
-- `src/components/orders/OrderHistoryFilters.tsx`（新規）
-- グローバルナビゲーションファイル（実装前に `src/components/` を grep してパスを特定すること）
-
-**`src/app/orders/page.tsx`**:
-- `useSearchParams` を使うため Suspense でラップ必須（既知パターン）
-```typescript
-'use client'
-import { Suspense } from 'react'
-
-export default function OrdersPage() {
-  return (
-    <Suspense fallback={<p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>}>
-      <OrdersPageInner />
-    </Suspense>
-  )
-}
-```
-
-**タブ実装方針**:
-- タブ状態は URL searchParams（`?kind=loan_order`）で管理 → ブラウザバック対応
-- `useSearchParams` で現在の kind を読み、タブ UI に反映
-- タブ変更時は `router.push` で URL を更新し、`offset` パラメータを URL から削除する（先頭ページに戻す）
-
-**フィルタ実装方針**:
-- `OrderHistoryFilters` コンポーネントに `dateFrom`, `dateTo`, `keyword` の入力欄
-- 変更時に `router.push` で URL を更新し、`offset` パラメータを URL から削除する（先頭ページに戻す）
-- 「クリア」ボタンで全 searchParams を削除（`offset` も含めて全リセット）
-
-**データ取得**:
-- `useEffect` 内で `/api/orders?facility_id=...` を fetch
-- `facility_id` の取得方法: 既存の `/facilities/[id]/...` ページが `use(params)` で facility id を取得しているパターンとは異なり、`/orders` はグローバルページのため、セッションまたはコンテキストから施設 ID を取得する方法を既存コードで確認すること（`src/components/` や `src/lib/supabase/` を参照）
-
-**一覧表示列**:
-
-| 列 | case_order | consumable_order | loan_order | loan_return |
-|---|---|---|---|---|
-| 種別バッジ | 症例発注 | 消耗品発注 | 短貸発注 | 短貸返却 |
-| 概要 | 手技名 | 消耗品 N 品目 | 手技名・メーカー | 返却日時 |
-| ステータス | 下書き / 提出済 | 下書き / 提出済 | 下書き / 提出済 | 下書き / 返却済 |
-| 未返却 | — | — | バッジ（該当時） | — |
-| 作成日 | createdAt | createdAt | createdAt | createdAt |
-
-**ステータスラベルマップ**:
-```typescript
-const STATUS_LABEL: Record<string, string> = {
-  draft: '下書き',
-  submitted: '提出済',
-  returned: '返却済',
-}
-```
-
-**テスト観点**:
-- `useSearchParams` が Suspense の内側にある
-- タブクリックで URL が更新され、データが再取得される
-- `unreturned: true` の行に「未返却」バッジが表示される
-- `unreturned: false / undefined` の行にバッジが表示されない
-- エラー時にエラーメッセージが表示される（画面が壊れない）
-- モバイル幅（375px）でテーブルが水平スクロールする
-- キーボードでタブ切り替えができる
-
----
-
-### 並列グループ宣言
-
-```
-Wave 1（順次・必須前提）:
-  - Set A (DB マイグレーション)
-
-Wave 2（Set A 完了後）:
-  - Set B (型定義)
-    触るファイル: src/types/order.ts
-
-Wave 3（Set B 完了後・以下2セットは並列可能）:
-  - Set C (Repository 拡張)
-    触るファイル: src/lib/case-orders/repository.ts
-                  src/lib/consumable-orders/repository.ts
-                  src/lib/loan-orders/repository.ts
-                  src/lib/loan-returns/repository.ts
-                  src/lib/orders/repository.ts（新規）
-
-  - Set D-fix（既存バリデーション修正・Set C と独立）
-    触るファイル: src/app/api/case-orders/route.ts
-                  src/app/api/consumable-orders/route.ts
-                  src/app/api/loan-orders/route.ts
-                  src/app/api/loan-returns/route.ts
-
-Wave 4（Set C 完了後）:
-  - Set D-new（新規 /api/orders ルート）
-    触るファイル: src/app/api/orders/route.ts（新規）
-
-Wave 5（Set D 完了後）:
-  - Set E（UI ページ・コンポーネント）
-    触るファイル: src/app/orders/page.tsx（新規）
-                  src/components/orders/OrderHistoryTable.tsx（新規）
-                  src/components/orders/OrderHistoryFilters.tsx（新規）
-                  グローバルナビゲーションファイル（パスは実装前に確認）
-```
-
----
-
-### 実装スコープ外（この issue では対応しない）
-
-| 項目 | 理由 |
-|---|---|
-| 発注詳細画面 | issue #20 スコープ外。別 issue 推奨 |
-| loan_return_items での品目単位の返却追跡 | DB 設計変更を伴う。別 issue 推奨 |
-| 既存4施設別ページとの統合 | UX 整合の判断が必要。別 issue 推奨 |
-| loan_returns repository の atomic RPC 移行 | 調査で発見したバグだが本 issue スコープ外。別 issue 起票推奨 |
-
----
-
-## Part 3 — 仕様レビュー前セルフチェック（AI用・レビュー不要）
-
-### 新型・enum・statusフィールドの判定基準確認
-
-**OrderKind**（新規 enum）:
-
-| 値 | 意味 | 判定基準 |
+| グループ | セット | 触るファイル |
 |---|---|---|
-| `case_order` | 症例発注 | case_orders テーブルから取得した行 |
-| `consumable_order` | 消耗品発注 | consumable_orders テーブルから取得した行 |
-| `loan_order` | 短貸発注 | loan_orders テーブルから取得した行 |
-| `loan_return` | 短貸返却 | loan_returns テーブルから取得した行 |
+| G1（直列ブロッカー）| A | `supabase/migrations/<実装日>_create_product_compatibilities.sql` |
+| G2（G1後）| B | `src/types/compatibility.ts` |
+| G3（G2後）| C | `src/lib/compatibilities/repository.ts` |
+| G4（G3後）| D | `src/app/api/compat/route.ts`, `src/app/api/compat/[id]/route.ts`, `src/app/api/compat/products/route.ts` |
+| G5（G4後、E-1とE-2は並列）| E-1 | `src/components/compat/CompatList.tsx` |
+| G5（G4後、E-1とE-2は並列）| E-2 | `src/components/compat/CompatForm.tsx` |
+| G6（G5後）| F | `src/app/compat/page.tsx` |
+| G7（G6後）| G | `e2e/compat.spec.ts` |
 
-下流の反応:
-- タブ UI: OrderKind の各値でタブ表示をフィルタ。全値を網羅したタブが存在する（すべて + 4種別 = 5タブ）
-- API `kind` パラメータ: 値が一致する種別のみクエリ。一致しない値は 400 を返す
-- `OrderHistoryTable`: 種別バッジの色・ラベルを kind で分岐
+---
 
-**status（既存値・種別依存）**:
-- `draft` / `submitted`: case_orders / consumable_orders / loan_orders
-- `draft` / `returned`: loan_returns
-- 下流: `OrderListItem.status` に文字列格納、`STATUS_LABEL` マップで日本語変換
-- 既存 status 値を変更しないため、他の下流（既存施設別ページ）への影響なし
+### スコープ外（今回あえて対応しない）
 
-**unreturned フラグ**:
-
-| 値 | 判定条件 | UI の反応 |
-|---|---|---|
-| `true` | `loan_order.status === 'submitted'` かつ loan_returns が 0 件 | 「未返却」バッジを表示 |
-| `false` または `undefined` | それ以外すべて（draft / 返却済 / loan_order 以外の種別） | バッジなし |
-
-下流: `OrderHistoryTable` コンポーネントのみが消費。stats・レポート・後続フェーズへの影響なし。
-
-### 包含・除外リスト確認
-
-タブ数: 5（すべて・症例発注・消耗品発注・短貸発注・短貸返却）= OrderKind の4種別 + 全体タブ 1 件 = 計5件。本文「タブ: 「すべて」「症例発注」「消耗品発注」「短貸発注」「短貸返却」」の記述と一致。
-
-### 既存ロジック影響確認
-
-- 既存 `/api/case-orders` 等の limit/offset バリデーション修正: 呼び出し元の施設別ページは `limit`/`offset` をデフォルト省略で呼ぶため影響なし（デフォルト値 50 / 0 は有効範囲内）
-- `listCaseOrders` 等への `filter` 引数追加: オプショナルなため既存呼び出し元に変更不要
-- `LoanReturn` 型への `loanOrderId?: string` 追加: オプショナルなため既存コンポーネント（`LoanReturnModal.tsx`）に変更不要
+- 既存 API の `requireAdmin` 欠落修正（`products`/`categories`/`distributor-products`/`facilities` の PUT/DELETE）— 別issue化済み（人間レビューで決定）
+- `login/page.tsx` の Suspense fallback 欠落 — 別issue化済み（人間レビューで決定）
+- 互換品の閲覧権限を施設スコープにすること — 人間レビューで「不要」と決定済み。今回はテナント非分離の前提で進める
+- ページネーション（LIMIT/OFFSET・cursor・無限スクロール） — 500件超過時に別issueで検討（人間レビューで決定した閾値）
+- `distributor_products` 削除時の `product_compatibilities` 孤立レコード対策（直接FKなし） — 表示はアプリ層フィルタで担保し、DB整合性上の孤立は許容。恒久対応は別issue
+- キーワード検索の `pg_trgm`/GIN インデックス導入 — マスタ件数が少ない前提のため初期実装では未導入。件数増大時に別issueで検討
