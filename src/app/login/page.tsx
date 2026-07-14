@@ -107,7 +107,11 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#EDEADE' }} />
+      }
+    >
       <LoginForm />
     </Suspense>
   )
