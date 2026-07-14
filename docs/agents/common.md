@@ -8,6 +8,7 @@
 - ドメイン用語（facility・price等が何であるか）は [`domain.md`](./domain.md) を参照
 - 各ルールが「なぜ」その設計になったかは [`decisions.md`](./decisions.md) を参照
 - 過去に実際に再発した実装ミスのチェックリストは [`known-failure-patterns.md`](./known-failure-patterns.md) を参照（レビュー・Sweep系エージェントは必読）
+- 検知手段のないルール（自然言語のみで強制力の無いルール）の一覧は [「検知手段のないルールの棚卸し（issue #339）」](#検知手段のないルールの棚卸しissue-339) を参照
 
 ## Next.js バージョンに関する注意
 
@@ -97,7 +98,21 @@ any code. Heed deprecation notices.
 - これも loop-observability と同じ構造的限界を持つ：**エージェントへの自然言語指示に
   依存しており強制力がない**（オーケストレーター側から機械的に書き込ませることはできない）。
   つまり「進捗が表示されない」ことは「本当に止まっている」のか「そもそも記録し忘れている」のか
-  区別できない。記録漏れの検知（loop-observability同様の仕組み）は今後の課題として残っている。
+  区別できない。
+- **記録漏れの検知（issue #339、loop-observabilityと同型の仕組み）は実装済み。**
+  `aidd-phase1.js` / `aidd-phase2.js` を実行する前後で、必ず以下を行うこと。
+  1. 実行前に `jq -s '[.[] | select(.status == "done" or .status == "failed")] | length' logs/agent-progress.jsonl` で件数を記録する（ファイルが無ければ0）
+  2. フロー完了後、戻り値の `stats.expectedAgentProgressRecords` を確認する
+  3. `scripts/check-agent-progress-gap.sh --before <1の値> --expected <2の値>` を実行する
+  4. `hasGap: true`（exit 1）になった場合、記録漏れとして扱い、issue化するか原因を調査する
+  - 判定ロジックは `.claude/workflows/lib/agent-progress-gap.js`（loop-observability-gap.jsの
+    computeGapを再利用）、期待件数の算出は `.claude/workflows/lib/agent-progress-expectation.js`
+    （`aidd-phase2.js` 側はWorkflow DSL制約によりインライン複製）を参照。
+  - **これは件数の一致だけを見ており、記録内容の正しさ（本当にそのagentが完了したか、
+    fabricationでないか）までは保証しない。** また `aidd-1-1-deep-task.js`（深掘り調査）は
+    未対応のまま残っている（Sweep/Completeness Criticの一部のみが進捗記録対象agentTypeで、
+    Find/Adversarial Verify/Judge Panel等の大半がそもそも進捗記録の対象外agentTypeで呼ばれて
+    いるため、既存の期待値カウント方式をそのまま適用できない）。
 
 ## 引き継ぎフォーマット
 
@@ -140,7 +155,6 @@ any code. Heed deprecation notices.
 
 | ルール | 所在 | 備考 |
 |---|---|---|
-| サブエージェント進捗記録（`log-agent-progress.sh`呼び出し） | 本ファイル「サブエージェント進捗の可視化」 | 記録漏れ検知は未実装（優先度1候補） |
 | `aidd-phase1-router`を入口に使うこと自体（TRI/RISK判定の実施） | 本ファイル「TRI/RISK 機械判定基準」 | 判定ロジック自体は機械的だが、routerを経由せず直接実装に入れば判定がまるごとスキップされる（優先度2候補） |
 | 引き継ぎフォーマットの実施 | 本ファイル「引き継ぎフォーマット」 | 既存Stop hook（`doc-suggest-check.sh`等）の拡張候補（優先度3候補） |
 | ブランチ運用ルール（着手前PR確認・`origin/main`起点でのbranch作成） | 本ファイル「ブランチ運用ルール」 | 過去に古いローカル`main`起点でbranch作成し手戻りが発生した実績あり |
@@ -162,3 +176,4 @@ any code. Heed deprecation notices.
 | `supabase/migrations/` | DBマイグレーション |
 | [`docs/agents/run-manifest.md`](./run-manifest.md) | AIDDフローのspecHash/baseCommit突合用Run Manifestのスキーマ |
 | `scripts/log-agent-progress.sh` / `scripts/show-agent-status.sh` | サブエージェント進捗の記録・一覧表示（issue #18） |
+| `scripts/check-agent-progress-gap.sh` | agent-progress記録漏れの機械検知（issue #339） |

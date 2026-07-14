@@ -82,6 +82,10 @@ return {
     // findingCount: 完遂できた調査のうち、実際に指摘が見つかった本数(status/detailの2軸判定。docs/agents/agent-result-schema.md参照)
     findingCount: results.filter(r => r?.status === 'pass' && r?.detail !== '指摘なし').length,
     blockedCount: results.filter(r => r?.status === 'blocked').length,
+    // issue #339: sweep-ui/data/db/typesの4体は全てdocs/agents/common.md「サブエージェント進捗の
+    // 可視化」の進捗記録対象agentType（.claude/workflows/lib/agent-progress-expectation.js参照）。
+    // capture-base-commitは対象外のため含めない。
+    expectedAgentProgressRecords: 4,
   },
   runManifestSeed: {
     baseCommit,
