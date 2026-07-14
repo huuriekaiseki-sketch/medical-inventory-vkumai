@@ -132,8 +132,15 @@ run_verifier() {
     printf '%s' "$PROMPT" | eval "$VERIFY_CLAIMS_VERIFIER_CMD"
     return $?
   fi
+  # --setting-sources "": ユーザー/プロジェクトのsettings.jsonを一切読み込ませない。
+  # これが無いと、このサブプロセス自身がStopイベントでStop hook一式(このverify-claims.sh自身や
+  # グローバルのclaude_stop_notify.sh等)を継承・再発火させ、子プロセスが際限なく増殖する
+  # (2026-07-14に実際に発生、約15分で343セッションが生成されアラート音が鳴り続けた)。
+  # --no-session-persistence: 検証専用の使い捨てセッションのため、transcriptを永続化しない。
   printf '%s' "$PROMPT" | claude -p --model "$MODEL" \
-    --allowedTools "Read,Grep,Glob,Bash(git diff*),Bash(git log*),Bash(git show*),Bash(cat *),Bash(grep *),Bash(find *)"
+    --allowedTools "Read,Grep,Glob,Bash(git diff*),Bash(git log*),Bash(git show*),Bash(cat *),Bash(grep *),Bash(find *)" \
+    --setting-sources "" \
+    --no-session-persistence
 }
 
 # ポータブルなタイムアウト実装（macOSにGNU coreutilsのtimeoutが無い前提で、
