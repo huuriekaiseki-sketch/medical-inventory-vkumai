@@ -1,332 +1,474 @@
-# 機能仕様書 — issue #305: PRを介さない本番スキーマ変更の定期ドリフト検知
+# 機能仕様書: 発注履歴ページ新設（issue #20）
 
-> ステータス: **承認済み（停止①クリア）— Phase 3実装へ**
-> 作成日: 2026-07-13 / 承認日: 2026-07-13
-> 由来: Phase 1深掘り調査（Sweep→Draft Spec→Adversarial Verify→Judge Panel→Synthesize、98エージェント）の統合提案
-> 承認内容: 5点の判断事項すべて提案通り（v1スコープ3種のみ・GitHub Issueのみ通知・既存ドリフト封印・drift_alert_view anon公開・pg_cron有効化）で承認
+作成日: 2026-07-13
+ステータス: ドラフト（人間レビュー待ち、Adversarial Verifyのcritical指摘4件を反映済み）
 
 ---
 
-## Part 1 — 仕様（★人間がレビューする部分）
+## Part 1 — 仕様（人間レビュー用）
 
-### 背景・課題
+### 概要
 
-issue #30でSupabase GitHub Integrationを有効化したが、これはPR/ブランチトリガーでのみ動作する。SQL Editor等でPRを介さず直接本番DBに変更が入るケース（`rls_auto_enable`イベントトリガーが実際にPRを介さず入っていた事故パターン、`20260707000001_capture_rls_auto_enable_event_trigger.sql`参照）は、次にPRが発生するまで検知が遅延する。
+施設内の発注履歴（症例発注・消耗品発注・短貸発注・短貸返却）を 1 つのページで横断して確認できるようにする。現在は種別ごとに別ページへ移動しないと履歴を確認できず、横断比較・検索ができない状態を解消する。
 
-### 何ができるようになるか
-
-SQL Editor等でPRを介さず本番DBのスキーマが直接変更された場合、**翌日までに自動でGitHub Issueが作成され**、気づけるようになる。具体的には以下の3種類の変更を検知する（v1スコープ）：
-
-1. **テーブルのRLS（行レベルセキュリティ）が無効化された**（最も危険な変更。他施設のデータが見えてしまう等の事故に直結する）
-2. **想定外のテーブルが追加された**
-3. **既存のテーブルが削除された**
-
-検知は毎日1回、自動で実行される。ドリフトがなければ何も起きない（誤通知なし）。
-
-### 採用する方式（v1・最小スコープ）
-
-- **DB内部の関数（`check_schema_drift()`）が毎日1回、自動実行**され、上記3種のドリフトをチェックしてログテーブルに記録する
-- **GitHub Actionsが毎日そのログを確認**し、未対応のドリフトがあれば自動でGitHub Issueを作成する
-- 本番DBへの接続情報（パスワード・アクセストークン）はGitHub Secretsに一切置かない（既存方針を継続。`docs/agents/decisions.md`参照）
-- Edge Function・外部HTTP通信は使わない（v1では省略し、実績のあるDB内部完結の仕組みに絞る）
-
-### 今回やらないこと（v2以降）
-
-- 関数の追加・削除・シグネチャ変更の検知
-- カラムの追加・削除の検知
-- イベントトリガーの追加・削除の検知
-- 制約（外部キー・一意制約・チェック制約）・インデックスの変更検知
-- RLSポリシー個別の削除検知（テーブルのRLS有効/無効のみを見る。ポリシーの中身までは見ない）
-- Slack通知等、GitHub Issue以外の通知経路
-
-理由：これらを最初から全部やろうとすると実装・検証コストが跳ね上がり着手が遅れる。まずセキュリティ影響が最大の3種（RLS無効化・テーブル追加・削除）を確実に検知できる状態を最速で作り、対象を広げるのは次のissueで行う。
-
-### 操作の流れ（人間が見るもの）
-
-1. 何もしなくてよい。毎日自動でチェックが走る
-2. ドリフトが検知されると、GitHub Issueが自動作成される（ラベル: `schema-drift`, `bug`）📸
-3. Issueには「何が」「いつ検知されたか」が書かれている
-4. 対応（マイグレーション作成 or 意図した変更なら追認）した後、次回チェックでドリフトが消えていれば自動でIssueがクローズされる
-
-> 📸 本機能はブラウザ画面を伴わない自動処理（DB関数 + GitHub Actions）のため、動作確認はGitHub Issue作成の実物とAction実行ログで行う。E2E（Playwright）のスクリーンショット撮影ポイントはない。
-
-### 受け入れ条件（チェックリスト）
-
-#### 検知の正確性
-
-- [x] ローカルSupabaseで `SELECT * FROM check_schema_drift();` を実行し、ドリフトがない状態でゼロ行が返る（`db reset`直後に実測確認済み）
-- [x] SQL Editorで `CREATE TABLE public.zz_test_drift (id uuid);` を実行後に再実行すると、`table_added` の1行が検知される（実測確認済み。後片付け済み）
-- [x] SQL Editorで既存テーブルの `ALTER TABLE ... DISABLE ROW LEVEL SECURITY;` を実行後に再実行すると、`rls_disabled` の1行が検知される（実測確認済み）
-- [x] baseline snapshotに存在するテーブルをSQL Editorで `DROP TABLE` すると、`table_removed` の1行が検知される（`case_order_items`で実測確認済み。確認後`db reset`で復元）
-- [x] 同じドリフトが未解決のまま複数回チェックが走っても、ログに重複して記録されない（冪等性）（`record_schema_drift()`を2回連続実行し重複なしを実測確認済み）
-- [x] `schema_drift_log` / `schema_baseline_snapshots` テーブル自体が削除された場合、`check_schema_drift()` の実行がエラーとして失敗し、その失敗がpg_cronの実行履歴に残る（`schema_drift_log`を実際にDROPして例外発生を実測確認済み）
-
-#### GitHub Issue連携
-
-> 以下4項目のロジック自体は`scripts/schema-drift-reconcile.test.sh`（gh CLIをスタブ化した回帰テスト、リポジトリにコミット済み・実行して4アサーション全通過を確認済み）で検証済み。実際のSupabase本番環境に対する動作確認は、本番プロジェクト（`dddwaoooqzrtlbtcnwso`）が既存Secrets `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` と一致することを確認できたため、新規Secrets登録は不要と判断し、ワークフロー側をこの既存Secrets参照に変更した。`workflow_dispatch`での実地確認は本変更後に実施する。
-
-- [x] 未解決ドリフトが1件以上ある状態でGitHub Actionsを実行すると、`schema-drift`・`bug`ラベル付きのIssueが作成される（ロジックはテストで検証済み。本番環境での実地確認は上記の通り未実施）
-- [x] 既にIssueが作成済みの未解決ドリフトについては、再実行してもIssueが重複作成されない（タイトルベースの突合ロジックをテストで検証済み）
-- [x] ドリフトが解消された後の実行で、対応するIssueが自動でクローズされる（テストで検証済み）
-- [x] GitHub Actions用のトークンは標準の`GITHUB_TOKEN`（`issues:write`権限のみ）を使い、個人アクセストークンの発行・管理は不要である（`permissions: issues: write`のみ宣言、PAT不使用）
-
-#### セキュリティ
-
-- [x] 本番DBの接続パスワード・Service Role Key・Supabase Access TokenはGitHub Secretsに一切登録しない（既存の`NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`の2つのみを再利用。新規Secrets登録は行わない。ワークフローファイルにコメントで明記）
-- [x] GitHub Actionsが読み取るビュー（`drift_alert_view`）はanon keyで読める設計だが、公開される情報はドリフトの種類・対象オブジェクト名・検知日時のみで、それ以上の詳細情報（`detail`列の中身）は公開されない（実装確認済み）
-- [x] `check_schema_drift()`はservice_roleのみ実行可能（GRANT EXECUTEがservice_roleに限定されている）（実装確認済み）
-
-#### 運用
-
-- [x] テスト専用Supabase環境ではこのスケジュールチェックは動作しない（本番環境限定）（`schedule`/`workflow_dispatch`のみでPRトリガーなし。構造的にテスト/PR環境では実行されない）
-- [x] `docs/agents/decisions.md` に本設計（Edge Function不使用・GitHub Actions日次ポーリング方式を選んだ理由、および実装時に発覚したrecord_issue_url()矛盾の解決）が追記される
+URL: `/orders`（グローバルナビゲーションからアクセス、施設ログイン後に表示）
 
 ---
 
-### 判断が必要な点（レビュー時に確認）
+### できるようになること（利用者目線）
 
-1. **pg_cron拡張の有効化を承認するか** — Supabase Dashboard → Database → Extensionsから有効化する。DB内部スケジューラとして必須。無効化できない/したくない場合は、GitHub Actions側からRPC経由で`check_schema_drift()`を直接呼ぶ代替方式に変更する（フォールバックとして実装計画には両方含める）
-2. **v1の検知スコープ（RLS無効化・テーブル追加・テーブル削除の3種のみ）で妥当か** — 関数・カラム・トリガー等はv2に先送りするが、これで最初の一歩として十分な価値があるか
-3. **通知先はGitHub Issueのみで確定してよいか**（Slack等は今回対象外）
-4. **本番の「既存の未記録ドリフト」の扱い** — 本仕様の初回マイグレーション適用時点のテーブル一覧を「あるべき状態」としてそのまま封印する設計にする（過去に本当にドリフトしていたものがあっても、そこは合格ラインとして扱われる）。適用前に本番の棚卸しを別途行うべきか、それともこのまま封印してよいか
-5. **`drift_alert_view`をanon keyで公開すること**への承認 — ドリフト種別・対象オブジェクト名・検知日時が匿名で読み取り可能になる（詳細情報は非公開）。この程度の情報公開は許容できるか
+1. **4種別の発注を1ページで一覧できる**
+   - 症例発注（手術・処置で使用した医療材料の発注）
+   - 消耗品発注（施設備品・消耗品の発注）
+   - 短貸発注（メーカーから一時的に借用する機器・材料の発注）
+   - 短貸返却（借用品の返却記録）
+
+2. **種別タブで表示を切り替えられる**
+   - タブ: 「すべて」「症例発注」「消耗品発注」「短貸発注」「短貸返却」
+   - タブ選択で一覧がフィルタされる
+
+3. **期間・キーワードで絞り込みできる**
+   - 開始日・終了日（created_at ベースの範囲指定、カレンダー UI）
+   - キーワード（製品名・JAN・手技名などに対するテキスト検索）
+
+4. **短貸発注に「未返却」バッジが表示される**
+   - 対応する返却記録（loan_returns）が存在しない短貸発注には「未返却」バッジを表示
+   - 返却済みの場合はバッジなし
+
+5. **ステータスが一目でわかる**
+   - 症例発注・消耗品発注・短貸発注: 「下書き」「提出済」
+   - 短貸返却: 「下書き」「返却済」
 
 ---
 
-## Part 2 — 実装計画（AI用・技術詳細・レビュー不要）
+### 操作の流れ
 
-### 前提
+```
+1. ログイン後、グローバルナビの「発注履歴」リンクをクリック → /orders へ遷移
+2. 施設に紐づく全発注が「作成日降順」で一覧表示される（初期タブ: すべて）
+📸 [スクリーンショット1] 初期表示（全タブ・フィルタなし状態）
 
-- RISK判定: `supabase/migrations/`・RLS・policyドメインに触れるため **RISK=はい（M/Lレーン必須）**
-- 既存方針の継承: 本番Supabase接続情報をGitHub Secretsに置かない（`docs/agents/decisions.md`「なぜスキーマドリフト検知を自前cronではなくSupabase GitHub Integrationで始めたか」と同じ制約を維持する。本仕様はそれを補完するもので、置き換えではない）
-- `check_schema_drift()`のテーブル追加/削除判定は、`schema_baseline_snapshots`にmigration適用時点の`pg_tables`実データをそのまま記録する方式（手動でのテーブル名列挙はしない。導出漏れリスクを構造的に避けるため）
-- **[Phase 5レビューで追加]** 今後publicスキーマのテーブル構成を変える（テーブルを追加/削除する）migrationは、末尾で`SELECT refresh_schema_baseline_snapshot('<そのmigrationのタイムスタンプ>');`を呼ぶこと（`20260714000003_schema_drift_v1_hardening.sql`で追加）。呼ばないと、正規のPRレビュー済み変更でもtable_added/table_removedとして恒久的に誤検知され続ける（`docs/agents/common.md`にも運用ルールとして明記）
+3. タブ「短貸発注」をクリック → 短貸発注のみ絞り込み表示
+📸 [スクリーンショット2] 短貸発注タブ選択・「未返却」バッジ確認
 
-### drift_type / event_kind の値と判定基準（Part 3セルフチェック対応）
+4. 開始日・終了日を入力 → 期間絞り込みが反映される
+5. キーワードを入力（例: 製品名）→ 一致する行のみ表示
+📸 [スクリーンショット3] フィルタ適用後の絞り込み結果
 
-**`drift_type`**（`schema_drift_log.drift_type`、TEXT、CHECK制約で下記3値に限定）
+6. 「クリア」ボタンでフィルタをリセット → 全件表示に戻る
+```
 
-| 値 | 判定基準 | 下流の反応 |
-|---|---|---|
-| `rls_disabled` | `pg_class.relrowsecurity = false` のpublicスキーマテーブルが1件でもある | `drift_alert_view`に表示 → GitHub Actionsが`[priority:high]`をタイトルに付与してIssue作成 |
-| `table_added` | 最新snapshotの`snapshot`配列に存在しないテーブルが`pg_tables`に存在する | `drift_alert_view`に表示 → 通常のIssue作成対象 |
-| `table_removed` | 最新snapshotの`snapshot`配列に存在するテーブルが`pg_tables`に存在しない | `drift_alert_view`に表示 → 通常のIssue作成対象 |
+---
 
-**[Phase 5レビューで削除]** 原案にあった`error`種別（想定外例外の捕捉）は、対応する例外ハンドラが実装されておらず実装と乖離したドキュメントのみの状態だったため、v1スコープから削除した。基盤テーブル消失・baseline空の2ケースは`check_schema_drift()`が`RAISE EXCEPTION`で直接失敗する設計のままとし（`cron.job_run_details`に残る）、それ以外の想定外例外を`schema_drift_log`に記録する機能はv2以降の検討課題とする。
+### 受け入れ条件チェックリスト
 
-**`event_kind`**（`schema_drift_log.event_kind`、TEXT CHECK IN ('detected','acknowledged','resolved')）
+#### 表示
 
-| 値 | 判定基準 | 下流の反応 |
-|---|---|---|
-| `detected` | `check_schema_drift()`が新規ドリフトを検知した瞬間にINSERTする初期値 | `drift_alert_view`の対象（`resolved_at IS NULL`かつ`event_kind='detected'`） |
-| `acknowledged` | 人間がドリフトを「意図した変更」と確認し、対応するmigrationを作らずクローズしたい場合に手動でUPDATEする（v1では専用UIなし、SQLで直接更新） | `drift_alert_view`の対象から除外（`resolved_at`が設定される想定、またはWHERE句で`event_kind != 'acknowledged'`も対象外にする） |
-| `resolved` | 次回`check_schema_drift()`実行時に、同一`drift_type`+`object_name`の組が再検知されなかった場合、対応する`detected`行の`resolved_at`を自動更新する | `drift_alert_view`の対象から除外。GitHub Actions側が対応するIssueをクローズする |
+- [ ] `/orders` にアクセスすると発注一覧が表示される
+- [ ] ログインしていない状態でアクセスすると `/login` にリダイレクトされる
+- [ ] 自施設の発注のみが表示される（他施設の発注は表示されない）
+- [ ] 一覧は created_at 降順で表示される
+- [ ] 各行に「種別」「作成日」「ステータス」「概要」が表示される
+- [ ] 短貸発注行のうち、対応する返却記録がないものに「未返却」バッジが表示される
+- [ ] 返却記録が存在する短貸発注には「未返却」バッジが表示されない
 
-**合計3種類の`drift_type`・3種類の`event_kind`、本文中の記載件数と一致することを確認済み。**
+#### タブ操作
+
+- [ ] タブ「すべて」選択時は4種別すべてが一覧に表示される
+- [ ] タブ「症例発注」選択時は症例発注のみが表示される
+- [ ] タブ「消耗品発注」選択時は消耗品発注のみが表示される
+- [ ] タブ「短貸発注」選択時は短貸発注のみが表示される
+- [ ] タブ「短貸返却」選択時は短貸返却のみが表示される
+
+#### フィルタ
+
+- [ ] 開始日を指定すると、指定日（日本時間 0:00）以降の発注のみが表示される
+- [ ] 終了日を指定すると、指定日（日本時間 23:59:59）以前の発注のみが表示される
+- [ ] キーワードを入力すると、製品名・JAN・手技名・メーカー名に部分一致する行が表示される（消耗品発注の場合も消耗品名で検索できる）
+- [ ] 「クリア」ボタンでフィルタをリセットすると全件表示に戻る
+- [ ] タブ変更後もフィルタ条件（期間・キーワード）は保持されるが、ページ位置（offset）はタブ・期間・キーワードのいずれかを変更するたびに先頭（0件目）にリセットされる
+
+#### エラー・エッジケース
+
+- [ ] 発注が0件の場合「発注履歴がありません」と表示される
+- [ ] データ取得失敗時はエラーメッセージが表示される（画面が壊れない）
+- [ ] フィルタ結果が0件の場合「条件に一致する発注がありません」と表示される
+
+#### アクセシビリティ・レスポンシブ
+
+- [ ] モバイル幅（375px）でも表が崩れず水平スクロールで閲覧できる
+- [ ] タブがキーボード操作で切り替えられる
+
+---
+
+## Part 2 — 実装計画（AI用・レビュー不要）
+
+### 前提: 現状の課題と対応方針
+
+| 課題 | 対応 |
+|---|---|
+| loan_returns に loan_order_id FK がない（「未返却」判定不能） | Set A でマイグレーション追加 |
+| 既存 repository に日付・キーワードフィルタなし | Set C で引数拡張 |
+| 横断一覧用 API エンドポイントがない | Set D で `/api/orders` 新設 |
+| Union 型・フィルタ型がない | Set B で型定義追加 |
+| `useSearchParams` 使用時の Suspense 必須（既知パターン） | Set E で Suspense ラップ必須 |
+| limit/offset バリデーション漏れ（既存4 route.ts） | Set D で合わせて修正 |
+| consumable_orders / loan_orders / loan_returns に created_at インデックスなし | Set A のマイグレーションで追加 |
+
+---
 
 ### 実装セット一覧（依存順）
 
-#### セット1: DBスキーマ（マイグレーション、直列内で最初）
+#### Set A — DB マイグレーション（前提・最優先）
 
-**触るファイル（新規）:**
-- `supabase/migrations/20260714000001_create_schema_drift_detection.sql`
+**触るファイル**:
+- `supabase/migrations/YYYYMMDD_orders_history_prereqs.sql`（新規）
 
-**内容（骨格）:**
-```sql
--- 1. baseline snapshot（append-only）
-CREATE TABLE schema_baseline_snapshots (
-  epoch TEXT PRIMARY KEY,
-  snapshot JSONB NOT NULL,
-  applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-ALTER TABLE schema_baseline_snapshots ENABLE ROW LEVEL SECURITY;
--- service_role以外ポリシーなし = service_roleのみアクセス可（既存パターンに合わせる）
+**内容**:
+1. `loan_returns` に `loan_order_id` 列を追加:
+   ```sql
+   ALTER TABLE loan_returns
+     ADD COLUMN loan_order_id UUID REFERENCES loan_orders(id) ON DELETE SET NULL;
+   ```
+   - NULL 許容（NOT NULL 不可。既存行は対応 loan_order が追跡できないため）
+2. 不足インデックスを追加:
+   ```sql
+   CREATE INDEX IF NOT EXISTS idx_consumable_orders_facility_created_at
+     ON consumable_orders (facility_id, created_at DESC);
+   CREATE INDEX IF NOT EXISTS idx_loan_orders_facility_created_at
+     ON loan_orders (facility_id, created_at DESC);
+   CREATE INDEX IF NOT EXISTS idx_loan_returns_facility_created_at
+     ON loan_returns (facility_id, created_at DESC);
+   ```
+3. `SELECT refresh_schema_baseline_snapshot('YYYYMMDD');` を末尾に記載
+   - loan_returns テーブルに列を追加するが、テーブル新設・削除ではないため
+     `known-failure-patterns.md` の「publicスキーマのテーブルを追加/削除する場合のみ必須」ルール
+     を確認の上、呼び出し要否を最終判断すること
 
--- 2. ドリフトログ（append-only、冪等性は部分ユニーク制約で担保）
-CREATE TABLE schema_drift_log (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  drift_type TEXT NOT NULL,
-  object_name TEXT,
-  detail JSONB,
-  event_kind TEXT NOT NULL DEFAULT 'detected' CHECK (event_kind IN ('detected','acknowledged','resolved')),
-  detected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  resolved_at TIMESTAMPTZ,
-  issue_url TEXT
-);
-CREATE UNIQUE INDEX schema_drift_log_open_unique
-  ON schema_drift_log (drift_type, object_name) WHERE resolved_at IS NULL;
-ALTER TABLE schema_drift_log ENABLE ROW LEVEL SECURITY;
+**テスト観点**:
+- `supabase migration up` でエラーなく適用できる
+- `loan_returns` に `loan_order_id` 列が追加され、loan_orders への FK が効いている
+- loan_order_id = NULL で INSERT できる（既存行の後方互換）
 
--- 3. 初期snapshot（このmigration適用時点の実データをそのまま封印）
-INSERT INTO schema_baseline_snapshots (epoch, snapshot)
-SELECT '20260714000001', jsonb_agg(tablename ORDER BY tablename)
-FROM pg_tables WHERE schemaname = 'public';
+---
 
--- 4. check_schema_drift() 本体
-CREATE OR REPLACE FUNCTION check_schema_drift()
-RETURNS TABLE (drift_type TEXT, object_name TEXT, detail JSONB)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  latest_snapshot JSONB;
-BEGIN
-  -- 自己参照ガード: 基盤テーブル自体の消失を最優先で検知
-  IF to_regclass('public.schema_drift_log') IS NULL
-     OR to_regclass('public.schema_baseline_snapshots') IS NULL THEN
-    RAISE EXCEPTION 'schema drift detection base tables are missing (self-referential integrity failure)';
-  END IF;
+#### Set B — 型定義追加（Set A 完了後）
 
-  SELECT snapshot INTO latest_snapshot
-  FROM schema_baseline_snapshots ORDER BY epoch DESC LIMIT 1;
+**触るファイル**:
+- `src/types/order.ts`（追記）
 
-  -- 1. RLS無効化検知（ホワイトリスト不要、public全テーブル対象）
-  --    自テーブル(schema_baseline_snapshots/schema_drift_log)もRLS有効化前提のため対象に含む
-  RETURN QUERY
-  SELECT 'rls_disabled', c.relname, jsonb_build_object('schema', 'public')
-  FROM pg_class c
-  JOIN pg_namespace n ON n.oid = c.relnamespace
-  WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity = false;
+**追加する型**:
+```typescript
+// 発注種別識別子
+export type OrderKind = 'case_order' | 'consumable_order' | 'loan_order' | 'loan_return'
 
-  -- 2. テーブル追加検知
-  RETURN QUERY
-  SELECT 'table_added', t.tablename, jsonb_build_object('schema', 'public')
-  FROM pg_tables t
-  WHERE t.schemaname = 'public'
-    AND NOT (latest_snapshot ? t.tablename);
+// 横断一覧用サマリ型
+export type OrderListItem = {
+  id: string
+  kind: OrderKind
+  facilityId: string
+  status: string      // 各種別のステータス値をそのまま文字列で保持
+  summary: string     // 手技名 / 消耗品 N 品目 など、UI 表示用の概要テキスト
+  createdAt: string
+  unreturned?: boolean  // loan_order のみ: 対応 loan_returns が 0 件なら true
+}
 
-  -- 3. テーブル削除検知
-  RETURN QUERY
-  SELECT 'table_removed', s.name, jsonb_build_object('schema', 'public')
-  FROM jsonb_array_elements_text(latest_snapshot) AS s(name)
-  WHERE NOT EXISTS (
-    SELECT 1 FROM pg_tables t WHERE t.schemaname = 'public' AND t.tablename = s.name
-  );
-END;
-$$;
-GRANT EXECUTE ON FUNCTION check_schema_drift TO service_role;
-
--- 5. ドリフト記録関数（check_schema_drift()の結果をログに冪等insertし、resolved自動更新も行う）
-CREATE OR REPLACE FUNCTION record_schema_drift()
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  -- 新規ドリフトを記録（既存の未解決行があればスキップ）
-  INSERT INTO schema_drift_log (drift_type, object_name, detail)
-  SELECT d.drift_type, d.object_name, d.detail FROM check_schema_drift() d
-  ON CONFLICT (drift_type, object_name) WHERE resolved_at IS NULL DO NOTHING;
-
-  -- 前回検知されたが今回検知されなかった行はresolvedにする
-  UPDATE schema_drift_log l
-  SET event_kind = 'resolved', resolved_at = now()
-  WHERE l.event_kind = 'detected' AND l.resolved_at IS NULL
-    AND NOT EXISTS (
-      SELECT 1 FROM check_schema_drift() d
-      WHERE d.drift_type = l.drift_type AND d.object_name = l.object_name
-    );
-END;
-$$;
-GRANT EXECUTE ON FUNCTION record_schema_drift TO service_role;
-
--- 6. GitHub Actions公開用ビュー（詳細非公開・未解決分のみ）
-CREATE VIEW drift_alert_view AS
-SELECT id, drift_type, object_name, detected_at, issue_url
-FROM schema_drift_log
-WHERE event_kind = 'detected' AND resolved_at IS NULL;
-GRANT SELECT ON drift_alert_view TO anon;
+// フィルタ条件型
+export type OrderListFilter = {
+  kind?: OrderKind
+  dateFrom?: string   // YYYY-MM-DD
+  dateTo?: string     // YYYY-MM-DD
+  keyword?: string
+}
 ```
 
-**テスト観点:**
-- `supabase/migrations/__tests__/schema_drift_detection.test.ts`（既存`tech_debt_migrations.test.ts`と同じ静的SQL検証方式）
-  - `record_schema_drift()`・`check_schema_drift()`・`drift_alert_view`が定義されていること
-  - `schema_drift_log_open_unique`部分ユニークインデックスの`WHERE resolved_at IS NULL`条件が含まれること
-  - `GRANT SELECT ON drift_alert_view TO anon`が含まれること（過剰付与ではなくSELECTのみであることも確認）
-- ローカル`supabase db reset`後、`SELECT * FROM check_schema_drift();`がゼロ行を返すことを手動確認（受け入れ条件1件目に対応）
-
-**触るファイル:**
-- `supabase/migrations/20260714000001_create_schema_drift_detection.sql`（新規）
-- `supabase/migrations/__tests__/schema_drift_detection.test.ts`（新規）
-
----
-
-#### セット2: pg_cronスケジュール設定（セット1完了後・直列）
-
-**触るファイル（新規）:**
-- `supabase/migrations/20260714000002_schedule_schema_drift_check.sql`
-
-**内容（骨格）:**
-```sql
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-
-SELECT cron.schedule(
-  'schema-drift-daily-check',
-  '0 23 * * *', -- UTC 23:00 = JST 8:00
-  $$ SELECT record_schema_drift(); $$
-);
+また `LoanReturn` 型に `loanOrderId?: string` を追加:
+```typescript
+export type LoanReturn = {
+  // ... 既存フィールド
+  loanOrderId?: string  // Set A で追加した loan_order_id FK に対応
+}
 ```
 
-**補足（pg_cronが有効化できない場合のフォールバック）:**
-- 前提確認1（Part 1参照）でpg_cron不可の判断が出た場合、このセットはスキップし、代わりにセット3（GitHub Actions）側から`record_schema_drift()`をRPC経由（service_role key使用、ただしこれはGitHub Secretsではなく別途安全な経路の検討が必要—**この場合は追加の人間判断が必要なため、pg_cron不可判定が出た時点でこのセットの実装者は着手せず、統合ゲートで報告すること**）
-
-**テスト観点:**
-- ローカルで`SELECT * FROM cron.job WHERE jobname = 'schema-drift-daily-check';`でスケジュール登録を確認
-- `SELECT cron.run_job((SELECT jobid FROM cron.job WHERE jobname = 'schema-drift-daily-check'));`で手動実行し、エラーが出ないことを確認
-
-**触るファイル:**
-- `supabase/migrations/20260714000002_schedule_schema_drift_check.sql`（新規）
+**テスト観点**:
+- `tsc --noEmit` でコンパイルエラーなし
 
 ---
 
-#### セット3（セット1と並列可）: GitHub Actionsワークフロー
+#### Set C — Repository 層フィルタ拡張（Set B 完了後）
 
-**触るファイル（新規）:**
-- `.github/workflows/schema-drift-check.yml`
+**触るファイル**:
+- `src/lib/case-orders/repository.ts`（引数拡張）
+- `src/lib/consumable-orders/repository.ts`（引数拡張）
+- `src/lib/loan-orders/repository.ts`（引数拡張）
+- `src/lib/loan-returns/repository.ts`（引数拡張 + `loanOrderId` フィールド追加）
+- `src/lib/orders/repository.ts`（新規: 横断一覧取得）
 
-**内容（実装済み。原案からの変更点はテスト観点の後に記載）:**
-- `schedule: cron: '0 0 * * *'`（UTC 0:00、DB側チェックより後に実行されるよう時刻をずらす）+ `workflow_dispatch`（手動実行可能に）
-- `curl`で`drift_alert_view`をanon keyで取得（本番Supabase URLとanon keyのみ使用。パスワード・service role key不使用）
-- 未解決ドリフトごとに、タイトル`[schema-drift] <drift_type>: <object_name>`で`gh issue create`。既存open issueとタイトル突合し重複作成を防ぐ
-- 未解決一覧に存在しなくなったドリフトに対応するopen issueは`gh issue close`する
+**各既存 repository の変更方針**:
 
-**テスト観点:**
-- `workflow_dispatch`での手動実行が成功すること（実装後に一度手動トリガーして確認する統合ゲート項目とする）
-- モックの`drift.json`/`open_issues.json`に対する新規作成・重複防止・クローズの3パターンをbashスクリプトのドライランで検証済み（実装時に実施）
+`listXxxOrders` の引数に `filter?: { dateFrom?: string; dateTo?: string; keyword?: string }` を追加。
+既存の呼び出し元は引数省略でそのまま動作する。
 
-**原案からの変更点（実装時に判明した矛盾の解決）:**
-原案は`issue_url`を`record_issue_url()` RPC経由でDBに書き戻す設計だったが、その関数はservice_role限定であり、anon keyのみで動くこのワークフローからは呼び出せないという矛盾が実装時に判明した（Part1「本番DBの接続パスワード・Service Role Key…はGitHub Secretsに一切登録しない」という受け入れ条件と直接衝突するため、この矛盾を解消せずに進めることはできない）。
-DBへの書き込みを一切行わず、GitHub Issue自体を状態源にする方式に変更した（詳細は`docs/agents/decisions.md`参照）。`record_issue_url()`関数自体はセット1に実装済みだが、このワークフローからは呼び出さない（将来DB側の運用ツールから使う可能性を考慮し残置）。
+```typescript
+// 追加クエリ例（case_orders）
+// WHY: created_at は timestamptz(UTC)だが、日付入力は施設の運用時間帯(JST)基準。
+//      UTC固定で扱うと日付境界が最大9時間ずれるため、+09:00を明示してJSTの一日として解釈する
+if (filter?.dateFrom) query = query.gte('created_at', `${filter.dateFrom}T00:00:00+09:00`)
+if (filter?.dateTo)   query = query.lte('created_at', `${filter.dateTo}T23:59:59+09:00`)
+if (filter?.keyword) {
+  query = query.ilike('procedure_name', `%${filter.keyword}%`)
+  // items の JAN は後段の JS 側フィルタで補完（SELECT * で items を取得済みのため）
+}
+```
 
-**触るファイル:**
-- `.github/workflows/schema-drift-check.yml`（新規）
+keyword の種別ごとの対象列:
+- `case_orders`: `procedure_name`、取得した `case_order_items[].jan` を JS でフィルタ
+- `consumable_orders`: `.select('*, consumable_order_items(*, consumables(name, jan))')` で consumables をネストJOINして取得し、`consumables.name` / `consumables.jan` を JS でフィルタ（`summary` にも消耗品名を使う。既存の `listConsumableOrders` の戻り値には影響しない別クエリとして実装する）
+- `loan_orders`: `procedure_name`, `maker`、取得した `loan_order_items[].name` を JS でフィルタ
+- `loan_returns`: 取得した `loan_return_items[].jan` を JS でフィルタ
+
+**新規 `src/lib/orders/repository.ts`**:
+
+```typescript
+export async function listOrders(
+  db: SupabaseClient,
+  facilityId: string,
+  filter: OrderListFilter,
+  limit = 50,
+  offset = 0
+): Promise<OrderListItem[]>
+```
+
+内部実装:
+- `filter.kind` が指定された場合は該当種別のみをクエリ（残りはスキップ）
+- **性能上の上限（v1スコープ）**: 各テーブルへのクエリは `ORDER BY created_at DESC LIMIT 500` を必ず付与してから
+  取得する（4テーブル合計で最大2000行）。全件取得はしない。取得した最大2000行をメモリ内で
+  createdAt 降順にマージソートし、`offset` から `offset + limit` 件を切り出す。
+  施設単位の発注件数が2000件を大きく超える運用が確認された場合は、cursor-based pagination か
+  UNION ビューへの置き換えを別issueで検討する（本issueのスコープ外）
+- `unreturned` フラグ: loan_orders クエリ時に `.select('*, loan_returns!left(id)')` で LEFT JOIN し、
+  `loan_returns` が空かつ `status === 'submitted'` なら `unreturned: true`
+- `summary` 生成:
+  - `case_order`: `procedureName`
+  - `consumable_order`: 取得した `consumable_order_items[].consumables.name` を `、` 区切りで連結（例: `シリンジ、ガーゼ`）。1件も名前が取れない場合のみ `消耗品 ${items.length} 品目` にフォールバック
+  - `loan_order`: `${procedureName}（${maker}）`
+  - `loan_return`: `返却 ${new Date(returnDatetime).toLocaleDateString('ja-JP')}`
+- **offsetのリセット**: `kind` / `dateFrom` / `dateTo` / `keyword` のいずれかが前回呼び出しと異なる場合、
+  呼び出し元（UI）が `offset` を 0 にリセットしてから呼び出す。`listOrders` 自体は渡された `offset` を
+  そのまま使うのみで、リセット判定はUI側（Set E）の責務とする
+
+**テスト観点**:
+- `dateFrom` / `dateTo` が JST の日境界で正しく絞り込みに反映される（例: `dateTo=2026-07-13` を指定した場合、`2026-07-13T23:59:59+09:00` = UTCで`2026-07-13T14:59:59Z`より前の行のみ含まれる）
+- `keyword` が各種別の対象列に対して機能する（consumable_orderは消耗品名でも一致する）
+- `kind` 指定時は指定種別のみ返す
+- `unreturned: true` になる行 = submitted かつ loan_returns が 0 件の loan_order のみ
+- 各テーブルへのクエリに `LIMIT 500` が付与されている
+- 既存の `listCaseOrders` 等がデフォルト引数で動作する
 
 ---
 
-#### セット4（独立・並列可）: decisions.md更新
+#### Set D — API route 新設 + 既存バリデーション修正（Set C 完了後）
 
-**触るファイル（既存）:**
-- `docs/agents/decisions.md`
+**触るファイル**:
+- `src/app/api/orders/route.ts`（新規）
+- `src/app/api/case-orders/route.ts`（limit/offset バリデーション修正）
+- `src/app/api/consumable-orders/route.ts`（limit/offset バリデーション修正）
+- `src/app/api/loan-orders/route.ts`（limit/offset バリデーション修正）
+- `src/app/api/loan-returns/route.ts`（limit/offset バリデーション修正）
 
-**内容:**
-- 「なぜPRの外側のスキーマドリフト検知にEdge Functionを使わずpg_cron + GitHub Actionsポーリングを採用したか」を追記
-- 検討した代替案（Edge Function + Webhook方式）を不採用にした理由（pg_net依存・デプロイパイプライン未定義・GITHUB_TOKEN管理コストの3点）を記録
+注: Set D の既存 route.ts 修正（バリデーション追加のみ）は Set C と独立しているため、
+Wave 3 で Set C と並列実施も可能。ただし新規 `/api/orders/route.ts` は Set C 完了を要する。
+
+**`/api/orders` GET パラメータ**:
+
+| パラメータ | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `facility_id` | string (UUID) | 必須 | 施設 ID |
+| `kind` | `case_order` / `consumable_order` / `loan_order` / `loan_return` | 任意 | 種別フィルタ |
+| `date_from` | YYYY-MM-DD | 任意 | 開始日（created_at >= date_from） |
+| `date_to` | YYYY-MM-DD | 任意 | 終了日（created_at <= date_to 23:59:59） |
+| `keyword` | string | 任意 | 部分一致検索 |
+| `limit` | number | 任意 | デフォルト 50、上限 200 |
+| `offset` | number | 任意 | デフォルト 0 |
+
+**limit/offset バリデーション（参考実装: `/src/app/api/news/route.ts`）**:
+```typescript
+const rawLimit = Number(params.get('limit') ?? '50')
+const rawOffset = Number(params.get('offset') ?? '0')
+if (!Number.isFinite(rawLimit) || rawLimit < 1 || rawLimit > 200)
+  return apiError('limit は 1〜200 の整数で指定してください', 400)
+if (!Number.isFinite(rawOffset) || rawOffset < 0)
+  return apiError('offset は 0 以上の整数で指定してください', 400)
+```
+
+**認可**: `requireAuth` + `requireFacilityAccess(facility_id)` — 既存パターン踏襲
+
+**レスポンス**: `{ orders: OrderListItem[] }`
+
+**テスト観点**:
+- `facility_id` なし → 400
+- 他施設の `facility_id` → 403
+- `limit=NaN` / `limit=-1` / `limit=9999` → 400
+- `kind=case_order` → case_orders のみが返る
+- `date_from` / `date_to` / `keyword` の絞り込みが機能する
+
+---
+
+#### Set E — UI ページ・コンポーネント（Set D 完了後）
+
+**触るファイル**:
+- `src/app/orders/page.tsx`（新規）
+- `src/components/orders/OrderHistoryTable.tsx`（新規）
+- `src/components/orders/OrderHistoryFilters.tsx`（新規）
+- グローバルナビゲーションファイル（実装前に `src/components/` を grep してパスを特定すること）
+
+**`src/app/orders/page.tsx`**:
+- `useSearchParams` を使うため Suspense でラップ必須（既知パターン）
+```typescript
+'use client'
+import { Suspense } from 'react'
+
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={<p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>}>
+      <OrdersPageInner />
+    </Suspense>
+  )
+}
+```
+
+**タブ実装方針**:
+- タブ状態は URL searchParams（`?kind=loan_order`）で管理 → ブラウザバック対応
+- `useSearchParams` で現在の kind を読み、タブ UI に反映
+- タブ変更時は `router.push` で URL を更新し、`offset` パラメータを URL から削除する（先頭ページに戻す）
+
+**フィルタ実装方針**:
+- `OrderHistoryFilters` コンポーネントに `dateFrom`, `dateTo`, `keyword` の入力欄
+- 変更時に `router.push` で URL を更新し、`offset` パラメータを URL から削除する（先頭ページに戻す）
+- 「クリア」ボタンで全 searchParams を削除（`offset` も含めて全リセット）
+
+**データ取得**:
+- `useEffect` 内で `/api/orders?facility_id=...` を fetch
+- `facility_id` の取得方法: 既存の `/facilities/[id]/...` ページが `use(params)` で facility id を取得しているパターンとは異なり、`/orders` はグローバルページのため、セッションまたはコンテキストから施設 ID を取得する方法を既存コードで確認すること（`src/components/` や `src/lib/supabase/` を参照）
+
+**一覧表示列**:
+
+| 列 | case_order | consumable_order | loan_order | loan_return |
+|---|---|---|---|---|
+| 種別バッジ | 症例発注 | 消耗品発注 | 短貸発注 | 短貸返却 |
+| 概要 | 手技名 | 消耗品 N 品目 | 手技名・メーカー | 返却日時 |
+| ステータス | 下書き / 提出済 | 下書き / 提出済 | 下書き / 提出済 | 下書き / 返却済 |
+| 未返却 | — | — | バッジ（該当時） | — |
+| 作成日 | createdAt | createdAt | createdAt | createdAt |
+
+**ステータスラベルマップ**:
+```typescript
+const STATUS_LABEL: Record<string, string> = {
+  draft: '下書き',
+  submitted: '提出済',
+  returned: '返却済',
+}
+```
+
+**テスト観点**:
+- `useSearchParams` が Suspense の内側にある
+- タブクリックで URL が更新され、データが再取得される
+- `unreturned: true` の行に「未返却」バッジが表示される
+- `unreturned: false / undefined` の行にバッジが表示されない
+- エラー時にエラーメッセージが表示される（画面が壊れない）
+- モバイル幅（375px）でテーブルが水平スクロールする
+- キーボードでタブ切り替えができる
 
 ---
 
 ### 並列グループ宣言
 
 ```
-Wave 1 ──┬── Set 1 (DBスキーマ)     supabase/migrations/20260714000001_*.sql + __tests__
-          └── Set 4 (decisions.md)  docs/agents/decisions.md
-             ↓ Set 1完了後
-Wave 2 ──┬── Set 2 (pg_cronスケジュール)  supabase/migrations/20260714000002_*.sql
-          └── Set 3 (GitHub Actions)      .github/workflows/schema-drift-check.yml
-             （Set 3はSet 1のrecord_issue_url関数シグネチャに依存するため、Set 1完了後に着手）
-統合ゲート:
-  - migrationのローカル適用確認（db reset）
-  - pg_cronジョブの手動実行確認
-  - GitHub Actionsのworkflow_dispatch手動実行確認（可能な範囲で）
+Wave 1（順次・必須前提）:
+  - Set A (DB マイグレーション)
+
+Wave 2（Set A 完了後）:
+  - Set B (型定義)
+    触るファイル: src/types/order.ts
+
+Wave 3（Set B 完了後・以下2セットは並列可能）:
+  - Set C (Repository 拡張)
+    触るファイル: src/lib/case-orders/repository.ts
+                  src/lib/consumable-orders/repository.ts
+                  src/lib/loan-orders/repository.ts
+                  src/lib/loan-returns/repository.ts
+                  src/lib/orders/repository.ts（新規）
+
+  - Set D-fix（既存バリデーション修正・Set C と独立）
+    触るファイル: src/app/api/case-orders/route.ts
+                  src/app/api/consumable-orders/route.ts
+                  src/app/api/loan-orders/route.ts
+                  src/app/api/loan-returns/route.ts
+
+Wave 4（Set C 完了後）:
+  - Set D-new（新規 /api/orders ルート）
+    触るファイル: src/app/api/orders/route.ts（新規）
+
+Wave 5（Set D 完了後）:
+  - Set E（UI ページ・コンポーネント）
+    触るファイル: src/app/orders/page.tsx（新規）
+                  src/components/orders/OrderHistoryTable.tsx（新規）
+                  src/components/orders/OrderHistoryFilters.tsx（新規）
+                  グローバルナビゲーションファイル（パスは実装前に確認）
 ```
 
-Set 1とSet 4は互いに別ファイルのみを触るため並列可能。Set 2・Set 3はSet 1完了後（関数シグネチャ確定後）に着手する。
+---
 
-### 型・データアクセス層の方針
+### 実装スコープ外（この issue では対応しない）
 
-- 本機能はDB関数・SQLマイグレーション・GitHub Actionsのみで完結し、`src/`配下のTypeScriptコード・APIルートは一切変更しない
-- 型安全性はPostgreSQLのCHECK制約（`event_kind`）とSQLの静的検証テスト（既存`tech_debt_migrations.test.ts`パターン踏襲）で担保する
+| 項目 | 理由 |
+|---|---|
+| 発注詳細画面 | issue #20 スコープ外。別 issue 推奨 |
+| loan_return_items での品目単位の返却追跡 | DB 設計変更を伴う。別 issue 推奨 |
+| 既存4施設別ページとの統合 | UX 整合の判断が必要。別 issue 推奨 |
+| loan_returns repository の atomic RPC 移行 | 調査で発見したバグだが本 issue スコープ外。別 issue 起票推奨 |
+
+---
+
+## Part 3 — 仕様レビュー前セルフチェック（AI用・レビュー不要）
+
+### 新型・enum・statusフィールドの判定基準確認
+
+**OrderKind**（新規 enum）:
+
+| 値 | 意味 | 判定基準 |
+|---|---|---|
+| `case_order` | 症例発注 | case_orders テーブルから取得した行 |
+| `consumable_order` | 消耗品発注 | consumable_orders テーブルから取得した行 |
+| `loan_order` | 短貸発注 | loan_orders テーブルから取得した行 |
+| `loan_return` | 短貸返却 | loan_returns テーブルから取得した行 |
+
+下流の反応:
+- タブ UI: OrderKind の各値でタブ表示をフィルタ。全値を網羅したタブが存在する（すべて + 4種別 = 5タブ）
+- API `kind` パラメータ: 値が一致する種別のみクエリ。一致しない値は 400 を返す
+- `OrderHistoryTable`: 種別バッジの色・ラベルを kind で分岐
+
+**status（既存値・種別依存）**:
+- `draft` / `submitted`: case_orders / consumable_orders / loan_orders
+- `draft` / `returned`: loan_returns
+- 下流: `OrderListItem.status` に文字列格納、`STATUS_LABEL` マップで日本語変換
+- 既存 status 値を変更しないため、他の下流（既存施設別ページ）への影響なし
+
+**unreturned フラグ**:
+
+| 値 | 判定条件 | UI の反応 |
+|---|---|---|
+| `true` | `loan_order.status === 'submitted'` かつ loan_returns が 0 件 | 「未返却」バッジを表示 |
+| `false` または `undefined` | それ以外すべて（draft / 返却済 / loan_order 以外の種別） | バッジなし |
+
+下流: `OrderHistoryTable` コンポーネントのみが消費。stats・レポート・後続フェーズへの影響なし。
+
+### 包含・除外リスト確認
+
+タブ数: 5（すべて・症例発注・消耗品発注・短貸発注・短貸返却）= OrderKind の4種別 + 全体タブ 1 件 = 計5件。本文「タブ: 「すべて」「症例発注」「消耗品発注」「短貸発注」「短貸返却」」の記述と一致。
+
+### 既存ロジック影響確認
+
+- 既存 `/api/case-orders` 等の limit/offset バリデーション修正: 呼び出し元の施設別ページは `limit`/`offset` をデフォルト省略で呼ぶため影響なし（デフォルト値 50 / 0 は有効範囲内）
+- `listCaseOrders` 等への `filter` 引数追加: オプショナルなため既存呼び出し元に変更不要
+- `LoanReturn` 型への `loanOrderId?: string` 追加: オプショナルなため既存コンポーネント（`LoanReturnModal.tsx`）に変更不要

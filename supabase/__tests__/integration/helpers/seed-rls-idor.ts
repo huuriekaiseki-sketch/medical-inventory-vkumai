@@ -269,3 +269,94 @@ export async function seedConsumableOrdersRlsIdorFixtures(): Promise<SeedConsuma
 export async function cleanupConsumableOrdersRlsIdorFixtures(fixtures: SeedConsumableOrdersRlsIdorFixtures): Promise<void> {
   await cleanupFacilitiesAndUsers(fixtures.userA, fixtures.userB, fixtures.facilityA, fixtures.facilityB)
 }
+
+export interface SeedOrdersRlsIdorFixtures {
+  facilityA: { id: string; name: string }
+  facilityB: { id: string; name: string }
+  userA: SeededUser
+  userB: SeededUser
+  caseOrderA: { id: string }
+  consumableOrderA: { id: string }
+  loanOrderA: { id: string }
+  loanReturnA: { id: string }
+}
+
+/**
+ * 施設A・施設B、ユーザーA（施設Aのみ）・ユーザーB（施設Bのみ）、施設Aに紐づく
+ * 4種別発注（case_orders/consumable_orders/loan_orders/loan_returns）1件ずつを作成する
+ * （issue #20: /orders 横断一覧の「自施設の発注のみが表示される」受け入れ条件を、
+ * 個別テーブルのRLSではなく listOrders() 経由で確認するための統合テスト用フィクスチャ）。
+ */
+export async function seedOrdersRlsIdorFixtures(): Promise<SeedOrdersRlsIdorFixtures> {
+  const serviceClient = createServiceRoleClient()
+  const runId = randomUUID()
+
+  const facilityA = await createFacility(serviceClient, `テスト施設A-${runId}`)
+  const facilityB = await createFacility(serviceClient, `テスト施設B-${runId}`)
+
+  const userA = await createSeededUser(serviceClient, 'rls-idor-orders-user-a', facilityA.id)
+  const userB = await createSeededUser(serviceClient, 'rls-idor-orders-user-b', facilityB.id)
+
+  const { data: caseOrder, error: caseOrderError } = await serviceClient
+    .from('case_orders')
+    .insert({
+      facility_id: facilityA.id,
+      case_datetime: new Date().toISOString(),
+      procedure_name: 'シード用術式',
+      patient_id: 'IDOR-TEST-PATIENT-0000',
+      patient_initials: 'IDORテスト患者',
+      gender: 'other',
+      doctor_name: 'IDORテスト医師',
+    })
+    .select('id')
+    .single()
+  if (caseOrderError || !caseOrder) {
+    throw new Error(`[seed-rls-idor] case_orders シード作成失敗: ${caseOrderError?.message}`)
+  }
+
+  const { data: consumableOrder, error: consumableOrderError } = await serviceClient
+    .from('consumable_orders')
+    .insert({ facility_id: facilityA.id })
+    .select('id')
+    .single()
+  if (consumableOrderError || !consumableOrder) {
+    throw new Error(`[seed-rls-idor] consumable_orders シード作成失敗: ${consumableOrderError?.message}`)
+  }
+
+  const { data: loanOrder, error: loanOrderError } = await serviceClient
+    .from('loan_orders')
+    .insert({
+      facility_id: facilityA.id,
+      procedure_name: 'シード用術式',
+      maker: 'シード用メーカー',
+    })
+    .select('id')
+    .single()
+  if (loanOrderError || !loanOrder) {
+    throw new Error(`[seed-rls-idor] loan_orders シード作成失敗: ${loanOrderError?.message}`)
+  }
+
+  const { data: loanReturn, error: loanReturnError } = await serviceClient
+    .from('loan_returns')
+    .insert({ facility_id: facilityA.id, return_datetime: new Date().toISOString() })
+    .select('id')
+    .single()
+  if (loanReturnError || !loanReturn) {
+    throw new Error(`[seed-rls-idor] loan_returns シード作成失敗: ${loanReturnError?.message}`)
+  }
+
+  return {
+    facilityA,
+    facilityB,
+    userA,
+    userB,
+    caseOrderA: { id: caseOrder.id as string },
+    consumableOrderA: { id: consumableOrder.id as string },
+    loanOrderA: { id: loanOrder.id as string },
+    loanReturnA: { id: loanReturn.id as string },
+  }
+}
+
+export async function cleanupOrdersRlsIdorFixtures(fixtures: SeedOrdersRlsIdorFixtures): Promise<void> {
+  await cleanupFacilitiesAndUsers(fixtures.userA, fixtures.userB, fixtures.facilityA, fixtures.facilityB)
+}

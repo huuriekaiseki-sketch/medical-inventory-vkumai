@@ -24,6 +24,7 @@ const navLinks = [
   { href: '/facilities', label: '施設一覧' },
   { href: '/products', label: 'デバイス' },
   { href: '/distributor-products', label: '販売店商品' },
+  { href: '/orders', label: '発注履歴' },
   { href: '/news', label: 'ニュース' },
   { href: '/compat', label: 'コンパチ' },
   { href: '/other', label: 'その他' },
