@@ -425,7 +425,6 @@ Wave 5（Set D 完了後）:
 |---|---|
 | 発注詳細画面 | issue #20 スコープ外。別 issue 推奨 |
 | loan_return_items での品目単位の返却追跡 | DB 設計変更を伴う。別 issue 推奨 |
-| consumable_order の keyword 検索でのネスト JOIN | 実装難度・効果のバランス。Phase 2 で検討 |
 | 既存4施設別ページとの統合 | UX 整合の判断が必要。別 issue 推奨 |
 | loan_returns repository の atomic RPC 移行 | 調査で発見したバグだが本 issue スコープ外。別 issue 起票推奨 |
 
