@@ -53,7 +53,7 @@ describe('FacilitySummaryList', () => {
     render(<FacilitySummaryList facilitySummaries={summaries} loanOutstanding={outstanding} />)
     expect(screen.getAllByRole('link', { name: /症例発注/ })[0]).toHaveAttribute('href', '/facilities/f1/case-orders')
     expect(screen.getAllByRole('link', { name: /消耗品発注/ })[0]).toHaveAttribute('href', '/facilities/f1/consumable-orders')
-    expect(screen.getAllByRole('link', { name: /貸出発注/ })[0]).toHaveAttribute('href', '/facilities/f1/loan-orders')
+    expect(screen.getAllByRole('link', { name: /短貸発注/ })[0]).toHaveAttribute('href', '/facilities/f1/loan-orders')
   })
 
   it('0件のとき「データがありません」が表示される', () => {

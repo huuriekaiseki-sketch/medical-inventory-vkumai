@@ -17,7 +17,7 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
   const [patientInitials, setPatientInitials] = useState('')
   const [gender, setGender] = useState<'male' | 'female' | 'other'>('male')
   const [doctorName, setDoctorName] = useState('')
-  const [items, setItems] = useState<ItemRow[]>([{ jan: '', lot: '', ubd: '', quantity: 1 }])
+  const [items, setItems] = useState<ItemRow[]>(() => [{ id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,7 +28,7 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
     setPatientInitials('')
     setGender('male')
     setDoctorName('')
-    setItems([{ jan: '', lot: '', ubd: '', quantity: 1 }])
+    setItems([{ id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
     setError(null)
   }
 
@@ -38,7 +38,11 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!caseDatetime.trim()) { setError('症例日時を入力してください'); return }
     if (!procedureName.trim()) { setError('手技名を入力してください'); return }
+    if (!patientId.trim()) { setError('患者IDを入力してください'); return }
+    if (!patientInitials.trim()) { setError('患者イニシャルを入力してください'); return }
+    if (!doctorName.trim()) { setError('担当医師を入力してください'); return }
     setSubmitting(true)
     setError(null)
     try {

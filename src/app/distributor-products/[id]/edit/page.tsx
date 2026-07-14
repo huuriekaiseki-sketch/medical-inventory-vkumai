@@ -40,19 +40,23 @@ export default function EditDistributorProductPage({ params }: { params: Promise
 
   async function handleSubmit(data: DistributorProductInput) {
     setSubmitError(null)
-    const res = await fetch(`/api/distributor-products/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
+    try {
+      const res = await fetch(`/api/distributor-products/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      setSubmitError(body.error ?? '更新に失敗しました')
-      return
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setSubmitError(body.error ?? '更新に失敗しました')
+        return
+      }
+
+      router.push('/distributor-products')
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : '更新に失敗しました')
     }
-
-    router.push('/distributor-products')
   }
 
   if (loadError && !item) {

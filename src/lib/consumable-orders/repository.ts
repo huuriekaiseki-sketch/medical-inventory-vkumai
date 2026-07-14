@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { asString, asNumber } from '@/lib/mapping'
+import { asString, asNumber, asEnum } from '@/lib/mapping'
+import { jstDayStart, jstDayEnd } from '@/lib/jst-date-range'
+import { KEYWORD_SCAN_LIMIT, type OrderRepositoryFilter } from '@/lib/orders/list-filter'
 import type { ConsumableOrder, ConsumableOrderInput, ConsumableOrderItem } from '@/types/order'
+
+const STATUSES = ['draft', 'submitted'] as const
 
 interface ConsumableOrderItemRow {
   id?: unknown
@@ -8,7 +12,12 @@ interface ConsumableOrderItemRow {
   consumable_id?: unknown
   quantity?: unknown
   created_at?: unknown
+  // keyword絞り込み時のみ nested join で取得される（listConsumableOrders の戻り値には含めない）
+  consumables?: { name?: unknown; jan?: unknown } | null
 }
+
+// WHY: 重複定義していたフィルタ型を src/lib/orders/list-filter.ts に統合（issue #20 レビュー指摘）
+export type ConsumableOrderListFilter = OrderRepositoryFilter
 
 interface ConsumableOrderRow {
   id?: unknown
@@ -32,19 +41,48 @@ export async function listConsumableOrders(
   db: SupabaseClient,
   facilityId: string,
   limit = 50,
-  offset = 0
+  offset = 0,
+  filter?: ConsumableOrderListFilter
 ): Promise<ConsumableOrder[]> {
-  const { data, error } = await db
+  // WHY: consumable_orders 自体には検索対象になる列がない（消耗品名は consumable_id 経由）。
+  //      keyword指定時のみ consumables をネストJOINして取得し、既存の戻り値（ConsumableOrder[]）には
+  //      影響しない別クエリとして扱う（consumables フィールドはJS側フィルタにのみ使い、mapItemで捨てる）
+  const useKeywordQuery = Boolean(filter?.keyword)
+  let query = db
     .from('consumable_orders')
-    .select('*, consumable_order_items(*)')
+    .select(useKeywordQuery ? '*, consumable_order_items(*, consumables(name, jan))' : '*, consumable_order_items(*)')
     .eq('facility_id', facilityId)
     .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1)
+
+  if (filter?.dateFrom) query = query.gte('created_at', jstDayStart(filter.dateFrom))
+  if (filter?.dateTo) query = query.lte('created_at', jstDayEnd(filter.dateTo))
+
+  // WHY: keywordはconsumables.name/janへのOR一致が要件。DB側で先にrangeすると
+  //      キーワード一致前の行に対してoffset/limitを適用してしまうため、
+  //      keyword指定時はrangeせず取得してからJS側で判定・スライスする。
+  //      無制限取得はDoSベクタになるため created_at 降順 KEYWORD_SCAN_LIMIT 件で打ち切る
+  //      （issue #20 レビュー指摘: 正しさ important）
+  if (useKeywordQuery) query = query.limit(KEYWORD_SCAN_LIMIT)
+  else query = query.range(offset, offset + limit - 1)
+
+  const { data, error } = await query
   if (error) throw new Error(error.message)
-  return ((data ?? []) as (ConsumableOrderRow & { consumable_order_items?: ConsumableOrderItemRow[] })[]).map(o => ({
+  let rows = (data ?? []) as (ConsumableOrderRow & { consumable_order_items?: ConsumableOrderItemRow[] })[]
+
+  if (filter?.keyword) {
+    const kw = filter.keyword.toLowerCase()
+    rows = rows.filter(o => (o.consumable_order_items ?? []).some(item => {
+      const name = asString(item.consumables?.name).toLowerCase()
+      const jan = asString(item.consumables?.jan).toLowerCase()
+      return name.includes(kw) || jan.includes(kw)
+    }))
+    rows = rows.slice(offset, offset + limit)
+  }
+
+  return rows.map(o => ({
     id: asString(o.id),
     facilityId: asString(o.facility_id),
-    status: asString(o.status) as 'draft' | 'submitted',
+    status: asEnum(o.status, STATUSES, 'draft'),
     items: (o.consumable_order_items ?? []).map(mapItem),
     createdAt: asString(o.created_at),
     updatedAt: asString(o.updated_at),
@@ -55,12 +93,10 @@ export async function createConsumableOrder(db: SupabaseClient, facilityId: stri
   // 単一トランザクションで完結させるため RPC を呼ぶ（ヘッダー+明細を原子的に INSERT）
   const { data, error } = await db.rpc('create_consumable_order_atomic', {
     p_facility_id: facilityId,
-    p_items: JSON.stringify(
-      input.items.map(item => ({
-        consumable_id: item.consumableId,
-        quantity: item.quantity,
-      }))
-    ),
+    p_items: input.items.map(item => ({
+      consumable_id: item.consumableId,
+      quantity: item.quantity,
+    })),
   })
   if (error) throw new Error(error.message)
 
@@ -70,7 +106,7 @@ export async function createConsumableOrder(db: SupabaseClient, facilityId: stri
   return {
     id: asString(o.id),
     facilityId: asString(o.facility_id),
-    status: asString(o.status) as 'draft' | 'submitted',
+    status: asEnum(o.status, STATUSES, 'draft'),
     items: itemRows.map(mapItem),
     createdAt: asString(o.created_at),
     updatedAt: asString(o.updated_at),

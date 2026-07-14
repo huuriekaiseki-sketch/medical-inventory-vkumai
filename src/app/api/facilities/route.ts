@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
+import { resolveIsAdmin } from '@/lib/admin-status'
 import { listFacilities, createFacility } from '@/lib/facilities/repository'
 import { apiError } from '@/lib/api-error'
 import type { FacilityInput } from '@/types/facility'
@@ -8,9 +9,14 @@ import type { FacilityInput } from '@/types/facility'
 export async function GET() {
   try {
     const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    let user
+    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
     const facilities = await listFacilities(db)
-    return NextResponse.json({ facilities })
+    // WHY: フロントエンドが「全施設」表示オプションを出すかどうかの判定に使う。
+    // require-facility-access.ts の resolveIsAdmin と同じ判定にすることで、
+    // UIが「全施設」を選べるのにAPIがfacilityId必須で弾く、という不整合を防ぐ（issue #40）
+    const isAdmin = await resolveIsAdmin(db, user)
+    return NextResponse.json({ facilities, isAdmin })
   } catch (error) {
     return apiError(error instanceof Error ? error.message : '施設の取得に失敗しました')
   }

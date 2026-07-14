@@ -1,0 +1,102 @@
+# WHY: PRを介さない本番スキーマ変更（SQL Editor等での直接操作）を検知して通知する（issue #305）。
+# DB側（20260714000001_create_schema_drift_detection.sql）が毎日pg_cronでドリフトを検知・記録し、
+# このワークフローはその結果を日次でポーリングしてGitHub Issueを自動作成・自動クローズする。
+#
+# secrets.NEXT_PUBLIC_SUPABASE_URL / secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY は「公開して問題ない値」
+# （anon key。クライアントバンドルにも埋め込まれる値で、本番Next.jsアプリと同じSecretsを再利用する）
+# のみを使う。本番DBパスワード・service role key・SUPABASE_ACCESS_TOKENはこのワークフローに
+# 一切渡さない（docs/agents/decisions.md「なぜスキーマドリフト検知を自前cronではなく
+# Supabase GitHub Integrationで始めたか」と同じ制約を維持する）。
+#
+# 冪等性・Issue自動クローズの実現方法について:
+# SPEC.md原案では issue_url を record_issue_url() RPC経由でDBに書き戻す設計だったが、
+# その関数はservice_role限定であり、anon keyのみで動くこのワークフローからは呼び出せない
+# （実装時に発覚した矛盾。docs/agents/decisions.md参照）。
+# 代わりに、GitHub Issue自体を状態源とする：ドリフトごとに一意なタイトルを
+# `[schema-drift] <drift_type>: <object_name>` の形式で生成し、既存のopen issueと
+# タイトルで突合することで重複作成を防ぐ。drift_alert_view（未解決分のみ）に存在しなくなった
+# ドリフトに対応するopen issueは自動クローズする。DBへの書き込みは一切行わない
+# （読み取り専用・anon keyのみで完結する）。
+
+name: Schema Drift Check
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # UTC 0:00。DB側の日次チェック(UTC 23:00)より後に実行する
+  workflow_dispatch:
+
+jobs:
+  check-drift:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Fetch unresolved schema drifts
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY が未設定です。リポジトリのSecretsを確認してください。"
+            exit 1
+          fi
+          curl -sf "${SUPABASE_URL}/rest/v1/drift_alert_view?select=drift_type,object_name,detected_at" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -o drift_raw.json
+          echo "未解決ドリフト件数: $(jq 'length' drift_raw.json)"
+
+          # titleをここで一度だけ生成し、以降の全ステップはこのフィールドだけを参照する
+          # (フォーマット文字列を複数箇所に重複させない)。rls_disabledはSPEC.md記載の
+          # 優先度が最も高いドリフト種別のため、タイトルにも明示する
+          jq '[.[] | . + {
+                title: (if .drift_type == "rls_disabled"
+                        then "[schema-drift][priority:high] " + .drift_type + ": " + .object_name
+                        else "[schema-drift] " + .drift_type + ": " + .object_name end)
+              }]' drift_raw.json > drift.json
+          jq -r '.[].title' drift.json > expected_titles.txt
+
+      - name: Reconcile GitHub Issues (create new / close resolved)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # WHY: このジョブはactions/checkoutを行わないため、ghコマンドがgitリモートから
+          # 対象リポジトリを推測できず「fatal: not a git repository」で失敗する。
+          # GH_REPOで対象リポジトリを明示することでcheckoutなしでも動作させる
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # WHY: --limit 100は既知の制約。100件を超えるopen issueが積み上がった場合、
+          # 古いissueが取得漏れし重複作成・クローズ漏れが起こりうる（v1では許容。
+          # 20260714000003マイグレーションでbaseline恒久誤検知バグを是正済みのため
+          # 実運用でこの上限に達する可能性は低いと判断）
+          gh issue list --label schema-drift --state open --json title,number --limit 100 > open_issues.json
+
+          while IFS= read -r title; do
+            [ -z "$title" ] && continue
+            if jq -e --arg t "$title" 'any(.[]; .title == $t)' open_issues.json > /dev/null; then
+              continue
+            fi
+            row=$(jq -c --arg t "$title" 'map(select(.title == $t)) | .[0]' drift.json)
+            drift_type=$(echo "$row" | jq -r '.drift_type')
+            object_name=$(echo "$row" | jq -r '.object_name')
+            detected_at=$(echo "$row" | jq -r '.detected_at')
+            cat > issue-body.md <<EOF
+          ## 検知内容
+          - drift_type: \`${drift_type}\`
+          - object_name: \`${object_name}\`
+          - detected_at: ${detected_at}
+
+          PRを介さず本番DBのスキーマが直接変更された可能性があります。SQL Editor等での直接操作を確認し、意図した変更であればmigrationとして記録してください。意図しない変更であれば復旧を検討してください。
+
+          issue #305 のスキーマドリフト検知により自動作成されました。
+          EOF
+            gh issue create --title "$title" --label schema-drift --label bug --body-file issue-body.md
+          done < expected_titles.txt
+
+          jq -r '.[].title' open_issues.json | while IFS= read -r title; do
+            [ -z "$title" ] && continue
+            if grep -qxF "$title" expected_titles.txt; then
+              continue
+            fi
+            number=$(jq -r --arg t "$title" 'map(select(.title == $t)) | .[0].number' open_issues.json)
+            gh issue close "$number" --comment "ドリフトが解消されたため自動クローズします（issue #305 スキーマドリフト検知）"
+          done

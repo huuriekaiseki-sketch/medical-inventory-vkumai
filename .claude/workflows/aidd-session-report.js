@@ -51,6 +51,7 @@ ${notes || '（なし）'}
 ### Phase 1 調査
 - Sweeper: ${phase1Stats?.agents ?? '?'}台 × ${phase1Stats?.rounds ?? '?'}ラウンド
 - 指摘あり軸数: ${phase1Stats?.findingCount ?? '?'} / 4
+- 調査不能(blocked)軸数: ${phase1Stats?.blockedCount ?? '?'} / 4
 
 ### Phase 2〜5 実装・検証
 - implementer: ${phase2Stats?.implAgents ?? '?'}台（並列）
@@ -58,6 +59,7 @@ ${notes || '（なし）'}
 - reviewer: ${phase2Stats?.reviewAgents ?? '?'}台（並列）
 - 合計エージェント数: ${phase2Stats?.totalAgents ?? '?'}台
 - 実装成功グループ数: ${phase2Stats?.implSuccessCount ?? '?'} / ${phase2Stats?.implAgents ?? '?'}
+- 着手不能(blocked)グループ数: ${phase2Stats?.implBlockedCount ?? '?'} / ${phase2Stats?.implAgents ?? '?'}
 
 ## 結果サマリー
 - うまくいったこと: （生成時に記入）

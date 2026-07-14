@@ -1,6 +1,7 @@
 'use client'
 
 export type ItemRow = {
+  id: string
   jan: string
   lot: string
   ubd: string
@@ -13,7 +14,7 @@ type Props = {
 }
 
 export function ItemRowInput({ rows, onChange }: Props) {
-  const addRow = () => onChange([...rows, { jan: '', lot: '', ubd: '', quantity: 1 }])
+  const addRow = () => onChange([...rows, { id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
   const removeRow = (i: number) => onChange(rows.filter((_, idx) => idx !== i))
   const updateRow = (i: number, field: keyof ItemRow, value: string | number) =>
     onChange(rows.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)))
@@ -27,7 +28,7 @@ export function ItemRowInput({ rows, onChange }: Props) {
         <span className="text-xs font-semibold w-16" style={{ color: '#6B7280' }}>数量</span>
       </div>
       {rows.map((row, i) => (
-        <div key={i} className="flex gap-2 mb-2 items-center">
+        <div key={row.id} className="flex gap-2 mb-2 items-center">
           <input
             type="text"
             value={row.jan}
