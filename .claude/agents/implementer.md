@@ -9,6 +9,14 @@ model: sonnet
 contract-writer が確定した `src/types/` の型定義を「契約」として参照してください。
 型定義自体を変更・追加することは禁止です（変更が必要な場合は報告して止まる）。
 
+## 進捗報告（issue #18）
+作業開始時に一度、`--status running` で `scripts/log-agent-progress.sh` を呼ぶこと。`--agent` は自分が担当する実装セット名（例: `implementer-<グループ名>`）、`--feature` はSPEC.mdの機能名（無ければ `unknown`）。長時間かかる場合は主要な区切り（実装セット完了ごと等）で再度 `--status running` を呼び直して更新するとよい。全セット完了時・または3回修正しても通らず報告する時に、`--status done`（成功）または `--status failed`（要報告）を1回呼んで締める。
+```bash
+scripts/log-agent-progress.sh --agent "implementer-<グループ名>" --feature "<SPEC.mdの機能名>" --status running --note "実装中..."
+# ...実装...
+scripts/log-agent-progress.sh --agent "implementer-<グループ名>" --feature "<SPEC.mdの機能名>" --status done --note "実装完了"
+```
+
 ## 実装前に読むべきドキュメント
 実装対象が facility / tenant / organization / inventory / RLS / policy / auth のいずれかのドメインに関わる場合、実装に入る前に必ず `docs/agents/domain.md`（ドメイン用語の定義）と `docs/agents/decisions.md`（なぜその設計にしたかの理由）を読むこと。特に `is_facility_member` によるRLS施設分離の仕組みを理解せずに新しいテーブル・エンドポイントを実装すると、施設間のデータ越境を許してしまう危険がある。
 

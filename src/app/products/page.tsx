@@ -16,7 +16,7 @@ export default function ProductsPage() {
     fetch('/api/products')
       .then((r) => { if (!r.ok) throw new Error(); return r.json() })
       .then((d) => { if (!cancelled) setProducts(d.products) })
-      .catch(() => { if (!cancelled) setError('一覧の取得に失敗しました') })
+      .catch(() => { if (!cancelled) setError('デバイスの取得に失敗しました') })
     return () => { cancelled = true }
   }, [refreshKey])
 
@@ -56,7 +56,12 @@ export default function ProductsPage() {
         </button>
       </div>
 
-      {error && <p className="mb-4 text-red-600">{error}</p>}
+      {error && (
+        <div className="mb-6 flex items-center gap-3 rounded px-4 py-3 text-sm font-medium text-white" style={{ backgroundColor: '#DC2626', borderRadius: '2px' }}>
+          <span>⚠</span>
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="rounded bg-white shadow-sm overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
         <ProductList

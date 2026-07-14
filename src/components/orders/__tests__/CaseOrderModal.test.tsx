@@ -53,7 +53,11 @@ describe('CaseOrderModal', () => {
       json: () => Promise.resolve({ error: '送信に失敗しました' }),
     })
     render(<CaseOrderModal facilityId="f-1" isOpen={true} onClose={vi.fn()} onSuccess={vi.fn()} />)
+    await userEvent.type(screen.getByLabelText(/症例日時/), '2026-06-24T10:00')
     await userEvent.type(screen.getByLabelText(/手技名/), 'TAVI')
+    await userEvent.type(screen.getByLabelText(/患者ID/), 'P001')
+    await userEvent.type(screen.getByLabelText(/患者イニシャル/), 'T.S.')
+    await userEvent.type(screen.getByLabelText(/担当医師/), '田中医師')
     await userEvent.click(screen.getByRole('button', { name: '発注する' }))
     expect(await screen.findByText('送信に失敗しました')).toBeInTheDocument()
   })
@@ -61,6 +65,7 @@ describe('CaseOrderModal', () => {
   it('性別「女」を選択して送信するとgender:femaleが送信される', async () => {
     render(<CaseOrderModal facilityId="f-1" isOpen={true} onClose={vi.fn()} onSuccess={vi.fn()} />)
     await userEvent.selectOptions(screen.getByLabelText(/性別/), 'female')
+    await userEvent.type(screen.getByLabelText(/症例日時/), '2026-06-24T10:00')
     await userEvent.type(screen.getByLabelText(/手技名/), 'TAVI')
     await userEvent.type(screen.getByLabelText(/患者ID/), 'P001')
     await userEvent.type(screen.getByLabelText(/患者イニシャル/), 'T.S.')
@@ -72,6 +77,7 @@ describe('CaseOrderModal', () => {
 
   it('+ 行を追加で物品行を増やして送信できる', async () => {
     render(<CaseOrderModal facilityId="f-1" isOpen={true} onClose={vi.fn()} onSuccess={vi.fn()} />)
+    await userEvent.type(screen.getByLabelText(/症例日時/), '2026-06-24T10:00')
     await userEvent.type(screen.getByLabelText(/手技名/), 'TAVI')
     await userEvent.type(screen.getByLabelText(/患者ID/), 'P001')
     await userEvent.type(screen.getByLabelText(/患者イニシャル/), 'T.S.')
