@@ -34,6 +34,12 @@ export function ProductList({ products, onEdit, onDelete }: ProductListProps) {
               REF コード
             </th>
             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest text-white/80" style={{ fontFamily: 'var(--font-oswald), sans-serif' }}>
+              製品名
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest text-white/80" style={{ fontFamily: 'var(--font-oswald), sans-serif' }}>
+              メーカー名
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest text-white/80" style={{ fontFamily: 'var(--font-oswald), sans-serif' }}>
               操作
             </th>
           </tr>
@@ -50,6 +56,12 @@ export function ProductList({ products, onEdit, onDelete }: ProductListProps) {
               </td>
               <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                 {product.ref}
+              </td>
+              <td className="px-6 py-4 text-sm" style={{ color: '#111827' }}>
+                {product.name}
+              </td>
+              <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>
+                {product.maker ?? '—'}
               </td>
               <td className="px-6 py-4 text-sm">
                 <div className="flex items-center gap-3">

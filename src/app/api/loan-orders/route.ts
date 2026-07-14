@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listLoanOrders, createLoanOrder } from '@/lib/loan-orders/repository'
 import { apiError } from '@/lib/api-error'
+import { parsePagination } from '@/lib/api-pagination'
 import type { LoanOrderInput } from '@/types/order'
 
 export async function GET(request: NextRequest) {
@@ -17,13 +18,14 @@ export async function GET(request: NextRequest) {
     if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('facility_id は必須です', 400)
     return apiError('アクセス権限がありません', 403)
   }
-  const limit = Number(request.nextUrl.searchParams.get('limit') ?? '50')
-  const offset = Number(request.nextUrl.searchParams.get('offset') ?? '0')
+  const pagination = parsePagination(request.nextUrl.searchParams)
+  if (!pagination.ok) return pagination.response
+  const { limit, offset } = pagination
   try {
     const orders = await listLoanOrders(db, facilityId!, limit, offset)
     return NextResponse.json({ orders })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '貸出発注一覧の取得に失敗しました')
+    return apiError(error instanceof Error ? error.message : '短貸発注一覧の取得に失敗しました')
   }
 }
 

@@ -62,6 +62,11 @@ status と detail を返すこと。
 let round = 1
 let dryRounds = 0
 const allFindings = { ui: [], data: [], db: [], types: [] }
+// 軸ごとに既出の指摘文言(先頭80文字)を記録し、ラウンドをまたいだ同一指摘の再掲を
+// 「新規」として扱わないようにする（issue #293: 再掲が永遠に新規扱いされ収束しない問題）
+const seenFindingKeys = { ui: new Set(), data: new Set(), db: new Set(), types: new Set() }
+// 直近ラウンドでblocked/未応答（deny-by-default）だった軸。エスカレーション報告に使う
+let lastRoundBlockedAxes = []
 let additionalContext = ''
 
 while (dryRounds < 2 && round <= maxRounds) {
@@ -78,15 +83,34 @@ while (dryRounds < 2 && round <= maxRounds) {
     () => agent(sweepPrompt, { label: `sweep-db:R${round}`,    agentType: 'sweep-db',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB }),
     () => agent(sweepPrompt, { label: `sweep-types:R${round}`, agentType: 'sweep-types', phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB }),
   ])
+  const axisResults = { ui: uiResult, data: dataResult, db: dbResult, types: typesResult }
 
-  // isNew: 完遂できた(status==='pass')うえで、実際に新規の指摘がある(detail!=='指摘なし')場合のみ新規findingsとみなす(2軸判定)
-  const isNew = (r) => r?.status === 'pass' && r?.detail !== '指摘なし'
-  if (isNew(uiResult))    allFindings.ui.push(`[R${round}]\n${uiResult.detail}`)
-  if (isNew(dataResult))  allFindings.data.push(`[R${round}]\n${dataResult.detail}`)
-  if (isNew(dbResult))    allFindings.db.push(`[R${round}]\n${dbResult.detail}`)
-  if (isNew(typesResult)) allFindings.types.push(`[R${round}]\n${typesResult.detail}`)
+  // deny-by-default: status==='pass'と確認できない軸（blocked・null・未知の値）はすべてblocked扱いにしてエスカレーションする
+  lastRoundBlockedAxes = Object.entries(axisResults)
+    .filter(([, r]) => r?.status !== 'pass')
+    .map(([axis, r]) => `${axis}(status=${r?.status ?? 'なし'})`)
+  if (lastRoundBlockedAxes.length > 0) {
+    log(`Sweep警告: ラウンド${round}でblocked/未応答の軸を検知 → ${lastRoundBlockedAxes.join(', ')}`)
+  }
 
-  const hasNewFindings = isNew(uiResult) || isNew(dataResult) || isNew(dbResult) || isNew(typesResult)
+  // isNew: 完遂できた(status==='pass')・指摘ありに加え、同一文言を過去ラウンドで既に記録していないことを条件にする(3軸判定)
+  const isNew = (axis, r) => {
+    if (r?.status !== 'pass' || r?.detail === '指摘なし') return false
+    const key = r.detail.trim().slice(0, 80)
+    if (seenFindingKeys[axis].has(key)) return false
+    seenFindingKeys[axis].add(key)
+    return true
+  }
+  const isNewUi    = isNew('ui', uiResult)
+  const isNewData  = isNew('data', dataResult)
+  const isNewDb    = isNew('db', dbResult)
+  const isNewTypes = isNew('types', typesResult)
+  if (isNewUi)    allFindings.ui.push(`[R${round}]\n${uiResult.detail}`)
+  if (isNewData)  allFindings.data.push(`[R${round}]\n${dataResult.detail}`)
+  if (isNewDb)    allFindings.db.push(`[R${round}]\n${dbResult.detail}`)
+  if (isNewTypes) allFindings.types.push(`[R${round}]\n${typesResult.detail}`)
+
+  const hasNewFindings = isNewUi || isNewData || isNewDb || isNewTypes
 
   const roundSummary = [
     `## UI層\n${uiResult?.detail ?? '指摘なし'}`,
@@ -121,7 +145,17 @@ const sweepSummary = [
   `## 型整合性\n${allFindings.types.join('\n') || '指摘なし'}`,
 ].join('\n\n')
 
-log(`Sweep完了: ${round - 1}ラウンド`)
+// converged: dryRounds到達（新規指摘が尽きた）による正常終了。falseならラウンド上限到達による打ち切りで、
+// 未解決の指摘が残っている可能性がある（issue #293: 上限到達時も常に「Sweep完了」と報告していた問題）
+const sweepConverged = dryRounds >= 2
+if (sweepConverged) {
+  log(`Sweep完了（収束）: ${round - 1}ラウンド`)
+} else {
+  log(`Sweep未完了: ラウンド上限(${maxRounds})に到達したため打ち切り。未解決の指摘が残っている可能性があります`)
+}
+if (lastRoundBlockedAxes.length > 0) {
+  log(`Sweep: 最終ラウンドでblocked/未応答だった軸 → ${lastRoundBlockedAxes.join(', ')}（調査が完遂していない可能性）`)
+}
 
 // ─── Phase 3: 仕様書ドラフト生成 ──────────────────────────────────────
 phase('Draft Spec')
@@ -136,6 +170,21 @@ const draftSpec = await agent(
 - blocked: Sweep結果が空でドラフト生成に着手できなかった`,
   { label: 'draft-spec', phase: 'Draft Spec', model: 'claude-sonnet-4-6', effort: 'medium', schema: AGENT_RESULT_SCHEMA_PFB }
 )
+
+// 品質ゲート: deny-by-default（.claude/workflows/lib/quality-gate.js shouldBlockと同一発想）。
+// これまでdraftSpecのstatusを一切見ずFind以降へ進んでいたため、fail/blockedでも
+// 空・矛盾したドラフトを元に後続の調査が無駄に走っていた（issue #293）
+if (draftSpec?.status !== 'pass') {
+  log(`品質ゲート: Draft Specがstatus="${draftSpec?.status ?? 'なし'}"のため中断（Find以降へは進みません）`)
+  return {
+    sweepFindings: allFindings,
+    sweepConverged,
+    sweepBlockedAxes: lastRoundBlockedAxes,
+    draftSpec,
+    blocked: true,
+    blockedAt: 'Draft Spec',
+  }
+}
 
 log('仕様書ドラフト生成完了。Deep Spec 検証を開始します。')
 
@@ -208,7 +257,7 @@ if (autoSurvivedMinor.length > 0) {
 const verdicts = await parallel(
   toVerify.map((f, i) => () => agent(
     `次の仕様指摘を反証しようとせよ。仕様書のどこかで既に対処されているか、問題が成立しない理由があれば refuted=true にせよ。不確かなら refuted=false にせよ（疑わしいものは生存させる）。\n\nタイトル: ${f.title}\n説明: ${f.description}\n\n仕様書ドラフト:\n${draftSpec?.detail}`,
-    { label: `verify:${i}`, phase: 'Adversarial Verify', schema: VERDICT_SCHEMA, model: 'claude-sonnet-4-6', effort: 'medium' }
+    { label: `verify:${i}`, phase: 'Adversarial Verify', schema: VERDICT_SCHEMA, model: 'claude-opus-4-8', effort: 'medium' }
   ))
 )
 
@@ -289,11 +338,41 @@ const proposals = await parallel(
 const validProposals = proposals.filter(Boolean)
 
 // 設計判断が実質同じ提案しかない場合は採点パネル（3案 x 3観点 = 9エージェント）を省略する。
-// 正規化したkeyDecisionsの重複率が高い（=判断が割れていない）ほど採点の価値が低いため。
-const normalizeDecision = (d) => d.trim().toLowerCase()
-const allDecisions = validProposals.flatMap(p => p.keyDecisions.map(normalizeDecision))
-const uniqueDecisions = new Set(allDecisions)
-const divergenceRatio = allDecisions.length > 0 ? uniqueDecisions.size / allDecisions.length : 0
+// 品質ゲート: .claude/workflows/lib/judge-panel.js の computeDivergence と同一ロジック
+// （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
+// 旧実装は正規化文字列の完全一致でしか重複を判定できず、別々のLLM提案が表現違いなだけでも
+// 常に「分岐あり」と判定され、不要な採点パネルが起動していた（issue #295）。
+// 文字bigramのJaccard類似度に基づくクラスタリングに変更する。
+function toBigrams(text) {
+  const cleaned = String(text).replace(/\s+/g, '')
+  const grams = new Set()
+  if (cleaned.length < 2) {
+    if (cleaned.length > 0) grams.add(cleaned)
+    return grams
+  }
+  for (let i = 0; i <= cleaned.length - 2; i++) {
+    grams.add(cleaned.slice(i, i + 2))
+  }
+  return grams
+}
+function decisionSimilarity(a, b) {
+  const setA = toBigrams(a)
+  const setB = toBigrams(b)
+  if (setA.size === 0 && setB.size === 0) return 1
+  let intersection = 0
+  for (const gram of setA) {
+    if (setB.has(gram)) intersection++
+  }
+  const union = setA.size + setB.size - intersection
+  return union === 0 ? 0 : intersection / union
+}
+const allDecisions = validProposals.flatMap(p => p.keyDecisions)
+const clusterRepresentatives = []
+for (const decision of allDecisions) {
+  const isDuplicate = clusterRepresentatives.some(rep => decisionSimilarity(rep, decision) >= 0.5)
+  if (!isDuplicate) clusterRepresentatives.push(decision)
+}
+const divergenceRatio = allDecisions.length > 0 ? clusterRepresentatives.length / allDecisions.length : 0
 const hasDivergence = validProposals.length > 1 && divergenceRatio >= 0.5
 
 let validScored
@@ -333,6 +412,8 @@ const synthesis = await agent(
 
 return {
   sweepFindings: allFindings,
+  sweepConverged,
+  sweepBlockedAxes: lastRoundBlockedAxes,
   draftSpec,
   survived,
   gaps,

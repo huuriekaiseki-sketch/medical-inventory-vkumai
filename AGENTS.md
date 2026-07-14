@@ -66,6 +66,7 @@ Phase 1 調査(並列) → Phase 2 仕様書 → [停止① 人間レビュー]
 | ファイル | 目的 |
 |---|---|
 | `CLAUDE.md` | Phase 1-5 の詳細フロー・絶対ルール |
+| [`docs/agents/common.md`](docs/agents/common.md) | 全AIエージェント共通ルール・**引き継ぎフォーマット**（作業完了時は必読） |
 | `docs/ai-config-map.md` | エージェント・スキル全体マップ |
 | `.claude/settings.json` | Bash/MCP 権限リスト |
 | `src/app/` | Next.js App Router のページ・API Routes |

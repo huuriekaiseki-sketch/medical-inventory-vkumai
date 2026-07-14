@@ -72,6 +72,22 @@ describe('EditCategoryPage', () => {
     })
   })
 
+  it('更新時のネットワークエラーでエラーメッセージを表示し遷移しない', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch')
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ category }) } as Response)
+    fetchMock.mockRejectedValueOnce(new Error('network error'))
+
+    await renderPage(params)
+    await waitFor(() => {
+      expect(screen.getByLabelText('カテゴリ名')).toHaveValue('消耗品')
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: '更新' }))
+
+    expect(await screen.findByText('network error')).toBeInTheDocument()
+    expect(push).not.toHaveBeenCalled()
+  })
+
   it('取得失敗でエラーメッセージを表示する', async () => {
     vi.spyOn(global, 'fetch').mockRejectedValue(new Error('network'))
 

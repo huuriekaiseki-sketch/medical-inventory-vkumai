@@ -14,6 +14,8 @@ function NewsPageInner() {
   const urlFacilityId = searchParams.get('facilityId')
 
   const [facilities, setFacilities] = useState<Facility[]>([])
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [initialized, setInitialized] = useState(false)
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null)
   const [items, setItems] = useState<NewsFeedItem[]>([])
   const [offset, setOffset] = useState(0)
@@ -21,6 +23,7 @@ function NewsPageInner() {
   const [error, setError] = useState<string | null>(null)
 
   // 初回ロード用: facilities を取得し、選択施設IDを決定する
+  // 管理者はURLで施設が指定されていなければ「全施設」（selectedFacilityId=null）をデフォルトにする（issue #40）
   useEffect(() => {
     let cancelled = false
     async function load() {
@@ -29,21 +32,28 @@ function NewsPageInner() {
         if (!res.ok) throw new Error()
         const data = await res.json()
         const loadedFacilities = data.facilities as Facility[]
+        const admin = Boolean(data.isAdmin)
         if (cancelled) return
 
         setFacilities(loadedFacilities)
+        setIsAdmin(admin)
 
         const isValidUrlFacility =
           urlFacilityId !== null && loadedFacilities.some((f) => f.id === urlFacilityId)
         const resolvedFacilityId = isValidUrlFacility
           ? urlFacilityId
-          : (loadedFacilities[0]?.id ?? null)
+          : admin
+            ? null
+            : (loadedFacilities[0]?.id ?? null)
 
         setSelectedFacilityId(resolvedFacilityId)
+        setInitialized(true)
 
         if (resolvedFacilityId !== urlFacilityId && resolvedFacilityId) {
           router.replace(`/news?facilityId=${encodeURIComponent(resolvedFacilityId)}`)
         }
+
+        setError(null)
       } catch {
         if (!cancelled) setError('データの取得に失敗しました')
       }
@@ -56,24 +66,29 @@ function NewsPageInner() {
   }, [])
 
   // フィード取得用: selectedFacilityId が変わるたびに1ページ目から取得する
+  // 管理者がselectedFacilityId=null（全施設）の場合はfacilityIdを付与せず取得する
   useEffect(() => {
     let cancelled = false
     async function loadFeed() {
-      if (!selectedFacilityId) {
+      if (!initialized) return
+      if (!selectedFacilityId && !isAdmin) {
         setItems([])
         setHasMore(false)
+        setError(null)
         return
       }
       try {
-        const res = await fetch(
-          `/api/news?facilityId=${encodeURIComponent(selectedFacilityId)}&limit=${PAGE_SIZE}&offset=0`
-        )
+        const query = selectedFacilityId
+          ? `facilityId=${encodeURIComponent(selectedFacilityId)}&limit=${PAGE_SIZE}&offset=0`
+          : `limit=${PAGE_SIZE}&offset=0`
+        const res = await fetch(`/api/news?${query}`)
         if (!res.ok) throw new Error()
         const data = await res.json()
         if (cancelled) return
         setItems(data.items)
         setOffset(PAGE_SIZE)
         setHasMore(data.items.length === PAGE_SIZE)
+        setError(null)
       } catch {
         if (!cancelled) setError('データの取得に失敗しました')
       }
@@ -82,27 +97,35 @@ function NewsPageInner() {
     return () => {
       cancelled = true
     }
-  }, [selectedFacilityId])
+  }, [selectedFacilityId, isAdmin, initialized])
 
   async function handleLoadMore() {
-    if (!selectedFacilityId) return
+    if (!selectedFacilityId && !isAdmin) return
     try {
-      const res = await fetch(
-        `/api/news?facilityId=${encodeURIComponent(selectedFacilityId)}&limit=${PAGE_SIZE}&offset=${offset}`
-      )
+      const query = selectedFacilityId
+        ? `facilityId=${encodeURIComponent(selectedFacilityId)}&limit=${PAGE_SIZE}&offset=${offset}`
+        : `limit=${PAGE_SIZE}&offset=${offset}`
+      const res = await fetch(`/api/news?${query}`)
       if (!res.ok) throw new Error()
       const data = await res.json()
       setItems((prev) => [...prev, ...data.items])
       setOffset((prev) => prev + PAGE_SIZE)
       setHasMore(data.items.length === PAGE_SIZE)
+      setError(null)
     } catch {
       setError('データの取得に失敗しました')
     }
   }
 
   function handleFacilityChange(newId: string) {
-    setSelectedFacilityId(newId)
-    router.replace(`/news?facilityId=${encodeURIComponent(newId)}`)
+    // 空文字は「全施設」選択（管理者のみ選択肢として表示）を表す
+    const resolved = newId === '' ? null : newId
+    setSelectedFacilityId(resolved)
+    if (resolved) {
+      router.replace(`/news?facilityId=${encodeURIComponent(resolved)}`)
+    } else {
+      router.replace('/news')
+    }
   }
 
   return (
@@ -133,6 +156,7 @@ function NewsPageInner() {
             className="rounded border px-3 py-2 text-sm"
             style={{ borderColor: '#072C2C33', color: '#072C2C' }}
           >
+            {isAdmin && <option value="">全施設</option>}
             {facilities.map((facility) => (
               <option key={facility.id} value={facility.id}>
                 {facility.name}

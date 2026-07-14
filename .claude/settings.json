@@ -17,6 +17,10 @@
       "Bash(mv *)",
       "Bash(diff *)",
       "Bash(python3 *)",
+      "Bash(jq *)",
+      "Bash(bash scripts/summarize-loop-observability.sh *)",
+      "Bash(scripts/scan-claude-transcripts.sh *)",
+      "Bash(bash scripts/update-loop-observability-usage.sh *)",
       "Bash(npm run *)",
       "Bash(npm test *)",
       "Bash(npm install *)",
@@ -49,17 +53,9 @@
       "Bash(gh pr list*)",
       "Bash(gh pr diff *)",
       "Bash(gh pr checks*)",
-      "Bash(gh pr create*)",
-      "Bash(gh pr merge*)",
-      "Bash(gh pr edit*)",
-      "Bash(gh pr close*)",
-      "Bash(gh pr comment*)",
       "Bash(gh issue view *)",
       "Bash(gh issue list*)",
       "Bash(gh issue create*)",
-      "Bash(gh issue edit*)",
-      "Bash(gh issue close*)",
-      "Bash(gh issue comment*)",
       "Bash(gh repo view*)",
       "Bash(claude mcp list*)",
       "Bash(claude mcp --help*)",
@@ -71,6 +67,7 @@
       "Bash(scripts/log-loop-observability.sh *)",
       "Bash(/Users/masanori/medical-inventory-vkumai/scripts/log-loop-observability.sh *)",
       "Bash(scripts/doc-suggest-check.sh *)",
+      "Bash(scripts/ai-check-suggest.sh *)",
       "Bash(curl -s http://localhost:*)",
       "Bash(sort *)",
       "Bash(ps *)",
@@ -81,7 +78,8 @@
       "Bash(/Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/review-package *)",
       "Bash(/Users/masanori/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/skills/subagent-driven-development/scripts/task-brief *)",
       "mcp__context7__resolve-library-id",
-      "mcp__playwright__browser_navigate"
+      "mcp__playwright__browser_navigate",
+      "WebFetch(domain:code.claude.com)"
     ],
     "ask": [
       "Bash(supabase db push*)",
@@ -96,6 +94,14 @@
       "Bash(npx supabase functions deploy*)",
       "Bash(npx supabase secrets*)",
       "Bash(npx supabase link*)",
+      "Bash(gh pr create*)",
+      "Bash(gh pr merge*)",
+      "Bash(gh pr edit*)",
+      "Bash(gh pr close*)",
+      "Bash(gh pr comment*)",
+      "Bash(gh issue edit*)",
+      "Bash(gh issue close*)",
+      "Bash(gh issue comment*)",
       "Bash(gh api*)",
       "Bash(gh repo edit*)"
     ],
@@ -119,6 +125,12 @@
             "command": "scripts/doc-suggest-check.sh",
             "timeout": 15,
             "statusMessage": "domain.md/decisions.md更新候補を確認中..."
+          },
+          {
+            "type": "command",
+            "command": "scripts/ai-check-suggest.sh",
+            "timeout": 15,
+            "statusMessage": "ai:check実行有無を確認中..."
           }
         ]
       }

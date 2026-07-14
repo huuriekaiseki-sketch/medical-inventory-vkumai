@@ -41,27 +41,31 @@ export default function EditHospitalPricePage({ params }: { params: Promise<{ id
 
   async function handleSubmit(data: HospitalPriceInput) {
     setError(null)
-    const res = await fetch(`/api/hospital-prices/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
+    try {
+      const res = await fetch(`/api/hospital-prices/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
 
-    if (!res.ok) {
-      if (res.status === 404) {
-        setError('価格情報が見つかりません')
-      } else if (res.status === 422) {
-        setError('施設または代理店商品が存在しません')
-      } else if (res.status === 409) {
-        setError('この施設と商品の組み合わせは既に登録されています')
-      } else {
-        const body = await res.json()
-        setError(body.error ?? '更新に失敗しました')
+      if (!res.ok) {
+        if (res.status === 404) {
+          setError('価格情報が見つかりません')
+        } else if (res.status === 422) {
+          setError('施設または代理店商品が存在しません')
+        } else if (res.status === 409) {
+          setError('この施設と商品の組み合わせは既に登録されています')
+        } else {
+          const body = await res.json()
+          setError(body.error ?? '更新に失敗しました')
+        }
+        return
       }
-      return
-    }
 
-    router.push('/hospital-prices')
+      router.push('/hospital-prices')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '更新に失敗しました')
+    }
   }
 
   if (error && !price) {

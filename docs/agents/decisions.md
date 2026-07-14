@@ -95,3 +95,113 @@ migrationファイルだけがスキーマの唯一のソースオブトゥル�
 E2Eテストやシード投入は本番相当の操作（データ作成・削除・RLSトリガー実行）を伴うため、
 設定ミス1つで本番DBに書き込まれるリスクがある。環境変数の設定ミスだけに頼らず、実行時に
 接続先を機械的に検証することで、ヒューマンエラーが起きても本番事故に直結しないようにした。
+
+## なぜスキーマドリフト検知を自前cronではなくSupabase GitHub Integrationで始めたか
+
+`supabase db diff --linked` を独自のGitHub Actions cronで定期実行する案（issue #30原案）も
+検討したが、これは本番の `SUPABASE_ACCESS_TOKEN` とDBパスワードをGitHub Secretsに追加する
+必要があり、e2e.ymlが徹底している「CIに本番Supabase接続情報を一切渡さない」方針
+（このファイルの「なぜE2E/BSGはテスト専用Supabaseのみに接続する設計にしたか」）と正面から
+矛盾する。
+
+Supabase公式のGitHub Integration（Dashboard側でOAuth認可するだけで、GitHub Secretsへの
+手動登録が不要）を先に有効化する方針にした。「Deploy to production」（mainマージで本番DBへ
+自動でmigrationを適用する機能）はOFFのままにしている。issue #30の目的は検知であって
+デプロイ自動化ではなく、AIDD品質ゲート（重大度分類のImplement/Integrateゲート組み込み）が
+未実装の段階で、最もクリティカルな変更であるDBスキーマ変更を自動デプロイの対象にするのは
+時期尚早と判断した。調査の結果、これまでも本番へのmigration適用はCIではなくローカルCLIでの
+手動 `supabase link` → `supabase db push`（都度確認付き）で行われており、Integrationを
+ONにすることは既存フローの自動化ではなく新規のリスクを追加することになる、という点も判断
+材料にした。
+
+GitHub側で「required status check」によるマージブロックも検討したが、このリポジトリは
+private repoでGitHub Free（Org）プランのため、classic branch protectionもRulesets（新機能）も
+「強制」が有効にならないことが判明した（プライベートリポジトリでの強制にはGitHub Team以上の
+プランが必要）。有償プランへのアップグレードは費用判断のため今回は見送り、Supabaseの
+ステータスチェックがPR画面に表示される「検知のみ」の状態を許容する方針にした。マージの
+可否は引き続き人間のレビューに委ねる。
+
+弱点として、PRを介さない変更（SQL Editor等での直接操作、rls_auto_enableの実際の事故
+パターン）はPRが発生するまで検知が遅延する。この「PRの外側の変更」をどう定期検知するかは
+未解決のまま残しており、シークレットをGitHub側に置かない代替案（Supabase Edge Functionの
+スケジュール実行など）を含めて別issue（#305）で検討する前提にしている。
+
+## なぜマスタデータ（products/categories/distributor_products）の書き込みをadmin限定にしたか
+
+`20260629000001_fix_master_rls.sql` で、これらのテーブルのRLSを「SELECTは全認証ユーザー可、
+INSERT/UPDATE/DELETEはadmin（`is_admin()`）のみ可」に変更した。それ以前は `auth_only` という
+FOR ALLポリシー（`USING (true) WITH CHECK (true)`）で、書き込みも全認証ユーザーに許可されて
+いたが、これは設計意図と一致しない状態だった（`SPEC-tech-debt.md` SET F、2026-06-29）。
+
+マスタデータ（製品・カテゴリ・代理店製品）は施設横断で共有される単一の真実源であり、
+どこか1施設のスタッフが自由に編集できると、他の全施設の在庫管理・発注に影響する。書き込みを
+admin限定にすることで、共有マスタの一貫性を管理者の統制下に置く設計にした。
+
+**教訓（2026-07-13、issue #39のSPEC.mdレビューで発覚）:** この決定がdecisions.mdに記録されて
+いなかったため、後続のSPEC.md（在庫マスタへのカラム追加）が「管理者・施設スタッフ双方が
+登録・編集できる」という汎用テンプレート文言のまま受け入れ条件に書かれ、E2Eテストが実際の
+CI（本番相当RLS）で初めて失敗するまで気づかれなかった。**SPEC.mdの受け入れ条件でマスタデータ
+（products/categories/distributor_products等）のCUD操作に触れる場合は、着手前にこのセクションと
+該当migrationの `-- WHY:` コメントを必ず確認すること。**
+
+## なぜスキーマドリフト検知（issue #305）にEdge Functionを使わずpg_cron + GitHub Actionsポーリングを採用したか
+
+issue #305（PRを介さない本番スキーマ変更の定期ドリフト検知）は、Phase 1深掘り調査（98エージェント）
+のJudge Panelが「最小スコープv1設計」を採用推奨案として選定した。Edge Function + pg_net経由の
+リアルタイム通知案は、pg_net拡張の有無が未確認・Edge Functionのデプロイパイプライン未定義・
+GITHUB_TOKENのSupabase環境変数管理という3つの未確認依存を抱えており、v1では不採用とした。
+
+代わりに、DB内部（pg_cron）が`check_schema_drift()`を毎日呼んで`schema_drift_log`に記録するだけに
+とどめ、通知はGitHub Actionsの日次ポーリング（`drift_alert_view`をanon keyで読み、`gh issue create`）
+に委譲する構成にした。これによりSUPABASE_ACCESS_TOKEN・DBパスワード・service role keyのいずれも
+GitHub Secretsに置く必要がなくなり、既存方針（本セクション冒頭「なぜE2E/BSGはテスト専用Supabase
+のみに接続する設計にしたか」等）と完全に整合する。
+
+**実装時に発覚した矛盾とその解決:** 仕様ドラフトでは、GitHub Actionsが作成したIssue URLを
+`record_issue_url()` RPC経由でDBに書き戻す設計だったが、その関数はservice_role限定であり、
+anon keyのみで動くGitHub Actionsからは本来呼び出せない（「本番接続情報をGitHub Secretsに置かない」
+という制約と直接矛盾する）。この矛盾はPhase 2の仕様レビュー（Part 3セルフチェック）でも見逃され、
+Phase 3の実装時（db-impl・api実装担当がそれぞれ別々にSPECを読んだ際）に初めて発覚した。
+
+解決として、DBへの書き込みを一切行わない設計に変更した。GitHub Issueのタイトルを
+`[schema-drift] <drift_type>: <object_name>`という決定的な形式にし、既存のopen issueとの
+タイトル突合だけで冪等性（重複作成防止）とクローズ判定を実現する。GitHub Issue自体を
+状態源（state source）とすることで、Supabase側への書き込み権限が一切不要になった。
+
+**教訓:** 「anon keyのみで完結させる」という制約は、通知の"作成"だけでなく"状態更新（書き戻し）"
+にも同じ制約がかかることをSPEC作成時点で見落としやすい。read-onlyなanon key経由の設計を書く際は、
+「この設計のどこかにwrite操作が紛れ込んでいないか」をPart 3セルフチェックの追加観点として
+確認すべきだった（現行のPart 3チェックリストにはこの観点が明示的に含まれていない）。
+
+## なぜ新しい運用ルールに「検知手段を先に決める」原則を導入したか（issue #339）
+
+2026-07-14のmentor設計レビューで、現行ルールの強制力が3層に分かれていることが確認された：
+
+| 層 | 例 | 強制力 |
+|---|---|---|
+| 機械強制 | env-guard、CI、Stop hook（ai:check実行検知） | 破れない |
+| 機械検知（事後） | check-loop-observability-gap.sh、schema-drift検知 | 破ると気づける |
+| 自然言語のみ | agent-progress記録、aidd-phase1-routerを入口に使うこと自体、ブランチ運用、引き継ぎフォーマット | 読まれなければ終わり |
+
+第3層は「破られたことに気づく手段」が無く、破られても静かに劣化する。実際に3回壊れた実績がある
+（loop-observability記録の5日分欠落、TRI/RISK判定が「機械判定」と明記されつつ実態は手動運用
+だった期間、セッションレポートの空テンプレ自動生成）。壊れる条件も既知（コンテキスト圧縮時・
+Codex等の別ツール経由・古いworktreeで古い版のルールが読まれるとき）。
+
+common.mdの分量は増え続けており、prose追加1件ごとに他ルールの遵守率が薄まる構造的問題がある
+（読む分量が増えるほど、1件あたりの遵守確率は下がる）。これに対し「もっと詳しく書く」で対応
+すると悪化するだけなので、書く量を増やす方向ではなく検知できるものは機械に移す方向で対応する
+方針にした。
+
+**原則:** 新しい運用ルールは、破られたことを機械的に検知する手段を先に決めてから書く。検知手段を
+設計できないルールは、prose追加ではなく既存の機械ゲート（hook / CI / スクリプト）の拡張として
+実装できないか先に検討する。検知すら設計できない場合は、そのルールがprose追加に見合う価値を
+持つか自体を疑う。検知（事後）で十分なものと、強制（事前ブロック）が必要なものは分けて設計する
+（例: 停止①の人間承認はManifest Checkによる事前ブロック、agent-progress記録漏れは事後の件数
+突合で十分、という判断の違い）。
+
+すべてを一度に機械化する必要はない。まず第3層ルールの棚卸し（[`common.md`](./common.md)参照）
+と本原則の明文化だけでも、ルール増殖の歯止めになる。個別の検知手段のうち、agent-progress記録漏れ
+検知は`scripts/check-agent-progress-gap.sh`（loop-observabilityのgap検知と同じ「期待件数 vs
+実測件数」パターンを再利用）として実装済み。残る2件（router非経由でのTRI/RISK対象変更検知、
+引き継ぎフォーマット実施検知）は優先度順に別途実装する（未着手、issue #339）。

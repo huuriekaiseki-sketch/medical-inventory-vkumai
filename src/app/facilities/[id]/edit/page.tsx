@@ -23,23 +23,27 @@ export default function EditFacilityPage({ params }: { params: Promise<{ id: str
 
   async function handleSubmit(data: FacilityInput) {
     setError(null)
-    const res = await fetch(`/api/facilities/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
+    try {
+      const res = await fetch(`/api/facilities/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
 
-    if (!res.ok) {
-      if (res.status === 409) {
-        setError('施設名は既に使用されています')
+      if (!res.ok) {
+        if (res.status === 409) {
+          setError('施設名は既に使用されています')
+          return
+        }
+        const body = await res.json()
+        setError(body.error ?? '更新に失敗しました')
         return
       }
-      const body = await res.json()
-      setError(body.error ?? '更新に失敗しました')
-      return
-    }
 
-    router.push('/facilities')
+      router.push('/facilities')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '更新に失敗しました')
+    }
   }
 
   if (error && !facility) {

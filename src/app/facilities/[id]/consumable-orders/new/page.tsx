@@ -19,10 +19,14 @@ export default function NewConsumableOrderPage({ params }: { params: Promise<{ i
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     fetch(`/api/consumables?facilityId=${id}`)
       .then(r => r.json())
-      .then(d => setConsumables(d.consumables ?? []))
-      .catch(() => setError('消耗品の取得に失敗しました'))
+      .then(d => { if (!cancelled) setConsumables(d.consumables ?? []) })
+      .catch(() => { if (!cancelled) setError('消耗品の取得に失敗しました') })
+    return () => {
+      cancelled = true
+    }
   }, [id])
 
   const filtered = activeTab === 'ALL' ? consumables : consumables.filter(c => c.purpose === activeTab)

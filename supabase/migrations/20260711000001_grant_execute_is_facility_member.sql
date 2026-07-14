@@ -1,0 +1,13 @@
+-- =========================================================================
+-- is_facility_member() への EXECUTE 権限の明示化（issue #165 セット4）
+-- =========================================================================
+-- WHY: is_facility_member() は関数作成時（20260627010000_add_multitenant.sql）に
+--      GRANT EXECUTE が明示されておらず、PostgreSQL のデフォルト仕様である
+--      「PUBLIC への EXECUTE 権限自動付与」に暗黙的に依存していた。
+--      本リポジトリには ALTER DEFAULT PRIVILEGES による REVOKE EXECUTE FROM PUBLIC
+--      相当の記述が無いため現状は動作しているが、他のRPC関数
+--      （create_loan_order_atomic・get_admin_status 等）と同様に明示的な GRANT を
+--      行うことで、将来 REVOKE EXECUTE FROM PUBLIC のような防御的変更が入った際に
+--      暗黙のPUBLIC権限だけに頼っていたことで静かに壊れるのを防ぐ。
+--      これはバグ修正ではなく、既存の動作を明示化するための変更である。
+GRANT EXECUTE ON FUNCTION is_facility_member(UUID) TO authenticated;
