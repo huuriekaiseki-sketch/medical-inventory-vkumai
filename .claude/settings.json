@@ -68,6 +68,8 @@
       "Bash(/Users/masanori/medical-inventory-vkumai/scripts/log-loop-observability.sh *)",
       "Bash(scripts/doc-suggest-check.sh *)",
       "Bash(scripts/ai-check-suggest.sh *)",
+      "Bash(scripts/verify-claims.sh *)",
+      "Bash(bash scripts/verify-claims.test.sh*)",
       "Bash(curl -s http://localhost:*)",
       "Bash(sort *)",
       "Bash(ps *)",
@@ -131,6 +133,12 @@
             "command": "scripts/ai-check-suggest.sh",
             "timeout": 15,
             "statusMessage": "ai:check実行有無を確認中..."
+          },
+          {
+            "type": "command",
+            "command": "scripts/verify-claims.sh",
+            "timeout": 90,
+            "statusMessage": "直前ターンの主張を裏取り中..."
           }
         ]
       }
