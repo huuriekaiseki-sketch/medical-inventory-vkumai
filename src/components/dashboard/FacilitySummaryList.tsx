@@ -71,7 +71,7 @@ export function FacilitySummaryList({ facilitySummaries, loanOutstanding }: Faci
                 <dd>{summary.consumableOrderCount}件 / {formatDateTime(summary.consumableOrderLatestAt)}</dd>
               </Link>
               <Link href={`/facilities/${summary.facilityId}/loan-orders`} className="flex justify-between rounded px-1 -mx-1 hover:bg-[#EDEADE]/40">
-                <dt>貸出発注</dt>
+                <dt>短貸発注</dt>
                 <dd>{summary.loanOrderCount}件 / {formatDateTime(summary.loanOrderLatestAt)}</dd>
               </Link>
             </dl>

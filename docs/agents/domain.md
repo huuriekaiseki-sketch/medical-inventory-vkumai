@@ -50,6 +50,9 @@ _Avoid_: 商品、product単体（hospital_priceとの対比で使う場合はdi
 **loan_return（短貸返却）**:
 `loan_order` で借りたものの返却記録。
 
+> 表記ゆれ注意: 「貸出発注」「貸出返却」は誤記（issue #337で修正済み）。
+> ユーザー向け文言・コメント・テストは必ず「短貸発注」「短貸返却」で統一する。
+
 すべての発注系テーブル（`case_orders` / `consumable_orders` / `loan_orders` / `loan_returns`）は
 `facility_id` を持ち、`is_facility_member` によるRLSで施設外からのアクセスを遮断する。
 

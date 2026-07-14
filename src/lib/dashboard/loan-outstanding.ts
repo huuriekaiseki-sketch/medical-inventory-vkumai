@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-// WHY: 未返却件数 = submittedの貸出発注件数 - returnedの返却件数（施設単位のビジネスルール）
+// WHY: 未返却件数 = submittedの短貸発注件数 - returnedの返却件数（施設単位のビジネスルール）
 // loan_order_items と loan_return_items に直接の外部キーはないため、件数差分で近似する。
 // 差分が負になるケース（返却超過）は0に丸める。
 export async function getLoanOutstandingCount(
