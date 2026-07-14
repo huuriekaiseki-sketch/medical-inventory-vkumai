@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const orders = await listLoanOrders(db, facilityId!, limit, offset)
     return NextResponse.json({ orders })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '貸出発注一覧の取得に失敗しました')
+    return apiError(error instanceof Error ? error.message : '短貸発注一覧の取得に失敗しました')
   }
 }
 
