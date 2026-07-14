@@ -120,9 +120,10 @@ test.describe('コンパチ（互換品）ページ（issue #21）', () => {
     await page.getByRole('button', { name: '登録' }).click()
 
     // WHY: 製品名がフォーム内の選択肢・一覧テーブル行にも出現するため、page全体への
-    // getByTextではstrict mode violationになる。エラー文言はrole="alert"の要素に
-    // 限定して表示されるため、そこに絞って検証する。
-    const formError = page.getByRole('alert')
+    // getByTextではstrict mode violationになる。role="alert"だけで絞ると、
+    // Next.jsが自動挿入するルートアナウンサー用の空div（同じくrole="alert"）も
+    // ヒットしてしまうため、CompatForm自身のエラー表示<p>タグまでセレクタで絞り込む。
+    const formError = page.locator('p[role="alert"]')
     await expect(formError).toContainText('すでに登録済みです')
     await expect(formError).toContainText(productA.name)
     await expect(formError).toContainText(productB.name)
