@@ -7,6 +7,7 @@ type DashboardShortcutsProps = {
 }
 
 const BASE_SHORTCUTS = [
+  { href: '/orders', label: '発注履歴' },
   { href: '/facilities', label: '施設一覧' },
   { href: '/products', label: '商品一覧' },
   { href: '/distributor-products', label: '販売店商品一覧' },

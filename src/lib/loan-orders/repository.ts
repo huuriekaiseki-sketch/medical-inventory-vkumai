@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asOptionalString, asNumber, asEnum } from '@/lib/mapping'
-import type { LoanOrder, LoanOrderInput, LoanOrderItem } from '@/types/order'
+import { assertValidListOptions } from '@/lib/orders/list-options-validation'
+import type { LoanOrder, LoanOrderInput, LoanOrderItem, OrderListFilterOptions } from '@/types/order'
 
 const STATUSES = ['draft', 'submitted'] as const
 
@@ -38,13 +39,47 @@ export async function listLoanOrders(
   db: SupabaseClient,
   facilityId: string,
   limit = 50,
-  offset = 0
+  offset = 0,
+  options?: OrderListFilterOptions
 ): Promise<LoanOrder[]> {
-  const { data, error } = await db
+  assertValidListOptions(limit, offset)
+  // issue #20 SET-C: 品名検索（productSearch）は loan_order_items.name を直接使う
+  // （name 列がそのまま存在するため products テーブルへのJOINは不要）。
+  // 先に対象の loan_order_id 群を絞り込んでからメインクエリに .in() で適用する
+  const productSearch = options?.productSearch?.trim()
+  let orderIds: string[] | undefined
+  if (productSearch) {
+    const { data: itemRows, error: itemError } = await db
+      .from('loan_order_items')
+      .select('loan_order_id')
+      .ilike('name', `%${productSearch}%`)
+    if (itemError) throw new Error(itemError.message)
+    orderIds = Array.from(
+      new Set(((itemRows ?? []) as { loan_order_id?: unknown }[]).map(r => asString(r.loan_order_id)))
+    )
+    if (orderIds.length === 0) return []
+  }
+
+  let query = db
     .from('loan_orders')
     .select('*, loan_order_items(*)')
     .eq('facility_id', facilityId)
+  if (options?.dateFrom) query = query.gte('created_at', options.dateFrom)
+  if (options?.dateTo) query = query.lte('created_at', options.dateTo)
+  if (orderIds) query = query.in('id', orderIds)
+
+  // id を第2キーにして同時刻のページング順序も安定させる（case-orders/loan-returnsと統一）
+  //
+  // issue #20 型安全・データ層整合レビュー対応（important）: summaryLabel（SET-D）は
+  // items[0]（代表1品目）を使うが、埋め込みクエリ(loan_order_items(*))に明示的な
+  // ORDER BY を指定しないと代表製品名の選出が理論上非決定的になる。作成順
+  // （created_at昇順・id昇順を第2キー）を明示し、「最初に登録した明細」を安定して
+  // 代表として選出する
+  const { data, error } = await query
     .order('created_at', { ascending: false })
+    .order('id', { ascending: true })
+    .order('created_at', { ascending: true, referencedTable: 'loan_order_items' })
+    .order('id', { ascending: true, referencedTable: 'loan_order_items' })
     .range(offset, offset + limit - 1)
   if (error) throw new Error(error.message)
   return ((data ?? []) as (LoanOrderRow & { loan_order_items?: LoanOrderItemRow[] })[]).map(o => ({

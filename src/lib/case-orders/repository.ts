@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asOptionalString, asNumber, asEnum } from '@/lib/mapping'
-import type { CaseOrder, CaseOrderInput, CaseOrderItem } from '@/types/order'
+import { assertValidListOptions } from '@/lib/orders/list-options-validation'
+import type { CaseOrder, CaseOrderInput, CaseOrderItem, OrderListFilterOptions } from '@/types/order'
 
 const GENDERS = ['male', 'female', 'other'] as const
 const STATUSES = ['draft', 'submitted'] as const
@@ -45,13 +46,62 @@ export async function listCaseOrders(
   db: SupabaseClient,
   facilityId: string,
   limit = 50,
-  offset = 0
+  offset = 0,
+  options?: OrderListFilterOptions
 ): Promise<CaseOrder[]> {
-  const { data, error } = await db
+  assertValidListOptions(limit, offset)
+  // issue #20 SET-C: 品名検索（productSearch）は case_order_items に name 列が無く、
+  // jan → products.name の突合が必要。case_order_items.jan は products.jan への FK では
+  // ないため PostgREST の埋め込み(embed) join が使えず、2段階の絞り込みクエリで解決する
+  // （① products から該当jan群を取得 → ② case_order_items からその jan群に紐づく
+  // case_order_id群を取得 → ③ メインクエリに .in('id', ...) で適用）
+  const productSearch = options?.productSearch?.trim()
+  let caseOrderIds: string[] | undefined
+  if (productSearch) {
+    const { data: productRows, error: productError } = await db
+      .from('products')
+      .select('jan')
+      .ilike('name', `%${productSearch}%`)
+    if (productError) throw new Error(productError.message)
+    const jans = ((productRows ?? []) as { jan?: unknown }[]).map(p => asString(p.jan))
+    if (jans.length === 0) return []
+
+    const { data: itemRows, error: itemError } = await db
+      .from('case_order_items')
+      .select('case_order_id')
+      .in('jan', jans)
+    if (itemError) throw new Error(itemError.message)
+    caseOrderIds = Array.from(
+      new Set(((itemRows ?? []) as { case_order_id?: unknown }[]).map(r => asString(r.case_order_id)))
+    )
+    if (caseOrderIds.length === 0) return []
+  }
+
+  let query = db
     .from('case_orders')
     .select('*, case_order_items(*)')
     .eq('facility_id', facilityId)
-    .order('created_at', { ascending: false })
+  if (options?.dateFrom) query = query.gte('case_datetime', options.dateFrom)
+  if (options?.dateTo) query = query.lte('case_datetime', options.dateTo)
+  if (caseOrderIds) query = query.in('id', caseOrderIds)
+
+  // issue #20 型安全・データ層整合レビュー対応（critical）: dateFrom/dateTo は case_datetime で
+  // 絞り込んでいるため、.order() も created_at ではなく case_datetime にしないと、
+  // 施設ごとの該当件数が limit を超えた場合に DB 側で誤った基準（created_at）で先に
+  // 切り詰められ、unified-repository.ts の fetchTopN が前提とする
+  // 「displayDatetime(=case_datetime)降順で上位N件」という不変条件が壊れる。
+  // id を第2キーにして同時刻のページング順序も安定させる
+  //
+  // issue #20 型安全・データ層整合レビュー対応（important）: summaryLabel（SET-D）は
+  // items[0]（代表1品目）を使うが、埋め込みクエリ(case_order_items(*))に明示的な
+  // ORDER BY を指定しないと代表製品名の選出が理論上非決定的になる。作成順
+  // （created_at昇順・id昇順を第2キー）を明示し、「最初に登録した明細」を安定して
+  // 代表として選出する
+  const { data, error } = await query
+    .order('case_datetime', { ascending: false })
+    .order('id', { ascending: true })
+    .order('created_at', { ascending: true, referencedTable: 'case_order_items' })
+    .order('id', { ascending: true, referencedTable: 'case_order_items' })
     .range(offset, offset + limit - 1)
   if (error) throw new Error(error.message)
   return ((data ?? []) as (CaseOrderRow & { case_order_items?: CaseOrderItemRow[] })[]).map(o => ({

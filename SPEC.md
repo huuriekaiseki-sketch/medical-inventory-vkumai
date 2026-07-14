@@ -1,9 +1,10 @@
-# 機能仕様書 — issue #305: PRを介さない本番スキーマ変更の定期ドリフト検知
+# 機能仕様書 — issue #20: 発注履歴ページ（/orders）: 4種別の発注を横断して一覧・検索
 
 > ステータス: **承認済み（停止①クリア）— Phase 3実装へ**
-> 作成日: 2026-07-13 / 承認日: 2026-07-13
-> 由来: Phase 1深掘り調査（Sweep→Draft Spec→Adversarial Verify→Judge Panel→Synthesize、98エージェント）の統合提案
-> 承認内容: 5点の判断事項すべて提案通り（v1スコープ3種のみ・GitHub Issueのみ通知・既存ドリフト封印・drift_alert_view anon公開・pg_cron有効化）で承認
+> 作成日: 2026-07-14 / 承認日: 2026-07-14
+> 由来: Phase 1深掘り調査（Sweep→Draft Spec→Find→Adversarial Verify→Completeness Critic→Judge Panel→Synthesize、92エージェント）の統合提案
+> 承認内容: 判断が必要な点6点すべて回答済み（未返却バッジ見送り・80件固定表示・先頭施設デフォルト・単純ilike・総件数非表示、②は保留でよい）。実装時の技術的懸念2点（summaryLabelのJOIN経路・facility_id自動送信ロジック）もSPEC.mdに反映済み
+> 前提: issue #23（分析・レポート `/reports`）はissue自身が「本issue完了後に着手推奨（案5）」としており、本issueはその前提条件
 
 ---
 
@@ -11,322 +12,266 @@
 
 ### 背景・課題
 
-issue #30でSupabase GitHub Integrationを有効化したが、これはPR/ブランチトリガーでのみ動作する。SQL Editor等でPRを介さず直接本番DBに変更が入るケース（`rls_auto_enable`イベントトリガーが実際にPRを介さず入っていた事故パターン、`20260707000001_capture_rls_auto_enable_event_trigger.sql`参照）は、次にPRが発生するまで検知が遅延する。
+発注登録モーダル（症例出荷・消耗品・貸出・返却）とDB・RPCは実装済みだが、それらを横断して参照する一覧ページが存在しない。施設ごとの個別ページ（`/facilities/[id]/case-orders` 等）はあるが、種別をまたいだ検索・一覧性がない。
 
-### 何ができるようになるか
+### 何ができるようになるか（利用者目線）
 
-SQL Editor等でPRを介さず本番DBのスキーマが直接変更された場合、**翌日までに自動でGitHub Issueが作成され**、気づけるようになる。具体的には以下の3種類の変更を検知する（v1スコープ）：
+- `/orders` を開くと、自施設に関係する4種別の発注（症例発注・消耗品発注・貸出発注・貸出返却）を1つの表で時系列に確認できる
+- 画面上部のフィルタで「期間」「製品名」「発注種別」を絞り込める
+- 管理者は施設フィルタも使用でき、複数施設をまたいで確認できる
+- 各行から関連する既存ページへ遷移できる（※実装時に判明した齟齬: 個別レコード単位の詳細ページは現行コードベースに存在しないため、施設スコープの一覧ページ（例: `/facilities/{facilityId}/loan-orders`）へのリンクとして実装。単票詳細ページの新設要否は別issueで検討）
 
-1. **テーブルのRLS（行レベルセキュリティ）が無効化された**（最も危険な変更。他施設のデータが見えてしまう等の事故に直結する）
-2. **想定外のテーブルが追加された**
-3. **既存のテーブルが削除された**
+### v1スコープで**やらないこと**（Phase 1調査でコードレベルの矛盾が確定したため除外）
 
-検知は毎日1回、自動で実行される。ドリフトがなければ何も起きない（誤通知なし）。
+- **貸出の「未返却」バッジ表示** — issue原文の要件だが、下記「判断が必要な点①」に理由を記載。v1では見送り、別issueで再検討
+- **「さらに読み込む」による追加ページネーション** — 各種別最新20件（計最大80件）の固定表示に変更。理由は「判断が必要な点③」参照
+- **JAN（バーコード）での製品検索** — 品名検索のみに統一。理由は下記
+- 発注詳細の編集・削除
+- CSVエクスポート
 
-### 採用する方式（v1・最小スコープ）
+### 操作の流れ
 
-- **DB内部の関数（`check_schema_drift()`）が毎日1回、自動実行**され、上記3種のドリフトをチェックしてログテーブルに記録する
-- **GitHub Actionsが毎日そのログを確認**し、未対応のドリフトがあれば自動でGitHub Issueを作成する
-- 本番DBへの接続情報（パスワード・アクセストークン）はGitHub Secretsに一切置かない（既存方針を継続。`docs/agents/decisions.md`参照）
-- Edge Function・外部HTTP通信は使わない（v1では省略し、実績のあるDB内部完結の仕組みに絞る）
-
-### 今回やらないこと（v2以降）
-
-- 関数の追加・削除・シグネチャ変更の検知
-- カラムの追加・削除の検知
-- イベントトリガーの追加・削除の検知
-- 制約（外部キー・一意制約・チェック制約）・インデックスの変更検知
-- RLSポリシー個別の削除検知（テーブルのRLS有効/無効のみを見る。ポリシーの中身までは見ない）
-- Slack通知等、GitHub Issue以外の通知経路
-
-理由：これらを最初から全部やろうとすると実装・検証コストが跳ね上がり着手が遅れる。まずセキュリティ影響が最大の3種（RLS無効化・テーブル追加・削除）を確実に検知できる状態を最速で作り、対象を広げるのは次のissueで行う。
-
-### 操作の流れ（人間が見るもの）
-
-1. 何もしなくてよい。毎日自動でチェックが走る
-2. ドリフトが検知されると、GitHub Issueが自動作成される（ラベル: `schema-drift`, `bug`）📸
-3. Issueには「何が」「いつ検知されたか」が書かれている
-4. 対応（マイグレーション作成 or 意図した変更なら追認）した後、次回チェックでドリフトが消えていれば自動でIssueがクローズされる
-
-> 📸 本機能はブラウザ画面を伴わない自動処理（DB関数 + GitHub Actions）のため、動作確認はGitHub Issue作成の実物とAction実行ログで行う。E2E（Playwright）のスクリーンショット撮影ポイントはない。
+1. サイドバー等から「発注履歴」を開く → `/orders` に遷移
+2. 施設スコープで最新80件（種別ごと最新20件ずつ）の発注が日付降順で表示される
+3. フィルタ変更 → URLクエリパラメータ更新 → 再フェッチ
+4. 各行の「詳細」から該当施設・種別の一覧ページに遷移（上記「利用者目線」の※注記参照）
 
 ### 受け入れ条件（チェックリスト）
 
-#### 検知の正確性
+#### 表示
+- [ ] case_orders / consumable_orders / loan_orders / loan_returns の4種別が1テーブルに表示される（各種別最新20件、計最大80件、`displayDatetime`降順・同時刻は`id`を第2キーに安定ソート）
+- [ ] 表示カラム: 発注日時・種別ラベル（症例発注/消耗品発注/貸出発注/貸出返却）・ステータス・製品名（主要1品＋残n件）・施設名（adminのみ）
+- [ ] 空結果時は「該当する発注履歴がありません」を表示
 
-- [x] ローカルSupabaseで `SELECT * FROM check_schema_drift();` を実行し、ドリフトがない状態でゼロ行が返る（`db reset`直後に実測確認済み）
-- [x] SQL Editorで `CREATE TABLE public.zz_test_drift (id uuid);` を実行後に再実行すると、`table_added` の1行が検知される（実測確認済み。後片付け済み）
-- [x] SQL Editorで既存テーブルの `ALTER TABLE ... DISABLE ROW LEVEL SECURITY;` を実行後に再実行すると、`rls_disabled` の1行が検知される（実測確認済み）
-- [x] baseline snapshotに存在するテーブルをSQL Editorで `DROP TABLE` すると、`table_removed` の1行が検知される（`case_order_items`で実測確認済み。確認後`db reset`で復元）
-- [x] 同じドリフトが未解決のまま複数回チェックが走っても、ログに重複して記録されない（冪等性）（`record_schema_drift()`を2回連続実行し重複なしを実測確認済み）
-- [x] `schema_drift_log` / `schema_baseline_snapshots` テーブル自体が削除された場合、`check_schema_drift()` の実行がエラーとして失敗し、その失敗がpg_cronの実行履歴に残る（`schema_drift_log`を実際にDROPして例外発生を実測確認済み）
+#### フィルタ
+- [ ] 期間フィルタ（date_from/date_to）: `CaseOrder→case_datetime` / `ConsumableOrder・LoanOrder→created_at` / `LoanReturn→return_datetime` で絞り込む。境界は両端とも含む（`gte`/`lte`）。日付単位で選択されたJST日付は「選択日 00:00:00+09:00」（date_from）〜「選択日 23:59:59.999+09:00」（date_to、選択日を含む終端）としてUTC変換した上でAPIへ渡す（変換はSET-Fのクライアント側で行い、API層では変換しない。前提制約参照）
+- [ ] 製品フィルタ（product_search）: 品名の部分一致（ilike）のみ。JAN検索は対象外
+- [ ] 種別フィルタ（order_type）: チェックボックスで複数選択（デフォルト全選択）。`order_kinds`に`OrderKind`以外の未知の値が1つでも含まれる場合はリクエスト全体を400で拒否する（黙って無視すると意図しない種別で絞り込まれたことに呼び出し元が気づけないため）
+- [ ] 施設フィルタ（adminのみ表示）: 施設ドロップダウン
+- [ ] 非adminで所属施設が複数ある場合、施設選択ドロップダウンを表示し、先頭施設を初期選択する（判断が必要な点④参照）。所属施設が1件のみなら自動セットしUI非表示。非adminで所属施設が0件の場合はドロップダウンを出さず「所属施設がありません」を表示し、`/api/orders`へのリクエスト自体を送らない（`facility_id`未確定のままリクエストするとAPI層に400で弾かれ続けるだけで無意味なため）
 
-#### GitHub Issue連携
+#### アクセス制御
+- [ ] 非adminユーザーは自分が所属する施設のデータのみ閲覧できる
+- [ ] 非adminがfacility_id省略・不正指定 → 400、他施設facility_id指定 → 403
+- [ ] 未認証 → API層は401を返し、ページ層が/loginへリダイレクトする（責務分離）
 
-> 以下4項目のロジック自体は`scripts/schema-drift-reconcile.test.sh`（gh CLIをスタブ化した回帰テスト、リポジトリにコミット済み・実行して4アサーション全通過を確認済み）で検証済み。ただし実際のSupabase本番環境に対する動作は`PROD_SUPABASE_URL`/`PROD_SUPABASE_ANON_KEY`のGitHub Secrets登録後、`workflow_dispatch`での手動実行で別途確認が必要（**未実施**。マージ後の運用開始タスクとして残る）。
-
-- [x] 未解決ドリフトが1件以上ある状態でGitHub Actionsを実行すると、`schema-drift`・`bug`ラベル付きのIssueが作成される（ロジックはテストで検証済み。本番環境での実地確認は上記の通り未実施）
-- [x] 既にIssueが作成済みの未解決ドリフトについては、再実行してもIssueが重複作成されない（タイトルベースの突合ロジックをテストで検証済み）
-- [x] ドリフトが解消された後の実行で、対応するIssueが自動でクローズされる（テストで検証済み）
-- [x] GitHub Actions用のトークンは標準の`GITHUB_TOKEN`（`issues:write`権限のみ）を使い、個人アクセストークンの発行・管理は不要である（`permissions: issues: write`のみ宣言、PAT不使用）
-
-#### セキュリティ
-
-- [x] 本番DBの接続パスワード・Service Role Key・Supabase Access TokenはGitHub Secretsに一切登録しない（`PROD_SUPABASE_URL`/`PROD_SUPABASE_ANON_KEY`の2つのみ使用。ワークフローファイルにコメントで明記）
-- [x] GitHub Actionsが読み取るビュー（`drift_alert_view`）はanon keyで読める設計だが、公開される情報はドリフトの種類・対象オブジェクト名・検知日時のみで、それ以上の詳細情報（`detail`列の中身）は公開されない（実装確認済み）
-- [x] `check_schema_drift()`はservice_roleのみ実行可能（GRANT EXECUTEがservice_roleに限定されている）（実装確認済み）
-
-#### 運用
-
-- [x] テスト専用Supabase環境ではこのスケジュールチェックは動作しない（本番環境限定）（`schedule`/`workflow_dispatch`のみでPRトリガーなし。構造的にテスト/PR環境では実行されない）
-- [x] `docs/agents/decisions.md` に本設計（Edge Function不使用・GitHub Actions日次ポーリング方式を選んだ理由、および実装時に発覚したrecord_issue_url()矛盾の解決）が追記される
+#### エラー・ローディングUI
+- [ ] 4種別の一部取得に失敗しても、成功した種別は表示する（`Promise.allSettled`）。失敗種別がある場合は「一部の発注種別を取得できませんでした」バナーを表示
+- [ ] フィルタ変更中はスケルトンUIを表示
+- [ ] APIエラー・ネットワークエラー時はエラーバナー＋リトライボタンを表示
 
 ---
 
 ### 判断が必要な点（レビュー時に確認）
 
-1. **pg_cron拡張の有効化を承認するか** — Supabase Dashboard → Database → Extensionsから有効化する。DB内部スケジューラとして必須。無効化できない/したくない場合は、GitHub Actions側からRPC経由で`check_schema_drift()`を直接呼ぶ代替方式に変更する（フォールバックとして実装計画には両方含める）
-2. **v1の検知スコープ（RLS無効化・テーブル追加・テーブル削除の3種のみ）で妥当か** — 関数・カラム・トリガー等はv2に先送りするが、これで最初の一歩として十分な価値があるか
-3. **通知先はGitHub Issueのみで確定してよいか**（Slack等は今回対象外）
-4. **本番の「既存の未記録ドリフト」の扱い** — 本仕様の初回マイグレーション適用時点のテーブル一覧を「あるべき状態」としてそのまま封印する設計にする（過去に本当にドリフトしていたものがあっても、そこは合格ラインとして扱われる）。適用前に本番の棚卸しを別途行うべきか、それともこのまま封印してよいか
-5. **`drift_alert_view`をanon keyで公開すること**への承認 — ドリフト種別・対象オブジェクト名・検知日時が匿名で読み取り可能になる（詳細情報は非公開）。この程度の情報公開は許容できるか
+1. **「未返却」バッジをv1で本当に見送るか**
+   Phase 1調査でコード確認済み: `loan_orders.status`の許容値は`['draft','submitted']`のみで`'returned'`は存在せず、`loan_returns`に`loan_order_id`列も無く、`createLoanReturn`は`loan_order.status`を更新しない。つまりissue原文が想定する「未返却ステータス表示」を単純な`status`判定（案A）で実装すると、**返却済みレコードを100%誤検知して常に「未返却」と表示してしまう**バグになることが確定している。
+   正確に実装するには`loan_returns`に`loan_order_id`FKを追加するマイグレーション（案B）が必要。
+   → **推奨: v1では見送り、案Bを別issueで先行実施してから再度対応**。ただしバッジがビジネス上必須なら、本issueのスコープを広げて案Bを含める判断もありうる
+
+2. **既存`loan_returns`データの案B移行戦略**（①で案B採用の場合のみ関係）
+   FK後付け時、既存レコードの`loan_order_id`をNULLのまま残すか、lot/jan/facilityで推測紐付けするか。データ整合性に関わるため人間判断が必要（v1では扱わないため今回は保留でよい）
+
+3. **ページネーションをv1で「各種別最新20件・計最大80件の固定表示」に絞ることの受容**
+   種別ごとにoffsetを取ると全体の日付降順マージと矛盾し重複・抜けが確定的に発生するため、cursor-basedページネーションが必要になるが、v1にはコストが見合わない。この制約（それより古いデータは期間フィルタで絞り込む必要がある）を運用上許容できるか
+
+4. **複数施設所属ユーザーのデフォルト施設**
+   「先頭施設を初期選択」でよいか、「前回選択を復元」等の要望があるか
+
+5. **製品フィルタのスペース区切りOR検索の要否**
+   単純な部分一致（ilike）のみで十分か、複数キーワードのOR検索に対応するか（対応する場合UIヘルプテキストが追加で必要）
+
+6. **総件数表示は不要か**
+   「全n件中m件表示」等の件数表示要件は無しとする前提（`counts`フィールドを削除）で問題ないか
 
 ---
 
-## Part 2 — 実装計画（AI用・技術詳細・レビュー不要）
+## Part 2 — 実装計画（AI用・技術詳細）
 
-### 前提
+### 前提制約（調査結果から）
 
-- RISK判定: `supabase/migrations/`・RLS・policyドメインに触れるため **RISK=はい（M/Lレーン必須）**
-- 既存方針の継承: 本番Supabase接続情報をGitHub Secretsに置かない（`docs/agents/decisions.md`「なぜスキーマドリフト検知を自前cronではなくSupabase GitHub Integrationで始めたか」と同じ制約を維持する。本仕様はそれを補完するもので、置き換えではない）
-- `check_schema_drift()`のテーブル追加/削除判定は、`schema_baseline_snapshots`にmigration適用時点の`pg_tables`実データをそのまま記録する方式（手動でのテーブル名列挙はしない。導出漏れリスクを構造的に避けるため）
-- **[Phase 5レビューで追加]** 今後publicスキーマのテーブル構成を変える（テーブルを追加/削除する）migrationは、末尾で`SELECT refresh_schema_baseline_snapshot('<そのmigrationのタイムスタンプ>');`を呼ぶこと（`20260714000003_schema_drift_v1_hardening.sql`で追加）。呼ばないと、正規のPRレビュー済み変更でもtable_added/table_removedとして恒久的に誤検知され続ける（`docs/agents/common.md`にも運用ルールとして明記）
+1. **facility_id必須制約**: `requireFacilityAccess`は非adminでfacility_id=nullを拒否する。新規APIエンドポイント（`/api/orders`）ではadmin時のみfacility_id=nullを許可し、非adminは所属施設のfacility_idを解決して渡す
+2. **RLSは追加不要**: `20260628010001_update_rls_admin.sql`で4テーブルに`facility_member_or_admin`ポリシーが存在済み。`/api/orders`は`requireFacilityAccess`を呼ぶだけでRLSが自動適用される（API側チェックはdefense-in-depth）
+3. **既存4 APIのクエリパラメータバリデーション漏れ**（`limit`/`offset`のNumber.isFinite・負数・上限チェックなし）のHTTPステータスコードへのマッピングは本issueのスコープ外（別issue推奨、pending_issues.jsonlで追跡）。ただし repository層（SET-C）の list* 関数自体には limit/offset の不変条件チェック（`limit`は1〜100の整数、`offset`は0以上の整数。外れる場合はErrorを投げる）を defense-in-depth として実装する（呼び出し元でのHTTPステータスへの変換は各APIの責務のまま）。新設する`/api/orders`（SET-D）は`limit`をユーザー入力から受け取らず`LIMIT_PER_KIND=20`固定で呼ぶため、この検証には通常抵触しない
+4. **use(params) + Suspense**: 新設`/orders`ページは`useSearchParams`を使うため`Suspense`でのラップ＋`fallback`指定が必須（既知の失敗パターン：`src/app/login/page.tsx:110`で同種の指摘あり、本issueでは新規実装側で確実に対応する）
+5. **facilityName（admin表示用）の解決元**: `facilities`テーブルは authenticated であれば全件SELECT可能な共有マスタ（`auth_only`ポリシー）。SET-D（`unified-repository.ts`）が`listFacilities(db)`を1回呼び、`id→name`のMapを作って各`UnifiedOrder.facilityName`に適用する。4種別ごとに個別JOINしない（N+1回避）
+6. **admin用施設一覧（フィルタドロップダウン・全施設対象時の対象施設ID解決）の取得元**: 既存`GET /api/facilities`は`listFacilities(db)`の全件をそのまま返す仕様で、非adminにも全施設が見えてしまい「非adminは所属施設のみ選択可」という受け入れ条件と矛盾する。そのため`/orders`ページ（SET-F）専用の軽量エンドポイント`GET /api/user-facilities`を新設し、adminには全施設、非adminには`listUserFacilities`で解決した所属施設のみを返す（`{ facilities: Facility[], isAdmin: boolean }`）。既存`GET /api/dashboard`は施設ごとの重い集計を含むため流用しない。同様に、SET-Dの`unified-repository.ts`はサーバー側関数のため`listFacilities`を直接呼べるが、SET-Fはクライアントコンポーネント（`'use client'`）であり`src/lib/facilities/repository.ts`等のサーバー専用DBアクセス関数を直接importできない。そのため両者は独立した経路（サーバー内部呼び出し vs 新設APIのfetch）で施設一覧を取得する
 
-### drift_type / event_kind の値と判定基準（Part 3セルフチェック対応）
+### 実装セット一覧（依存順）に対する補足: `/api/user-facilities`
 
-**`drift_type`**（`schema_drift_log.drift_type`、TEXT、CHECK制約で下記3値に限定）
+上記前提制約6により、統合時点で以下のセットを追加実装済み（元のSET-F計画にはAPIエンドポイントの記載が無く、`listUserFacilities`をクライアント側から直接呼ぶ想定になっていたが、クライアントコンポーネントからサーバー専用のrepository関数を直接呼ぶことはできないため、この不足を補うAPIが必要だった）:
 
-| 値 | 判定基準 | 下流の反応 |
-|---|---|---|
-| `rls_disabled` | `pg_class.relrowsecurity = false` のpublicスキーマテーブルが1件でもある | `drift_alert_view`に表示 → GitHub Actionsが`[priority:high]`をタイトルに付与してIssue作成 |
-| `table_added` | 最新snapshotの`snapshot`配列に存在しないテーブルが`pg_tables`に存在する | `drift_alert_view`に表示 → 通常のIssue作成対象 |
-| `table_removed` | 最新snapshotの`snapshot`配列に存在するテーブルが`pg_tables`に存在しない | `drift_alert_view`に表示 → 通常のIssue作成対象 |
+- ファイル: `src/app/api/user-facilities/route.ts`（新規）
+- GET: `requireAuth`（401） → `resolveIsAdmin` → admin時は`listFacilities`の全件、非admin時は`listUserFacilities`で絞り込んだ所属施設のみを返す
+- SET-Fはこのエンドポイントをfetchして`facilities`・`isAdmin`を取得し、施設ドロップダウンの選択肢と初期選択施設を決定する
 
-**[Phase 5レビューで削除]** 原案にあった`error`種別（想定外例外の捕捉）は、対応する例外ハンドラが実装されておらず実装と乖離したドキュメントのみの状態だったため、v1スコープから削除した。基盤テーブル消失・baseline空の2ケースは`check_schema_drift()`が`RAISE EXCEPTION`で直接失敗する設計のままとし（`cron.job_run_details`に残る）、それ以外の想定外例外を`schema_drift_log`に記録する機能はv2以降の検討課題とする。
+### 型定義（`src/types/order.ts` に追記）
 
-**`event_kind`**（`schema_drift_log.event_kind`、TEXT CHECK IN ('detected','acknowledged','resolved')）
+```typescript
+export type OrderKind = 'case' | 'consumable' | 'loan' | 'loan_return'
 
-| 値 | 判定基準 | 下流の反応 |
-|---|---|---|
-| `detected` | `check_schema_drift()`が新規ドリフトを検知した瞬間にINSERTする初期値 | `drift_alert_view`の対象（`resolved_at IS NULL`かつ`event_kind='detected'`） |
-| `acknowledged` | 人間がドリフトを「意図した変更」と確認し、対応するmigrationを作らずクローズしたい場合に手動でUPDATEする（v1では専用UIなし、SQLで直接更新） | `drift_alert_view`の対象から除外（`resolved_at`が設定される想定、またはWHERE句で`event_kind != 'acknowledged'`も対象外にする） |
-| `resolved` | 次回`check_schema_drift()`実行時に、同一`drift_type`+`object_name`の組が再検知されなかった場合、対応する`detected`行の`resolved_at`を自動更新する | `drift_alert_view`の対象から除外。GitHub Actions側が対応するIssueをクローズする |
+// raw原案は削除（union型のtype guardが強制されず実行時エラーリスクがあるため）。
+// 詳細遷移はid+kindのみで既存個別ページへのリンクで完結する
+export type UnifiedOrder = {
+  id: string
+  kind: OrderKind
+  facilityId: string
+  facilityName?: string          // admin表示用（JOIN先から）
+  displayDatetime: string        // case→case_datetime / consumable・loan→created_at / loan_return→return_datetime。生成責任はAPI層(SET-D)
+  status: string
+  summaryLabel: string           // 代表製品名 + 残n件。生成責任はAPI層(SET-D)
+}
 
-**合計3種類の`drift_type`・3種類の`event_kind`、本文中の記載件数と一致することを確認済み。**
+export type OrdersFilter = {
+  facilityId?: string
+  dateFrom?: string   // ISO 8601 (UTC)
+  dateTo?: string     // ISO 8601 (UTC)
+  productSearch?: string
+  orderKinds?: OrderKind[]
+}
+```
 
 ### 実装セット一覧（依存順）
 
-#### セット1: DBスキーマ（マイグレーション、直列内で最初）
+#### SET-A: DBマイグレーション — インデックス追加
+- ファイル: `supabase/migrations/YYYYMMDDHHMMSS_add_orders_search_indexes.sql`
+- 追加インデックス:
+  - `case_orders`: `(facility_id, case_datetime)` ★既存の`idx_case_orders_facility_created_at`とは別に必要（期間フィルタは`case_datetime`を使うため）
+  - `consumable_orders`: `(facility_id, created_at)`
+  - `loan_orders`: `(facility_id, created_at)`
+  - `loan_returns`: `(facility_id, return_datetime)`
+- `refresh_schema_baseline_snapshot`は呼ばない（テーブル追加/削除を伴わないインデックス追加のみのため。common.md記載の対象外。念のためmigration内に1行コメントで根拠を明記する）
+- テスト観点: マイグレーション適用が冪等に成功すること（`IF NOT EXISTS`）
 
-**触るファイル（新規）:**
-- `supabase/migrations/20260714000001_create_schema_drift_detection.sql`
+#### SET-B: 型定義追加
+- ファイル: `src/types/order.ts`（上記型定義を追記）
+- 依存: なし（先行実装可）
 
-**内容（骨格）:**
-```sql
--- 1. baseline snapshot（append-only）
-CREATE TABLE schema_baseline_snapshots (
-  epoch TEXT PRIMARY KEY,
-  snapshot JSONB NOT NULL,
-  applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-ALTER TABLE schema_baseline_snapshots ENABLE ROW LEVEL SECURITY;
--- service_role以外ポリシーなし = service_roleのみアクセス可（既存パターンに合わせる）
+#### SET-C: Repository層フィルタ拡張
+- ファイル（4ファイル）: `src/lib/case-orders/repository.ts` / `src/lib/consumable-orders/repository.ts` / `src/lib/loan-orders/repository.ts` / `src/lib/loan-returns/repository.ts`
+- 各`list*`関数に`dateFrom?`, `dateTo?`, `productSearch?`引数を追加
+- 品名JOIN経路（M-3・M-5対応。**このJOINはproductSearchフィルタの絞り込み専用**であり、SET-Dが行うsummaryLabel表示用の名前解決とは目的・実行タイミングが異なる別クエリである。両者は同じ`products`/`consumables`テーブルに触れるが、前者は「検索条件に一致するID群を求める」ため、後者は「取得済みレコードの代表製品名を表示用に解決する」ためであり、責務が重複しているわけではない。productSearch未指定時はSET-C側のJOINは発生しない）:
+  - `loan_order_items.name`（直接、name列あり）
+  - `case_order_items.jan → products.name`（JOIN必須、case_order_itemsにname列なし）
+  - `loan_return_items.jan → products.name`（JOIN必須、loan_return_itemsにname列なし）
+  - `consumable_order_items.consumable_id → consumables.name`（JOIN）
+- 生の`status`をそのまま返す（isUnreturned等の判定はSET-Cでは行わない。将来案B採用時もAPI層1箇所の修正で完結させるため）
+- `limit`/`offset`の不変条件チェックを共通ヘルパー（`src/lib/orders/list-options-validation.ts`想定）に集約し、4つの`list*`関数の先頭で呼ぶ（前提制約3参照）。`limit`は1〜100の整数以外、`offset`は0以上の整数以外でErrorを投げる。HTTPステータスへの変換は行わない（呼び出し元APIの責務）
+- `.order()`は必ず`dateFrom`/`dateTo`の絞り込みに使っているカラムと同じキーを使うこと（`case_orders→case_datetime` / `loan_returns→return_datetime` / それ以外→`created_at`）。フィルタキーとソートキーがズレると、施設ごとの該当件数がlimitを超えた場合にDB側で誤ったキーで先に切り詰められ、SET-Dのunified-repositoryが前提とする「displayDatetime降順で上位N件」という不変条件が崩れる（型安全・データ層整合レビューで確認された実バグ）。同時刻の安定ページングのため`id`昇順を第2キーとして併用する
+- テスト観点:
+  - dateFrom/dateTo境界値テスト（UTC/JST変換を含む）
+  - `.order()`のキーがdateFrom/dateToで絞り込むカラムと一致していること（case_orders→case_datetime、loan_returns→return_datetime）
+  - productSearchが空の場合はフィルタを適用しない
+  - limit上限: 最大100（100超はrepository層でError）、負数もrepository層でError（offsetの負数も同様）
 
--- 2. ドリフトログ（append-only、冪等性は部分ユニーク制約で担保）
-CREATE TABLE schema_drift_log (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  drift_type TEXT NOT NULL,
-  object_name TEXT,
-  detail JSONB,
-  event_kind TEXT NOT NULL DEFAULT 'detected' CHECK (event_kind IN ('detected','acknowledged','resolved')),
-  detected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  resolved_at TIMESTAMPTZ,
-  issue_url TEXT
-);
-CREATE UNIQUE INDEX schema_drift_log_open_unique
-  ON schema_drift_log (drift_type, object_name) WHERE resolved_at IS NULL;
-ALTER TABLE schema_drift_log ENABLE ROW LEVEL SECURITY;
+#### SET-D: 横断APIエンドポイント新設 `/api/orders`
+- ファイル: `src/app/api/orders/route.ts`
+- 内部構造として`src/lib/orders/unified-repository.ts`を新設し、4種別の並列取得・マージ・summaryLabel解決・facilityName解決をここに集約する（API routeを薄く保ち、将来の種別追加を1箇所で完結させるため）
+- GETパラメータ: `facility_id`, `date_from`, `date_to`, `product_search`, `order_kinds`（CSV）
+- 実装方針:
+  - `requireAuth`（未認証→401） → `requireFacilityAccess`（非adminはfacility_id必須、省略/不正→400、他施設→403）
+  - `order_kinds`に`OrderKind`以外の未知の値が含まれる場合は400（前提制約・受け入れ条件参照）
+  - `listFacilities(db)`を1回呼び、`id→name`のMapを作成する。admin時に`facility_id`未指定なら、このMapのキー（全施設ID）を対象施設IDリストとして使う（facilityNameの解決と対象施設ID列挙を同じ1回のクエリ結果で兼ねる。前提制約5参照）
+  - `Promise.allSettled`で4種別を並列取得（各種別limit=20固定、v1ではoffset無し）。admin全施設対象時は種別ごとに対象施設分`list*`を並列呼び出しし、施設をまたいでdisplayDatetime降順にマージしてから上位20件に絞り込む（=1種別あたり最大「施設数×20件」を一時的に取得してから絞り込むため、施設数が多い環境ではクエリ数・レイテンシが線形に増える。既知の未対応・今後の課題を参照）
+  - マージ後、日時降順・同時刻は`id`昇順で安定ソート
+  - summaryLabelの解決はjan経路とconsumable_id経路を分けてバッチ化する（いずれもN+1回避のため個別クエリにしない。**SET-Cのproduct/consumable JOINとは別の、表示専用の名前解決クエリ**であり、取得済みレコードの代表1品目分のキーのみをバッチでIN句解決する）:
+    - case_orders・loan_returnsから収集したjan（各注文の代表1明細分）をまとめて`products`へIN句1本
+    - consumable_ordersから収集したconsumable_id（代表1明細分）をまとめて`consumables`へIN句1本
+    - loan_ordersは`loan_order_items.name`を直接使うためJOIN/IN句不要
+- レスポンス: `{ orders: UnifiedOrder[], errors: Array<{ kind: OrderKind; message: string }> }`
+  - 失敗種別は`orders`に含めず、`errors`に理由を記録。`counts`フィールドは持たない
+- バリデーション: `date_from`/`date_to`はISO 8601 UTC文字列として受け取り、API側での変換はしない
+- テスト観点:
+  - 非adminがfacility_id省略 → 400 / 他施設facility_id → 403 / 未認証 → 401
+  - `order_kinds`に未知の値が含まれる → 400
+  - 4種別すべて空 → `{ orders: [], errors: [] }`
+  - 1種別が失敗しても他の結果は返すこと（`errors`に該当種別が入ること）
+  - `src/lib/orders/unified-repository.ts`自体の単体テスト（route.test.tsでの`fetchUnifiedOrders`モック化とは別に必須）: displayDatetime降順・同時刻id昇順の安定ソート、summaryLabelの代表製品名+残n件表示、品目0件時の表示文言、facilityNameの解決、admin全施設ファンアウト時の種別ごと上位20件への絞り込み
 
--- 3. 初期snapshot（このmigration適用時点の実データをそのまま封印）
-INSERT INTO schema_baseline_snapshots (epoch, snapshot)
-SELECT '20260714000001', jsonb_agg(tablename ORDER BY tablename)
-FROM pg_tables WHERE schemaname = 'public';
+#### SET-E: UIコンポーネント
+- ファイル（新規）:
+  - `src/components/orders/OrderHistoryFilters.tsx` — フィルタフォーム（期間・品名・種別・施設）。複数施設所属時は施設ドロップダウンを表示
+  - `src/components/orders/OrderHistoryTable.tsx` — `UnifiedOrder[]`を受け取るテーブル。空状態・エラーバナー・スケルトンを含む
+  - `src/components/orders/OrderKindBadge.tsx` — `OrderKind`を受け取り種別カラーバッジを返す
+- テスト観点:
+  - `OrderHistoryTable`: `orders=[]`で「該当する発注履歴がありません」表示、`errors`が空でなければ「一部の発注種別を取得できませんでした」バナー表示、`loading=true`時はスケルトンUIを表示し行を描画しないこと、`showFacilityColumn=false`時は施設名カラム自体を出さないこと（非adminには不要なため）
+  - `OrderKindBadge`: 4種別（case/consumable/loan/loan_return）すべてで対応する日本語ラベル（症例発注/消耗品発注/貸出発注/貸出返却）が表示されること、未知の値を渡してもクラッシュしないこと
+  - `OrderHistoryFilters`: 種別チェックボックスの初期状態は全選択、施設ドロップダウンは`showFacilitySelect=false`時に表示されないこと
+  - アクセシビリティ: テーブル見出し（`<th>`）に`scope="col"`属性、`OrderKindBadge`のルート要素に`aria-label`（例: `症例発注`）
 
--- 4. check_schema_drift() 本体
-CREATE OR REPLACE FUNCTION check_schema_drift()
-RETURNS TABLE (drift_type TEXT, object_name TEXT, detail JSONB)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  latest_snapshot JSONB;
-BEGIN
-  -- 自己参照ガード: 基盤テーブル自体の消失を最優先で検知
-  IF to_regclass('public.schema_drift_log') IS NULL
-     OR to_regclass('public.schema_baseline_snapshots') IS NULL THEN
-    RAISE EXCEPTION 'schema drift detection base tables are missing (self-referential integrity failure)';
-  END IF;
-
-  SELECT snapshot INTO latest_snapshot
-  FROM schema_baseline_snapshots ORDER BY epoch DESC LIMIT 1;
-
-  -- 1. RLS無効化検知（ホワイトリスト不要、public全テーブル対象）
-  --    自テーブル(schema_baseline_snapshots/schema_drift_log)もRLS有効化前提のため対象に含む
-  RETURN QUERY
-  SELECT 'rls_disabled', c.relname, jsonb_build_object('schema', 'public')
-  FROM pg_class c
-  JOIN pg_namespace n ON n.oid = c.relnamespace
-  WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity = false;
-
-  -- 2. テーブル追加検知
-  RETURN QUERY
-  SELECT 'table_added', t.tablename, jsonb_build_object('schema', 'public')
-  FROM pg_tables t
-  WHERE t.schemaname = 'public'
-    AND NOT (latest_snapshot ? t.tablename);
-
-  -- 3. テーブル削除検知
-  RETURN QUERY
-  SELECT 'table_removed', s.name, jsonb_build_object('schema', 'public')
-  FROM jsonb_array_elements_text(latest_snapshot) AS s(name)
-  WHERE NOT EXISTS (
-    SELECT 1 FROM pg_tables t WHERE t.schemaname = 'public' AND t.tablename = s.name
-  );
-END;
-$$;
-GRANT EXECUTE ON FUNCTION check_schema_drift TO service_role;
-
--- 5. ドリフト記録関数（check_schema_drift()の結果をログに冪等insertし、resolved自動更新も行う）
-CREATE OR REPLACE FUNCTION record_schema_drift()
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  -- 新規ドリフトを記録（既存の未解決行があればスキップ）
-  INSERT INTO schema_drift_log (drift_type, object_name, detail)
-  SELECT d.drift_type, d.object_name, d.detail FROM check_schema_drift() d
-  ON CONFLICT (drift_type, object_name) WHERE resolved_at IS NULL DO NOTHING;
-
-  -- 前回検知されたが今回検知されなかった行はresolvedにする
-  UPDATE schema_drift_log l
-  SET event_kind = 'resolved', resolved_at = now()
-  WHERE l.event_kind = 'detected' AND l.resolved_at IS NULL
-    AND NOT EXISTS (
-      SELECT 1 FROM check_schema_drift() d
-      WHERE d.drift_type = l.drift_type AND d.object_name = l.object_name
-    );
-END;
-$$;
-GRANT EXECUTE ON FUNCTION record_schema_drift TO service_role;
-
--- 6. GitHub Actions公開用ビュー（詳細非公開・未解決分のみ）
-CREATE VIEW drift_alert_view AS
-SELECT id, drift_type, object_name, detected_at, issue_url
-FROM schema_drift_log
-WHERE event_kind = 'detected' AND resolved_at IS NULL;
-GRANT SELECT ON drift_alert_view TO anon;
-```
-
-**テスト観点:**
-- `supabase/migrations/__tests__/schema_drift_detection.test.ts`（既存`tech_debt_migrations.test.ts`と同じ静的SQL検証方式）
-  - `record_schema_drift()`・`check_schema_drift()`・`drift_alert_view`が定義されていること
-  - `schema_drift_log_open_unique`部分ユニークインデックスの`WHERE resolved_at IS NULL`条件が含まれること
-  - `GRANT SELECT ON drift_alert_view TO anon`が含まれること（過剰付与ではなくSELECTのみであることも確認）
-- ローカル`supabase db reset`後、`SELECT * FROM check_schema_drift();`がゼロ行を返すことを手動確認（受け入れ条件1件目に対応）
-
-**触るファイル:**
-- `supabase/migrations/20260714000001_create_schema_drift_detection.sql`（新規）
-- `supabase/migrations/__tests__/schema_drift_detection.test.ts`（新規）
-
----
-
-#### セット2: pg_cronスケジュール設定（セット1完了後・直列）
-
-**触るファイル（新規）:**
-- `supabase/migrations/20260714000002_schedule_schema_drift_check.sql`
-
-**内容（骨格）:**
-```sql
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-
-SELECT cron.schedule(
-  'schema-drift-daily-check',
-  '0 23 * * *', -- UTC 23:00 = JST 8:00
-  $$ SELECT record_schema_drift(); $$
-);
-```
-
-**補足（pg_cronが有効化できない場合のフォールバック）:**
-- 前提確認1（Part 1参照）でpg_cron不可の判断が出た場合、このセットはスキップし、代わりにセット3（GitHub Actions）側から`record_schema_drift()`をRPC経由（service_role key使用、ただしこれはGitHub Secretsではなく別途安全な経路の検討が必要—**この場合は追加の人間判断が必要なため、pg_cron不可判定が出た時点でこのセットの実装者は着手せず、統合ゲートで報告すること**）
-
-**テスト観点:**
-- ローカルで`SELECT * FROM cron.job WHERE jobname = 'schema-drift-daily-check';`でスケジュール登録を確認
-- `SELECT cron.run_job((SELECT jobid FROM cron.job WHERE jobname = 'schema-drift-daily-check'));`で手動実行し、エラーが出ないことを確認
-
-**触るファイル:**
-- `supabase/migrations/20260714000002_schedule_schema_drift_check.sql`（新規）
-
----
-
-#### セット3（セット1と並列可）: GitHub Actionsワークフロー
-
-**触るファイル（新規）:**
-- `.github/workflows/schema-drift-check.yml`
-
-**内容（実装済み。原案からの変更点はテスト観点の後に記載）:**
-- `schedule: cron: '0 0 * * *'`（UTC 0:00、DB側チェックより後に実行されるよう時刻をずらす）+ `workflow_dispatch`（手動実行可能に）
-- `curl`で`drift_alert_view`をanon keyで取得（本番Supabase URLとanon keyのみ使用。パスワード・service role key不使用）
-- 未解決ドリフトごとに、タイトル`[schema-drift] <drift_type>: <object_name>`で`gh issue create`。既存open issueとタイトル突合し重複作成を防ぐ
-- 未解決一覧に存在しなくなったドリフトに対応するopen issueは`gh issue close`する
-
-**テスト観点:**
-- `workflow_dispatch`での手動実行が成功すること（実装後に一度手動トリガーして確認する統合ゲート項目とする）
-- モックの`drift.json`/`open_issues.json`に対する新規作成・重複防止・クローズの3パターンをbashスクリプトのドライランで検証済み（実装時に実施）
-
-**原案からの変更点（実装時に判明した矛盾の解決）:**
-原案は`issue_url`を`record_issue_url()` RPC経由でDBに書き戻す設計だったが、その関数はservice_role限定であり、anon keyのみで動くこのワークフローからは呼び出せないという矛盾が実装時に判明した（Part1「本番DBの接続パスワード・Service Role Key…はGitHub Secretsに一切登録しない」という受け入れ条件と直接衝突するため、この矛盾を解消せずに進めることはできない）。
-DBへの書き込みを一切行わず、GitHub Issue自体を状態源にする方式に変更した（詳細は`docs/agents/decisions.md`参照）。`record_issue_url()`関数自体はセット1に実装済みだが、このワークフローからは呼び出さない（将来DB側の運用ツールから使う可能性を考慮し残置）。
-
-**触るファイル:**
-- `.github/workflows/schema-drift-check.yml`（新規）
-
----
-
-#### セット4（独立・並列可）: decisions.md更新
-
-**触るファイル（既存）:**
-- `docs/agents/decisions.md`
-
-**内容:**
-- 「なぜPRの外側のスキーマドリフト検知にEdge Functionを使わずpg_cron + GitHub Actionsポーリングを採用したか」を追記
-- 検討した代替案（Edge Function + Webhook方式）を不採用にした理由（pg_net依存・デプロイパイプライン未定義・GITHUB_TOKEN管理コストの3点）を記録
-
----
+#### SET-F: `/orders`ページ実装
+- ファイル: `src/app/orders/page.tsx`
+- 実装方針:
+  - `'use client'`、`useSearchParams()`でURLクエリを読み取り
+  - `Suspense`で`OrdersPageContent`をラップし、`fallback`を必ず指定する
+  - フィルタ変更 → `router.replace`でURL更新 → `useEffect`で再フェッチ
+  - JST日付をUTCに変換してからAPIへ渡す変換ロジックはクライアントユーティリティに集約（選択日00:00:00+09:00 → UTC変換）
+  - admin判定・施設一覧の取得は`GET /api/user-facilities`（前提制約6・実装セット一覧の補足参照）をfetchして行う。クライアントコンポーネントから`listUserFacilities`等のサーバー専用repository関数を直接importすることはできないため、既存`useUser`フックのみでは施設一覧を取得できない
+  - facility_idの決定ロジック（APIの400/403ルールと対応させる）:
+    - admin: 施設フィルタ未選択なら`facility_id`を付けずにリクエスト（API側でfacility_id=null許可）。選択時はその値を付ける
+    - 非admin・所属施設1件: `/api/user-facilities`が返した唯一の施設を自動的に`facility_id`としてリクエストに付与（UI非表示）
+    - 非admin・所属施設2件以上: 施設ドロップダウンで選択された値（初期値は先頭施設）を`facility_id`として必ず付与する。ドロップダウン未選択のまま初回リクエストを送らない（先頭施設をstateの初期値にしてから初回フェッチする）
+    - 非admin・所属施設0件: ドロップダウンを表示せず「所属施設がありません」を表示し、`/api/orders`へのリクエストを送らない（受け入れ条件・フィルタ節参照）
+- テスト観点:
+  - 非adminでページが開けること（自施設facility_idが自動セットされること）
+  - フィルタ変更でURLが更新されること
+  - ローディング中にスケルトンUIが表示されること
+  - 非adminで所属施設が0件の場合に「所属施設がありません」を表示し、無限ローディングにならないこと
 
 ### 並列グループ宣言
 
 ```
-Wave 1 ──┬── Set 1 (DBスキーマ)     supabase/migrations/20260714000001_*.sql + __tests__
-          └── Set 4 (decisions.md)  docs/agents/decisions.md
-             ↓ Set 1完了後
-Wave 2 ──┬── Set 2 (pg_cronスケジュール)  supabase/migrations/20260714000002_*.sql
-          └── Set 3 (GitHub Actions)      .github/workflows/schema-drift-check.yml
-             （Set 3はSet 1のrecord_issue_url関数シグネチャに依存するため、Set 1完了後に着手）
-統合ゲート:
-  - migrationのローカル適用確認（db reset）
-  - pg_cronジョブの手動実行確認
-  - GitHub Actionsのworkflow_dispatch手動実行確認（可能な範囲で）
+グループ1（並列）: SET-A + SET-B
+  - SET-A 触るファイル: supabase/migrations/（新規1ファイル）
+  - SET-B 触るファイル: src/types/order.ts
+
+グループ2（グループ1完了後、並列）: SET-C + SET-E
+  - SET-C 触るファイル:
+      src/lib/case-orders/repository.ts
+      src/lib/consumable-orders/repository.ts
+      src/lib/loan-orders/repository.ts
+      src/lib/loan-returns/repository.ts
+  - SET-E 触るファイル:
+      src/components/orders/OrderHistoryFilters.tsx（新規）
+      src/components/orders/OrderHistoryTable.tsx（新規）
+      src/components/orders/OrderKindBadge.tsx（新規）
+
+グループ3（SET-C完了後、SET-B完了後）: SET-D
+  - 触るファイル:
+      src/app/api/orders/route.ts（新規）
+      src/lib/orders/unified-repository.ts（新規）
+
+グループ4（SET-D + SET-E完了後）: SET-F
+  - 触るファイル: src/app/orders/page.tsx（新規）
 ```
 
-Set 1とSet 4は互いに別ファイルのみを触るため並列可能。Set 2・Set 3はSet 1完了後（関数シグネチャ確定後）に着手する。
+### 既知の未対応・今後の課題
 
-### 型・データアクセス層の方針
+| 事項 | 理由 | 対応時期 |
+|---|---|---|
+| 未返却バッジ（案B: loan_order_id FK追加） | 停止①「判断が必要な点①」で確定待ち | 停止①後、別issue推奨 |
+| 全体横断のcursor-basedページネーション | v1は固定80件表示で対応、それ以上はコスト超過 | 別issue |
+| JAN単独フィルタ | 種別間で挙動が不統一（case/loan_returnはjan、consumableはjan NULL可） | 別issue |
+| 既存4 API（case-orders等）のlimit/offsetのHTTPステータスコードへのバリデーション修正 | 本issueのスコープ外（repository層の不変条件チェックのみSET-Cで対応済み） | 別issue（pending_issues.jsonlで追跡） |
+| モバイル表示 | v1はテーブル横スクロール（`overflow-x:auto`）で対応、カード切替は対象外 | 別issue |
+| admin全施設対象時のファンアウトクエリ数（施設数×4種別分の`list*`呼び出し） | v1は施設数が少数（数十施設程度）である前提で許容。施設数が数百規模に増える場合はDB側での集約（マテリアライズドビュー等）かcursor-based全体ページネーションへの再設計が必要 | 施設数増加時に別issueで再検討 |
 
-- 本機能はDB関数・SQLマイグレーション・GitHub Actionsのみで完結し、`src/`配下のTypeScriptコード・APIルートは一切変更しない
-- 型安全性はPostgreSQLのCHECK制約（`event_kind`）とSQLの静的検証テスト（既存`tech_debt_migrations.test.ts`パターン踏襲）で担保する
+### 後任AIへの注意
+
+- `/orders`は`/facilities/[id]/`配下ではなくトップレベルに置く
+- `requireFacilityAccess`は非adminでfacility_id=nullを`FACILITY_ID_REQUIRED`として弾く。非adminユーザーの施設ID取得（サーバー側）には`user_facilities`テーブルを参照する既存関数（`listUserFacilities`等）を再利用すること。ただしクライアントコンポーネント（SET-F）からはこれらのサーバー専用repository関数を直接importできないため、`GET /api/user-facilities`（前提制約6）を経由すること
+- v1では「未返却」判定を一切実装しない（`isUnreturned`フィールドも型に含めない）。案B採用が決まった場合のみ、API層（SET-D）に`loan_returns`へのLEFT JOINを1箇所追加する設計とする
+- `/api/orders`レスポンスキーは`orders`（`returns`ではない）に統一する。`counts`フィールドは持たない
+- ConsumableOrderの製品検索は`consumables`テーブルへのJOINが必要（janはconsumable_order_itemsにはない）。JAN検索自体はv1スコープ外
+- `case_orders`・`loan_returns`の`list*`は`dateFrom`/`dateTo`のフィルタキー（`case_datetime`/`return_datetime`）と`.order()`のソートキーを必ず一致させること。ズレるとfetchTopN前提の「displayDatetime降順で上位N件」が崩れる（型安全・データ層整合レビューで実際に検出されたcriticalバグ。修正済みだが再発させないこと）
+- `src/types/order.ts`の`OrdersQueryParams`型は現状どのファイルからも参照されていない未使用の型定義。型定義は契約（contract-writer確定分）のため本レビュー対応では削除していない。次に`src/types/order.ts`を触る機会があれば、契約管理者の判断で削除を検討すること
+
+---
+
+## Part 3 — セルフチェック
+
+- 受け入れ条件の各項目は上記「実装計画」のいずれかのSETに対応している。ただし当初のSET-F計画には`GET /api/user-facilities`エンドポイントの記載が抜けており（クライアントコンポーネントからサーバー専用repository関数を直接呼べないというアーキテクチャ上の制約を見落としていたため）、統合時点で実装が追加された。前提制約6・実装セット一覧の補足に事後反映済み
+- 「v1スコープでやらないこと」に列挙した3項目（未返却バッジ・追加ページネーション・JAN検索）は、いずれもPhase 1調査でコードレベルの矛盾・非対称性が確認された上での除外であり、対応する「既知の未対応」に将来対応の道筋を記載済み
+- RLS/facility境界: 新規テーブル・新規RLSポリシーは追加しない（既存ポリシーを再利用）。API層の`requireFacilityAccess`呼び出しがdefense-in-depthとして機能する
+- 中核集約ロジック（`src/lib/orders/unified-repository.ts`）は`route.test.ts`での`fetchUnifiedOrders`モック化とは別に、実装本体を直接検証する単体テスト（`src/lib/orders/__tests__/unified-repository.test.ts`）が存在すること
+- `case_orders`・`loan_returns`の`list*`は、dateFrom/dateToで絞り込むカラムと`.order()`のソートキーが一致していること（型安全・データ層整合レビュー対応）

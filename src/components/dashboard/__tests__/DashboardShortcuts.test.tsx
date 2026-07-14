@@ -5,6 +5,9 @@ import { DashboardShortcuts } from '../DashboardShortcuts'
 describe('DashboardShortcuts', () => {
   it('管理ページへのショートカットリンクが表示される', () => {
     render(<DashboardShortcuts isAdmin={false} />)
+    // WHY(issue #20 統合): /orders（発注履歴ページ）への導線をダッシュボードに追加したため、
+    // 結線漏れ（リンクが無くページへ到達できない）を検知できるようテストにも追加する
+    expect(screen.getByRole('link', { name: '発注履歴' })).toHaveAttribute('href', '/orders')
     expect(screen.getByRole('link', { name: '施設一覧' })).toHaveAttribute('href', '/facilities')
     expect(screen.getByRole('link', { name: '商品一覧' })).toHaveAttribute('href', '/products')
     expect(screen.getByRole('link', { name: /販売店商品一覧/ })).toHaveAttribute('href', '/distributor-products')
