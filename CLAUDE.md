@@ -19,23 +19,24 @@ Phase 5 検証(並列) →
 [停止② 構造化レビュー]
 
 ## AIDD stats 書き出しルール
-**SDD・AIDD・手動実装など、フロー種別を問わず**以下のタイミングで必ず Bash 実行する（Stop hook が自動でレポート生成）：
+**SDD・AIDD・手動実装など、フロー種別を問わず**以下のタイミングで必ず Bash 実行する（Stop hook が自動でレポート生成）。
+stats JSON は標準入力ではなく**第4引数**で渡す（パイプ・リダイレクト・`$(pwd)`は使わず、project_dirは実際の絶対パスを直接書く。許可リストのワイルドカードマッチを崩さないため）：
 
 ```bash
 # 1. AIDDフロー開始時（aidd-phase1-router.js を呼ぶ前）
-echo '' | ~/write_aidd_stats.sh start "<feature>" "$(pwd)"
+~/write_aidd_stats.sh start "<feature>" "<project_dirの絶対パス>"
 
 # 2. phase1 開始直前
-echo '' | ~/write_aidd_stats.sh phase1_start "<feature>" "$(pwd)"
+~/write_aidd_stats.sh phase1_start "<feature>" "<project_dirの絶対パス>"
 
 # 3. phase1 完了直後（戻り値の stats を渡す）
-echo '{"agents":4,"rounds":1,"findingCount":2}' | ~/write_aidd_stats.sh phase1 "<feature>" "$(pwd)"
+~/write_aidd_stats.sh phase1 "<feature>" "<project_dirの絶対パス>" '{"agents":4,"rounds":1,"findingCount":2}'
 
 # 4. phase2 開始直前
-echo '' | ~/write_aidd_stats.sh phase2_start "" ""
+~/write_aidd_stats.sh phase2_start "" ""
 
 # 5. phase2 完了直後（戻り値の stats を渡す）
-echo '{"implAgents":2,"reviewAgents":4,"totalAgents":7,"implSuccessCount":2}' | ~/write_aidd_stats.sh phase2 "" ""
+~/write_aidd_stats.sh phase2 "" "" '{"implAgents":2,"reviewAgents":4,"totalAgents":7,"implSuccessCount":2}'
 ```
 ※ start を呼び忘れた場合は phase1_start_at がフォールバックで使われる
 
