@@ -77,6 +77,20 @@ function countLoggable(agentType) {
   if (LOGGABLE_AGENT_TYPES.has(agentType)) loggableAgentCount++
 }
 
+// agent-progress記録漏れ検知（.claude/workflows/lib/agent-progress-expectation.js の
+// isProgressLoggableAgentType と同一ロジック。Workflow DSLはrequire不可のためインライン複製）。
+// docs/agents/common.md「サブエージェント進捗の可視化（issue #18）」に列挙されたagentTypeは
+// scripts/log-agent-progress.sh 呼び出し指示を持つ想定。この件数を「期待される記録件数」として
+// 返し、フロー完了後に scripts/check-agent-progress-gap.sh で実際のログと突き合わせる。
+const PROGRESS_LOGGABLE_AGENT_TYPES = new Set([
+  'sweep-db', 'sweep-ui', 'sweep-types', 'sweep-data', 'implementer', 'reviewer',
+  'integrator', 'judge-panel', 'proposer', 'adversarial-verify', 'completeness-critic', 'contract-writer',
+])
+let progressLoggableAgentCount = 0
+function countProgressLoggable(agentType) {
+  if (PROGRESS_LOGGABLE_AGENT_TYPES.has(agentType)) progressLoggableAgentCount++
+}
+
 function logMinorOnlyPassThrough(label, results) {
   const minorOnly = results.filter(isMinorOnlyFailure)
   if (minorOnly.length > 0) {
@@ -126,6 +140,7 @@ const specCheck = await agent(
 )
 
 countLoggable('reviewer')
+countProgressLoggable('reviewer')
 log(`Spec Check完了: status=${specCheck?.status ?? 'なし'}`)
 
 if (shouldBlock([specCheck])) {
@@ -135,7 +150,7 @@ if (shouldBlock([specCheck])) {
     specCheck,
     blocked: true,
     blockedAt: 'Spec Check',
-    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Spec Check', expectedLoopObservabilityRecords: loggableAgentCount },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Spec Check', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
   }
 }
 
@@ -171,6 +186,7 @@ const manifestCheck = await agent(
 )
 
 countLoggable('reviewer')
+countProgressLoggable('reviewer')
 log(`Manifest Check完了: status=${manifestCheck?.status ?? 'なし'}`)
 
 // 品質ゲート: deny-by-default（.claude/workflows/lib/quality-gate.js shouldBlockと同一発想）
@@ -181,7 +197,7 @@ if (manifestCheck?.status !== 'pass') {
     manifestCheck,
     blocked: true,
     blockedAt: 'Manifest Check',
-    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Manifest Check', expectedLoopObservabilityRecords: loggableAgentCount },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Manifest Check', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
   }
 }
 
@@ -211,6 +227,8 @@ const [contractResult, dbResult] = await parallel([
 
 countLoggable('contract-writer')
 countLoggable('implementer')
+countProgressLoggable('contract-writer')
+countProgressLoggable('implementer')
 log('Contract + DB完了')
 
 // 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック
@@ -225,7 +243,7 @@ if (shouldBlock([contractResult, dbResult])) {
     dbResult,
     blocked: true,
     blockedAt: 'Contract + DB',
-    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Contract + DB', expectedLoopObservabilityRecords: loggableAgentCount },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Contract + DB', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
   }
 }
 logMinorOnlyPassThrough('Contract + DB', [contractResult, dbResult])
@@ -260,6 +278,9 @@ const [dataResult, apiResult, uiResult] = await parallel([
 countLoggable('implementer')
 countLoggable('implementer')
 countLoggable('implementer')
+countProgressLoggable('implementer')
+countProgressLoggable('implementer')
+countProgressLoggable('implementer')
 log('Implement完了')
 
 // 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック（deny-by-default）
@@ -274,7 +295,7 @@ if (shouldBlock([dataResult, apiResult, uiResult])) {
     uiResult,
     blocked: true,
     blockedAt: 'Implement',
-    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Implement', expectedLoopObservabilityRecords: loggableAgentCount },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Implement', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
   }
 }
 logMinorOnlyPassThrough('Implement', [dataResult, apiResult, uiResult])
@@ -295,6 +316,7 @@ const integrationResult = await agent(
 )
 
 countLoggable('integrator')
+countProgressLoggable('integrator')
 log('統合完了')
 
 // 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック（deny-by-default）
@@ -310,7 +332,7 @@ if (shouldBlock([integrationResult])) {
     integration: integrationResult,
     blocked: true,
     blockedAt: 'Integrate',
-    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Integrate', expectedLoopObservabilityRecords: loggableAgentCount },
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Integrate', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
   }
 }
 logMinorOnlyPassThrough('Integrate', [integrationResult])
@@ -373,6 +395,7 @@ while (true) {
   )
 
   REVIEW_DIMENSIONS.forEach(() => countLoggable('reviewer'))
+  REVIEW_DIMENSIONS.forEach(() => countProgressLoggable('reviewer'))
 
   const { done, blocked, failingDimensions, blockedDimensions } = classifyReviewRound(reviewResults, REVIEW_DIMENSIONS, reviewAttempt, MAX_REVIEW_RETRIES)
 
@@ -409,6 +432,7 @@ while (true) {
         reviewBlockedDimensions: blockedDimensions.length,
         reviewRetries: reviewRetryAgentCount,
         expectedLoopObservabilityRecords: loggableAgentCount,
+        expectedAgentProgressRecords: progressLoggableAgentCount,
       },
     }
   }
@@ -428,6 +452,7 @@ while (true) {
     { label: `implementer-retry:R${reviewAttempt}`, phase: 'Review', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   )
   countLoggable('implementer')
+  countProgressLoggable('implementer')
   reviewRetryAgentCount++
 }
 
@@ -473,5 +498,6 @@ return {
     implSuccessCount: implResults.filter(r => r?.status === 'pass').length,
     implBlockedCount: implResults.filter(r => r?.status === 'blocked').length,
     expectedLoopObservabilityRecords: loggableAgentCount,
+    expectedAgentProgressRecords: progressLoggableAgentCount,
   },
 }
