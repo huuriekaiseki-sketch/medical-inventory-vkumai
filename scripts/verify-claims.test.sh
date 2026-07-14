@@ -214,6 +214,19 @@ RUN_VERIFIER_BLOCK="$(awk '/^run_verifier\(\)/,/^}/' "$SCRIPT")"
 assert_contains "$RUN_VERIFIER_BLOCK" '--setting-sources ""' "claude -p呼び出しに--setting-sources \"\"が付いている(Stop hook再帰発火防止)"
 assert_contains "$RUN_VERIFIER_BLOCK" '--no-session-persistence' "claude -p呼び出しに--no-session-persistenceが付いている"
 
+echo "=== scenario 10: untrackedファイルのみ修正 → ハッシュが変わり再検証される(issue #352) ==="
+rm -f "$MOCK_CALL_LOG"
+echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
+echo "new-content-v1" > "$REPO/new-file.txt"
+run_hook "s10"
+assert_eq "$EXIT_CODE" "0" "untracked新規ファイル追加時はpass"
+assert_eq "$(call_count)" "1" "untracked新規ファイル追加は検証エージェントが1回呼ばれる"
+echo "new-content-v2" > "$REPO/new-file.txt"
+run_hook "s10"
+assert_eq "$EXIT_CODE" "0" "untrackedファイルの中身を書き換えてもpass"
+assert_eq "$(call_count)" "2" "untrackedファイルの中身の変更だけでも再検証される(ハッシュが変わる)"
+rm -f "$REPO/new-file.txt"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

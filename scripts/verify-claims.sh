@@ -83,8 +83,20 @@ if [ -f "$SKIP_MARKER" ]; then
 fi
 
 # --- diffハッシュ計算 ---
+# WHY(issue #352): `git diff HEAD` はtrackedファイルの差分のみを含み、`git status --porcelain`は
+# untrackedファイルを `?? path` の1行としか出さず中身を含まない。そのため新規(untracked)ファイルの
+# 中身だけを直して再Stopしてもハッシュが変わらず、「何も直していない」ケースと誤判定されてしまう。
+# claude_stop_notify.sh側のgit add -Aが先に走っていれば偶然trackedになり救われるが、hookの実行順序に
+# 依存する暗黙のカップリングだったため、ここではuntrackedファイルの中身を直接読んでハッシュ対象に含める
+# (indexは変更しない = git add -N等でこのスクリプトが副作用的にリポジトリ状態を書き換えない)。
 DIFF_CONTENT="$( { git diff HEAD; git status --porcelain; } 2>/dev/null || true)"
-CURRENT_HASH="$(printf '%s' "$DIFF_CONTENT" | shasum -a 256 | awk '{print $1}')"
+UNTRACKED_CONTENT="$(
+  while IFS= read -r -d '' f; do
+    printf '%s\0' "$f"
+    cat -- "$f" 2>/dev/null
+  done < <(git ls-files --others --exclude-standard -z 2>/dev/null || true)
+)"
+CURRENT_HASH="$(printf '%s%s' "$DIFF_CONTENT" "$UNTRACKED_CONTENT" | shasum -a 256 | awk '{print $1}')"
 
 PREV_HASH=""
 PREV_VERDICT=""
