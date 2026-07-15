@@ -1,0 +1,25 @@
+{
+  "agentType": "implementer",
+  "promptModule": ".claude/workflows/lib/prompts/db-impl.js",
+  "promptFn": "buildDbImplPrompt",
+  "model": "sonnet",
+  "jsonSchema": {
+    "type": "object",
+    "properties": {
+      "status": { "type": "string", "enum": ["pass", "fail", "blocked"] },
+      "detail": { "type": "string" },
+      "findings": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "severity": { "type": "string", "enum": ["critical", "important", "minor"] },
+            "description": { "type": "string" }
+          },
+          "required": ["severity", "description"]
+        }
+      }
+    },
+    "required": ["status", "detail"]
+  }
+}
