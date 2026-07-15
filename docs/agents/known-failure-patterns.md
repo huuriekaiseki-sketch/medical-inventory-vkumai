@@ -72,6 +72,18 @@ Next.js API Route（`requireFacilityAccess`等）を経由せず直接呼び出�
 ため2026-07-15に別worktreeで再発した。詳細: [`2026-07-14-verification-subagent-design.md`の
 「運用インシデント」節](../superpowers/specs/2026-07-14-verification-subagent-design.md#運用インシデントpostmortem)。
 
+### findコマンドにクォートなしのglobを渡している
+
+**チェック内容:** `find <path>* -maxdepth N` のように、`find` の引数にクォートしていない
+globパターン（`*`等を含むパス）を渡していないか確認する。`find <path> -name '<pattern>*'`
+のように `-name` オプションで絞り込むか、globをクォートしてシェル展開させない形に書き換える。
+
+**なぜ再発したか:** クォートなしのglob（例: `find src/lib/mapping* -maxdepth 1`）は `find` が
+実行される前にシェルが展開してしまう。カレントディレクトリに `-` で始まる名前のファイルが
+存在すると、それが `find` のオプションとして誤解釈されうる構造的リスクがあるため、Claude Codeの
+組み込み安全性チェックが「引用符なしglob」として毎回確認を要求する。これは`.claude/settings.json`
+の`allow`リストへの追加では回避できない（コマンドの書き方自体を変える必要がある）。
+
 ## RLS/テナント分離層
 
 ### 「動いたからOK」でfacility_idフィルタ漏れ・RLS未設定を見逃す（issue #24再発防止）
