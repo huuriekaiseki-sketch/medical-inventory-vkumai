@@ -50,6 +50,30 @@ VS Code側で実装 → スクリーンショットをCLIセッションに貼�
   ```
 - **deny-by-default**: `severity` が欠損・不明な値の場合は `critical` として扱う(既存のAIDD Draft phaseと同じfail-open防止の方針。PR #298を踏襲)
 
+### 証拠検証(Evidence Verification)(issue #354)
+
+severity欠損時のdeny-by-defaultとは別に、findingsの`evidence`(file:line)自体が実在するかを
+hook側で機械チェックする。検証サブエージェント自身がLLMである以上、`evidence`がハルシネーション
+で実在しない箇所を指す可能性があり、それを無検証のままcritical/importantとして扱うと
+「裏取り装置が裏取りされていない」構造になる(docs/agents/known-failure-patterns.md参照)。
+
+- `evidence`文字列から拡張子付きのファイルパストークン(+ 任意の`:行番号`)を正規表現でベスト
+  エフォート抽出する。拡張子の無いパス表記(例: `scripts/lib/foo`)は検知できない既知の限界がある
+- 抽出したファイルがリポジトリ内に実在しない場合、または行番号がそのファイルの行数を超える場合は
+  「evidence未検証」とみなす
+- **evidence未検証のfindingはseverityを`minor`へ格下げする。** 完全に握りつぶす(無視する)選択肢
+  もあったが、以下の理由で「格下げ+可視化」を採用した:
+  - 完全に無視すると、findingが消えた理由が人間から見えなくなる。これはこのリポジトリの
+    「no silent caps」原則(検知結果を機械的に見える形で残す)と矛盾する
+  - `minor`はブロックしない(既存の判定ロジック通り)ため、ハルシネーションされたevidenceで
+    Stopがブロックされ続ける事態(issue #348のエスケープハッチ問題と同種の被害)は防げる
+  - 格下げ後もdescriptionに「evidence未検証」の注記が付き、`minor`一覧としてsystemMessageに
+    表示され続けるため、誤検知が多発していることには気づける(issue #355の効果測定と接続する)
+- **fail-open(exit 0での即時通過)ではなくseverity格下げを選んだ理由**: fail-openは「検証プロセス
+  自体が動かなかった」(インフラ障害・タイムアウト等)場合に予約している区分であり、「検証は正常に
+  動いたがevidenceの中身が怪しい」場合はこれと性質が異なる。前者と混同すると、fail-openの発生率が
+  「検証エージェントが落ちている率」を表さなくなり、issue #355の効果測定の意味が薄れる
+
 ### 判定・ブロックロジック
 
 - findings中の最大severityを求める
@@ -95,6 +119,7 @@ Stop event
 | ケース | 挙動 |
 |---|---|
 | severity欠損・不明 | critical扱い(deny-by-default) |
+| evidenceが実在しない/行番号が範囲外(issue #354) | minorへ格下げ(ブロックしない、systemMessageには残す) |
 | critical/important、retry <= 3 | ブロック(exit 2)、指摘内容を返す |
 | critical/important、retry > 3 | ブロック継続、人間の介入待ち。エスケープハッチ案内 |
 | minorのみ/findingsなし | pass(exit 0)、retry_countリセット |
@@ -186,6 +211,9 @@ claude_auto_issue / aidd_session_report が並走する。Claude Codeのhook実�
   7. 検証プロセス自体が失敗(モック) → fail-openでpass
   8. 同時実行数が上限に達している → サーキットブレーカーでfail-open(LLM呼び出し無し)
   9. **(issue #352)** untrackedファイルのみ追加・修正 → ハッシュが変わり再検証される(新規ファイル追加時に1回、その後中身を書き換えたときにもう1回、計2回LLM呼び出しが発生すること)
+  10. **(issue #354)** evidenceが実在しないファイルを指すcritical finding → minorへ格下げされブロックされない(exit 0)
+  11. **(issue #354)** evidenceのファイルは実在するが行番号がファイルの行数を超えるcritical finding → minorへ格下げされブロックされない(exit 0)
+  12. **(issue #354)** evidenceが空/ファイルパスらしきトークンを含まないcritical finding → minorへ格下げされブロックされない(exit 0)
 - `claude -p` 呼び出し部分は実行コストがかかるため、テストではモック(固定のfindings JSONを返すダミースクリプト)に差し替えて検証する
 
 ## 対象範囲外(YAGNI)
