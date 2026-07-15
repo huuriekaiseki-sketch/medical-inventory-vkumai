@@ -76,12 +76,6 @@ block_with_retry_check() {
   fi
 }
 
-# --- エスケープハッチ: .skipマーカーがあれば無条件pass（消費して削除） ---
-if [ -f "$SKIP_MARKER" ]; then
-  rm -f "$SKIP_MARKER"
-  emit_pass "verify-claims: 手動オーバーライド(.skipマーカー)が使用されたため、今回の検証をスキップしました。"
-fi
-
 # --- diffハッシュ計算 ---
 # WHY(issue #352): `git diff HEAD` はtrackedファイルの差分のみを含み、`git status --porcelain`は
 # untrackedファイルを `?? path` の1行としか出さず中身を含まない。そのため新規(untracked)ファイルの
@@ -97,6 +91,17 @@ UNTRACKED_CONTENT="$(
   done < <(git ls-files --others --exclude-standard -z 2>/dev/null || true)
 )"
 CURRENT_HASH="$(printf '%s%s' "$DIFF_CONTENT" "$UNTRACKED_CONTENT" | shasum -a 256 | awk '{print $1}')"
+
+# --- エスケープハッチ: .skipマーカーがあれば無条件pass（消費して削除） ---
+# WHY(issue #372): write_stateを呼ばずにexitすると、STATE_FILEのlast_verdictが直前のblockedのまま
+# 残り、次のStopイベントでdiffハッシュが変化していない場合に「ケース1/2」分岐でblockedが復活してしまう。
+# .skipは「そのStopイベント1回だけ」のはずなので、消費時点のCURRENT_HASHとpass判定を書き込んで
+# 以降のStopイベントに影響を残さないようにする。
+if [ -f "$SKIP_MARKER" ]; then
+  rm -f "$SKIP_MARKER"
+  write_state "$CURRENT_HASH" "pass" 0 ""
+  emit_pass "verify-claims: 手動オーバーライド(.skipマーカー)が使用されたため、今回の検証をスキップしました。"
+fi
 
 PREV_HASH=""
 PREV_VERDICT=""
