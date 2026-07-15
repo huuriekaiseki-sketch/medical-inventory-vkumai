@@ -227,6 +227,21 @@ assert_eq "$EXIT_CODE" "0" "untrackedファイルの中身を書き換えてもp
 assert_eq "$(call_count)" "2" "untrackedファイルの中身の変更だけでも再検証される(ハッシュが変わる)"
 rm -f "$REPO/new-file.txt"
 
+echo "=== scenario 11: .skip消費後、同一diffで再度Stopしてもblockedが復活しない(issue #372) ==="
+rm -f "$MOCK_CALL_LOG"
+echo "line11" >> "$REPO/file.txt"
+echo '{"findings": [{"severity": "critical", "description": "解消されない指摘", "evidence": "x:1"}]}' > "$MOCK_FINDINGS_FILE"
+run_hook "s11"
+assert_eq "$EXIT_CODE" "2" "1回目(新規diff・critical)はブロック"
+touch "$STATE_DIR/s11.skip"
+run_hook "s11"
+assert_eq "$EXIT_CODE" "0" ".skipマーカー使用時はpass"
+VERDICT_AFTER_SKIP="$(jq -r '.last_verdict' "$STATE_DIR/s11.json")"
+assert_eq "$VERDICT_AFTER_SKIP" "pass" ".skip消費時に状態ファイルのlast_verdictがpassにリセットされる"
+run_hook "s11"
+assert_eq "$EXIT_CODE" "0" ".skip消費後、diffが変化していない3回目もblockedが復活せずpass"
+assert_eq "$(call_count)" "1" ".skip消費後の3回目は検証エージェントを再度呼ばない(diffハッシュ一致・pass再利用)"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
