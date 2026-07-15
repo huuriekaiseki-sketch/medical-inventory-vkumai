@@ -125,6 +125,38 @@ hook側で機械チェックする。検証サブエージェント自身がLLM�
 
 理由: 「severityが不明」は検証した上での判断の曖昧さだが、「検証エージェントが動かなかった」のはツール自体の不備であり、これを理由にブロックし続けるのは開発を止めるだけで安全性に寄与しない。`systemMessage` に「検証エージェントの実行に失敗したため今回はスキップしました」と明記し、可視化はする。
 
+### 効果測定(Effectiveness Measurement)(issue #355)
+
+このリポジトリ自身の運用ルール「新しい運用ルールは検知手段を先に決める」(issue #339、
+[`docs/agents/common.md`](../../agents/common.md)参照)に照らすと、この検証サブエージェント自体にも
+「役に立っているかを機械的に知る手段」が無ければ、fail-open(検証未実施)が静かに常態化しても
+気づけない「動いていない検証装置」になり得る。これに対応するため、判定の種類ごとに
+`logs/verify-claims-effectiveness.jsonl` へ1行JSONを追記する(実装: `scripts/verify-claims.sh`の
+`log_effectiveness`)。
+
+- 記録するevent種別:
+  - `skip_used` - `.skip`マーカーが使われた(誤検知シグナル。issue #348がこのマーカー自体の
+    エスケープハッチ設計を別途扱う)
+  - `pass` - 指摘なしでpass(`cached`: 前回と同一diffの再利用によるものか、新規検証によるものか)
+  - `blocked` - critical/important指摘でブロック(`retry_count`、`cached`: LLM呼び出し無しでretry
+    だけ消費したケースか否か)
+  - `resolved` - 直前が`blocked`だった状態が、次の検証で指摘なしに変わった。**「指摘が修正に
+    つながった」ことを示す唯一のシグナル**であり、単なる`pass`(初回・元々問題なし)とは区別する
+  - `fail_open` - 検証未実施でfail-open。`reason`で`verifier_failed`(サブプロセス自体の失敗)・
+    `parse_failed`(出力がJSONとして解析不能)・`circuit_breaker`(同時実行数上限)を区別する
+- ログ書き込みはベストエフォート(`|| true`)とし、書き込み失敗が本来の検証フロー自体をブロック
+  しないようにする
+- **閾値検知**: 直近N件(既定5件、`VERIFY_CLAIMS_FAIL_OPEN_STREAK_THRESHOLD`で変更可)が連続して
+  `fail_open`の場合、「検証サブエージェント自体が機能していない可能性がある」旨の警告を
+  `systemMessage`に追記する。fail-open自体は単発では正常な安全策(インフラ障害時に開発を止めない)
+  だが、連続する場合は検証が実質的に機能していないシグナルであるため区別する
+- **自己参照バグへの注意**: このログファイル自身がリポジトリ配下の未追跡(untracked)ファイルに
+  なるため、diffハッシュ計算(「発火の仕組み」節、issue #352)にログの中身が混入すると、
+  ログ追記のたびにハッシュが変化し続け、キャッシュ機構(スキップ・再判定ロジックのケース1/2)が
+  機能しなくなる自己参照バグになる。`STATE_DIR`・`LOCK_DIR`・`EFFECTIVENESS_LOG`の配置先ディレクトリは
+  untrackedファイルのハッシュ計算対象から明示的に除外する(`/logs/`がgitignore対象であることに
+  暗黙依存しない)
+
 ## データフロー(概要)
 
 ```
@@ -240,6 +272,9 @@ claude_auto_issue / aidd_session_report が並走する。Claude Codeのhook実�
   10. **(issue #354)** evidenceが実在しないファイルを指すcritical finding → minorへ格下げされブロックされない(exit 0)
   11. **(issue #354)** evidenceのファイルは実在するが行番号がファイルの行数を超えるcritical finding → minorへ格下げされブロックされない(exit 0)
   12. **(issue #354)** evidenceが空/ファイルパスらしきトークンを含まないcritical finding → minorへ格下げされブロックされない(exit 0)
+  13. **(issue #355)** blockedからpassへ遷移した場合、効果測定ログに`resolved`イベントが記録される。blockedイベント自体にも`retry_count`・`cached`が記録される
+  14. **(issue #355)** `.skip`マーカー使用時に効果測定ログへ`skip_used`イベントが記録される
+  15. **(issue #355)** 直近N件(閾値)連続でfail_openが発生した場合、`systemMessage`に「検証サブエージェントが機能していない可能性」の警告が追記される
 - `claude -p` 呼び出し部分は実行コストがかかるため、テストではモック(固定のfindings JSONを返すダミースクリプト)に差し替えて検証する
 
 ## 対象範囲外(YAGNI)

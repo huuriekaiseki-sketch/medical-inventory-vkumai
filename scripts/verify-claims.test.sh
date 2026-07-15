@@ -29,6 +29,7 @@ STATE_DIR="$WORKDIR/state"
 MOCK_VERIFIER="$WORKDIR/mock-verifier.sh"
 MOCK_CALL_LOG="$WORKDIR/call.log"
 MOCK_FINDINGS_FILE="$WORKDIR/findings.json"
+EFFECTIVENESS_LOG="$WORKDIR/effectiveness.jsonl"
 
 cat > "$MOCK_VERIFIER" <<'MOCK_EOF'
 #!/usr/bin/env bash
@@ -80,6 +81,8 @@ run_hook() {
       VERIFY_CLAIMS_STATE_DIR="$STATE_DIR" \
       VERIFY_CLAIMS_MAX_RETRIES=3 \
       VERIFY_CLAIMS_VERIFIER_CMD="$MOCK_VERIFIER" \
+      VERIFY_CLAIMS_EFFECTIVENESS_LOG="$EFFECTIVENESS_LOG" \
+      VERIFY_CLAIMS_FAIL_OPEN_STREAK_THRESHOLD="${MOCK_FAIL_OPEN_STREAK_THRESHOLD:-5}" \
       MOCK_CALL_LOG="$MOCK_CALL_LOG" \
       MOCK_FINDINGS_FILE="$MOCK_FINDINGS_FILE" \
       MOCK_SHOULD_FAIL="${MOCK_SHOULD_FAIL:-0}" \
@@ -307,6 +310,59 @@ echo '{"findings": [{"severity": "critical", "description": "根拠不明の指�
 run_hook "s17"
 assert_eq "$EXIT_CODE" "0" "evidenceが空の場合はminor格下げでブロックされない"
 assert_contains "$STDOUT_OUT" "evidence未検証" "格下げの旨がsystemMessageに含まれる"
+
+echo "=== scenario 18: 効果測定ログにblocked/resolvedイベントが記録される(issue #355) ==="
+rm -f "$MOCK_CALL_LOG"
+: > "$EFFECTIVENESS_LOG"
+echo "line18a" >> "$REPO/file.txt"
+echo '{"findings": [{"severity": "critical", "description": "指摘", "evidence": "file.txt:1"}]}' > "$MOCK_FINDINGS_FILE"
+run_hook "s18"
+assert_eq "$EXIT_CODE" "2" "1回目はブロック"
+BLOCKED_EVENT="$(jq -c 'select(.session_id == "s18" and .event == "blocked")' "$EFFECTIVENESS_LOG" | tail -n1)"
+assert_contains "$BLOCKED_EVENT" '"retry_count":1' "blockedイベントにretry_countが記録される"
+assert_contains "$BLOCKED_EVENT" '"cached":false' "blockedイベントにcached:falseが記録される(LLM呼び出しあり)"
+
+echo "line18b" >> "$REPO/file.txt"
+echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
+run_hook "s18"
+assert_eq "$EXIT_CODE" "0" "2回目(指摘解消)はpass"
+RESOLVED_EVENT="$(jq -c 'select(.session_id == "s18" and .event == "resolved")' "$EFFECTIVENESS_LOG")"
+assert_contains "$RESOLVED_EVENT" '"event":"resolved"' "blockedからpassへの遷移がresolvedイベントとして記録される(=指摘が修正につながった)"
+
+echo "=== scenario 19: 効果測定ログにskip_usedイベントが記録される(issue #355) ==="
+rm -f "$MOCK_CALL_LOG"
+: > "$EFFECTIVENESS_LOG"
+touch "$STATE_DIR/s19.skip"
+run_hook "s19"
+assert_eq "$EXIT_CODE" "0" ".skip使用時はpass"
+SKIP_EVENT="$(jq -c 'select(.session_id == "s19" and .event == "skip_used")' "$EFFECTIVENESS_LOG")"
+assert_contains "$SKIP_EVENT" '"event":"skip_used"' "skip_usedイベント(誤検知シグナル)が記録される"
+
+echo "=== scenario 20: fail-openが連続するとsystemMessageに警告が追記される(issue #355) ==="
+rm -f "$MOCK_CALL_LOG"
+: > "$EFFECTIVENESS_LOG"
+MOCK_FAIL_OPEN_STREAK_THRESHOLD=3
+MOCK_SHOULD_FAIL=1
+echo "line20a" >> "$REPO/file.txt"
+run_hook "s20a"
+assert_eq "$EXIT_CODE" "0" "1回目のfail-openはpass"
+if printf '%s' "$STDOUT_OUT" | grep -qF "警告"; then
+  echo "  NG: 1回目から警告が出てはいけない(閾値未満)"
+  fail=1
+else
+  echo "  OK: 1回目は警告なし(閾値未満)"
+fi
+echo "line20b" >> "$REPO/file.txt"
+run_hook "s20b"
+echo "line20c" >> "$REPO/file.txt"
+run_hook "s20c"
+assert_eq "$EXIT_CODE" "0" "3回目もfail-openでpass"
+assert_contains "$STDOUT_OUT" "警告" "連続3回(閾値)のfail-openで警告が追記される"
+assert_contains "$STDOUT_OUT" "機能していない可能性" "警告文言に検証サブエージェント機能不全の旨が含まれる"
+FAIL_OPEN_COUNT="$(jq -c 'select(.event == "fail_open" and .reason == "verifier_failed")' "$EFFECTIVENESS_LOG" | wc -l | tr -d ' ')"
+assert_eq "$FAIL_OPEN_COUNT" "3" "fail_openイベントが3件記録される(reason: verifier_failed)"
+MOCK_SHOULD_FAIL=0
+MOCK_FAIL_OPEN_STREAK_THRESHOLD=5
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

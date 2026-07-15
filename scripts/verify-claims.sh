@@ -17,6 +17,20 @@ set -euo pipefail
 #                                 プロンプトを受け取り、findings JSONを標準出力に返すこと）
 #   VERIFY_CLAIMS_LOCK_DIR      - サーキットブレーカー用ロック置き場（省略時は .claude/.verify-lock）
 #   VERIFY_CLAIMS_MAX_CONCURRENT - 同時実行を許す検証プロセス数の上限（省略時は4）
+#   VERIFY_CLAIMS_EFFECTIVENESS_LOG - 効果測定ログの出力先（省略時は logs/verify-claims-effectiveness.jsonl）
+#   VERIFY_CLAIMS_FAIL_OPEN_STREAK_THRESHOLD - 連続fail-open警告の閾値（省略時は5）
+#
+# 効果測定ログ（issue #355）: 「新しい運用ルールは検知手段を先に決める」(issue #339)の原則に照らし、
+# fail-open（検証未実施）が静かに常態化しても気づけない状態を防ぐため、判定の種類ごとに
+# logs/verify-claims-effectiveness.jsonl へ1行JSONを追記する。event種別:
+#   skip_used  - .skipマーカーが使われた（誤検知シグナル）
+#   pass       - 指摘なしでpass（cached: 前回と同一diffの再利用か否か）
+#   blocked    - critical/important指摘でブロック（cached: LLM呼び出し無しでretry消費したか否か）
+#   resolved   - 前回blockedだった状態が、次の検証でfindings無しに変わった（指摘が修正につながった）
+#   fail_open  - 検証未実施でfail-open（reason: verifier_failed | parse_failed | circuit_breaker）
+# 直近N件（既定5件）が連続してfail_openの場合、「検証サブエージェントが機能していない可能性」の
+# 警告をsystemMessageに追記する。設計: docs/superpowers/specs/2026-07-14-verification-subagent-design.md
+# の「効果測定（Effectiveness Measurement）」節
 #
 # サーキットブレーカー（issue #359）: --setting-sources ""等の個別修正が正しくても、
 # それが適用され忘れる・マージされ忘れることで同種の再帰暴走が繰り返された実績がある
@@ -33,8 +47,10 @@ TIMEOUT_SECONDS="${VERIFY_CLAIMS_TIMEOUT_SECONDS:-60}"
 MODEL="${VERIFY_CLAIMS_MODEL:-claude-haiku-4-5-20251001}"
 LOCK_DIR="${VERIFY_CLAIMS_LOCK_DIR:-.claude/.verify-lock}"
 MAX_CONCURRENT="${VERIFY_CLAIMS_MAX_CONCURRENT:-4}"
+EFFECTIVENESS_LOG="${VERIFY_CLAIMS_EFFECTIVENESS_LOG:-logs/verify-claims-effectiveness.jsonl}"
+FAIL_OPEN_STREAK_THRESHOLD="${VERIFY_CLAIMS_FAIL_OPEN_STREAK_THRESHOLD:-5}"
 
-mkdir -p "$STATE_DIR" "$LOCK_DIR"
+mkdir -p "$STATE_DIR" "$LOCK_DIR" "$(dirname "$EFFECTIVENESS_LOG")"
 
 INPUT="$(cat)"
 SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // "unknown"')"
@@ -58,6 +74,46 @@ emit_block() {
   exit 2
 }
 
+# WHY(issue #355): 効果測定ログはあくまで補助であり、書き込み失敗（ディスクフル等）で
+# 本来の検証フロー自体を止めてはならないため、すべて`|| true`でベストエフォートにする。
+log_effectiveness() {
+  local event="$1"
+  local extra_json="${2:-}"
+  [ -n "$extra_json" ] || extra_json="{}"
+  local ts
+  ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "")"
+  jq -nc --arg ts "$ts" --arg session "$SESSION_ID" --arg event "$event" --argjson extra "$extra_json" \
+    '{timestamp: $ts, session_id: $session, event: $event} + $extra' \
+    >> "$EFFECTIVENESS_LOG" 2>/dev/null || true
+}
+
+# 直近FAIL_OPEN_STREAK_THRESHOLD件が全てfail_openなら警告文を返す(無ければ空文字)。
+# WHY: fail-openは単発では正常な安全策(インフラ障害時に開発を止めない)だが、連続して
+# 発生し続ける場合は「検証サブエージェント自体が機能していない」シグナルであり、
+# 気づく手段が無いと静かに劣化する(issue #339の原則)。
+check_fail_open_streak() {
+  [ -f "$EFFECTIVENESS_LOG" ] || return 0
+  local recent total fail_open_count
+  recent="$(tail -n "$FAIL_OPEN_STREAK_THRESHOLD" "$EFFECTIVENESS_LOG" 2>/dev/null | jq -s '[.[].event]' 2>/dev/null || echo '[]')"
+  total="$(printf '%s' "$recent" | jq 'length' 2>/dev/null || echo 0)"
+  fail_open_count="$(printf '%s' "$recent" | jq '[.[] | select(. == "fail_open")] | length' 2>/dev/null || echo 0)"
+  if [ "$total" -ge "$FAIL_OPEN_STREAK_THRESHOLD" ] && [ "$fail_open_count" -eq "$total" ]; then
+    printf 'verify-claims: 警告: 直近%d件の検証が連続してfail-open(検証未実施)です。検証サブエージェント自体が機能していない可能性があります。%s を確認してください。' \
+      "$FAIL_OPEN_STREAK_THRESHOLD" "$EFFECTIVENESS_LOG"
+  fi
+}
+
+emit_pass_fail_open() {
+  local reason="$1" msg="$2"
+  log_effectiveness "fail_open" "$(jq -n --arg r "$reason" '{reason: $r}')"
+  local streak_warning
+  streak_warning="$(check_fail_open_streak)"
+  if [ -n "$streak_warning" ]; then
+    msg="$(printf '%s\n%s' "$msg" "$streak_warning")"
+  fi
+  emit_pass "$msg"
+}
+
 write_state() {
   local hash="$1" verdict="$2" retry="$3" findings_msg="$4" fingerprint="${5:-}"
   jq -n --arg h "$hash" --arg v "$verdict" --argjson r "$retry" --arg m "$findings_msg" --arg fp "$fingerprint" \
@@ -72,7 +128,7 @@ write_state() {
 # 指摘の中身が変わった場合は1から数え直す(diffハッシュを変えるだけで同じ問題を放置する
 # ズルは、diffハッシュ不一致→再検証のたびに同一findingが再検出される限り引き続き累積されるため防げる)。
 block_with_retry_check() {
-  local hash="$1" findings_msg="$2" fingerprint="${3:-}"
+  local hash="$1" findings_msg="$2" fingerprint="${3:-}" cached="${4:-false}"
   local new_retry
   if [ "$PREV_VERDICT" = "blocked" ] && [ -n "$fingerprint" ] && [ "$fingerprint" = "$PREV_BLOCKING_FINGERPRINT" ]; then
     new_retry=$((PREV_RETRY_COUNT + 1))
@@ -80,6 +136,7 @@ block_with_retry_check() {
     new_retry=1
   fi
   write_state "$hash" "blocked" "$new_retry" "$findings_msg" "$fingerprint"
+  log_effectiveness "blocked" "$(jq -n --argjson retry "$new_retry" --argjson cached "$cached" '{retry_count: $retry, cached: $cached}')"
   if [ "$new_retry" -le "$MAX_RETRIES" ]; then
     emit_block "$(printf 'verify-claims: 未解消の指摘を検出しました(試行%d/%d):\n%s' "$new_retry" "$MAX_RETRIES" "$findings_msg")"
   else
@@ -95,8 +152,17 @@ block_with_retry_check() {
 # 依存する暗黙のカップリングだったため、ここではuntrackedファイルの中身を直接読んでハッシュ対象に含める
 # (indexは変更しない = git add -N等でこのスクリプトが副作用的にリポジトリ状態を書き換えない)。
 DIFF_CONTENT="$( { git diff HEAD; git status --porcelain; } 2>/dev/null || true)"
+# WHY(issue #355): このスクリプト自身が書き込む状態ファイル(STATE_DIR)・ロック(LOCK_DIR)・
+# 効果測定ログ(EFFECTIVENESS_LOG)がuntrackedのままだと、ログ追記のたびに中身が変化し、
+# それ自体がdiffハッシュに混入して「何もソースを直していないのにハッシュが変わり続ける」
+# 自己参照バグになる(このプロジェクトでは/logs/がgitignore対象のため実害はないが、
+# .gitignoreの存在に暗黙依存させず、スクリプト自身でも明示的に除外する)。
+EFFECTIVENESS_LOG_DIR="$(dirname "$EFFECTIVENESS_LOG")"
 UNTRACKED_CONTENT="$(
   while IFS= read -r -d '' f; do
+    if [[ "$f" == "$STATE_DIR"/* || "$f" == "$LOCK_DIR"/* || "$f" == "$EFFECTIVENESS_LOG_DIR"/* ]]; then
+      continue
+    fi
     printf '%s\0' "$f"
     cat -- "$f" 2>/dev/null
   done < <(git ls-files --others --exclude-standard -z 2>/dev/null || true)
@@ -111,6 +177,7 @@ CURRENT_HASH="$(printf '%s%s' "$DIFF_CONTENT" "$UNTRACKED_CONTENT" | shasum -a 2
 if [ -f "$SKIP_MARKER" ]; then
   rm -f "$SKIP_MARKER"
   write_state "$CURRENT_HASH" "pass" 0 ""
+  log_effectiveness "skip_used"
   emit_pass "verify-claims: 手動オーバーライド(.skipマーカー)が使用されたため、今回の検証をスキップしました。"
 fi
 
@@ -130,12 +197,13 @@ fi
 # --- ケース1/2: diffハッシュ一致（前回状態あり） ---
 if [ -n "$PREV_HASH" ] && [ "$CURRENT_HASH" = "$PREV_HASH" ]; then
   if [ "$PREV_VERDICT" = "pass" ]; then
+    log_effectiveness "pass" '{"cached": true}'
     emit_pass ""
   fi
   if [ "$PREV_VERDICT" = "blocked" ]; then
     # 何も直さずに再Stopしようとした場合。LLM呼び出しはせずretry_countだけ消費する。
     # フィンガープリントは前回と同一のものをそのまま渡す(同一findingとして必ず累積させる)。
-    block_with_retry_check "$CURRENT_HASH" "$PREV_FINDINGS_MSG" "$PREV_BLOCKING_FINGERPRINT"
+    block_with_retry_check "$CURRENT_HASH" "$PREV_FINDINGS_MSG" "$PREV_BLOCKING_FINGERPRINT" "true"
   fi
 fi
 
@@ -239,7 +307,7 @@ done
 
 CURRENT_CONCURRENT="$(find "$LOCK_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
 if [ "$CURRENT_CONCURRENT" -ge "$MAX_CONCURRENT" ]; then
-  emit_pass "$(printf 'verify-claims: 検証プロセスの同時実行数が上限(%d)に達しているため、サーキットブレーカーが働き今回の検証をスキップしました(暴走防止のfail-open)。' "$MAX_CONCURRENT")"
+  emit_pass_fail_open "circuit_breaker" "$(printf 'verify-claims: 検証プロセスの同時実行数が上限(%d)に達しているため、サーキットブレーカーが働き今回の検証をスキップしました(暴走防止のfail-open)。' "$MAX_CONCURRENT")"
 fi
 
 LOCK_ENTRY="$LOCK_DIR/$$"
@@ -251,13 +319,13 @@ VERIFIER_OUTPUT="$(run_verifier_with_timeout)" || VERIFIER_EXIT=$?
 
 if [ "$VERIFIER_EXIT" -ne 0 ]; then
   # インフラ障害時のfail-open: 検証プロセス自体の失敗はdeny-by-defaultの対象外とする
-  emit_pass "verify-claims: 検証エージェントの実行に失敗したため(exit=${VERIFIER_EXIT})、今回はスキップしました。"
+  emit_pass_fail_open "verifier_failed" "verify-claims: 検証エージェントの実行に失敗したため(exit=${VERIFIER_EXIT})、今回はスキップしました。"
 fi
 
 FINDINGS_JSON="$(printf '%s' "$VERIFIER_OUTPUT" | jq -c '.findings' 2>/dev/null || echo "")"
 if [ -z "$FINDINGS_JSON" ] || [ "$FINDINGS_JSON" = "null" ]; then
   # 出力自体が壊れている場合も検証プロセスの不備として扱い、fail-open
-  emit_pass "verify-claims: 検証エージェントの出力を解析できなかったため、今回はスキップしました。"
+  emit_pass_fail_open "parse_failed" "verify-claims: 検証エージェントの出力を解析できなかったため、今回はスキップしました。"
 fi
 
 # deny-by-default: severity欠損・不明値はcriticalとして扱う
@@ -323,10 +391,17 @@ if [ "$HAS_BLOCKING" = "true" ]; then
     [.[] | select(.severity == "critical" or .severity == "important")
        | {severity, description, evidence: (.evidence // "")}] | sort
   ' | shasum -a 256 | awk '{print $1}')"
-  block_with_retry_check "$CURRENT_HASH" "$FINDINGS_TEXT" "$BLOCKING_FINGERPRINT"
+  block_with_retry_check "$CURRENT_HASH" "$FINDINGS_TEXT" "$BLOCKING_FINGERPRINT" "false"
 fi
 
 write_state "$CURRENT_HASH" "pass" 0 ""
+# WHY(issue #355): 直前がblockedからのpassへの遷移は「指摘が修正につながった」ことを意味する
+# ため、単なるpass(初回・元々問題なし)とは区別してresolvedとして記録する。
+if [ "$PREV_VERDICT" = "blocked" ]; then
+  log_effectiveness "resolved"
+else
+  log_effectiveness "pass" '{"cached": false}'
+fi
 if [ -n "$MINOR_TEXT" ]; then
   emit_pass "$(printf 'verify-claims: 軽微な指摘があります(ブロックはしません):\n%s' "$MINOR_TEXT")"
 fi
