@@ -90,12 +90,23 @@ run_agent() {
 run_agent_with_timeout() {
   local out_file
   out_file="$(mktemp)"
+  # run_agentはclaude -p(実際にファイルを書き込みうるagentType)をさらにforkする。
+  # verify-claims.shのrun_verifier_with_timeoutは読み取り専用ツールしか使わないagentが
+  # 前提のため単一PID killで安全だったが、それをそのまま踏襲すると、タイムアウト時にラッパー
+  # サブシェルだけ死んでclaude本体が孤児化し、$CLONE_DIRをrm -rfした後もファイル書き込みを
+  # 続ける事故になりうる。setsidはmacOS(この開発環境)に存在しないため、bashのjob control
+  # (`set -m`)でバックグラウンドジョブを専用プロセスグループのリーダーにし、タイムアウト時は
+  # プロセスグループごとkillする。この関数は呼び出し元で`$(...)`(サブシェル)越しに呼ばれる
+  # ため、ここでのset -m/set +mはそのサブシェル内に閉じ、呼び出し元スクリプト全体には影響しない。
+  set -m
   ( run_agent "$1" > "$out_file" 2>/dev/null; echo $? > "${out_file}.exit" ) &
   local pid=$!
+  set +m
   local waited=0
   while kill -0 "$pid" 2>/dev/null; do
     if [ "$waited" -ge "$TIMEOUT_SECONDS" ]; then
-      kill "$pid" 2>/dev/null || true
+      # プロセスグループ全体をkill。"-$pid"が使えない環境向けに単一PID killへフォールバックする。
+      kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null || true
       cat "$out_file" 2>/dev/null || true
       rm -f "$out_file" "${out_file}.exit"
@@ -129,10 +140,28 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
   EXPECTED_STATUS="$(jq -r '.status' "$expected_file")"
 
   CLONE_DIR="$(mktemp -d)"
-  git clone --quiet --depth 1 "file://$REPO_DIR" "$CLONE_DIR/repo"
+  # git clone/プロンプト構築の失敗を`set -e`で全体abortさせず、当該fixtureのNGとして
+  # 記録した上で次のfixtureへ進む(エージェント呼び出し失敗・status不一致と同じ扱いに揃える)。
+  # ガードしないと1fixtureの事故(cloneミス等)で残り全fixtureの結果が失われ、かつ
+  # $CLONE_DIRがrm -rfされずリークする。
+  CLONE_EXIT=0
+  git clone --quiet --depth 1 "file://$REPO_DIR" "$CLONE_DIR/repo" || CLONE_EXIT=$?
+  if [ "$CLONE_EXIT" -ne 0 ]; then
+    rm -rf "$CLONE_DIR"
+    FAIL_LINES="$FAIL_LINES
+- [$case_name] NG: リポジトリのcloneに失敗しました(exit=$CLONE_EXIT)"
+    continue
+  fi
   cp "$spec_file" "$CLONE_DIR/repo/SPEC.md"
 
-  PROMPT="$(node "$SCRIPT_DIR/lib/build-eval-prompt.mjs" "$CLONE_DIR/repo/$PROMPT_MODULE" "$PROMPT_FN" "SPEC.md")"
+  BUILD_EXIT=0
+  PROMPT="$(node "$SCRIPT_DIR/lib/build-eval-prompt.mjs" "$CLONE_DIR/repo/$PROMPT_MODULE" "$PROMPT_FN" "SPEC.md")" || BUILD_EXIT=$?
+  if [ "$BUILD_EXIT" -ne 0 ]; then
+    rm -rf "$CLONE_DIR"
+    FAIL_LINES="$FAIL_LINES
+- [$case_name] NG: プロンプトの構築に失敗しました(exit=$BUILD_EXIT)"
+    continue
+  fi
 
   AGENT_EXIT=0
   AGENT_OUTPUT="$(cd "$CLONE_DIR/repo" && run_agent_with_timeout "$PROMPT")" || AGENT_EXIT=$?
@@ -153,6 +182,14 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
 - [$case_name] NG: status=$ACTUAL_STATUS (期待値=$EXPECTED_STATUS)"
   fi
 done
+
+# case-*/が1件もマッチしなかった場合(非nullglobのbashでは`for`が展開されない
+# 文字列そのままで1回だけ回るため`[ -d "$case_dir" ]`で弾かれTOTALが0のまま残る)、
+# fixtureセット名の誤り等の設定ミスを「0/0件合格」という誤ったexit 0で握りつぶさない。
+if [ "$TOTAL" -eq 0 ]; then
+  echo "eval-workflow-prompts: $FIXTURE_SET_DIR に case-*/ ディレクトリが1件も見つかりませんでした（spec.md/expected.jsonが揃っているケースが無いか、fixtureセット名が間違っている可能性があります）" >&2
+  exit 1
+fi
 
 echo ""
 echo "=== eval-workflow-prompts: $FIXTURE_SET ==="
