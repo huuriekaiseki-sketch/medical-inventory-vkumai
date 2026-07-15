@@ -19,10 +19,12 @@ VS Code側で実装 → スクリーンショットをCLIセッションに貼�
   - この方式により、既存の別Stop hook(`claude_stop_notify.sh`の`git add -A`)が先に走って untracked ファイルを tracked 化してくれることへの暗黙の依存が無くなる。`verify-claims.sh`単独でuntrackedファイルの中身を検知できるため、hookの実行順序に依存しない
 - 状態は `.claude/.verify-state/<session_id>.json` に保存する:
   ```json
-  { "last_diff_hash": "...", "last_verdict": "pass" | "blocked", "retry_count": 0, "last_findings_message": "..." }
+  { "last_diff_hash": "...", "last_verdict": "pass" | "blocked", "retry_count": 0, "last_findings_message": "...", "last_blocking_fingerprint": "..." }
   ```
   `last_findings_message` は、ケース2(ハッシュ一致・前回blocked)で前回の指摘内容をLLM呼び出し
-  無しに再提示するために保持する(実装: `scripts/verify-claims.sh`の`write_state`/`block_with_retry_check`)
+  無しに再提示するために保持する(実装: `scripts/verify-claims.sh`の`write_state`/`block_with_retry_check`)。
+  `last_blocking_fingerprint` は、指摘の同一性判定(issue #351、下記「判定・ブロックロジック」節)
+  に使う
 - 7日より古い状態ファイルは `doc-suggest-check.sh` と同様に自動削除する
 
 ### スキップ・再判定ロジック
@@ -68,13 +70,23 @@ VS Code側で実装 → スクリーンショットをCLIセッションに貼�
 
 - findings中の最大severityを求める
 - **critical/important が1件以上ある場合**:
-  - `retry_count` を+1
+  - **retry_countの加算/リセット判定(issue #351)**: diffハッシュ不一致で再検証した場合、今回の
+    critical/important findingsの`{severity, description, evidence}`をソートしてハッシュ化した
+    「フィンガープリント」を、前回blocked時のフィンガープリント(`last_blocking_fingerprint`、
+    状態ファイルに保存)と比較する
+    - **前回`blocked`かつフィンガープリントが一致**(=同一の指摘が解消されないまま別の箇所を
+      触ってdiffハッシュだけ変えた): `retry_count` を+1(累積)
+    - **それ以外**(前回`pass`だった/前回`blocked`だが指摘の中身が変わった=別の新しい指摘):
+      `retry_count` を1にリセット。長いセッションで散発的に別々の正当な指摘が出ただけで
+      上限に達し人間介入待ちになることを防ぐ。なお「ハッシュ一致・前回blocked」の場合
+      (スキップ・再判定ロジックの(2)、LLM呼び出し無し)は前回と同一のフィンガープリントを
+      そのまま引き継ぐため、常に累積される(この経路の挙動は変えない)
   - `retry_count <= 3`(既存の `MAX_REVIEW_RETRIES` と同じ上限): 該当箇所の指摘内容を `stderr` に出力して `exit 2`(Stopをブロックし、VS Code側セッションに指摘を伝えて修正を促す)
   - `retry_count > 3`: ブロックしたまま人間の介入を待つ状態にする。`stderr` に「3回自動修正を試みたが解消されなかった」旨と、下記エスケープハッチの使い方を明記する
-  - 状態ファイルを `{ diff_hash, verdict: "blocked", retry_count }` で更新
+  - 状態ファイルを `{ diff_hash, verdict: "blocked", retry_count, last_blocking_fingerprint }` で更新
 - **findingsが無い、またはminorのみの場合**:
   - `exit 0`。minor findingsがあれば `systemMessage` として警告のみ添える(ブロックはしない)
-  - `retry_count` を0にリセットし、状態ファイルを `{ diff_hash, verdict: "pass", retry_count: 0 }` で更新
+  - `retry_count` を0にリセットし、状態ファイルを `{ diff_hash, verdict: "pass", retry_count: 0, last_blocking_fingerprint: "" }` で更新
 
 ### エスケープハッチ(誤検知対策)
 
