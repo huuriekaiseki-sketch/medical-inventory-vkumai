@@ -3,8 +3,10 @@ import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/supabase/server', () => ({ createServerSupabase: vi.fn().mockResolvedValue({}) }))
 vi.mock('@/lib/supabase/require-auth', () => ({ requireAuth: vi.fn().mockResolvedValue({ id: 'u-1', email: 'user@example.com' }) }))
+vi.mock('@/lib/admin-status', () => ({ resolveIsAdmin: vi.fn() }))
 vi.mock('@/lib/categories/repository')
 
+import { resolveIsAdmin } from '@/lib/admin-status'
 import {
   listCategories,
   createCategory,
@@ -35,7 +37,10 @@ function makeParams(id: string) {
   return { params: Promise.resolve({ id }) }
 }
 
-beforeEach(() => vi.resetAllMocks())
+beforeEach(() => {
+  vi.resetAllMocks()
+  vi.mocked(resolveIsAdmin).mockResolvedValue(true)
+})
 
 describe('GET /api/categories', () => {
   it('カテゴリ一覧を返す', async () => {
@@ -99,6 +104,18 @@ describe('POST /api/categories', () => {
     const res = await POST(req)
     expect(res.status).toBe(401)
   })
+
+  it('一般ユーザーの場合は403を返す', async () => {
+    const { resolveIsAdmin } = await import('@/lib/admin-status')
+    vi.mocked(resolveIsAdmin).mockResolvedValueOnce(false)
+    const req = makeRequest('/api/categories', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'カテゴリA', description: null }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(403)
+    expect(createCategory).not.toHaveBeenCalled()
+  })
 })
 
 describe('GET /api/categories/[id]', () => {
@@ -160,6 +177,18 @@ describe('PUT /api/categories/[id]', () => {
     const res = await PUT(req, makeParams('test-id'))
     expect(res.status).toBe(409)
   })
+
+  it('一般ユーザーの場合は403を返す', async () => {
+    const { resolveIsAdmin } = await import('@/lib/admin-status')
+    vi.mocked(resolveIsAdmin).mockResolvedValueOnce(false)
+    const req = makeRequest('/api/categories/test-id', {
+      method: 'PUT',
+      body: JSON.stringify({ name: 'カテゴリB', description: null }),
+    })
+    const res = await PUT(req, makeParams('test-id'))
+    expect(res.status).toBe(403)
+    expect(updateCategory).not.toHaveBeenCalled()
+  })
 })
 
 describe('DELETE /api/categories/[id]', () => {
@@ -186,5 +215,14 @@ describe('DELETE /api/categories/[id]', () => {
     expect(res.status).toBe(409)
     const body = await res.json()
     expect(body.error).toBe('使用中のため削除できません')
+  })
+
+  it('一般ユーザーの場合は403を返す', async () => {
+    const { resolveIsAdmin } = await import('@/lib/admin-status')
+    vi.mocked(resolveIsAdmin).mockResolvedValueOnce(false)
+    const req = makeRequest('/api/categories/test-id', { method: 'DELETE' })
+    const res = await DELETE(req, makeParams('test-id'))
+    expect(res.status).toBe(403)
+    expect(deleteCategory).not.toHaveBeenCalled()
   })
 })

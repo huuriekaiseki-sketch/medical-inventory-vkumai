@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
+import { resolveIsAdmin } from '@/lib/admin-status'
 import { listCategories, createCategory } from '@/lib/categories/repository'
 import { apiError } from '@/lib/api-error'
 import type { CategoryInput } from '@/types/category'
@@ -30,7 +31,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    let user
+    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    const isAdmin = await resolveIsAdmin(db, user)
+    if (!isAdmin) return apiError('権限がありません', 403)
     const category = await createCategory(db, input)
     return NextResponse.json({ category }, { status: 201 })
   } catch (error) {
