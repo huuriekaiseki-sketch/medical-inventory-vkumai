@@ -227,6 +227,17 @@ assert_eq "$EXIT_CODE" "0" "untrackedファイルの中身を書き換えてもp
 assert_eq "$(call_count)" "2" "untrackedファイルの中身の変更だけでも再検証される(ハッシュが変わる)"
 rm -f "$REPO/new-file.txt"
 
+echo "=== scenario 11: プロンプトが検証対象の主張の型・対象外・evidence必須を明記している(issue #353) ==="
+# 実際にclaude -pへ送るプロンプト内容はE2Eでは検証しづらいため、scenario 9と同様に
+# 「PROMPT変数の実装が必須の文言を含むか」を静的に確認する。この仕組みの価値の核心は
+# 「主張の裏取り」であり一般的なコードレビューではないことをプロンプトが明示していないと、
+# 既存reviewer/code-reviewと重複した劣化版になってしまう
+# (docs/superpowers/specs/2026-07-14-verification-subagent-design.md「検証本体」節参照)。
+PROMPT_BLOCK="$(awk '/^PROMPT=/,/^PROMPT_EOF/' "$SCRIPT")"
+assert_contains "$PROMPT_BLOCK" "対象外" "プロンプトに対象外(一般的なコードレビュー的指摘の除外)の明記がある"
+assert_contains "$PROMPT_BLOCK" "evidence" "プロンプトにevidence必須の指示が含まれる"
+assert_contains "$PROMPT_BLOCK" "参照関係の主張" "プロンプトに検証対象の主張の型(参照関係)の例示がある"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
