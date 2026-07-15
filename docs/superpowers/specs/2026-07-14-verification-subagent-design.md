@@ -125,6 +125,70 @@ hook側で機械チェックする。検証サブエージェント自身がLLM�
 
 理由: 「severityが不明」は検証した上での判断の曖昧さだが、「検証エージェントが動かなかった」のはツール自体の不備であり、これを理由にブロックし続けるのは開発を止めるだけで安全性に寄与しない。`systemMessage` に「検証エージェントの実行に失敗したため今回はスキップしました」と明記し、可視化はする。
 
+## 効果測定(Effectiveness Measurement)(issue #355)
+
+`docs/agents/common.md`のissue #339棚卸しレビュー指摘(8/9)への対応。この検証サブエージェント
+自体、「役に立っているか」「壊れずに動き続けているか」を機械的に知る手段が無いままだと、
+fail-open(検証プロセス自体の失敗によるexit 0)が静かに常態化しても誰も気づけない
+(docs/agents/decisions.md「なぜ新しい運用ルールに検知手段を先に決める原則を導入したか」参照)。
+
+### ログ
+
+判定のたびに `logs/verify-claims-observability.jsonl`(JSON Lines、環境変数
+`VERIFY_CLAIMS_OBSERVABILITY_LOG`で上書き可)へ1行追記する:
+
+```json
+{
+  "timestamp": "2026-07-15T12:00:00Z",
+  "session_id": "...",
+  "event": "block" | "pass" | "fail_open" | "skip_used",
+  "verifier_called": true,
+  "retry_count": 1,
+  "retry_exhausted": false,
+  "fail_open_reason": "verifier_error" | "parse_error" | "circuit_breaker" | null,
+  "was_previously_blocked": false,
+  "diff_hash": "..." 
+}
+```
+
+- **`event`**: `block`(ブロック。同一diffの再ブロックも含む) / `pass`(検証実行の上でpass) /
+  `fail_open`(インフラ障害・サーキットブレーカーによる強制pass) / `skip_used`(`.skip`マーカー使用)
+- **`verifier_called`**: この判定で実際に`claude -p`を呼んだか。「スキップ・再判定ロジック」の
+  ケース1(即pass)は`verifier_called`の対象事象自体が無いため**そもそもログしない**(何も
+  変わっていないタイミングでの空振り記録はノイズにしかならないため)。ケース2(同一diff再
+  ブロック)は`event=block, verifier_called=false`として記録する
+- **`retry_exhausted`**: `retry_count > MAX_RETRIES`(人間の介入待ちに遷移したか)
+- **`was_previously_blocked`**: `pass`イベント限定。直前状態が`blocked`だった場合は`true`。
+  これが「指摘が修正につながった」ことの直接シグナルになる(=誤検知でなければ、指摘後に
+  正しく直されてpassに転じたということ)
+- **WHY untrackedファイルとして扱われない場所に書く必要がある**: `/logs/`は`.gitignore`済み
+  (既存の`loop-observability.jsonl`と同じ扱い)。これは単なる衛生上の配慮ではなく**必須**:
+  もし`/logs/`がgitignoreされていない場合、このログファイル自身がuntrackedファイルとして
+  「スキップ・再判定ロジック」のdiffハッシュ計算(issue #352で既にuntrackedファイルの中身を
+  含める方式に変更済み)に取り込まれ、判定のたびにログファイルが増えて中身が変わる
+  →ハッシュが常に変わる→ケース1(即pass)が二度と成立しなくなり、Stopのたびに必ず
+  `claude -p`を呼び続ける自己参照バグになる。テスト(`verify-claims.test.sh`)ではテスト用
+  gitリポジトリに`.gitignore`が無いため、`VERIFY_CLAIMS_OBSERVABILITY_LOG`を明示的に
+  リポジトリ外(`$WORKDIR`配下)へ向けて回避している(既存の`VERIFY_CLAIMS_STATE_DIR`/
+  `VERIFY_CLAIMS_LOCK_DIR`と同じパターン)
+
+### 計算できる指標(事後集計、本ドキュメントのスコープでは集計スクリプトは実装しない)
+
+- **fail-open率**: `fail_open`件数 / `verifier_called=true`件数
+- **ブロック回数**: `event=block`件数(`verifier_called`の真偽で「新規指摘」と「同一指摘の
+  再ブロック」を区別できる)
+- **skipマーカー使用回数**: `event=skip_used`件数(=誤検知シグナル)
+- **指摘が修正につながった率**: `was_previously_blocked=true`の`pass`件数 / `event=block`
+  (`verifier_called=true`)件数の近似値
+
+### 閾値検知
+
+`scripts/check-verify-claims-fail-open-streak.sh`が、`verifier_called=true`の判定のうち
+直近N件(デフォルト5、`--streak-threshold`で変更可。暫定値であり運用しながら調整する)が
+連続で`fail_open`なら警告して`exit 1`する。CIやAIDDフローへの組み込みは今回のスコープ外とし、
+必要に応じて別途呼び出す運用とする(既存の`check-loop-observability-gap.sh`と同じ「事後の
+機械検知」レイヤーに位置づける)。
+
 ## データフロー(概要)
 
 ```
@@ -249,7 +313,11 @@ claude_auto_issue / aidd_session_report が並走する。Claude Codeのhook実�
   10. **(issue #354)** evidenceが実在しないファイルを指すcritical finding → minorへ格下げされブロックされない(exit 0)
   11. **(issue #354)** evidenceのファイルは実在するが行番号がファイルの行数を超えるcritical finding → minorへ格下げされブロックされない(exit 0)
   12. **(issue #354)** evidenceが空/ファイルパスらしきトークンを含まないcritical finding → minorへ格下げされブロックされない(exit 0)
+  13. **(issue #355)** block/pass/fail_open(各理由)/skip_usedの各イベントが効果測定ログに正しいフィールド(`verifier_called`/`retry_exhausted`/`was_previously_blocked`/`fail_open_reason`)で記録される
 - `claude -p` 呼び出し部分は実行コストがかかるため、テストではモック(固定のfindings JSONを返すダミースクリプト)に差し替えて検証する
+- `scripts/check-verify-claims-fail-open-streak.sh`(効果測定ログの閾値検知)は
+  `scripts/check-verify-claims-fail-open-streak.test.sh`で別途、合成したログ行を使って
+  連続fail-open検知・非連続時の非検知・`verifier_called=false`行の除外を検証する
 
 ## 対象範囲外(YAGNI)
 
