@@ -19,10 +19,12 @@ VS Code側で実装 → スクリーンショットをCLIセッションに貼�
   - この方式により、既存の別Stop hook(`claude_stop_notify.sh`の`git add -A`)が先に走って untracked ファイルを tracked 化してくれることへの暗黙の依存が無くなる。`verify-claims.sh`単独でuntrackedファイルの中身を検知できるため、hookの実行順序に依存しない
 - 状態は `.claude/.verify-state/<session_id>.json` に保存する:
   ```json
-  { "last_diff_hash": "...", "last_verdict": "pass" | "blocked", "retry_count": 0, "last_findings_message": "..." }
+  { "last_diff_hash": "...", "last_verdict": "pass" | "blocked", "retry_count": 0, "last_findings_message": "...", "last_blocking_fingerprint": "..." }
   ```
   `last_findings_message` は、ケース2(ハッシュ一致・前回blocked)で前回の指摘内容をLLM呼び出し
-  無しに再提示するために保持する(実装: `scripts/verify-claims.sh`の`write_state`/`block_with_retry_check`)
+  無しに再提示するために保持する(実装: `scripts/verify-claims.sh`の`write_state`/`block_with_retry_check`)。
+  `last_blocking_fingerprint` は、指摘の同一性判定(issue #351、下記「判定・ブロックロジック」節)
+  に使う
 - 7日より古い状態ファイルは `doc-suggest-check.sh` と同様に自動削除する
 
 ### スキップ・再判定ロジック
@@ -44,23 +46,71 @@ VS Code側で実装 → スクリーンショットをCLIセッションに貼�
 - 渡す入力:
   - `transcript_path` から直前の assistant ターンの抜粋(発言・編集内容の要約。トランスクリプト全体は渡さない。大きすぎるとコスト・コンテキストの両面で問題になる)
   - 現在のdiff内容
+- **検証対象とする主張の型(issue #353)**: この仕組みの価値の核心は「主張の裏取り」であり、一般的な
+  コードレビューではない。ここが曖昧だと既存のreviewer/code-reviewと重複した劣化版になるため、
+  対象とする主張を以下の3種類に明示的に限定する:
+  1. 参照関係の主張: 「XはYを参照している/呼んでいる」「XはYに依存している」
+  2. 既存コードの挙動に関する主張: 「この関数は既にZを処理している/ハンドリングしている」
+     「〜という分岐が既に存在する」
+  3. 識別子・位置の一致に関する主張: 行番号・環境変数名・関数名・ファイルパス等が実コードと
+     一致しているか
+  - **evidence(file:line等)必須**: 根拠箇所を示せない指摘(=検証しようがない曖昧な懸念)は
+    findingsに含めないようプロンプトで明示する
+  - **対象外(役割分担)**: 設計の良し悪し・命名規約・可読性・ベストプラクティス等の一般的な
+    コードレビュー的指摘、および発言中で述べられていない検証エージェント自身の新規の気付きは
+    findingsに含めない。これらは既存reviewer/code-reviewの担当とする
+  - 実装: `scripts/verify-claims.sh` の `PROMPT` 変数
 - 出力は以下のJSON形式を強制する:
   ```json
   { "findings": [ { "severity": "critical" | "important" | "minor", "description": "...", "evidence": "file:line等" } ] }
   ```
 - **deny-by-default**: `severity` が欠損・不明な値の場合は `critical` として扱う(既存のAIDD Draft phaseと同じfail-open防止の方針。PR #298を踏襲)
 
+### 証拠検証(Evidence Verification)(issue #354)
+
+severity欠損時のdeny-by-defaultとは別に、findingsの`evidence`(file:line)自体が実在するかを
+hook側で機械チェックする。検証サブエージェント自身がLLMである以上、`evidence`がハルシネーション
+で実在しない箇所を指す可能性があり、それを無検証のままcritical/importantとして扱うと
+「裏取り装置が裏取りされていない」構造になる(docs/agents/known-failure-patterns.md参照)。
+
+- `evidence`文字列から拡張子付きのファイルパストークン(+ 任意の`:行番号`)を正規表現でベスト
+  エフォート抽出する。拡張子の無いパス表記(例: `scripts/lib/foo`)は検知できない既知の限界がある
+- 抽出したファイルがリポジトリ内に実在しない場合、または行番号がそのファイルの行数を超える場合は
+  「evidence未検証」とみなす
+- **evidence未検証のfindingはseverityを`minor`へ格下げする。** 完全に握りつぶす(無視する)選択肢
+  もあったが、以下の理由で「格下げ+可視化」を採用した:
+  - 完全に無視すると、findingが消えた理由が人間から見えなくなる。これはこのリポジトリの
+    「no silent caps」原則(検知結果を機械的に見える形で残す)と矛盾する
+  - `minor`はブロックしない(既存の判定ロジック通り)ため、ハルシネーションされたevidenceで
+    Stopがブロックされ続ける事態(issue #348のエスケープハッチ問題と同種の被害)は防げる
+  - 格下げ後もdescriptionに「evidence未検証」の注記が付き、`minor`一覧としてsystemMessageに
+    表示され続けるため、誤検知が多発していることには気づける(issue #355の効果測定と接続する)
+- **fail-open(exit 0での即時通過)ではなくseverity格下げを選んだ理由**: fail-openは「検証プロセス
+  自体が動かなかった」(インフラ障害・タイムアウト等)場合に予約している区分であり、「検証は正常に
+  動いたがevidenceの中身が怪しい」場合はこれと性質が異なる。前者と混同すると、fail-openの発生率が
+  「検証エージェントが落ちている率」を表さなくなり、issue #355の効果測定の意味が薄れる
+
 ### 判定・ブロックロジック
 
 - findings中の最大severityを求める
 - **critical/important が1件以上ある場合**:
-  - `retry_count` を+1
+  - **retry_countの加算/リセット判定(issue #351)**: diffハッシュ不一致で再検証した場合、今回の
+    critical/important findingsの`{severity, description, evidence}`をソートしてハッシュ化した
+    「フィンガープリント」を、前回blocked時のフィンガープリント(`last_blocking_fingerprint`、
+    状態ファイルに保存)と比較する
+    - **前回`blocked`かつフィンガープリントが一致**(=同一の指摘が解消されないまま別の箇所を
+      触ってdiffハッシュだけ変えた): `retry_count` を+1(累積)
+    - **それ以外**(前回`pass`だった/前回`blocked`だが指摘の中身が変わった=別の新しい指摘):
+      `retry_count` を1にリセット。長いセッションで散発的に別々の正当な指摘が出ただけで
+      上限に達し人間介入待ちになることを防ぐ。なお「ハッシュ一致・前回blocked」の場合
+      (スキップ・再判定ロジックの(2)、LLM呼び出し無し)は前回と同一のフィンガープリントを
+      そのまま引き継ぐため、常に累積される(この経路の挙動は変えない)
   - `retry_count <= 3`(既存の `MAX_REVIEW_RETRIES` と同じ上限): 該当箇所の指摘内容を `stderr` に出力して `exit 2`(Stopをブロックし、VS Code側セッションに指摘を伝えて修正を促す)
   - `retry_count > 3`: ブロックしたまま人間の介入を待つ状態にする。`stderr` に「3回自動修正を試みたが解消されなかった」旨と、下記エスケープハッチの使い方を明記する
-  - 状態ファイルを `{ diff_hash, verdict: "blocked", retry_count }` で更新
+  - 状態ファイルを `{ diff_hash, verdict: "blocked", retry_count, last_blocking_fingerprint }` で更新
 - **findingsが無い、またはminorのみの場合**:
   - `exit 0`。minor findingsがあれば `systemMessage` として警告のみ添える(ブロックはしない)
-  - `retry_count` を0にリセットし、状態ファイルを `{ diff_hash, verdict: "pass", retry_count: 0 }` で更新
+  - `retry_count` を0にリセットし、状態ファイルを `{ diff_hash, verdict: "pass", retry_count: 0, last_blocking_fingerprint: "" }` で更新
 
 ### エスケープハッチ(誤検知対策)
 
@@ -159,6 +209,7 @@ Stop event
 | ケース | 挙動 |
 |---|---|
 | severity欠損・不明 | critical扱い(deny-by-default) |
+| evidenceが実在しない/行番号が範囲外(issue #354) | minorへ格下げ(ブロックしない、systemMessageには残す) |
 | critical/important、retry <= 3 | ブロック(exit 2)、指摘内容を返す |
 | critical/important、retry > 3 | ブロック継続、人間の介入待ち。エスケープハッチ案内 |
 | minorのみ/findingsなし | pass(exit 0)、retry_countリセット |
@@ -233,7 +284,16 @@ claude_auto_issue / aidd_session_report が並走する。Claude Codeのhook実�
 - この判定ロジックはグローバルスクリプト側(`~/claude_stop_notify.sh`、`~/claude_auto_issue.sh`)
   に実装する必要がある。`verify-claims.sh`が存在しない/未実行のプロジェクトでは状態ファイルも
   存在しないため、従来通りの挙動になる(後方互換)
-- 実装(グローバルスクリプトの変更)は本ドキュメントのスコープ外とし、別issueとして切り出す
+- **実装済み(issue #360)**: 上記2ファイルはこのリポジトリ外(`$HOME`直下)にあり、
+  medical-inventory-vkumai以外の全プロジェクトで共通して使われるグローバル設定のため、
+  このリポジトリのgit管理・PRレビューの対象外。判定ロジック本体は共通ヘルパー
+  `~/claude_verify_suppress_check.sh`(diffハッシュ計算を`verify-claims.sh`と同じ方法で
+  行う。将来この計算方法がズレても常に非抑制側に倒れるだけで安全)に切り出し、
+  `claude_stop_notify.sh`/`claude_auto_issue.sh`はセッションIDを渡して呼ぶだけにした。
+  リポジトリ外ファイルのためこのリポジトリのテストスイートには含められないが、サンドボックス
+  (偽の`$HOME`・`osascript`/`gh`のスタブコマンド)で「抑制されるケース(実際の通知・
+  issue作成が発生しないこと)」「状態ファイルが無いセッションでは従来通り実行されること
+  (後方互換)」の両方を確認済み
 
 ## テスト方針
 
@@ -250,7 +310,10 @@ claude_auto_issue / aidd_session_report が並走する。Claude Codeのhook実�
   7. 検証プロセス自体が失敗(モック) → fail-openでpass
   8. 同時実行数が上限に達している → サーキットブレーカーでfail-open(LLM呼び出し無し)
   9. **(issue #352)** untrackedファイルのみ追加・修正 → ハッシュが変わり再検証される(新規ファイル追加時に1回、その後中身を書き換えたときにもう1回、計2回LLM呼び出しが発生すること)
-  10. **(issue #355)** block/pass/fail_open(各理由)/skip_usedの各イベントが効果測定ログに正しいフィールド(`verifier_called`/`retry_exhausted`/`was_previously_blocked`/`fail_open_reason`)で記録される
+  10. **(issue #354)** evidenceが実在しないファイルを指すcritical finding → minorへ格下げされブロックされない(exit 0)
+  11. **(issue #354)** evidenceのファイルは実在するが行番号がファイルの行数を超えるcritical finding → minorへ格下げされブロックされない(exit 0)
+  12. **(issue #354)** evidenceが空/ファイルパスらしきトークンを含まないcritical finding → minorへ格下げされブロックされない(exit 0)
+  13. **(issue #355)** block/pass/fail_open(各理由)/skip_usedの各イベントが効果測定ログに正しいフィールド(`verifier_called`/`retry_exhausted`/`was_previously_blocked`/`fail_open_reason`)で記録される
 - `claude -p` 呼び出し部分は実行コストがかかるため、テストではモック(固定のfindings JSONを返すダミースクリプト)に差し替えて検証する
 - `scripts/check-verify-claims-fail-open-streak.sh`(効果測定ログの閾値検知)は
   `scripts/check-verify-claims-fail-open-streak.test.sh`で別途、合成したログ行を使って
