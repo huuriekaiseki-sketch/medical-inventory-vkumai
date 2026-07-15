@@ -232,6 +232,51 @@ NORMALIZED_FINDINGS="$(printf '%s' "$FINDINGS_JSON" | jq -c '
     then .severity else "critical" end)]
 ')"
 
+# --- evidence実在チェック(issue #354) ---
+# WHY: 検証サブエージェント自身がLLMである以上、evidence(file:line)がハルシネーションで
+# 実在しない箇所を指している可能性がある。「裏取り装置が裏取りされていない」状態を防ぐため、
+# evidenceが指すファイル・行番号が実在するかを機械チェックする。実在しない/検証不能な場合は
+# severityをminorへ格下げする(完全に握りつぶすと「何が起きたか分からない」サイレント劣化に
+# なるため、systemMessageのminor一覧には残す。設計: docs/superpowers/specs/
+# 2026-07-14-verification-subagent-design.md の「証拠検証(Evidence Verification)」節)。
+verify_evidence() {
+  local findings_json="$1"
+  local result="[]"
+  local finding evidence ev_path ev_line total_lines verified
+  while IFS= read -r finding; do
+    evidence="$(printf '%s' "$finding" | jq -r '.evidence // ""')"
+    verified="false"
+    ev_path=""
+    ev_line=""
+    # evidence文字列からファイルパスらしきトークン(拡張子付き) + 任意の:行番号を抽出する。
+    # ベストエフォート: 拡張子の無いパス(例: scripts/lib/foo)は検知できない既知の限界がある。
+    if [[ "$evidence" =~ ([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)(:([0-9]+))? ]]; then
+      ev_path="${BASH_REMATCH[1]}"
+      ev_line="${BASH_REMATCH[3]}"
+      if [ -f "$ev_path" ]; then
+        if [ -z "$ev_line" ]; then
+          verified="true"
+        else
+          total_lines="$(wc -l < "$ev_path" 2>/dev/null | tr -d ' ')"
+          total_lines="${total_lines:-0}"
+          # +1: 末尾行に改行が無いファイル(wc -lが最終行を数えない)への許容
+          if [ "$ev_line" -ge 1 ] && [ "$ev_line" -le "$((total_lines + 1))" ]; then
+            verified="true"
+          fi
+        fi
+      fi
+    fi
+    if [ "$verified" = "true" ]; then
+      result="$(printf '%s' "$result" | jq -c --argjson f "$finding" '. + [$f]')"
+    else
+      result="$(printf '%s' "$result" | jq -c --argjson f "$finding" \
+        '. + [($f | .severity = "minor" | .description = (.description + "(evidence未検証のためminorへ格下げ: 該当箇所を確認できませんでした)"))]')"
+    fi
+  done < <(printf '%s' "$findings_json" | jq -c '.[]')
+  printf '%s' "$result"
+}
+NORMALIZED_FINDINGS="$(verify_evidence "$NORMALIZED_FINDINGS")"
+
 HAS_BLOCKING="$(printf '%s' "$NORMALIZED_FINDINGS" | jq 'any(.[]; .severity == "critical" or .severity == "important")')"
 FINDINGS_TEXT="$(printf '%s' "$NORMALIZED_FINDINGS" | jq -r '.[] | "- [" + .severity + "] " + .description + " (" + (.evidence // "evidence不明") + ")"')"
 MINOR_TEXT="$(printf '%s' "$NORMALIZED_FINDINGS" | jq -r '[.[] | select(.severity == "minor")] | .[] | "- " + .description + " (" + (.evidence // "evidence不明") + ")"')"
