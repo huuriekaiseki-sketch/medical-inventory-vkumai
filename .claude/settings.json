@@ -73,6 +73,8 @@
       "Bash(scripts/ai-check-suggest.sh *)",
       "Bash(scripts/verify-claims.sh *)",
       "Bash(bash scripts/verify-claims.test.sh*)",
+      "Bash(scripts/check-skip-marker-write.sh *)",
+      "Bash(bash scripts/check-skip-marker-write.test.sh*)",
       "Bash(curl -s http://localhost:*)",
       "Bash(sort *)",
       "Bash(ps *)",
@@ -122,6 +124,14 @@
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit",
+        "hooks": [
+          { "type": "command", "command": "scripts/check-skip-marker-write.sh", "timeout": 5 }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
