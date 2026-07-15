@@ -276,14 +276,9 @@ set -e
 assert_eq "$EXIT_CODE" "1" "case-*/が1件も無い場合はexit 1(0/0合格のexit 0にしない)"
 assert_contains "$ERR" "case-*/ ディレクトリが1件も見つかりません" "設定ミスを示すエラーメッセージがstderrに出る"
 
-# scenario 9(タイムアウト時のプロセスグループkill、レビュー指摘3)は自動テストとして
-# 追加を試みたが、この開発環境のBashツールのサンドボックスがツール呼び出し境界をまたいで
-# 孤児プロセスを回収してしまい、修正前(単一PID kill)のコードに対しても「孫プロセスは
-# 停止している」という偽陽性のOKが再現性なく出た(同一プロセス内で比較する分離スクリプトでは
-# 修正前=孫プロセス生存/修正後=孫プロセス停止の差を安定して確認できたが、test.sh経由では
-# 再現しなかった)。フレーキーな自動テストを追加するとCIで偽の安心感を与えるため、ここでは
-# 追加せず、手動検証で代替した(検証内容はissue #391のtask-6-report.md「Fix for review
-# findings」セクションを参照)。
+echo "=== scenario 9: タイムアウト時にプロセスグループごとkillする実装になっている(静的確認、issue #391 Task6) ==="
+RUN_AGENT_WITH_TIMEOUT_BLOCK="$(awk '/^run_agent_with_timeout\(\)/,/^}/' "$SCRIPT")"
+assert_contains "$RUN_AGENT_WITH_TIMEOUT_BLOCK" 'kill -- "-$pid"' "タイムアウト時にプロセスグループ全体をkillする実装になっている(単一PIDのkillに退行するとimplementerの子プロセスが停止せず残る)"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
