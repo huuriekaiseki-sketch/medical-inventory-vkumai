@@ -17,7 +17,14 @@ set -euo pipefail
 #                                 プロンプトを受け取り、findings JSONを標準出力に返すこと）
 #   VERIFY_CLAIMS_LOCK_DIR      - サーキットブレーカー用ロック置き場（省略時は .claude/.verify-lock）
 #   VERIFY_CLAIMS_MAX_CONCURRENT - 同時実行を許す検証プロセス数の上限（省略時は4）
+#   VERIFY_CLAIMS_OBSERVABILITY_LOG - 効果測定ログの出力先（省略時は logs/verify-claims-observability.jsonl）
 #
+# 効果測定ログ（issue #355）: fail-open率・ブロック回数・skipマーカー使用回数・指摘が修正に
+# つながった率を事後集計できるよう、判定のたびにJSON Linesで1行追記する。「役に立っているか
+# を機械的に知る手段が無い」状態（docs/agents/decisions.md「なぜ新しい運用ルールに検知手段を
+# 先に決める原則を導入したか」参照）を避けるための措置。ログ書き込み自体の失敗は検証結果の
+# 判定に影響させない（fail-open。詳細はlog_event()参照）。
+# 設計: docs/superpowers/specs/2026-07-14-verification-subagent-design.md の「効果測定」節
 # サーキットブレーカー（issue #359）: --setting-sources ""等の個別修正が正しくても、
 # それが適用され忘れる・マージされ忘れることで同種の再帰暴走が繰り返された実績がある
 # (2026-07-14初回発生・2026-07-15に修正未マージのまま再発)。個別修正の正しさに依存せず、
@@ -33,6 +40,7 @@ TIMEOUT_SECONDS="${VERIFY_CLAIMS_TIMEOUT_SECONDS:-60}"
 MODEL="${VERIFY_CLAIMS_MODEL:-claude-haiku-4-5-20251001}"
 LOCK_DIR="${VERIFY_CLAIMS_LOCK_DIR:-.claude/.verify-lock}"
 MAX_CONCURRENT="${VERIFY_CLAIMS_MAX_CONCURRENT:-4}"
+OBS_LOG_FILE="${VERIFY_CLAIMS_OBSERVABILITY_LOG:-logs/verify-claims-observability.jsonl}"
 
 mkdir -p "$STATE_DIR" "$LOCK_DIR"
 
@@ -65,10 +73,48 @@ write_state() {
     > "$STATE_FILE"
 }
 
+# 効果測定ログへの1行追記(issue #355)。引数はすべて位置引数:
+#   $1 event                : block | pass | fail_open | skip_used
+#   $2 verifier_called      : true|false (claude -pサブプロセスを実際に呼んだか。コスト発生の有無)
+#   $3 retry_count          : 整数
+#   $4 retry_exhausted      : true|false (retry_countがMAX_RETRIESを超え人間の介入待ちになったか)
+#   $5 fail_open_reason     : verifier_error|parse_error|circuit_breaker|""(該当なしはnullで記録)
+#   $6 was_previously_blocked : true|false (pass時、直前状態がblockedだったか=このpassが「修正」を意味するか)
+#   $7 diff_hash            : sha256、または不明時は""(nullで記録)
+# ログ書き込みの失敗(ディスクフル等)は検証結果の判定に影響させない(末尾の`|| true`)。
+log_event() {
+  local event="$1" verifier_called="$2" retry_count="$3" retry_exhausted="$4"
+  local fail_open_reason="$5" was_previously_blocked="$6" diff_hash="$7"
+  local timestamp
+  timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  mkdir -p "$(dirname "$OBS_LOG_FILE")" 2>/dev/null || true
+  jq -nc \
+    --arg timestamp "$timestamp" \
+    --arg session_id "$SESSION_ID" \
+    --arg event "$event" \
+    --argjson verifier_called "$verifier_called" \
+    --argjson retry_count "$retry_count" \
+    --argjson retry_exhausted "$retry_exhausted" \
+    --arg fail_open_reason "$fail_open_reason" \
+    --argjson was_previously_blocked "$was_previously_blocked" \
+    --arg diff_hash "$diff_hash" \
+    '{timestamp: $timestamp, session_id: $session_id, event: $event, verifier_called: $verifier_called,
+      retry_count: $retry_count, retry_exhausted: $retry_exhausted,
+      fail_open_reason: (if $fail_open_reason == "" then null else $fail_open_reason end),
+      was_previously_blocked: $was_previously_blocked,
+      diff_hash: (if $diff_hash == "" then null else $diff_hash end)}' \
+    >> "$OBS_LOG_FILE" 2>/dev/null || true
+}
+
 block_with_retry_check() {
-  local hash="$1" findings_msg="$2"
+  local hash="$1" findings_msg="$2" verifier_called="${3:-false}"
   local new_retry=$((PREV_RETRY_COUNT + 1))
+  local exhausted="false"
+  if [ "$new_retry" -gt "$MAX_RETRIES" ]; then
+    exhausted="true"
+  fi
   write_state "$hash" "blocked" "$new_retry" "$findings_msg"
+  log_event "block" "$verifier_called" "$new_retry" "$exhausted" "" "false" "$hash"
   if [ "$new_retry" -le "$MAX_RETRIES" ]; then
     emit_block "$(printf 'verify-claims: 未解消の指摘を検出しました(試行%d/%d):\n%s' "$new_retry" "$MAX_RETRIES" "$findings_msg")"
   else
@@ -79,6 +125,7 @@ block_with_retry_check() {
 # --- エスケープハッチ: .skipマーカーがあれば無条件pass（消費して削除） ---
 if [ -f "$SKIP_MARKER" ]; then
   rm -f "$SKIP_MARKER"
+  log_event "skip_used" "false" "0" "false" "" "false" ""
   emit_pass "verify-claims: 手動オーバーライド(.skipマーカー)が使用されたため、今回の検証をスキップしました。"
 fi
 
@@ -116,7 +163,7 @@ if [ -n "$PREV_HASH" ] && [ "$CURRENT_HASH" = "$PREV_HASH" ]; then
   fi
   if [ "$PREV_VERDICT" = "blocked" ]; then
     # 何も直さずに再Stopしようとした場合。LLM呼び出しはせずretry_countだけ消費する。
-    block_with_retry_check "$CURRENT_HASH" "$PREV_FINDINGS_MSG"
+    block_with_retry_check "$CURRENT_HASH" "$PREV_FINDINGS_MSG" "false"
   fi
 fi
 
@@ -205,6 +252,7 @@ done
 
 CURRENT_CONCURRENT="$(find "$LOCK_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
 if [ "$CURRENT_CONCURRENT" -ge "$MAX_CONCURRENT" ]; then
+  log_event "fail_open" "false" "0" "false" "circuit_breaker" "false" "$CURRENT_HASH"
   emit_pass "$(printf 'verify-claims: 検証プロセスの同時実行数が上限(%d)に達しているため、サーキットブレーカーが働き今回の検証をスキップしました(暴走防止のfail-open)。' "$MAX_CONCURRENT")"
 fi
 
@@ -217,12 +265,14 @@ VERIFIER_OUTPUT="$(run_verifier_with_timeout)" || VERIFIER_EXIT=$?
 
 if [ "$VERIFIER_EXIT" -ne 0 ]; then
   # インフラ障害時のfail-open: 検証プロセス自体の失敗はdeny-by-defaultの対象外とする
+  log_event "fail_open" "true" "0" "false" "verifier_error" "false" "$CURRENT_HASH"
   emit_pass "verify-claims: 検証エージェントの実行に失敗したため(exit=${VERIFIER_EXIT})、今回はスキップしました。"
 fi
 
 FINDINGS_JSON="$(printf '%s' "$VERIFIER_OUTPUT" | jq -c '.findings' 2>/dev/null || echo "")"
 if [ -z "$FINDINGS_JSON" ] || [ "$FINDINGS_JSON" = "null" ]; then
   # 出力自体が壊れている場合も検証プロセスの不備として扱い、fail-open
+  log_event "fail_open" "true" "0" "false" "parse_error" "false" "$CURRENT_HASH"
   emit_pass "verify-claims: 検証エージェントの出力を解析できなかったため、今回はスキップしました。"
 fi
 
@@ -237,10 +287,15 @@ FINDINGS_TEXT="$(printf '%s' "$NORMALIZED_FINDINGS" | jq -r '.[] | "- [" + .seve
 MINOR_TEXT="$(printf '%s' "$NORMALIZED_FINDINGS" | jq -r '[.[] | select(.severity == "minor")] | .[] | "- " + .description + " (" + (.evidence // "evidence不明") + ")"')"
 
 if [ "$HAS_BLOCKING" = "true" ]; then
-  block_with_retry_check "$CURRENT_HASH" "$FINDINGS_TEXT"
+  block_with_retry_check "$CURRENT_HASH" "$FINDINGS_TEXT" "true"
 fi
 
 write_state "$CURRENT_HASH" "pass" 0 ""
+WAS_PREVIOUSLY_BLOCKED="false"
+if [ "$PREV_VERDICT" = "blocked" ]; then
+  WAS_PREVIOUSLY_BLOCKED="true"
+fi
+log_event "pass" "true" "0" "false" "" "$WAS_PREVIOUSLY_BLOCKED" "$CURRENT_HASH"
 if [ -n "$MINOR_TEXT" ]; then
   emit_pass "$(printf 'verify-claims: 軽微な指摘があります(ブロックはしません):\n%s' "$MINOR_TEXT")"
 fi

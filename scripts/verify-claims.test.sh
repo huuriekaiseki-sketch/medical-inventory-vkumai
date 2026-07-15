@@ -26,6 +26,7 @@ mkdir -p "$REPO"
 )
 
 STATE_DIR="$WORKDIR/state"
+OBS_LOG="$WORKDIR/observability.jsonl"
 MOCK_VERIFIER="$WORKDIR/mock-verifier.sh"
 MOCK_CALL_LOG="$WORKDIR/call.log"
 MOCK_FINDINGS_FILE="$WORKDIR/findings.json"
@@ -78,6 +79,7 @@ run_hook() {
     printf '%s' "$input" | \
       VERIFY_CLAIMS_REPO_DIR="$REPO" \
       VERIFY_CLAIMS_STATE_DIR="$STATE_DIR" \
+      VERIFY_CLAIMS_OBSERVABILITY_LOG="$OBS_LOG" \
       VERIFY_CLAIMS_MAX_RETRIES=3 \
       VERIFY_CLAIMS_VERIFIER_CMD="$MOCK_VERIFIER" \
       MOCK_CALL_LOG="$MOCK_CALL_LOG" \
@@ -189,6 +191,7 @@ STDOUT_OUT="$(
   printf '%s' "$input" | \
     VERIFY_CLAIMS_REPO_DIR="$REPO" \
     VERIFY_CLAIMS_STATE_DIR="$STATE_DIR" \
+    VERIFY_CLAIMS_OBSERVABILITY_LOG="$OBS_LOG" \
     VERIFY_CLAIMS_LOCK_DIR="$LOCK_DIR" \
     VERIFY_CLAIMS_MAX_CONCURRENT=2 \
     VERIFY_CLAIMS_VERIFIER_CMD="$MOCK_VERIFIER" \
@@ -226,6 +229,68 @@ run_hook "s10"
 assert_eq "$EXIT_CODE" "0" "untrackedファイルの中身を書き換えてもpass"
 assert_eq "$(call_count)" "2" "untrackedファイルの中身の変更だけでも再検証される(ハッシュが変わる)"
 rm -f "$REPO/new-file.txt"
+
+# --- 効果測定ログ(issue #355)の内容検証 ---
+log_field() {
+  local sid="$1" event="$2" field="$3"
+  jq -rs --arg sid "$sid" --arg ev "$event" --arg f "$field" \
+    '[.[] | select(.session_id == $sid and .event == $ev)] | last | .[$f]' \
+    "$OBS_LOG" 2>/dev/null
+}
+
+echo "=== scenario 11: blockイベント(新規verifier呼び出し)が正しく記録される(issue #355) ==="
+V="$(log_field "s4" "block" "verifier_called")"
+assert_eq "$V" "true" "新規diffでのブロックはverifier_called=trueで記録される"
+RE="$(log_field "s4" "block" "retry_exhausted")"
+assert_eq "$RE" "false" "retry上限内はretry_exhausted=false"
+
+echo "=== scenario 12: block_retry(同一diff再ブロック)がverifier_called=falseで記録される(issue #355) ==="
+V="$(log_field "s3" "block" "verifier_called")"
+assert_eq "$V" "false" "同一diff再ブロックの最新エントリはverifier_called=false(LLM呼び出し無し)"
+RC="$(log_field "s3" "block" "retry_count")"
+assert_eq "$RC" "2" "retry_countが記録される"
+
+echo "=== scenario 13: retry上限超過でretry_exhausted=trueが記録される(issue #355) ==="
+RE="$(log_field "s5" "block" "retry_exhausted")"
+assert_eq "$RE" "true" "上限超過後の最新blockエントリはretry_exhausted=true"
+
+echo "=== scenario 14: 指摘解消後のpassイベントでwas_previously_blocked=trueが記録される(issue #355) ==="
+rm -f "$MOCK_CALL_LOG"
+echo "line14a" >> "$REPO/file.txt"
+echo '{"findings": [{"severity": "critical", "description": "一時的な指摘", "evidence": "file.txt:1"}]}' > "$MOCK_FINDINGS_FILE"
+run_hook "s14"
+echo "line14b" >> "$REPO/file.txt"
+echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
+run_hook "s14"
+assert_eq "$EXIT_CODE" "0" "指摘解消後はpass"
+WAS_PREV="$(log_field "s14" "pass" "was_previously_blocked")"
+assert_eq "$WAS_PREV" "true" "直前がblockedだったpassにはwas_previously_blocked=trueが記録される(=修正が効いたシグナル)"
+
+echo "=== scenario 15: 通常passではwas_previously_blocked=falseが記録される(issue #355) ==="
+WAS_PREV_S2="$(log_field "s2" "pass" "was_previously_blocked")"
+assert_eq "$WAS_PREV_S2" "false" "直前がblockedでないpassはwas_previously_blocked=false"
+
+echo "=== scenario 16: fail-open(検証プロセス失敗)がfail_open_reason=verifier_errorで記録される(issue #355) ==="
+FOR="$(log_field "s7" "fail_open" "fail_open_reason")"
+assert_eq "$FOR" "verifier_error" "検証プロセス失敗はfail_open_reason=verifier_errorで記録される"
+
+echo "=== scenario 17: fail-open(同時実行数上限)がfail_open_reason=circuit_breakerで記録される(issue #355) ==="
+FOR="$(log_field "s8" "fail_open" "fail_open_reason")"
+assert_eq "$FOR" "circuit_breaker" "サーキットブレーカーはfail_open_reason=circuit_breakerで記録される"
+
+echo "=== scenario 18: fail-open(出力解析失敗)がfail_open_reason=parse_errorで記録される(issue #355) ==="
+rm -f "$MOCK_CALL_LOG"
+echo "line18" >> "$REPO/file.txt"
+echo 'not-json-output' > "$MOCK_FINDINGS_FILE"
+run_hook "s18"
+assert_eq "$EXIT_CODE" "0" "出力解析失敗はfail-openでexit 0"
+FOR="$(log_field "s18" "fail_open" "fail_open_reason")"
+assert_eq "$FOR" "parse_error" "出力解析失敗はfail_open_reason=parse_errorで記録される"
+echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
+
+echo "=== scenario 19: .skipマーカー使用がskip_usedイベントとして記録される(issue #355) ==="
+SKIP_COUNT="$(jq -rs --arg sid "s6" '[.[] | select(.session_id == $sid and .event == "skip_used")] | length' "$OBS_LOG")"
+assert_eq "$SKIP_COUNT" "1" "skip_usedイベントが1件記録される"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
