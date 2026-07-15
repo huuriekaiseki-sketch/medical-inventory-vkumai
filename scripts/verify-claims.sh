@@ -59,16 +59,27 @@ emit_block() {
 }
 
 write_state() {
-  local hash="$1" verdict="$2" retry="$3" findings_msg="$4"
-  jq -n --arg h "$hash" --arg v "$verdict" --argjson r "$retry" --arg m "$findings_msg" \
-    '{last_diff_hash: $h, last_verdict: $v, retry_count: $r, last_findings_message: $m}' \
+  local hash="$1" verdict="$2" retry="$3" findings_msg="$4" fingerprint="${5:-}"
+  jq -n --arg h "$hash" --arg v "$verdict" --argjson r "$retry" --arg m "$findings_msg" --arg fp "$fingerprint" \
+    '{last_diff_hash: $h, last_verdict: $v, retry_count: $r, last_findings_message: $m, last_blocking_fingerprint: $fp}' \
     > "$STATE_FILE"
 }
 
+# WHY(issue #351): 「同一findingが解消されないまま」なのか「別の新しい指摘に置き換わった」のかを
+# 区別せずretry_countを一律加算すると、長いセッションで散発的な別々の正当な指摘が出るだけで
+# 上限(MAX_RETRIES)に達し人間介入待ちになってしまう。findingの同一性(severity/description/evidence
+# の集合をソートしたフィンガープリント)で判定し、同一の指摘が残っている場合のみ累積し、
+# 指摘の中身が変わった場合は1から数え直す(diffハッシュを変えるだけで同じ問題を放置する
+# ズルは、diffハッシュ不一致→再検証のたびに同一findingが再検出される限り引き続き累積されるため防げる)。
 block_with_retry_check() {
-  local hash="$1" findings_msg="$2"
-  local new_retry=$((PREV_RETRY_COUNT + 1))
-  write_state "$hash" "blocked" "$new_retry" "$findings_msg"
+  local hash="$1" findings_msg="$2" fingerprint="${3:-}"
+  local new_retry
+  if [ "$PREV_VERDICT" = "blocked" ] && [ -n "$fingerprint" ] && [ "$fingerprint" = "$PREV_BLOCKING_FINGERPRINT" ]; then
+    new_retry=$((PREV_RETRY_COUNT + 1))
+  else
+    new_retry=1
+  fi
+  write_state "$hash" "blocked" "$new_retry" "$findings_msg" "$fingerprint"
   if [ "$new_retry" -le "$MAX_RETRIES" ]; then
     emit_block "$(printf 'verify-claims: 未解消の指摘を検出しました(試行%d/%d):\n%s' "$new_retry" "$MAX_RETRIES" "$findings_msg")"
   else
@@ -107,11 +118,13 @@ PREV_HASH=""
 PREV_VERDICT=""
 PREV_RETRY_COUNT=0
 PREV_FINDINGS_MSG=""
+PREV_BLOCKING_FINGERPRINT=""
 if [ -f "$STATE_FILE" ]; then
   PREV_HASH="$(jq -r '.last_diff_hash // ""' "$STATE_FILE")"
   PREV_VERDICT="$(jq -r '.last_verdict // ""' "$STATE_FILE")"
   PREV_RETRY_COUNT="$(jq -r '.retry_count // 0' "$STATE_FILE")"
   PREV_FINDINGS_MSG="$(jq -r '.last_findings_message // ""' "$STATE_FILE")"
+  PREV_BLOCKING_FINGERPRINT="$(jq -r '.last_blocking_fingerprint // ""' "$STATE_FILE")"
 fi
 
 # --- ケース1/2: diffハッシュ一致（前回状態あり） ---
@@ -121,7 +134,8 @@ if [ -n "$PREV_HASH" ] && [ "$CURRENT_HASH" = "$PREV_HASH" ]; then
   fi
   if [ "$PREV_VERDICT" = "blocked" ]; then
     # 何も直さずに再Stopしようとした場合。LLM呼び出しはせずretry_countだけ消費する。
-    block_with_retry_check "$CURRENT_HASH" "$PREV_FINDINGS_MSG"
+    # フィンガープリントは前回と同一のものをそのまま渡す(同一findingとして必ず累積させる)。
+    block_with_retry_check "$CURRENT_HASH" "$PREV_FINDINGS_MSG" "$PREV_BLOCKING_FINGERPRINT"
   fi
 fi
 
@@ -257,7 +271,14 @@ FINDINGS_TEXT="$(printf '%s' "$NORMALIZED_FINDINGS" | jq -r '.[] | "- [" + .seve
 MINOR_TEXT="$(printf '%s' "$NORMALIZED_FINDINGS" | jq -r '[.[] | select(.severity == "minor")] | .[] | "- " + .description + " (" + (.evidence // "evidence不明") + ")"')"
 
 if [ "$HAS_BLOCKING" = "true" ]; then
-  block_with_retry_check "$CURRENT_HASH" "$FINDINGS_TEXT"
+  # WHY(issue #351): critical/important findingの{severity,description,evidence}をソートして
+  # ハッシュ化したものを「指摘の同一性」の判定基準にする(表示用のFINDINGS_TEXTは整形済みの
+  # 人間向け文言のため、同一性判定には使わない)。
+  BLOCKING_FINGERPRINT="$(printf '%s' "$NORMALIZED_FINDINGS" | jq -c '
+    [.[] | select(.severity == "critical" or .severity == "important")
+       | {severity, description, evidence: (.evidence // "")}] | sort
+  ' | shasum -a 256 | awk '{print $1}')"
+  block_with_retry_check "$CURRENT_HASH" "$FINDINGS_TEXT" "$BLOCKING_FINGERPRINT"
 fi
 
 write_state "$CURRENT_HASH" "pass" 0 ""
