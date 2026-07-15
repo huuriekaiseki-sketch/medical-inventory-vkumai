@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { GET, PUT, DELETE } from '../route'
 
 const mockGetUser = vi.fn()
+const mockResolveIsAdmin = vi.fn()
 const mockGetProduct = vi.fn()
 const mockUpdateProduct = vi.fn()
 const mockDeleteProduct = vi.fn()
@@ -10,6 +11,10 @@ vi.mock('@/lib/supabase/server', () => ({
   createServerSupabase: async () => ({
     auth: { getUser: mockGetUser },
   }),
+}))
+
+vi.mock('@/lib/admin-status', () => ({
+  resolveIsAdmin: (...args: unknown[]) => mockResolveIsAdmin(...args),
 }))
 
 vi.mock('@/lib/products/repository', () => ({
@@ -24,6 +29,7 @@ const authenticated = () => mockGetUser.mockResolvedValue({ data: { user: { id: 
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockResolveIsAdmin.mockResolvedValue(true)
 })
 
 describe('GET /api/products/[id]', () => {
@@ -58,6 +64,15 @@ describe('PUT /api/products/[id]', () => {
     const res = await PUT(req as never, context)
     expect(res.status).toBe(200)
   })
+
+  it('一般ユーザーの場合は403を返す', async () => {
+    authenticated()
+    mockResolveIsAdmin.mockResolvedValue(false)
+    const req = new Request('http://localhost', { method: 'PUT', body: JSON.stringify({ jan: '1', ref: 'r', name: '製品A' }) })
+    const res = await PUT(req as never, context)
+    expect(res.status).toBe(403)
+    expect(mockUpdateProduct).not.toHaveBeenCalled()
+  })
 })
 
 describe('DELETE /api/products/[id]', () => {
@@ -73,5 +88,13 @@ describe('DELETE /api/products/[id]', () => {
     mockDeleteProduct.mockResolvedValue(undefined)
     const res = await DELETE(new Request('http://localhost') as never, context)
     expect(res.status).toBe(200)
+  })
+
+  it('一般ユーザーの場合は403を返す', async () => {
+    authenticated()
+    mockResolveIsAdmin.mockResolvedValue(false)
+    const res = await DELETE(new Request('http://localhost') as never, context)
+    expect(res.status).toBe(403)
+    expect(mockDeleteProduct).not.toHaveBeenCalled()
   })
 })

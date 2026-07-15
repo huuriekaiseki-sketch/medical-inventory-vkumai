@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { GET, PUT, DELETE } from '../route'
 
 const mockGetUser = vi.fn()
+const mockResolveIsAdmin = vi.fn()
 const mockGetDistributorProduct = vi.fn()
 const mockUpdateDistributorProduct = vi.fn()
 const mockDeleteDistributorProduct = vi.fn()
@@ -10,6 +11,10 @@ vi.mock('@/lib/supabase/server', () => ({
   createServerSupabase: async () => ({
     auth: { getUser: mockGetUser },
   }),
+}))
+
+vi.mock('@/lib/admin-status', () => ({
+  resolveIsAdmin: (...args: unknown[]) => mockResolveIsAdmin(...args),
 }))
 
 vi.mock('@/lib/distributor-products/repository', () => ({
@@ -26,6 +31,7 @@ const validInput = { productId: 'p1', maker: 'maker', supplier: 'supplier', name
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockResolveIsAdmin.mockResolvedValue(true)
 })
 
 describe('GET /api/distributor-products/[id]', () => {
@@ -60,6 +66,15 @@ describe('PUT /api/distributor-products/[id]', () => {
     const res = await PUT(req as never, context)
     expect(res.status).toBe(200)
   })
+
+  it('一般ユーザーの場合は403を返す', async () => {
+    authenticated()
+    mockResolveIsAdmin.mockResolvedValue(false)
+    const req = new Request('http://localhost', { method: 'PUT', body: JSON.stringify(validInput) })
+    const res = await PUT(req as never, context)
+    expect(res.status).toBe(403)
+    expect(mockUpdateDistributorProduct).not.toHaveBeenCalled()
+  })
 })
 
 describe('DELETE /api/distributor-products/[id]', () => {
@@ -75,5 +90,13 @@ describe('DELETE /api/distributor-products/[id]', () => {
     mockDeleteDistributorProduct.mockResolvedValue(undefined)
     const res = await DELETE(new Request('http://localhost') as never, context)
     expect(res.status).toBe(200)
+  })
+
+  it('一般ユーザーの場合は403を返す', async () => {
+    authenticated()
+    mockResolveIsAdmin.mockResolvedValue(false)
+    const res = await DELETE(new Request('http://localhost') as never, context)
+    expect(res.status).toBe(403)
+    expect(mockDeleteDistributorProduct).not.toHaveBeenCalled()
   })
 })

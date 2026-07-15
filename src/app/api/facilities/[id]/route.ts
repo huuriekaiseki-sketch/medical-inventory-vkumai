@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
+import { resolveIsAdmin } from '@/lib/admin-status'
 import { getFacility, updateFacility, deleteFacility } from '@/lib/facilities/repository'
 import { apiError } from '@/lib/api-error'
 import type { FacilityInput } from '@/types/facility'
@@ -32,7 +33,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   try {
     const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    let user
+    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    const isAdmin = await resolveIsAdmin(db, user)
+    if (!isAdmin) return apiError('権限がありません', 403)
     const facility = await updateFacility(db, id, input)
     return NextResponse.json({ facility })
   } catch (error) {
@@ -52,7 +56,10 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   try {
     const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    let user
+    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    const isAdmin = await resolveIsAdmin(db, user)
+    if (!isAdmin) return apiError('権限がありません', 403)
     await deleteFacility(db, id)
     return NextResponse.json({ success: true })
   } catch (error) {
