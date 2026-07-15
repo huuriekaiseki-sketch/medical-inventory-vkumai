@@ -63,26 +63,29 @@ emit_block "$(printf 'verify-claims: %d回の自動修正を試みましたが�
 
 #### 2. 新規: `scripts/check-skip-marker-write.sh` (PreToolUse hook)
 
-`.claude/.verify-state/<session_id>.skip`というパスへの書き込みを試みるツール呼び出し(Bash/Write/Edit)を検知し、手段を問わず人間の確認プロンプト(ask)に強制的に切り替える。
+`.claude/.verify-state/<session_id>.skip`というパスへの書き込みを試みるツール呼び出し(Bash/Write/Edit/MultiEdit)を検知し、手段を問わず人間の確認プロンプト(ask)に強制的に切り替える。
 
-- 標準入力でPreToolUseのhook入力JSON(`tool_name`, `tool_input`)を受け取る
-- `tool_name`が`Bash`の場合は`tool_input.command`全体(リダイレクト先パスを含む)、`Write`/`Edit`の場合は`tool_input.file_path`を対象に、正規表現 `\.claude/\.verify-state/[^/]+\.skip` にマッチするかを調べる
+- 標準入力でPreToolUseのhook入力JSON(`tool_name`, `tool_input`, `cwd`)を受け取る
+- `tool_name`が`Bash`の場合は`tool_input.command`全体(リダイレクト先パスを含む)、`Write`/`Edit`/`MultiEdit`の場合は`tool_input.file_path`を対象に、正規表現 `\.claude/\.verify-state/[^/]+\.skip` にマッチするかを調べる
 - マッチした場合、以下を標準出力してexit 0:
   ```json
   {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask", "permissionDecisionReason": "verify-claimsのエスケープハッチ(.skipマーカー)への書き込みです。人間の確認が必要です。"}}
   ```
 - マッチしない場合は何も出力せずexit 0(通常の許可フローに委ねる。allowでもdenyでもなく無関与)
+- **cwd変更後の相対パス操作への追加検知(コードレビューで実証された抜け道への追加修正)**: フルパスの正規表現一致だけでは、以下2パターンで検知をすり抜けられることが判明したため、追加で検知する:
+  1. 単一コマンド内での`cd`後の相対パス操作(例: `cd .claude/.verify-state && touch abc.skip`) — 同一コマンド文字列内に`.claude/.verify-state`というディレクトリ参照と、相対パスの`.skip`トークンの両方が含まれるかを見る
+  2. 事前のBash呼び出しで既に`cd .claude/.verify-state`を実行済みの状態で、別呼び出しとして`touch abc.skip`のみを実行する場合 — hook入力の`cwd`フィールド(Bashツールがセッション間で持続させる現在の作業ディレクトリ)が`.claude/.verify-state`ディレクトリそのもの/配下を指しており、かつ対象文字列に相対パスの`.skip`トークンが含まれるかを見る
 
 判定基準:
 
 | ケース | 挙動 |
 |---|---|
-| Bashコマンド文字列またはWrite/Edit file_pathが`.claude/.verify-state/*.skip`にマッチしない | このhookは関与しない(通常の権限フローのまま) |
-| マッチする | `permissionDecision: "ask"`を返し、通常の確認ダイアログが表示される。人間が承認すれば実行され、拒否すれば実行されない |
+| Bashコマンド文字列またはWrite/Edit/MultiEdit file_pathが`.claude/.verify-state/*.skip`にマッチせず、cd+相対パス・cwd起点の追加検知にも該当しない | このhookは関与しない(通常の権限フローのまま) |
+| マッチする(フルパス一致、またはcd+相対パス一致、またはcwd起点の相対パス一致) | `permissionDecision: "ask"`を返し、通常の確認ダイアログが表示される。人間が承認すれば実行され、拒否すれば実行されない |
 
 既知の限界(設計ドキュメントに明記する):
 - 正規表現によるコマンド文字列マッチのため、変数展開・base64エンコード等で意図的に難読化されたコマンドは検知をすり抜けうる。典型的な手段(touch/echo/cp/mv/python -c/node -e等、コマンド文字列に直接パスが現れるもの)を塞ぐのが目的であり、完全な保証ではない
-- 確認プロンプトはVS Code側で実際にセッションを見ている人間が応答することが前提。誰も見ていない間は応答待ちのまま進まない(=通過しない側に倒れるため安全)
+- 確認プロンプトはVS Code側で実際にセッションを見ている人間が応答することが前提。誰も見ていない間は応答待ちのまま進まない(=通過しない側に倒れるため安全)。`--permission-mode bypassPermissions`かつheadless環境での実機検証では応答待ちのまま拒否側に倒れることを確認済みだが、この検証は一度限りの手動確認であり自動回帰テストとしては存在しない
 
 #### 3. `.claude/settings.json`
 
@@ -90,13 +93,14 @@ emit_block "$(printf 'verify-claims: %d回の自動修正を試みましたが�
 ```json
 "PreToolUse": [
   {
-    "matcher": "Bash|Write|Edit",
+    "matcher": "Bash|Write|Edit|MultiEdit",
     "hooks": [
       { "type": "command", "command": "scripts/check-skip-marker-write.sh", "timeout": 5 }
     ]
   }
 ]
 ```
+`matcher`はツール名の完全一致(exact match)のリストである。`Edit`と同じくfile_pathを持つ書き込み系ツールの`MultiEdit`を漏らさず含める(`matcher`と`scripts/check-skip-marker-write.sh`内の`case`文の両方を揃える必要があり、片方だけ直しても検知が効かない)。
 既存の`Stop`フックエントリ(doc-suggest-check.sh / ai-check-suggest.sh / verify-claims.sh)はそのまま変更しない。
 
 #### 4. `scripts/verify-claims.sh`のテスト、`scripts/verify-claims.test.sh`
@@ -106,20 +110,26 @@ emit_block "$(printf 'verify-claims: %d回の自動修正を試みましたが�
 
 #### 5. 新規: `scripts/check-skip-marker-write.test.sh`
 
-PreToolUse hook単体の回帰テスト。合成した`tool_name`/`tool_input`のJSONを標準入力で渡し、以下を確認する:
+PreToolUse hook単体の回帰テスト。合成した`tool_name`/`tool_input`/`cwd`のJSONを標準入力で渡し、以下を確認する:
 - シナリオ1: `Bash`で`command`が`touch .claude/.verify-state/abc.skip`の場合 → `permissionDecision: "ask"`が返る
 - シナリオ2: `Bash`で`command`が`echo x > .claude/.verify-state/abc.skip`の場合(リダイレクト経由) → `permissionDecision: "ask"`が返る
 - シナリオ3: `Write`で`file_path`が`.claude/.verify-state/abc.skip`の場合 → `permissionDecision: "ask"`が返る
 - シナリオ4: `Bash`で`command`が`.claude/.verify-state/`と無関係な通常コマンド(例: `npm test`)の場合 → 何も出力されない(exit 0、空出力)
 - シナリオ5: `Bash`で`command`が`.claude/.verify-state/`配下だが`.skip`拡張子ではないファイル(例: `cat .claude/.verify-state/abc.json`)への操作の場合 → 何も出力されない(状態ファイル自体の閲覧・既存ロジックの正常動作を妨げない)
+- シナリオ6: `Bash`で`command`が`cd .claude/.verify-state && touch abc.skip`(単一コマンド内でcd後に相対パス操作)の場合 → `permissionDecision: "ask"`が返る(cd+相対パス検知の回帰)
+- シナリオ7: `Bash`で`command`が`touch abc.skip`、`cwd`が`.claude/.verify-state`配下(事前のBash呼び出しで既にcd済み)の場合 → `permissionDecision: "ask"`が返る(cwd起点の相対パス検知の回帰)
+- シナリオ8: `Bash`で`command`が`python3 -c "..."`でフルパス`.claude/.verify-state/abc.skip`へ書き込む場合 → `permissionDecision: "ask"`が返る
+- シナリオ9: `Bash`で`command`が`node -e "..."`でフルパス`.claude/.verify-state/abc.skip`へ書き込む場合 → `permissionDecision: "ask"`が返る
+- シナリオ10: `Edit`で`file_path`が`.claude/.verify-state/abc.skip`の場合 → `permissionDecision: "ask"`が返る
+- シナリオ11: `MultiEdit`で`file_path`が`.claude/.verify-state/abc.skip`の場合 → `permissionDecision: "ask"`が返る(matcher/case文からMultiEditが漏れていた抜け道の回帰)
 
 #### 6. 設計ドキュメント更新
 
 `docs/superpowers/specs/2026-07-14-verification-subagent-design.md`の以下を更新:
-- 「エスケープハッチ(誤検知対策)」節(115-120行目): 「VS Code側セッションに依頼してtouchする形でも可」という記述を削除し、PreToolUse hookによるask強制の仕組みに差し替える
+- 「エスケープハッチ(誤検知対策)」節(115-120行目): 「VS Code側セッションに依頼してtouchする形でも可」という記述を削除し、PreToolUse hookによるask強制の仕組みに差し替える。あわせて、`matcher`へのMultiEdit追加(当初漏れていた書き込み系ツール)、cd+相対パス・cwd起点の相対パスという2つの追加検知、`bypassPermissions`環境での実機検証結果(一度限りの手動確認である旨も含む)を明記する
 - 「判定・ブロックロジック」節(108-109行目): ブロックメッセージからコマンド案内を削除する旨を反映
 - 「エラーハンドリングまとめ」表(143-153行目): `.skip`マーカーの行はStop hook側の挙動として変更なし(pass)のまま維持しつつ、「ただしマーカー作成自体はPreToolUse hookでask」の注記を追加
-- テスト方針の一覧(225-243行目)にシナリオ5のアサーション更新内容と、新規`check-skip-marker-write.test.sh`への参照を追記
+- テスト方針の一覧(225-243行目)にシナリオ5のアサーション更新内容と、新規`check-skip-marker-write.test.sh`(シナリオ1〜11)への参照を追記
 
 ### 型・データアクセス層の方針
 

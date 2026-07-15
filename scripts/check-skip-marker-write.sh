@@ -27,15 +27,22 @@ set -euo pipefail
 #    ".claude/.verify-state" ディレクトリそのもの/配下を指しており、かつcommand/file_pathに
 #    スラッシュを含まない(=相対パスらしい)".skip"トークンが含まれる場合も対象とする。
 #
+# 対象ツール: Bash / Write / Edit / MultiEdit(いずれもtool_input.file_pathまたはcommandに
+# 書き込み先パスが現れる)。.claude/settings.jsonのmatcherと本スクリプトのcase文の両方を
+# 揃える必要がある(片方だけ直しても検知が効かない)。NotebookEdit等、file_path以外の
+# パラメータ名で書き込み先を指定するツールが将来追加された場合は同様に追随が必要。
+#
 # 既知の限界(設計ドキュメントに明記済み):
 # - 正規表現によるコマンド文字列マッチのため、変数展開・base64エンコード等で意図的に
 #   難読化されたコマンドはすり抜けうる。典型的な手段(touch/echo/cp/mv/python -c/node -e等、
 #   コマンド文字列に直接パスが現れるもの)を塞ぐのが目的であり、完全な保証ではない。
 
 FULL_PATH_PATTERN='\.claude/\.verify-state/[^/]+\.skip'
-# ディレクトリ参照の後にスラッシュ・空白・&・;・文字列末尾のいずれかが続く(cdの引数として
-# 使われる書き方も含めて拾うため、直後に必ずスラッシュが来るとは限らない)。
-DIR_REFERENCE_PATTERN='\.claude/\.verify-state([/[:space:]&;]|$)'
+# 「cd」でディレクトリへ移動する操作に限定する(単に ls/cat/grep 等でディレクトリ名に
+# 言及しているだけの読み取り系コマンドと、無関係な場所にある別の *.skip ファイルへの
+# 操作が同一コマンド文字列中にたまたま同居しているだけの誤検知(false positive)を避けるため)。
+# 直前が行頭・空白・;・& のいずれかで始まる「cd <path>」の形のみを対象とする。
+DIR_REFERENCE_PATTERN='(^|[;&[:space:]])cd[[:space:]]+\.claude/\.verify-state([/[:space:]&;]|$)'
 CWD_PATTERN='(^|/)\.claude/\.verify-state($|/)'
 RELATIVE_SKIP_TOKEN_PATTERN='[^/[:space:]]+\.skip'
 
@@ -48,7 +55,7 @@ case "$TOOL_NAME" in
   Bash)
     TARGET="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')"
     ;;
-  Write|Edit)
+  Write|Edit|MultiEdit)
     TARGET="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""')"
     ;;
   *)

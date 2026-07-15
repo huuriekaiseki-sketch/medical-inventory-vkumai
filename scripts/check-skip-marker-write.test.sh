@@ -112,6 +112,24 @@ run_hook "$input"
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_contains "$OUT" '"permissionDecision": "ask"' "permissionDecision: askが出力される"
 
+echo "=== scenario 11: MultiEditツールでfile_pathが.skip → ask(マッチャー抜け漏れ修正) ==="
+input="$(jq -n '{tool_name: "MultiEdit", tool_input: {file_path: ".claude/.verify-state/abc.skip", edits: [{old_string: "x", new_string: "y"}]}}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" '"permissionDecision": "ask"' "permissionDecision: askが出力される"
+
+echo "=== scenario 12: cdを伴わないディレクトリ言及(ls)+無関係な.skipファイルへの操作 → 何も出力しない(誤検知修正の回帰) ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "ls .claude/.verify-state && rm old-backup.skip"}}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "出力が空である(cdを伴わないディレクトリ参照は誤検知としない)"
+
+echo "=== scenario 13: .claude/settings.jsonのmatcherと本スクリプトのcase文のツール一覧が一致する(matcher/case文の二重管理による抜け漏れの再発防止) ==="
+SETTINGS_FILE="$SCRIPT_DIR/../.claude/settings.json"
+MATCHER_TOOLS="$(jq -r '.hooks.PreToolUse[] | select(.hooks[].command | endswith("check-skip-marker-write.sh")) | .matcher' "$SETTINGS_FILE" | tr '|' '\n' | sort)"
+CASE_TOOLS="$(grep -oE '^  [A-Za-z]+(\|[A-Za-z]+)*\)' "$SCRIPT" | grep -v '^  \*)' | tr -d ' )' | tr '|' '\n' | sort -u)"
+assert_eq "$CASE_TOOLS" "$MATCHER_TOOLS" "settings.jsonのmatcherとcase文のツール一覧(Bash/Write/Edit/MultiEdit)が一致する(片方だけ変更されている場合はここで失敗する)"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
