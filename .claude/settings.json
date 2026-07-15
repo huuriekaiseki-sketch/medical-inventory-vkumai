@@ -74,6 +74,8 @@
       "Bash(scripts/show-agent-status.sh *)",
       "Bash(scripts/verify-agent-progress-transcript.sh *)",
       "Bash(scripts/doc-suggest-check.sh *)",
+      "Bash(scripts/check-branch-pr-status.sh*)",
+      "Bash(bash scripts/check-branch-pr-status.test.sh*)",
       "Bash(scripts/ai-check-suggest.sh *)",
       "Bash(scripts/verify-claims.sh *)",
       "Bash(bash scripts/verify-claims.test.sh*)",
@@ -128,6 +130,17 @@
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/check-branch-pr-status.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash|Write|Edit",
