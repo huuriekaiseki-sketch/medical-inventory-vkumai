@@ -220,7 +220,16 @@ claude_auto_issue / aidd_session_report が並走する。Claude Codeのhook実�
 - この判定ロジックはグローバルスクリプト側(`~/claude_stop_notify.sh`、`~/claude_auto_issue.sh`)
   に実装する必要がある。`verify-claims.sh`が存在しない/未実行のプロジェクトでは状態ファイルも
   存在しないため、従来通りの挙動になる(後方互換)
-- 実装(グローバルスクリプトの変更)は本ドキュメントのスコープ外とし、別issueとして切り出す
+- **実装済み(issue #360)**: 上記2ファイルはこのリポジトリ外(`$HOME`直下)にあり、
+  medical-inventory-vkumai以外の全プロジェクトで共通して使われるグローバル設定のため、
+  このリポジトリのgit管理・PRレビューの対象外。判定ロジック本体は共通ヘルパー
+  `~/claude_verify_suppress_check.sh`(diffハッシュ計算を`verify-claims.sh`と同じ方法で
+  行う。将来この計算方法がズレても常に非抑制側に倒れるだけで安全)に切り出し、
+  `claude_stop_notify.sh`/`claude_auto_issue.sh`はセッションIDを渡して呼ぶだけにした。
+  リポジトリ外ファイルのためこのリポジトリのテストスイートには含められないが、サンドボックス
+  (偽の`$HOME`・`osascript`/`gh`のスタブコマンド)で「抑制されるケース(実際の通知・
+  issue作成が発生しないこと)」「状態ファイルが無いセッションでは従来通り実行されること
+  (後方互換)」の両方を確認済み
 
 ## テスト方針
 
