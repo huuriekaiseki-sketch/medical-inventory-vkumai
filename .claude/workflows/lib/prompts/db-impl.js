@@ -21,8 +21,8 @@ findingsを省略した場合、またはcritical/important指摘が1件でも�
 
 export function buildDbImplPrompt(specPath) {
   return `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに supabase/migrations/ のマイグレーションファイルを実装してください。src/types/ / src/lib/ / src/app/ は触らないこと。\nPart 2にDBスキーマ変更が不要と明記されている場合（例:「該当なし」「DB変更なし」）は、何も実装せずstatus: passでdetailにその旨（不要と判断した根拠）を書いて報告すること。これはblocked（着手不能）ではない。${guide(
-    'マイグレーション実装が完了した、またはPart2にDBスキーマ変更が不要と明記されており対応不要と判断した',
-    'マイグレーションを試みたがエラー・矛盾がある',
-    'SPEC.mdが存在しない、またはPart2にDB変更の要否自体を判断できる記載が無い'
-  )}`
+      'マイグレーション実装が完了した、またはPart2にDBスキーマ変更が不要と明記されており対応不要と判断した',
+      'マイグレーションを試みたがエラー・矛盾がある',
+      'SPEC.mdが存在しない、またはPart2にDB変更の要否自体を判断できる記載が無い'
+    )}`
 }
