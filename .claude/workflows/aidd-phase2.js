@@ -216,10 +216,10 @@ const [contractResult, dbResult] = await parallel([
     { label: 'contract-writer', phase: 'Contract + DB', agentType: 'contract-writer', schema: AGENT_RESULT_SCHEMA }
   ),
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに supabase/migrations/ のマイグレーションファイルを実装してください。src/types/ / src/lib/ / src/app/ は触らないこと。${guide(
-      'マイグレーション実装が完了した',
+    `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに supabase/migrations/ のマイグレーションファイルを実装してください。src/types/ / src/lib/ / src/app/ は触らないこと。\nPart 2にDBスキーマ変更が不要と明記されている場合（例:「該当なし」「DB変更なし」）は、何も実装せずstatus: passでdetailにその旨（不要と判断した根拠）を書いて報告すること。これはblocked（着手不能）ではない。${guide(
+      'マイグレーション実装が完了した、またはPart2にDBスキーマ変更が不要と明記されており対応不要と判断した',
       'マイグレーションを試みたがエラー・矛盾がある',
-      'SPEC.mdが存在しない、またはPart2にマイグレーション情報が無く着手不能'
+      'SPEC.mdが存在しない、またはPart2にDB変更の要否自体を判断できる記載が無い'
     )}`,
     { label: 'db-impl', phase: 'Contract + DB', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   ),
