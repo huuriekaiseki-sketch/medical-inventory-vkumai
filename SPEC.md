@@ -52,6 +52,7 @@ admin ユーザーのみが `/admin/reports` にアクセスし、任意の期�
 **期間フィルタ**
 - [ ] 開始日・終了日をYYYY-MM-DD形式で任意指定できる（両方省略時は全期間）
 - [ ] 開始日のみ指定時は「指定日(JST 00:00:00)以降」、終了日のみ指定時は「指定日(JST 23:59:59)以前」として集計される（`src/lib/jst-date-range.ts`の`jstDayStart`/`jstDayEnd`/`isValidDateString`を再利用する。独自実装しない）
+  - **既知のリスク（minor、本機能スコープ外）**: `jstDayEnd`は秒精度（`23:59:59`）までしか表現できず、`created_at`（TIMESTAMPTZ、マイクロ秒精度）が`23:59:59.xxxxxx`の場合に`<=`比較で終了日当日の最後の1秒未満の発注が期間集計から漏れる可能性がある。これは`jstDayEnd`が既存の複数機能（case-orders/consumable-orders/loan-orders/loan-returns/orders）で共有されている既存実装（issue #20由来）であり、本機能はそれを再利用する方針のため本SPECの対応範囲外とする。修正するなら`jstDayEnd`自体を`23:59:59.999999`等に改める必要があり、影響範囲が本機能を超えるため別issueで検討する。
 - [ ] 開始日 > 終了日の場合はバリデーションエラーを表示し、APIは呼ばない
 - [ ] 不正な日付形式は400エラーになる
 
@@ -59,8 +60,11 @@ admin ユーザーのみが `/admin/reports` にアクセスし、任意の期�
 - [ ] 全施設が行として表示される（発注が0件の施設も表示する）
 - [ ] 列は「施設名 / 症例発注金額 / 消耗品発注金額 / 短貸発注金額 / 合計」の5列
 - [ ] 各金額セルは該当期間・施設・発注種別の `unit_price × quantity` のSUM（ステータスは問わず全件対象。未解決事項2）
-- [ ] 発注0件の施設は「-」、発注はあるが単価データが一切ない場合は「-（金額データなし）」、集計値が0円の場合は「¥0」と表示が区別される（未解決事項4）
-- [ ] 合計列は各種別のNULLを0とみなして加算する。ただし全種別が「発注0件」の場合は合計も「-」
+- [ ] 発注0件の施設は「-」、発注はあるが単価データが一切ない場合は「-（金額データなし）」、集計値が0円の場合は「¥0」と表示が区別される（未解決事項4）。この区別は種別（症例/消耗品/短貸）単位で行われ、他種別の状態に引きずられない（critical指摘対応: `*_total_count`で「発注0件」と「単価データなし」を種別ごとに判定する）
+- [ ] 合計列は以下の優先順位で判定する（コードレビューでSPEC文言の自己矛盾＝critical指摘を修正済み。`src/components/reports/ReportTable.tsx`の`formatTotal`実装が正）:
+  1. **3種別すべての`*_total_count === 0`**（=施設に発注が1件もない）→ 合計は「-」
+  2. 上記に該当せず、かつ**3種別すべての`amount === null`**（=発注はあるが、どの種別にも金額データがない）→ 合計は「-（金額データなし）」
+  3. 上記いずれにも該当しない（=少なくとも1種別に確定金額がある）→ 各種別の`amount`のNULLを0とみなして合計し「¥N,NNN」で表示（他種別が「発注0件」または「金額データなし」でも、確定金額がある種別が1つでもあれば合計は算出できる）
 - [ ] ページ下部に「YYYY-MM-DD以前の発注は金額データがありません」旨の注釈を表示する
 - [ ] 集計中はテーブル領域にローディング表示をする
 
@@ -81,7 +85,7 @@ admin ユーザーのみが `/admin/reports` にアクセスし、任意の期�
 | 集計対象ステータス | 問わず全件 | 同上。将来submitフロー実装時にWHERE句一行で絞れる設計にしておく |
 | JST日付変換 | `src/lib/jst-date-range.ts`を再利用 | 既存の`jstDayStart`/`jstDayEnd`/`isValidDateString`と重複実装しない |
 | 単価解決パス | `case_order_items.jan → products(jan) → distributor_products(product_id) → hospital_prices(distributor_product_id, facility_id)` | 実際のスキーマに基づく正しいJOINパス（`hospital_prices`は`distributor_product_id`+`facility_id`で一意） |
-| 認可 | API層`requireAdmin()`（403）+ RPC層`is_admin()`（permission denied→403変換） | 既存`admin-auth.ts`パターンを踏襲。`createAdminSupabase()`は不要 |
+| 認可 | API層`requireAuth()`（401）+`resolveIsAdmin()`（403）+ RPC層`is_admin()`（permission denied→403変換） | `requireAdmin()`は401/403を区別できないため個別判定パターンを採用。`createAdminSupabase()`は不要 |
 
 不採用（検討したが見送り）: クエリ時に現在の`hospital_prices`をJOINして計算する方式（未解決事項1で確定）。過去発注の履歴的単価精度が失われるため。
 
@@ -100,10 +104,9 @@ ALTER TABLE loan_order_items       ADD COLUMN unit_price NUMERIC(12,2);
 -- 既存データはNULL（過去発注は金額データなし）。カラム追加のみでテーブル新設/削除ではないため
 -- refresh_schema_baseline_snapshot は不要（issue #305要件の対象外。実装時に最新スキーマベースラインで再確認すること）
 
--- 20260714000005_orders_history_prereqs.sql が consumable_orders/loan_orders/loan_returns の
--- (facility_id, created_at)複合インデックスを追加済みだが、case_ordersが欠落している（本migrationで補う）
-CREATE INDEX IF NOT EXISTS idx_case_orders_facility_created_at
-  ON case_orders (facility_id, created_at DESC);
+-- 【SPEC訂正（実装時に判明）】case_ordersの(facility_id, created_at)複合インデックスは
+-- 20260626000000_fix_fk_and_indexes.sql で既に作成済みだった（本ドラフト作成時は
+-- 「欠落している」と誤認していた）。追加のCREATE INDEXは不要。
 ```
 
 **注意点**: `unit_price`はNUMERIC(12,2)（円未満は扱わないが、将来の消費税等端数対応に備え小数2桁を確保）。既存行はNULLのまま（遡及なし、未解決事項7）。
@@ -118,41 +121,52 @@ CREATE INDEX IF NOT EXISTS idx_case_orders_facility_created_at
   - `loan_order_items`: `case_order_items`と同型
   - 同一JANが複数`distributor_products`に紐づく場合は`MIN(purchase_price)`を採用（未解決事項3）
   - 単価解決に失敗した場合（該当行なし・`consumables.jan`がNULL等）は`unit_price = NULL`のまま挿入し、例外を投げない（best-effort、RPCはロールバックしない）
+  - **重複実装指摘対応（important）**: `case_order_items`と`loan_order_items`は`jan → products → distributor_products → hospital_prices`という全く同一の単価解決クエリを使う。これを共通のSQL関数`resolve_jan_unit_price(p_jan TEXT, p_facility_id UUID) RETURNS NUMERIC`（`LANGUAGE sql STABLE`）に切り出し、3つのRPCすべてがこの関数を呼び出す形にする（`consumable_order_items`は`consumables.jan`を求めたうえで同じ関数を呼ぶ）。各RPC内にインラインで同一クエリを重複実装しない
+  - **GRANT EXECUTE必須（important指摘対応）**: `resolve_jan_unit_price`に`GRANT EXECUTE ON FUNCTION resolve_jan_unit_price(TEXT, UUID) TO authenticated;`を明示的に付与する。暗黙のPUBLIC権限に依存すると、将来`REVOKE EXECUTE FROM PUBLIC`相当の防御的変更が入った際に`create_*_order_atomic`からの呼び出しが失敗し、発注作成自体が壊れる退行リスクがある（`is_facility_member()`の既存対応 `20260711000001_grant_execute_is_facility_member.sql` と同じ理由）
 - **テスト観点**:
   - 正常な単価解決で`unit_price`が正しく保存される
   - 該当する`hospital_prices`がない場合、`unit_price=NULL`で挿入が成功する（例外にならない）
   - 同一JANが複数distributor_productsに紐づく場合、`MIN(purchase_price)`が採用される
+  - `resolve_jan_unit_price`に`GRANT EXECUTE TO authenticated`が明示的に付与されている
 
 #### Set B: 集計RPC
 
 - **触るファイル**: `supabase/migrations/<実装日>_add_order_amount_report_rpc.sql`
 - RPC名: `get_order_amount_report(p_date_from TIMESTAMPTZ, p_date_to TIMESTAMPTZ)`
-- 戻り値型:
+- 戻り値型（コードレビュー指摘・critical対応: `*_total_count`列を追加。理由は下記参照）:
   ```sql
   TABLE(
     facility_id UUID,
     facility_name TEXT,
     case_order_amount NUMERIC,
     case_order_count INTEGER,
+    case_order_total_count INTEGER,
     consumable_order_amount NUMERIC,
     consumable_order_count INTEGER,
+    consumable_order_total_count INTEGER,
     loan_order_amount NUMERIC,
-    loan_order_count INTEGER
+    loan_order_count INTEGER,
+    loan_order_total_count INTEGER
   )
   ```
-  - `*_count`は「単価データがある明細の件数」。0件と「発注はあるが単価データなし」をUI側で区別するために必要（未解決事項4）
+  - `*_count`は「単価データがある明細の件数」（amount集計に使われた件数）。
+  - `*_total_count`は「価格の有無を問わない全明細件数」。**critical指摘対応**: 当初案は`*_count`のみで
+    「発注0件」と「発注はあるが単価データなし」を区別しようとしていたが、両者とも`amount=NULL・count=0`で
+    返るため区別不能だった。`*_total_count = 0`なら「発注自体が0件」、`*_total_count > 0`かつ`amount IS NULL`
+    なら「発注はあるが単価データなし」とUI側で判定する（未解決事項4）。
 - 実装方針:
   - `SECURITY DEFINER` + `SET search_path = public` + 関数冒頭で`is_admin()`チェック（false なら`RAISE EXCEPTION 'permission denied'`）
   - `GRANT EXECUTE ON FUNCTION get_order_amount_report TO authenticated, service_role`（`anon`除外。実行時の最終ガードは関数内`is_admin()`）
   - `facilities`テーブルを起点にLEFT JOINし、全施設が必ず出力される
   - 各発注種別は`WHERE (p_date_from IS NULL OR created_at >= p_date_from) AND (p_date_to IS NULL OR created_at <= p_date_to)`（ステータス条件なし、未解決事項2）
-  - `SUM(unit_price * quantity) FILTER (WHERE unit_price IS NOT NULL)`で集計、NULLはNULLのまま返す（COALESCEしない。UI側で判定）
+  - `SUM(unit_price * quantity) FILTER (WHERE unit_price IS NOT NULL)`と`COUNT(*) FILTER (WHERE unit_price IS NOT NULL)`で
+    `amount`/`count`を集計しつつ、フィルタなしの`COUNT(*)`を`total_count`として同時に集計する。`amount`はNULLのまま返す（COALESCEしない。UI側で判定）
 - **テスト観点**:
   - adminユーザーで実行できる
   - 非adminユーザーでpermission deniedが返る
   - 期間フィルタが正しく適用される（境界値含む）
-  - 発注0件の施設はNULL・countも0で返る
-  - 発注はあるが単価データなしの施設はNULL・count=0で返る
+  - 発注0件の施設は`amount=NULL`・`count=0`・`total_count=0`で返る
+  - 発注はあるが単価データなしの施設は`amount=NULL`・`count=0`・`total_count>0`で返る（`total_count`で発注0件の施設と区別できることを検証する）
 
 #### Set C: 型定義・Repository
 
@@ -160,17 +174,20 @@ CREATE INDEX IF NOT EXISTS idx_case_orders_facility_created_at
   - `src/types/report.ts`（新規）
   - `src/lib/reports/repository.ts`（新規）
   - `src/lib/reports/__tests__/repository.test.ts`（新規）
-- 型定義:
+- 型定義（`*_total_count`はcritical指摘対応。上記Set Bの`*_total_count`列に対応）:
   ```typescript
   export type OrderAmountReportRow = {
     facilityId: string
     facilityName: string
     caseOrderAmount: number | null
     caseOrderCount: number
+    caseOrderTotalCount: number
     consumableOrderAmount: number | null
     consumableOrderCount: number
+    consumableOrderTotalCount: number
     loanOrderAmount: number | null
     loanOrderCount: number
+    loanOrderTotalCount: number
   }
   export type OrderAmountReportFilter = {
     dateFrom?: string  // YYYY-MM-DD
@@ -188,7 +205,7 @@ CREATE INDEX IF NOT EXISTS idx_case_orders_facility_created_at
   - `src/app/api/admin/reports/route.ts`（新規）
   - `src/app/api/admin/reports/__tests__/route.test.ts`（新規）
 - `GET /api/admin/reports?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
-- 認可: `requireAdmin()`（`createServerSupabase()`経由、`createAdminSupabase()`は不要）→ 403
+- 認可: 【SPEC訂正（実装時に判明）】`requireAdmin()`（`src/lib/admin-auth.ts`）は未認証/非adminをどちらもnullで返し401/403を区別できないため、`requireAuth(db)`で認証チェック（失敗時401）→ `resolveIsAdmin(db, user)`で個別にadmin判定（false時403）というパターンを採用する（`createAdminSupabase()`は不要）
 - バリデーション:
   - `date_from`/`date_to`は省略可。指定時は`isValidDateString()`でYYYY-MM-DD形式チェック（不正形式は400）
   - `date_from > date_to`の場合は400
@@ -200,7 +217,7 @@ CREATE INDEX IF NOT EXISTS idx_case_orders_facility_created_at
 
 - **触るファイル**:
   - `src/components/reports/ReportFilters.tsx`（新規）: 期間フィルタUI。バリデーションエラー表示含む
-  - `src/components/reports/ReportTable.tsx`（新規）: 集計テーブル。`caseOrderCount === 0 && caseOrderAmount === null`なら「-（金額データなし）」、行自体の全種別が発注0件なら「-」、集計値0円は「¥0」と判定して表示（未解決事項4のルールを実装）
+  - `src/components/reports/ReportTable.tsx`（新規）: 集計テーブル。種別ごとに`*_total_count === 0`なら「-」（発注0件）、`*_total_count > 0 && amount === null`なら「-（金額データなし）」、集計値0円は「¥0」と判定して表示（未解決事項4のルールを実装。**critical/important指摘対応**: 種別単位の判定に`*_total_count`を使うことで、「発注0件」と「発注はあるが単価データなし」を混同しない。合計列は「全種別が`total_count===0`（=真に発注0件）」の場合のみ「-」とし、それ以外はNULLを0とみなして加算する。以前は`count===0 && amount===null`のみで判定していたため、一部種別だけ単価データなしの行を誤って「全種別発注0件」と判定してしまう境界条件の欠落があった。**important指摘対応・追加分**: 加えて「全種別に発注はあるが、いずれの種別にも金額データが一切ない（全`amount===null`）」場合は、合計を「NULLを0とみなして加算」した結果の「¥0」ではなく「-（金額データなし）」と表示する。この判定は「全種別発注0件」判定より優先し、一部種別のみ金額データがある場合は従来どおりNULLを0とみなして加算する）
   - `src/components/reports/__tests__/ReportFilters.test.tsx`（新規）
   - `src/components/reports/__tests__/ReportTable.test.tsx`（新規）
 - **テスト観点**: NULL/0/「-（金額データなし）」の3パターンが正しく出し分けられること、金額がカンマ区切り円表示されること、日付バリデーションが機能すること

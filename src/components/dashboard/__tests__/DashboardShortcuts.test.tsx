@@ -21,4 +21,15 @@ describe('DashboardShortcuts', () => {
     render(<DashboardShortcuts isAdmin={true} />)
     expect(screen.getByRole('link', { name: /管理ユーザー/ })).toHaveAttribute('href', '/admin/users')
   })
+
+  // issue #23: adminのみ「レポート」ショートカットが表示される
+  it('admin権限がない場合はレポートページへのリンクが表示されない', () => {
+    render(<DashboardShortcuts isAdmin={false} />)
+    expect(screen.queryByRole('link', { name: /レポート/ })).not.toBeInTheDocument()
+  })
+
+  it('admin権限がある場合はレポートページへのリンクが表示される', () => {
+    render(<DashboardShortcuts isAdmin={true} />)
+    expect(screen.getByRole('link', { name: /レポート/ })).toHaveAttribute('href', '/admin/reports')
+  })
 })
