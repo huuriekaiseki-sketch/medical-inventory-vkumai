@@ -106,7 +106,7 @@ hook側で機械チェックする。検証サブエージェント自身がLLM�
       (スキップ・再判定ロジックの(2)、LLM呼び出し無し)は前回と同一のフィンガープリントを
       そのまま引き継ぐため、常に累積される(この経路の挙動は変えない)
   - `retry_count <= 3`(既存の `MAX_REVIEW_RETRIES` と同じ上限): 該当箇所の指摘内容を `stderr` に出力して `exit 2`(Stopをブロックし、VS Code側セッションに指摘を伝えて修正を促す)
-  - `retry_count > 3`: ブロックしたまま人間の介入を待つ状態にする。`stderr` に「3回自動修正を試みたが解消されなかった」旨と、下記エスケープハッチの使い方を明記する
+  - `retry_count > 3`: ブロックしたまま人間の介入を待つ状態にする。`stderr` に「3回自動修正を試みたが解消されなかった」旨と「人間に相談してください」とだけ表示する。**issue #348以降、具体的なコマンド案内(`touch <パス>`等)はブロックメッセージから削除した。** これは、指摘を直す代わりにブロックされた本人(エージェント自身)がその案内通りにスキップ用ファイルを作成してすり抜けられてしまう抜け道だったため。エスケープハッチ自体の使い方は下記「エスケープハッチ(誤検知対策)」節を参照
   - 状態ファイルを `{ diff_hash, verdict: "blocked", retry_count, last_blocking_fingerprint }` で更新
 - **findingsが無い、またはminorのみの場合**:
   - `exit 0`。minor findingsがあれば `systemMessage` として警告のみ添える(ブロックはしない)
@@ -116,8 +116,21 @@ hook側で機械チェックする。検証サブエージェント自身がLLM�
 
 検証サブエージェント自身がLLMである以上、誤って `critical` と判定する可能性がある。3回のリトライを使い切って完全ブロックされた場合に人間が詰まないよう、以下を用意する:
 
-- 人間(またはVS Code側セッション)が `.claude/.verify-state/<session_id>.skip` というマーカーファイルを作成できるようにする(小さいヘルパースクリプト、またはVS Code側セッションに依頼して touch する形でも可)
-- hookはこのファイルの存在を検知したら、それを消費(削除)した上で無条件に `exit 0` とする。ログに「手動オーバーライドが使用された」旨を残す
+- 人間が `.claude/.verify-state/<session_id>.skip` というマーカーファイルを作成できるようにする
+- hookはこのファイルの存在を検知したら、それを消費(削除)した上で無条件に `exit 0` とする。ログに「手動オーバーライドが使用された」旨を残す(このpass判定ロジック自体はissue #348の変更でも一切変えていない)
+
+**issue #348: マーカー作成行為そのものを人間確認(ask)で強制する。** 当初の設計では「VS Code側セッションに依頼してtouchする形でも可」としていたが、これだとブロックされた本人(エージェント自身)が人間に断りなく黙ってスキップ用ファイルを作成し、指摘を直さずすり抜けられてしまう抜け道になっていた。これを塞ぐため、PreToolUse hook `scripts/check-skip-marker-write.sh` を追加した:
+
+- `tool_name`が`Bash`の場合は`tool_input.command`全体(リダイレクト先パスを含む)、`Write`/`Edit`の場合は`tool_input.file_path`を対象に、正規表現 `\.claude/\.verify-state/[^/]+\.skip` にマッチするかを調べる
+- マッチした場合、`permissionDecision: "ask"` を返す(`hookSpecificOutput.hookEventName: "PreToolUse"`)。これにより、touch・echo・python等の手段を問わず、`.skip`ファイルへの書き込みを試みた瞬間に通常の権限確認ダイアログが表示される。人間がその場で承認しない限り作成されない
+- マッチしない場合は何も出力せずexit 0(allow/denyには関与せず、通常の権限フローに委ねる)
+- `.claude/settings.json`の`hooks.PreToolUse`に`matcher: "Bash|Write|Edit"`で登録している。**この`matcher`はツール名の完全一致(exact match)のリストであり、`"MultiEdit"`のような別名ツールには一致しない。**将来Claude Code側に別名の書き込み系ツールが追加された場合は、`matcher`と`scripts/check-skip-marker-write.sh`内の`case`文の両方を更新する必要がある(片方だけ直しても検知が効かない)
+- **cwd変更後の相対パス操作への対策(issue #348追加修正)**: 当初の実装は正規表現によるコマンド文字列の直接一致のみだったため、`cd .claude/.verify-state && touch abc.skip`という単一コマンド、または事前に`cd .claude/.verify-state`を実行済みの状態で別のBash呼び出しとして`touch abc.skip`のみを実行する、という**難読化ですらない通常の操作**で検知をすり抜けられることが4観点レビューで実証された。これに対し、(1)コマンド文字列中に`.claude/.verify-state`というディレクトリ参照と相対パスの`.skip`トークンの両方が含まれる場合、(2)hook入力の`cwd`フィールド(セッション間で持続する現在の作業ディレクトリ)が`.claude/.verify-state`配下を指しており、かつ対象文字列に相対パスの`.skip`トークンが含まれる場合、の2つを追加で検知するようにした
+
+**実機検証で確認した安全側への倒れ方**: `--permission-mode bypassPermissions`かつheadlessモード(人間が確認に応答できない自律実行環境)で実際に検証したところ、hookが返す`permissionDecision: "ask"`は無視されず、確認相手が存在しない場合はツール実行が拒否される側に倒れることを確認済み。つまり「誰も見ていない完全放置の自律実行中に黙って`.skip`が作成されてしまう」ケースは発生しない(応答待ちのまま進まない=ブロック継続と同じ安全側の挙動)。**この検証は本実装時点のセッション内で一度実施したものであり、自動回帰テストとしては存在しない。**再現可能な形でリポジトリに残っているのは正規表現マッチ部分の`scripts/check-skip-marker-write.test.sh`のみで、`bypassPermissions`環境での実際のask強制の挙動そのものは手動一回検証にとどまる。
+
+既知の限界:
+- 正規表現によるコマンド文字列マッチのため、変数展開・base64エンコード等で意図的に難読化されたコマンドは検知をすり抜けうる。典型的な手段(touch/echo/cp/mv/python -c/node -e等、コマンド文字列に直接パスが現れるもの)を塞ぐのが目的であり、完全な保証ではない
 
 ### インフラ障害時の扱い(fail-open例外)
 
@@ -224,7 +237,7 @@ Stop event
 | critical/important、retry > 3 | ブロック継続、人間の介入待ち。エスケープハッチ案内 |
 | minorのみ/findingsなし | pass(exit 0)、retry_countリセット |
 | 検証プロセス自体の失敗(タイムアウト等)、または出力JSONの解析失敗 | fail-open(exit 0、警告のみ) |
-| `.skip`マーカーあり | 無条件pass、マーカー消費 |
+| `.skip`マーカーあり | 無条件pass、マーカー消費(Stop hook側のロジックはissue #348で変更なし)。**ただしマーカー作成自体はPreToolUse hook(`scripts/check-skip-marker-write.sh`)でask強制(issue #348)** |
 
 ## 運用インシデント(postmortem)
 
@@ -315,7 +328,7 @@ claude_auto_issue / aidd_session_report が並走する。Claude Codeのhook実�
   2. diff一致・前回pass → 即pass(LLM呼び出しが発生しないこと)
   3. diff一致・前回blocked → LLM呼び出し無しでretry_count+1、再ブロック
   4. diff不一致・critical finding → ブロック、状態ファイルにblocked+retry_count記録
-  5. retry_countが3を超える → ブロック継続、エスケープハッチ案内が出力に含まれる
+  5. retry_countが3を超える → ブロック継続。**(issue #348)** ブロックメッセージに`touch`という語を含まないこと・「人間に相談」という文言を含むことをアサートする(具体的なコマンド案内を削除したため)
   6. `.skip`マーカーあり → 無条件pass、マーカーファイルが削除される
   7. 検証プロセス自体が失敗(モック) → fail-openでpass
   8. 同時実行数が上限に達している → サーキットブレーカーでfail-open(LLM呼び出し無し)
@@ -329,9 +342,26 @@ claude_auto_issue / aidd_session_report が並走する。Claude Codeのhook実�
   `scripts/check-verify-claims-fail-open-streak.test.sh`で別途、合成したログ行を使って
   連続fail-open検知・非連続時の非検知・`verifier_called=false`行の除外を検証する
 
+**(issue #348)** PreToolUse hook `scripts/check-skip-marker-write.sh` 単体の回帰テストは
+`scripts/check-skip-marker-write.test.sh` に分離した(Stop hook本体とは別プロセス・別入力形式の
+ため)。合成した`tool_name`/`tool_input`のhook入力JSONを標準入力で渡し、以下を確認する:
+  1. `Bash`で`command`が`touch .claude/.verify-state/abc.skip` → `permissionDecision: "ask"`が出力される
+  2. `Bash`で`command`が`echo x > .claude/.verify-state/abc.skip`(リダイレクト経由) → 同様に`ask`
+  3. `Write`で`file_path`が`.claude/.verify-state/abc.skip` → 同様に`ask`
+  4. `Bash`で`command`が無関係な通常コマンド(例: `npm test`) → 何も出力されない(exit 0、空出力)
+  5. `Bash`で`command`が`.claude/.verify-state/`配下だが`.skip`拡張子ではないファイル(例: `cat *.json`)への操作 → 何も出力されない
+  6. **(issue #348追加修正)** `command`が`cd .claude/.verify-state && touch abc.skip`という単一コマンド(cwdフィールド併用) → `ask`
+  7. **(issue #348追加修正)** 事前に`cd .claude/.verify-state`済みのcwdから`command`が`touch abc.skip`のみ → `ask`
+  8. `command`が`python3 -c "open('.claude/.verify-state/abc.skip','w').close()"`のようなpython3経由の書き込み → `ask`
+  9. `command`が`node -e "require('fs').writeFileSync('.claude/.verify-state/abc.skip','')"`のようなnode経由の書き込み → `ask`
+  10. `Edit`で`file_path`が`.claude/.verify-state/abc.skip` → `ask`
+
 ## 対象範囲外(YAGNI)
 
-- Stop以外のhookイベント(PreToolUse等)への拡張は今回のスコープ外
+- Stop以外のhookイベントへの拡張は今回のスコープ外。**ただし例外として、issue #348のエスケープ
+  ハッチ濫用対策(`.skip`マーカー作成行為そのものへのask強制)のみPreToolUse hookを追加した。**
+  これはStop hook本体の判定ロジック拡張ではなく、Stop hookとは独立した別の権限制御であり、
+  上記「エスケープハッチ(誤検知対策)」節を参照
 - CLIセッション(Claude Code CLI)側への同様の仕組みの導入は行わない(CLIはアドバイスのみの方針を維持)
 - severity分類自体のチューニング(閾値の精度向上等)は運用開始後の継続課題とする
 

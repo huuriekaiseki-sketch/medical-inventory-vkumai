@@ -145,8 +145,13 @@ run_hook "s5"   # retry 2 (diff不変)
 run_hook "s5"   # retry 3 (diff不変)
 run_hook "s5"   # retry 4 → 上限超過
 assert_eq "$EXIT_CODE" "2" "上限超過後もブロック継続"
-assert_contains "$STDERR_OUT" "touch" "エスケープハッチ(.skipマーカー作成方法)の案内が出力される"
-assert_contains "$STDERR_OUT" "s5.skip" "案内にセッション固有のskipマーカーパスが含まれる"
+if printf '%s' "$STDERR_OUT" | grep -qF -- "touch"; then
+  echo "  NG: ブロックメッセージにtouchという語を含まないこと"
+  fail=1
+else
+  echo "  OK: ブロックメッセージにtouchという語を含まないこと"
+fi
+assert_contains "$STDERR_OUT" "人間に相談" "ブロックメッセージに人間に相談してくださいという文言が含まれる"
 
 echo "=== scenario 6: .skipマーカーあり → 無条件pass、マーカー削除 ==="
 rm -f "$MOCK_CALL_LOG"

@@ -129,7 +129,7 @@ block_with_retry_check() {
   if [ "$new_retry" -le "$MAX_RETRIES" ]; then
     emit_block "$(printf 'verify-claims: 未解消の指摘を検出しました(試行%d/%d):\n%s' "$new_retry" "$MAX_RETRIES" "$findings_msg")"
   else
-    emit_block "$(printf 'verify-claims: %d回の自動修正を試みましたが指摘が解消されませんでした。人間の介入待ちです。誤検知の場合は `touch %s` でスキップできます。\n%s' "$MAX_RETRIES" "$SKIP_MARKER" "$findings_msg")"
+    emit_block "$(printf 'verify-claims: %d回の自動修正を試みましたが指摘が解消されませんでした。人間の介入待ちです。人間に相談してください。\n%s' "$MAX_RETRIES" "$findings_msg")"
   fi
 }
 
