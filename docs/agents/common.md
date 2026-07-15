@@ -54,6 +54,10 @@ any code. Heed deprecation notices.
 - **新しいissue・機能の作業を始める前に、現在のブランチが別issue用の未マージPRの対象になっていないか確認する**（`git branch --show-current` → `gh pr list --head <branch>`）。
   なっていた場合は、着手前に `git checkout -b <new-branch> main` で新しいブランチを切ってから進める。
   1つのPRに無関係なissueのコミットが混ざると、レビュアーが混乱し、片方だけ却下・差し戻しになった際に切り分けられなくなる
+  - **このルールのうち「現在のブランチに既にマージ済みのPRが乗っている」ケースは、SessionStart hook（`scripts/check-branch-pr-status.sh`）が機械的に警告する。**
+    `git branch --show-current` → `gh pr list --head <branch> --state merged` の結果が空でなければ、セッション開始時に警告メッセージを出す（block不可・warningのみ）。
+    実際にissue-20-orders-list-page等、マージ済みブランチ上で気づかず並行作業が続き、重複・陳腐化したworktreeが複数残った実害があったため導入した。
+    **「別issueの未マージPRが乗っている」ケース（マージ前の分岐）はこのhookの検知対象外**で、引き続き人手の確認に依存する。
 - **`git checkout -b <new-branch> main` の前に、必ず `git fetch origin main` してから最新の `origin/main` を起点にする**（`git checkout -b <new-branch> origin/main`、または直前に`git merge origin/main`でローカルmainを追従させる）。
   ローカルの`main`ブランチ参照は自動更新されない（`gh pr merge`はリモートを更新するだけで、ローカルの別ブランチにいる間はローカル`main`が古いまま）。古いローカル`main`から新しいブランチを切ると、直近でマージされたPRの変更が丸ごと欠落した状態で作業が進んでしまい、後から気づいて`origin/main`をマージし直す手戻りが発生する
 
@@ -176,7 +180,7 @@ any code. Heed deprecation notices.
 |---|---|---|
 | `aidd-phase1-router`を入口に使うこと自体（TRI/RISK判定の実施） | 本ファイル「TRI/RISK 機械判定基準」 | 判定ロジック自体は機械的だが、routerを経由せず直接実装に入れば判定がまるごとスキップされる（優先度2候補） |
 | 引き継ぎフォーマットの実施 | 本ファイル「引き継ぎフォーマット」 | 既存Stop hook（`doc-suggest-check.sh`等）の拡張候補（優先度3候補） |
-| ブランチ運用ルール（着手前PR確認・`origin/main`起点でのbranch作成） | 本ファイル「ブランチ運用ルール」 | 過去に古いローカル`main`起点でbranch作成し手戻りが発生した実績あり |
+| ブランチ運用ルール（`origin/main`起点でのbranch作成） | 本ファイル「ブランチ運用ルール」 | 過去に古いローカル`main`起点でbranch作成し手戻りが発生した実績あり。着手前PR確認のうち「マージ済みPRが乗っている」ケースのみ`scripts/check-branch-pr-status.sh`（SessionStart hook）で検知済み。「別issueの未マージPRが乗っている」ケースと`origin/main`起点確認自体は未検知のまま |
 | サーキットブレーカー（`/goal`設定・テスト修正3回まで・フロー全体上限） | ルートの`CLAUDE.md` | |
 | 停止①②以外で止まらず自律進行すること | ルートの`CLAUDE.md`「絶対ルール」 | |
 | AIDD stats書き出し（各フェーズでの`write_aidd_stats.sh`呼び出し） | ルートの`CLAUDE.md` | 呼び忘れても気づく手段がない |
