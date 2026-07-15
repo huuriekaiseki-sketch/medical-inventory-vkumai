@@ -161,16 +161,26 @@ fail-open(検証プロセス自体の失敗によるexit 0)が静かに常態化
 - **`was_previously_blocked`**: `pass`イベント限定。直前状態が`blocked`だった場合は`true`。
   これが「指摘が修正につながった」ことの直接シグナルになる(=誤検知でなければ、指摘後に
   正しく直されてpassに転じたということ)
-- **WHY untrackedファイルとして扱われない場所に書く必要がある**: `/logs/`は`.gitignore`済み
-  (既存の`loop-observability.jsonl`と同じ扱い)。これは単なる衛生上の配慮ではなく**必須**:
-  もし`/logs/`がgitignoreされていない場合、このログファイル自身がuntrackedファイルとして
-  「スキップ・再判定ロジック」のdiffハッシュ計算(issue #352で既にuntrackedファイルの中身を
-  含める方式に変更済み)に取り込まれ、判定のたびにログファイルが増えて中身が変わる
-  →ハッシュが常に変わる→ケース1(即pass)が二度と成立しなくなり、Stopのたびに必ず
-  `claude -p`を呼び続ける自己参照バグになる。テスト(`verify-claims.test.sh`)ではテスト用
-  gitリポジトリに`.gitignore`が無いため、`VERIFY_CLAIMS_OBSERVABILITY_LOG`を明示的に
-  リポジトリ外(`$WORKDIR`配下)へ向けて回避している(既存の`VERIFY_CLAIMS_STATE_DIR`/
-  `VERIFY_CLAIMS_LOCK_DIR`と同じパターン)
+- **untrackedファイルとしてdiffハッシュに混入しないようにする(自己参照バグ対策)**: `/logs/`・
+  `.claude/.verify-state/`は`.gitignore`済み(既存の`loop-observability.jsonl`と同じ扱い)だが、
+  **`.gitignore`の存在に暗黙依存させず、スクリプト自身でも明示的に除外する**。もし除外していない
+  場合、このログファイル自身がuntrackedファイルとして「スキップ・再判定ロジック」のdiffハッシュ
+  計算(issue #352で既にuntrackedファイルの中身を含める方式に変更済み)に取り込まれ、判定のたびに
+  ログファイルが増えて中身が変わる→ハッシュが常に変わる→ケース1/2(キャッシュ経路)が二度と
+  成立しなくなり、Stopのたびに必ず`claude -p`を呼び続ける、または`retry_count`の累積・リセット
+  判定が壊れる自己参照バグになる。
+  - 実装: `STATE_DIR`/`LOCK_DIR`/`OBS_LOG_FILE`の配置先ディレクトリを、`git diff HEAD` +
+    `git status --porcelain`の`?? path`行 + `git ls-files --others --exclude-standard`の
+    いずれからも明示的に除外する(`scripts/verify-claims.sh`の`is_excluded_path`)
+  - これら3つのパスは環境変数で絶対パスに上書きされる可能性があるため、比較前に絶対パスへ
+    正規化する(相対パスのまま前方一致比較すると、絶対パスで上書きされた場合に除外が効かない)
+  - 正規化後の除外ディレクトリがリポジトリ配下(`REPO_DIR`配下)に無い場合は除外対象に加えない:
+    除外ディレクトリがリポジトリの祖先ディレクトリだと、「`$ancestor/*`」というglobがリポジトリ
+    配下の全ファイルに誤って一致してしまうため
+  - テスト(`verify-claims.test.sh`)の大半のシナリオは`VERIFY_CLAIMS_OBSERVABILITY_LOG`を
+    リポジトリ外(`$WORKDIR`配下)へ向けて自己参照バグ自体を回避しているが、この除外ロジック
+    自体の回帰テストとして、ログをリポジトリ内(`$REPO/logs/...`)に明示的に置いた上で
+    キャッシュ経路(ケース2)が正しく機能することを検証するシナリオを別途用意している
 
 ### 計算できる指標(事後集計、本ドキュメントのスコープでは集計スクリプトは実装しない)
 

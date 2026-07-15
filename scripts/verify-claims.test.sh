@@ -373,6 +373,55 @@ echo "=== scenario 26: .skipマーカー使用がskip_usedイベントとして�
 SKIP_COUNT="$(jq -rs --arg sid "s6" '[.[] | select(.session_id == $sid and .event == "skip_used")] | length' "$OBS_LOG")"
 assert_eq "$SKIP_COUNT" "1" "skip_usedイベントが1件記録される"
 
+echo "=== scenario 27: 効果測定ログをリポジトリ内(untracked)に置いても診断用ハッシュに混入せずキャッシュが機能する ==="
+# WHY: OBS_LOG_FILEの既定値はREPO_DIR相対の"logs/..."であり、リポジトリ配下のuntrackedファイルになる。
+# もしdiffハッシュ計算からこのログファイル自身を除外していないと、ログ追記のたびにハッシュが
+# 変化し続け、「ハッシュ一致・前回blocked」のキャッシュ経路(LLM再呼び出し無しでretry消費)が
+# 機能しなくなる自己参照バグになる(このテストスイート内では他シナリオがOBS_LOG_FILEを
+# $REPO外に置いて回避しているため、他シナリオではこのバグを検知できない)。
+IN_REPO_OBS_LOG="$REPO/logs/verify-claims-observability.jsonl"
+rm -f "$MOCK_CALL_LOG"
+echo "line27" >> "$REPO/file.txt"
+echo '{"findings": [{"severity": "critical", "description": "解消されない指摘", "evidence": "file.txt:1"}]}' > "$MOCK_FINDINGS_FILE"
+set +e
+STDOUT_OUT="$(
+  cd "$REPO"
+  input="$(jq -n --arg sid "s27" --arg tp "$WORKDIR/no-transcript.jsonl" '{session_id: $sid, transcript_path: $tp}')"
+  printf '%s' "$input" | \
+    VERIFY_CLAIMS_REPO_DIR="$REPO" \
+    VERIFY_CLAIMS_STATE_DIR="$STATE_DIR" \
+    VERIFY_CLAIMS_OBSERVABILITY_LOG="$IN_REPO_OBS_LOG" \
+    VERIFY_CLAIMS_MAX_RETRIES=3 \
+    VERIFY_CLAIMS_VERIFIER_CMD="$MOCK_VERIFIER" \
+    MOCK_CALL_LOG="$MOCK_CALL_LOG" \
+    MOCK_FINDINGS_FILE="$MOCK_FINDINGS_FILE" \
+    bash "$SCRIPT"
+)"
+EXIT_CODE=$?
+set -e
+assert_eq "$EXIT_CODE" "2" "1回目(新規diff・critical)はブロック"
+assert_eq "$(call_count)" "1" "1回目は検証エージェントが1回呼ばれる"
+set +e
+STDOUT_OUT="$(
+  cd "$REPO"
+  input="$(jq -n --arg sid "s27" --arg tp "$WORKDIR/no-transcript.jsonl" '{session_id: $sid, transcript_path: $tp}')"
+  printf '%s' "$input" | \
+    VERIFY_CLAIMS_REPO_DIR="$REPO" \
+    VERIFY_CLAIMS_STATE_DIR="$STATE_DIR" \
+    VERIFY_CLAIMS_OBSERVABILITY_LOG="$IN_REPO_OBS_LOG" \
+    VERIFY_CLAIMS_MAX_RETRIES=3 \
+    VERIFY_CLAIMS_VERIFIER_CMD="$MOCK_VERIFIER" \
+    MOCK_CALL_LOG="$MOCK_CALL_LOG" \
+    MOCK_FINDINGS_FILE="$MOCK_FINDINGS_FILE" \
+    bash "$SCRIPT"
+)"
+EXIT_CODE=$?
+set -e
+assert_eq "$EXIT_CODE" "2" "2回目(同一diff、ログ追記後)も再ブロック"
+assert_eq "$(call_count)" "1" "2回目は検証エージェントを再度呼ばない(ログ追記でハッシュが変わっていないため、キャッシュ経路が機能する)"
+RETRY_COUNT_S27="$(jq -r '.retry_count' "$STATE_DIR/s27.json")"
+assert_eq "$RETRY_COUNT_S27" "2" "retry_countが2まで進む(キャッシュ経路でも正しくretryが消費される)"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

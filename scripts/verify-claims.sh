@@ -140,9 +140,60 @@ block_with_retry_check() {
 # claude_stop_notify.sh側のgit add -Aが先に走っていれば偶然trackedになり救われるが、hookの実行順序に
 # 依存する暗黙のカップリングだったため、ここではuntrackedファイルの中身を直接読んでハッシュ対象に含める
 # (indexは変更しない = git add -N等でこのスクリプトが副作用的にリポジトリ状態を書き換えない)。
-DIFF_CONTENT="$( { git diff HEAD; git status --porcelain; } 2>/dev/null || true)"
+#
+# WHY(自己参照バグ対策): このスクリプト自身が書き込む状態ファイル(STATE_DIR)・ロック(LOCK_DIR)・
+# 効果測定ログ(OBS_LOG_FILEの配置先ディレクトリ)がuntrackedのままだと、ログ追記のたびに中身が
+# 変化し、それ自体がdiffハッシュに混入して「何もソースを直していないのにハッシュが変わり続ける」
+# 自己参照バグになる(このプロジェクトでは/logs/・.claude/.verify-state/がgitignore対象のため
+# 実害はないが、.gitignoreの存在に暗黙依存させず、スクリプト自身でも明示的に除外する)。
+# `git status --porcelain`の`?? path`行(パスのみ・中身は含まない)にも同じ除外を適用する必要が
+# ある。UNTRACKED_CONTENTのループだけ除外しても、この`?? path`行自体が新規追加/削除されると
+# それだけでDIFF_CONTENTが変化してしまうため。
+# `git ls-files`/`git status --porcelain`はリポジトリルート相対のパスを返す一方、
+# STATE_DIR/LOCK_DIR/OBS_LOG_FILEは環境変数で絶対パスに上書きされる可能性があるため、
+# 比較前に両者を絶対パスへ正規化する(相対パスのまま前方一致比較すると、絶対パスで上書き
+# された場合に除外が効かなくなる)。さらに、正規化後の除外ディレクトリがリポジトリ配下
+# (REPO_DIR_ABS配下)に無い場合は除外対象に加えない: 除外ディレクトリがリポジトリの祖先
+# ディレクトリだと、「$ancestor/*」というglobがリポジトリ配下の全ファイルに一致してしまい、
+# 本来除外すべきでないファイルまで丸ごとハッシュ対象から消えてしまう。
+REPO_DIR_ABS="$(pwd)"
+to_abs_path() {
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+    *) printf '%s/%s' "$REPO_DIR_ABS" "$1" ;;
+  esac
+}
+is_within_repo() {
+  [[ "$1" == "$REPO_DIR_ABS" || "$1" == "$REPO_DIR_ABS"/* ]]
+}
+is_excluded_path() {
+  local abs
+  abs="$(to_abs_path "$1")"
+  [[ ( -n "$STATE_DIR_ABS" && "$abs" == "$STATE_DIR_ABS"/* ) || ( -n "$LOCK_DIR_ABS" && "$abs" == "$LOCK_DIR_ABS"/* ) || ( -n "$OBS_LOG_DIR_ABS" && "$abs" == "$OBS_LOG_DIR_ABS"/* ) ]]
+}
+STATE_DIR_ABS="$(to_abs_path "$STATE_DIR")"
+is_within_repo "$STATE_DIR_ABS" || STATE_DIR_ABS=""
+LOCK_DIR_ABS="$(to_abs_path "$LOCK_DIR")"
+is_within_repo "$LOCK_DIR_ABS" || LOCK_DIR_ABS=""
+OBS_LOG_DIR_ABS="$(to_abs_path "$(dirname "$OBS_LOG_FILE")")"
+is_within_repo "$OBS_LOG_DIR_ABS" || OBS_LOG_DIR_ABS=""
+
+STATUS_PORCELAIN="$(git status --porcelain 2>/dev/null || true)"
+FILTERED_STATUS=""
+while IFS= read -r status_line; do
+  [ -n "$status_line" ] || continue
+  if [[ "$status_line" == '?? '* ]] && is_excluded_path "${status_line#\?\? }"; then
+    continue
+  fi
+  FILTERED_STATUS="$(printf '%s\n%s' "$FILTERED_STATUS" "$status_line")"
+done <<< "$STATUS_PORCELAIN"
+
+DIFF_CONTENT="$( { git diff HEAD 2>/dev/null || true; printf '%s' "$FILTERED_STATUS"; } )"
 UNTRACKED_CONTENT="$(
   while IFS= read -r -d '' f; do
+    if is_excluded_path "$f"; then
+      continue
+    fi
     printf '%s\0' "$f"
     cat -- "$f" 2>/dev/null
   done < <(git ls-files --others --exclude-standard -z 2>/dev/null || true)
