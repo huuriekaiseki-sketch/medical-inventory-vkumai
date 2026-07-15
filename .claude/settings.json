@@ -66,6 +66,8 @@
       "Bash(~/write_aidd_stats.sh *)",
       "Bash(scripts/log-loop-observability.sh *)",
       "Bash(/Users/masanori/medical-inventory-vkumai/scripts/log-loop-observability.sh *)",
+      "Bash(scripts/log-agent-progress.sh *)",
+      "Bash(scripts/show-agent-status.sh *)",
       "Bash(scripts/doc-suggest-check.sh *)",
       "Bash(scripts/ai-check-suggest.sh *)",
       "Bash(scripts/verify-claims.sh *)",
