@@ -113,6 +113,25 @@ any code. Heed deprecation notices.
     未対応のまま残っている（Sweep/Completeness Criticの一部のみが進捗記録対象agentTypeで、
     Find/Adversarial Verify/Judge Panel等の大半がそもそも進捗記録の対象外agentTypeで呼ばれて
     いるため、既存の期待値カウント方式をそのまま適用できない）。
+- **記録内容の正しさの検証（issue #369の②スコープ）も実装済み。**
+  `scripts/verify-agent-progress-transcript.sh` が `logs/agent-progress.jsonl` の自己申告
+  （status=done|failed）と、対応するtranscript（`~/.claude/projects/**/subagents/workflows/
+  wf_*/agent-<id>.jsonl` + `.meta.json`、`scripts/lib/reconstruct-loop-observability.ts`の
+  パース処理を再利用）のstatus/detailを機械比較し、食い違う行のみ検出する。LLM呼び出し不要。
+  - agent-progress.jsonlはagentId/workflow実行IDを保持しないため、`--agent`名から既知
+    agentType一覧への前方一致でagentTypeを復元し、同じagentType内で最も時刻が近い
+    transcriptに貪欲に対応付けるベストエフォート方式（`scripts/lib/
+    verify-agent-progress-transcript.ts`の`matchRecords`）。1:1のID突合ではないため、
+    高並行実行下では誤対応の可能性が残る。
+  - statusの食い違い（自己申告doneなのにtranscriptがfail等）は確定的な指摘として
+    `mismatches` に、detailの低一致（文字bigramのJaccard類似度が閾値未満）は
+    「要目視確認」の弱いシグナルとして `lowOverlapDetails` に分けて出力する
+    （表現が違うだけの正常なケースを誤検知しないため、detail側は自動ブロックしない）。
+  - issue #369の①（git diffとの突き合わせ）・③（LLMサンプリング検証）は解禁条件付きで
+    保留中。①はagent-progress.jsonlにagentTypeの書き込み系/読み取り専用分類を持たせてから、
+    ③は①②が安定稼働した後かつ`verify-claims.sh`と同型のサーキットブレーカー3点セット
+    （hooks非継承・セッション非永続化・同時実行数上限）を初回コミットから組み込んだ上でのみ
+    着手する。issue本文に理由を明記済み。
 
 ## 引き継ぎフォーマット
 
