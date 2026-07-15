@@ -173,6 +173,118 @@ RUN_AGENT_BLOCK="$(awk '/^run_agent\(\)/,/^}/' "$SCRIPT")"
 assert_contains "$RUN_AGENT_BLOCK" '--setting-sources ""' "claude -p呼び出しに--setting-sources \"\"が付いている(Stop hook再帰発火防止)"
 assert_contains "$RUN_AGENT_BLOCK" '--no-session-persistence' "claude -p呼び出しに--no-session-persistenceが付いている"
 
+echo "=== scenario 6: git cloneが失敗する → 当該fixtureをNGとして継続実行し、全体をabortしない(レビュー指摘1) ==="
+rm -f "$MOCK_CALL_LOG"
+echo '{ "status": "pass" }' > "$FIXTURES_DIR/sample/case-b/expected.json"
+echo '{ "status": "pass" }' > "$MOCK_RESPONSE_FILE"
+BROKEN_REPO_DIR="$WORKDIR/no-such-repo"
+set +e
+OUT="$(
+  EVAL_WORKFLOW_PROMPTS_REPO_DIR="$BROKEN_REPO_DIR" \
+  EVAL_WORKFLOW_PROMPTS_FIXTURES_DIR="$FIXTURES_DIR" \
+  EVAL_WORKFLOW_PROMPTS_LOCK_DIR="$WORKDIR/lock-clone-fail" \
+  EVAL_WORKFLOW_PROMPTS_MAX_CONCURRENT=2 \
+  EVAL_WORKFLOW_PROMPTS_AGENT_CMD="$MOCK_AGENT" \
+  MOCK_CALL_LOG="$MOCK_CALL_LOG" \
+  MOCK_RESPONSE_FILE="$MOCK_RESPONSE_FILE" \
+  bash "$SCRIPT" sample 2>"$WORKDIR/stderr6.tmp"
+)"
+EXIT_CODE=$?
+ERR="$(cat "$WORKDIR/stderr6.tmp")"
+set -e
+assert_eq "$EXIT_CODE" "1" "cloneが失敗するfixtureセットはexit 1"
+assert_contains "$OUT$ERR" "case-a" "cloneに失敗したcase-aがNGとして報告される(スキップされていない)"
+assert_contains "$OUT$ERR" "case-b" "case-aで落ちずcase-bまで継続実行される(全体abortしていない)"
+assert_contains "$OUT$ERR" "cloneに失敗しました" "cloneの失敗理由が報告に含まれる"
+if [ -f "$MOCK_CALL_LOG" ]; then
+  echo "  NG: cloneに失敗した以上エージェントは呼ばれないはずだが呼び出しログが存在する"
+  fail=1
+else
+  echo "  OK: cloneに失敗した場合はエージェントを呼ばない"
+fi
+
+echo "=== scenario 7: プロンプト構築(build-eval-prompt.mjs)が失敗する → 当該fixtureをNGとして継続実行(レビュー指摘1) ==="
+rm -f "$MOCK_CALL_LOG"
+BROKEN_MANIFEST_FIXTURES_DIR="$WORKDIR/fixtures-broken-manifest"
+mkdir -p "$BROKEN_MANIFEST_FIXTURES_DIR/sample/case-a" "$BROKEN_MANIFEST_FIXTURES_DIR/sample/case-b"
+# WHY: promptFnにdummy-prompt.jsが実際にはexportしていない関数名を指定し、
+# build-eval-prompt.mjsが`is not exported`でexit 1する状況を再現する。
+cat > "$BROKEN_MANIFEST_FIXTURES_DIR/sample/manifest.json" <<'EOF'
+{
+  "agentType": "implementer",
+  "promptModule": "scripts/eval-fixtures/dummy-prompt.js",
+  "promptFn": "thisFunctionDoesNotExist",
+  "model": "sonnet",
+  "jsonSchema": { "type": "object", "properties": { "status": { "type": "string" } }, "required": ["status"] }
+}
+EOF
+echo "spec-a" > "$BROKEN_MANIFEST_FIXTURES_DIR/sample/case-a/spec.md"
+echo '{ "status": "pass" }' > "$BROKEN_MANIFEST_FIXTURES_DIR/sample/case-a/expected.json"
+echo "spec-b" > "$BROKEN_MANIFEST_FIXTURES_DIR/sample/case-b/spec.md"
+echo '{ "status": "pass" }' > "$BROKEN_MANIFEST_FIXTURES_DIR/sample/case-b/expected.json"
+set +e
+OUT="$(
+  EVAL_WORKFLOW_PROMPTS_REPO_DIR="$DUMMY_REPO" \
+  EVAL_WORKFLOW_PROMPTS_FIXTURES_DIR="$BROKEN_MANIFEST_FIXTURES_DIR" \
+  EVAL_WORKFLOW_PROMPTS_LOCK_DIR="$WORKDIR/lock-build-fail" \
+  EVAL_WORKFLOW_PROMPTS_MAX_CONCURRENT=2 \
+  EVAL_WORKFLOW_PROMPTS_AGENT_CMD="$MOCK_AGENT" \
+  MOCK_CALL_LOG="$MOCK_CALL_LOG" \
+  MOCK_RESPONSE_FILE="$MOCK_RESPONSE_FILE" \
+  bash "$SCRIPT" sample 2>"$WORKDIR/stderr7.tmp"
+)"
+EXIT_CODE=$?
+ERR="$(cat "$WORKDIR/stderr7.tmp")"
+set -e
+assert_eq "$EXIT_CODE" "1" "プロンプト構築が失敗するfixtureセットはexit 1"
+assert_contains "$OUT$ERR" "case-a" "構築に失敗したcase-aがNGとして報告される(スキップされていない)"
+assert_contains "$OUT$ERR" "case-b" "case-aで落ちずcase-bまで継続実行される(全体abortしていない)"
+assert_contains "$OUT$ERR" "プロンプトの構築に失敗しました" "プロンプト構築の失敗理由が報告に含まれる"
+if [ -f "$MOCK_CALL_LOG" ]; then
+  echo "  NG: プロンプト構築に失敗した以上エージェントは呼ばれないはずだが呼び出しログが存在する"
+  fail=1
+else
+  echo "  OK: プロンプト構築に失敗した場合はエージェントを呼ばない"
+fi
+
+echo "=== scenario 8: case-*/ディレクトリが1件もない → 0/0合格の誤ったexit 0にせずexit 1にする(レビュー指摘2) ==="
+EMPTY_FIXTURES_DIR="$WORKDIR/fixtures-empty"
+mkdir -p "$EMPTY_FIXTURES_DIR/sample"
+cat > "$EMPTY_FIXTURES_DIR/sample/manifest.json" <<'EOF'
+{
+  "agentType": "implementer",
+  "promptModule": "scripts/eval-fixtures/dummy-prompt.js",
+  "promptFn": "buildDummyPrompt",
+  "model": "sonnet",
+  "jsonSchema": { "type": "object", "properties": { "status": { "type": "string" } }, "required": ["status"] }
+}
+EOF
+set +e
+OUT="$(
+  EVAL_WORKFLOW_PROMPTS_REPO_DIR="$DUMMY_REPO" \
+  EVAL_WORKFLOW_PROMPTS_FIXTURES_DIR="$EMPTY_FIXTURES_DIR" \
+  EVAL_WORKFLOW_PROMPTS_LOCK_DIR="$WORKDIR/lock-empty" \
+  EVAL_WORKFLOW_PROMPTS_MAX_CONCURRENT=2 \
+  EVAL_WORKFLOW_PROMPTS_AGENT_CMD="$MOCK_AGENT" \
+  MOCK_CALL_LOG="$MOCK_CALL_LOG" \
+  MOCK_RESPONSE_FILE="$MOCK_RESPONSE_FILE" \
+  bash "$SCRIPT" sample 2>"$WORKDIR/stderr8.tmp"
+)"
+EXIT_CODE=$?
+ERR="$(cat "$WORKDIR/stderr8.tmp")"
+set -e
+assert_eq "$EXIT_CODE" "1" "case-*/が1件も無い場合はexit 1(0/0合格のexit 0にしない)"
+assert_contains "$ERR" "case-*/ ディレクトリが1件も見つかりません" "設定ミスを示すエラーメッセージがstderrに出る"
+
+# scenario 9(タイムアウト時のプロセスグループkill、レビュー指摘3)は自動テストとして
+# 追加を試みたが、この開発環境のBashツールのサンドボックスがツール呼び出し境界をまたいで
+# 孤児プロセスを回収してしまい、修正前(単一PID kill)のコードに対しても「孫プロセスは
+# 停止している」という偽陽性のOKが再現性なく出た(同一プロセス内で比較する分離スクリプトでは
+# 修正前=孫プロセス生存/修正後=孫プロセス停止の差を安定して確認できたが、test.sh経由では
+# 再現しなかった)。フレーキーな自動テストを追加するとCIで偽の安心感を与えるため、ここでは
+# 追加せず、手動検証で代替した(検証内容はissue #391のtask-6-report.md「Fix for review
+# findings」セクションを参照)。
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
