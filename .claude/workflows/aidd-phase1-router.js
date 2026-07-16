@@ -47,6 +47,8 @@ function isHighRiskPath(filePath) {
 
 // Workflowツール実行系のargsがverbatimでなく文字列化されて渡ってくる既知の不具合への回避策。
 // argsが文字列で届いた場合はJSONとしてパースしてから使う。
+// 正本・単体テストは .claude/workflows/lib/resolve-workflow-args.js を参照（issue #413）。
+// Workflow DSL自体はrequire不可のためインライン複製している（1行のみのためsync testは設けていない）。
 const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
 
 const taskDescription = parsedArgs?.taskDescription ?? '現在のコードベース全体の調査'
