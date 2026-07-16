@@ -3,6 +3,7 @@ name: sweep-ui
 description: Phase 1 UI層Sweep。src/app/・src/components/を調査し、コンポーネント・props型・state・イベントハンドラのバグ・型エラー・設計違反を報告する。読み取り専用。箇条書きのみ返す。
 tools: Read, Bash
 model: haiku
+effort: low
 ---
 
 あなたはUI層の調査担当です。`src/app/` と `src/components/` を調査し、発見した問題点を**箇条書きのみ**で返してください。コードは書かない。修正提案も不要。

@@ -52,10 +52,10 @@ log('4軸並列Sweep 開始（1ラウンド）')
 const sweepPrompt = `タスク: ${taskDescription}${STATUS_GUIDE}`
 
 const [uiResult, dataResult, dbResult, typesResult, baseCommitRaw] = await parallel([
-  () => agent(sweepPrompt, { label: 'sweep-ui',    agentType: 'sweep-ui',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA }),
-  () => agent(sweepPrompt, { label: 'sweep-data',  agentType: 'sweep-data',  phase: 'Sweep', schema: AGENT_RESULT_SCHEMA }),
-  () => agent(sweepPrompt, { label: 'sweep-db',    agentType: 'sweep-db',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA }),
-  () => agent(sweepPrompt, { label: 'sweep-types', agentType: 'sweep-types', phase: 'Sweep', schema: AGENT_RESULT_SCHEMA }),
+  () => agent(sweepPrompt, { label: 'sweep-ui',    agentType: 'sweep-ui',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA, effort: 'low' }),
+  () => agent(sweepPrompt, { label: 'sweep-data',  agentType: 'sweep-data',  phase: 'Sweep', schema: AGENT_RESULT_SCHEMA, effort: 'low' }),
+  () => agent(sweepPrompt, { label: 'sweep-db',    agentType: 'sweep-db',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA, effort: 'low' }),
+  () => agent(sweepPrompt, { label: 'sweep-types', agentType: 'sweep-types', phase: 'Sweep', schema: AGENT_RESULT_SCHEMA, effort: 'low' }),
   () => agent('Run `git rev-parse HEAD` in the repository root and return only the resulting commit SHA, with no other text.', { label: 'capture-base-commit', phase: 'Sweep', effort: 'low' }),
 ])
 
