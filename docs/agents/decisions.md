@@ -216,3 +216,45 @@ common.mdの分量は増え続けており、prose追加1件ごとに他ルー�
 （検証メカニズムのメタ階層が自己申告→transcript突合→gap check→fault injection/evalの4段まで
 増殖し、機械トリガーで自動的に回るのはprompt sync test（npm test内）とSessionStart hookのみ
 という実測に基づく）。
+
+## issue #399の根本原因確定と修正（Workflowスクリプトのargs文字列化バグ）
+
+issue #399（Spec Checkが指定specPath以外のファイルを読んでpass誤判定する）は、複数回の調査
+（PR #402のactualPath自己申告+機械照合追加後も再現）を経て原因不明のまま残っていたが、
+2026-07-16の再検証で根本原因を確定できた。
+
+**確定した原因:** `.claude/workflows/aidd-phase2.js`は、`const specPath = args?.specPath ??
+'SPEC.md'`のように`args`を直接参照していた。`.claude/workflows/aidd-phase1-router.js`は
+既に「Workflowツールに`args`をオブジェクトとして渡してもスクリプト内では`typeof args ===
+'string'`（JSON文字列化された状態）で届く」という既知の不具合への防御コード
+（`typeof args === 'string' ? JSON.parse(args) : args`、正本は`.claude/workflows/lib/
+resolve-workflow-args.js`、issue #413）を持っていたが、`aidd-phase2.js`・`aidd-phase1.js`・
+`aidd-1-1-deep-task.js`・`aidd-session-report.js`の4ファイルにはこのガードが**無かった**。
+このため`args?.specPath`は常に`undefined`になり、`specPath`は常にデフォルト値`'SPEC.md'`に
+フォールバックしていた（`args.specPath`を明示的に無視していたのではなく、単純に読めていな
+かった）。
+
+**再検証で得られた実測データ:** 最小構成のWorkflowスクリプト（`args`をログ出力するだけ）を
+`args: {"specPath": "..."}`とオブジェクトの形で渡して実行したところ、`typeof args ===
+"string"`・`rawArgs`が JSON文字列そのものであることを確認した。この不具合は特定セッション
+固有のものではなく、別セッションでも再現する既存の不具合であることが確定した（過去の調査
+コメントにあった「別セッション・別環境での再検証を推奨する」という提案への回答）。
+
+**修正:** 上記4ファイルに`aidd-phase1-router.js`と同一の防御コードを追加した。修正後、
+`scripts/aidd-fault-injection-setup.sh missing-spec`シナリオを実際に`Workflow`ツールで
+実行し、Spec Checkが指定specPath（存在しないパス）を正しくReadしようとして
+`blockedAt: "Spec Check"`（`actualPath`は指定した存在しないパスの絶対パス、リポジトリ
+ルート直下の無関係な`SPEC.md`ではない）を返すことを確認した。
+
+**副次的に判明した重要な運用上の落とし穴:** `Workflow({name: "aidd-phase2", args: ...})`
+（登録済みワークフロー名での起動）は、直前に`.claude/workflows/aidd-phase2.js`を編集して
+保存した直後であっても、**古い（編集前の）スクリプト内容で実行された**（生成された
+スクリプトファイルの中身を確認して確定）。`Workflow({scriptPath: "<実ファイルの絶対パス>",
+args: ...})`で明示的にファイルパスを指定した場合は、正しく編集後の内容が使われた。つまり
+`name`指定はキャッシュされたスナップショットを使う可能性があり、ワークフロースクリプトを
+編集した直後の動作確認には`scriptPath`で実ファイルを直接指定する必要がある。この挙動の
+差異が、過去のissue #399調査で「同じスクリプト内の同じ`specPath`変数のはずなのに
+Spec CheckとManifest Checkで挙動が違う」「再検証結果が再現しない」という一見矛盾した観測を
+一部説明している可能性がある（過去の調査がどちらの呼び出し方を使ったかは記録が無く確認
+できないため、断定はできない）。今後ワークフロースクリプトの挙動を調査・検証する際は、
+`name`ではなく`scriptPath`で実ファイルを指定することを推奨する。
