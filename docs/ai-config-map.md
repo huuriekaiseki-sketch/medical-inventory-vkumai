@@ -99,6 +99,54 @@ medical-inventory-vkumai/               ← このプロジェクト
 
 ---
 
+## effort/model指定がどの実行経路に効くか（issue #433）
+
+`.claude/agents/*.md`のfrontmatter（`model:`/`effort:`）は、そのagentTypeを**agentType経由で
+呼び出した場合にのみ**適用される。一方、`.claude/workflows/*.js`内には同じ役割を担うのに
+frontmatterを一切参照せず`opts.model`/`opts.effort`を直接指定しているインライン実装が複数あり、
+frontmatterを変更しても実フローの挙動が変わらないケースがある（issue #419実装時に発覚。
+詳細はissue #419のPR #422コメント「重要な発見」参照）。
+
+**この二重管理はプロンプト正本問題（`workflow-prompt-sync.test.js`）と同型のドリフトリスクを
+持つが、意図的な差異（後述）があるため単純な一字一致sync testは適用できない。**
+
+### 対応表
+
+| agentType | frontmatter (model/effort) | 実際に効く経路 | 備考 |
+|---|---|---|---|
+| `sweep-ui` / `sweep-data` / `sweep-db` / `sweep-types` | haiku / low | ✅ `aidd-phase1.js`・`aidd-1-1-deep-task.js`が`agentType:'sweep-*'`で呼ぶ（`effort:'low'`もインラインで明示再指定、frontmatterと重複するが一致） | frontmatterとインライン指定が一致している健全なケース |
+| `contract-writer` | sonnet / (指定なし) | ✅ `aidd-phase2.js`が`agentType:'contract-writer'`で呼ぶ | frontmatterがそのまま適用される |
+| `implementer` | sonnet / (指定なし) | ✅ `aidd-phase2.js`（db-impl/data-impl/api-impl/ui-impl/implementer-retry）・`aidd-session-report.js`（report-writer）が`agentType:'implementer'`で呼ぶ | 同上 |
+| `integrator` | sonnet / (指定なし) | ✅ `aidd-phase2.js`が`agentType:'integrator'`で呼ぶ | 同上 |
+| `reviewer` | sonnet / (指定なし) | ✅ `aidd-phase2.js`（spec-check/manifest-check/review:*）が`agentType:'reviewer'`で呼ぶ | 同上 |
+| `completeness-critic` | sonnet / (指定なし) | ⚠️ **一部のみ**: `aidd-1-1-deep-task.js`のPhase 1ラウンド末の`critic:R${round}`呼び出しは`agentType:'completeness-critic'`経由（frontmatterが効く）。一方、Find/Adversarial Verify後の2回目のcritic呼び出し（`completeness-critic-2`）は`agentType`を使わず`model:'claude-sonnet-4-6', effort:'medium'`を直接指定（frontmatterは効かない） | 同名の役割が2箇所で呼ばれ、片方だけagentType経由という非対称なケース |
+| `adversarial-verify` | opus / **xhigh** | ❌ **効かない（Workflow内）**。`aidd-1-1-deep-task.js`のAdversarial Verifyフェーズは`agentType`を使わず`model:'claude-opus-4-8', effort:'medium'`を直接指定 | frontmatterのeffort変更が反映されるのは、Agent toolで直接`subagent_type:"adversarial-verify"`を呼ぶ経路（spec-deep-validateフロー、オーケストレーターが手動で呼ぶ場合）のみ |
+| `judge-panel` | sonnet / **xhigh** | ❌ **効かない（Workflow内）**。`aidd-1-1-deep-task.js`のJudge Panelフェーズは`agentType`を使わず、提案生成（`propose:*`、`model:'claude-sonnet-4-6', effort:'medium'`）と採点（`score:*:*`、`model:'claude-haiku-4-5-20251001', effort:'low'`、**意図的に安価な構成**）に分かれてそれぞれ直接指定 | 同上。採点は3案×3観点=最大9並列のため、意図的にhaiku+lowでコストを抑えている（frontmatterのxhighをそのまま適用すると採点コストが跳ね上がる） |
+| `proposer`（`~/.claude/agents/proposer.md`、グローバル） | sonnet / (指定なし) | ❌ **効かない（Workflow内）**。`aidd-1-1-deep-task.js`のJudge Panel「propose」呼び出しは`agentType:'proposer'`を使わず`model:'claude-sonnet-4-6', effort:'medium'`を直接指定 | frontmatterが効くのは、Agent toolで直接`subagent_type:"proposer"`を呼ぶ経路（spec-deep-validateフロー）のみ |
+
+### 意図的な差異（単純sync test化できない理由）
+
+- **judge-panelの採点フェーズ**: frontmatterは`effort: xhigh`だが、採点は意図的に`haiku` +
+  `effort: low`にしている（3案×3観点の並列採点でコストが跳ね上がるのを防ぐため）。
+  frontmatterと一致させることは設計上望ましくない
+- **adversarial-verify**: frontmatterは`effort: xhigh`だが、Workflow内は`effort: medium`。
+  Workflow内の反証は1指摘ずつ並列実行されるため、xhighにすると指摘数に比例してコストが
+  増大する。frontmatter（Agent tool直接呼び出し用の重量設定）とWorkflow内（大量並列実行用の
+  軽量設定）は意図的に別配分にしている
+- **completeness-criticの2箇所呼び出し**: 1回目（ラウンド末、agentType経由）と2回目
+  （Find/Adversarial Verify後、インライン）は文脈が異なる別々の批評であり、常に同じ設定に
+  揃える必要はない
+
+### 将来この対応表を機械的に同期させたくなった場合の注意
+
+`workflow-prompt-sync.test.js`と同じパターン（正本を切り出し、インライン複製との一致をテストで
+検証）をそのまま適用することはできない。上記のとおり意図的な差異があるため、単純な一字一致
+チェックではなく、**「frontmatterと異なる値を意図的に使ってよいagentType×呼び出し箇所」の
+例外リスト**を持つ設計が必須。例外リストが陳腐化しないよう、例外を追加する際はこの表と
+`docs/agents/decisions.md`に理由を記録すること。
+
+---
+
 ## プロジェクト固有スキル（`.claude/skills/`）
 
 | スキル | いつ呼ぶ | 出力 |
