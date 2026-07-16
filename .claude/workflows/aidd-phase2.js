@@ -126,12 +126,13 @@ const SPEC_CHECK_SCHEMA = {
   properties: {
     status: { type: 'string', enum: ['pass', 'blocked'] },
     detail: { type: 'string' },
+    actualPath: { type: 'string' },
   },
-  required: ['status', 'detail'],
+  required: ['status', 'detail', 'actualPath'],
 }
 
 const specCheck = await agent(
-  `Readツールで ${specPath} が存在し読み込めるか確認してください。それ以外は何もしないでください。${guide(
+  `Readツールで ${specPath} が存在し読み込めるか確認してください。指定されたパス以外のファイル（例: リポジトリルート直下の別のSPEC.md）が見つかっても、それは無視して絶対に読まないでください。それ以外は何もしないでください。\n\n完了報告のactualPathフィールドに、実際にReadツールへ渡した絶対パスを（今回指定された ${specPath} をそのまま解決したもので）必ず記載してください。${guide(
     `${specPath}が存在し読み込めた`,
     '（未使用: このエージェントはpass/blockedの2値のみ返す）',
     `${specPath}が存在しない、または読み込めない`
@@ -141,7 +142,29 @@ const specCheck = await agent(
 
 countLoggable('reviewer')
 countProgressLoggable('reviewer')
-log(`Spec Check完了: status=${specCheck?.status ?? 'なし'}`)
+log(`Spec Check完了: status=${specCheck?.status ?? 'なし'}, actualPath=${specCheck?.actualPath ?? 'なし'}`)
+
+// issue #399: Workflowツール側の非対称バグにより、最初のagent()呼び出し（Spec Check）だけが
+// 指定specPathを無視しデフォルト値'SPEC.md'を対象にしてしまう事象が実測で確認されている。
+// 根本原因はWorkflowツール側にある可能性が高く本スクリプトでは修正できないため、当面の防御として
+// 「実際にReadした絶対パス」を自己申告させ、指定specPathとの文字列一致をここで機械検証する。
+// 判定ロジックの正本・テストは .claude/workflows/lib/spec-check.js の isSpecCheckPathMismatch。
+// Workflow DSLはrequire不可のためインライン複製している（プロンプト文言を変更した場合は
+// spec-check.js側も手動で追従させること。自動では同期されない）。
+const specCheckPathMismatch = specCheck?.status === 'pass'
+  && typeof specCheck?.actualPath === 'string'
+  && !specCheck.actualPath.endsWith(specPath)
+
+if (specCheckPathMismatch) {
+  log(`品質ゲート: Spec Checkが指定specPath(${specPath})ではなく別ファイル(${specCheck.actualPath})を読んだため中断（issue #399）`)
+  return {
+    done: false,
+    specCheck,
+    blocked: true,
+    blockedAt: 'Spec Check',
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Spec Check', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
+  }
+}
 
 if (shouldBlock([specCheck])) {
   log(`品質ゲート: ${specPath}が存在しないため中断（Manifest Check以降のエージェントは起動しません）`)
