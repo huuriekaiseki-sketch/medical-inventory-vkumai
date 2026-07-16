@@ -137,6 +137,19 @@ any code. Heed deprecation notices.
     （hooks非継承・セッション非永続化・同時実行数上限）を初回コミットから組み込んだ上でのみ
     着手する。issue本文に理由を明記済み。
 
+## AIDDワークフロープロンプトのeval（issue #391）
+
+`.claude/workflows/*.js` 内の自然言語プロンプト（例: db-implの「DBスキーマ変更不要ならblockedではなくpass」という判定基準）は、ユニットテストが効かず、修正の妥当性が「次回実フローでの目視確認」頼みになりがちだった（issue #389のフォローアップ）。fixture SPEC.mdを実際のエージェント（`claude -p --agent <agentType>`、本番と同じモデル）に読ませ、期待するstatus判定になるかを回帰テストする仕組みを用意した。
+
+- `npm run eval:workflows <fixtureセット名>`（例: `npm run eval:workflows db-impl`）で実行する。実体は `scripts/eval-workflow-prompts.sh`。
+- fixtureは `scripts/eval-fixtures/<name>/` に `manifest.json`（agentType・プロンプトのビルド元モジュール・モデル・出力スキーマ）と `case-*/spec.md` + `case-*/expected.json` を置く形式。db-implには3ケース（①DB変更あり→pass ②「該当なし」明記→pass ③DB言及なし→blocked）を用意済み。将来contract-writer等のプロンプトを追加する場合は `scripts/eval-fixtures/<name>/` を増やすだけでよい。
+- 各fixtureはローカルの一時ディレクトリへリポジトリを `git clone --depth 1` してから実行する。本体の `supabase/migrations/` 等を実際に汚さないための隔離（fixture①はマイグレーションファイルを実際に書こうとするため）。
+- `claude -p` 呼び出しには `--setting-sources ""` と `--no-session-persistence` を初回コミットから組み込んでいる（verify-claims.shが2026-07-14に経験したStop hook再帰暴走と同型の事故を未然に防ぐため）。同時実行数の上限によるサーキットブレーカーも同様に組み込み済み。
+- `--setting-sources ""` は `.claude/agents/*.md` のファイル探索によるカスタムagent型解決も同時に無効化してしまうため（`--agent implementer` が `not found` になる）、実際の `claude -p` 呼び出しでは `.claude/agents/<agentType>.md` のYAML frontmatterを除いた本文を `--agents` フラグで明示的に注入している（`scripts/lib/build-eval-agent-json.mjs`）。`--setting-sources ""` を弱めずにこの問題を回避するための組み合わせであり、削るとevalの実エージェント呼び出しが全滅する load-bearing な仕組みなので、harnessを触る際は要注意。
+- モデルは意図的に安価なモデルへ差し替えていない（実際のdb-impl実行時と同じsonnet）。安いモデルでevalすると「本番で実際に動くもの」と異なる挙動をテストすることになり、モックが実環境の挙動を隠す典型的な落とし穴に陥るため。
+- プロンプト本文のドリフト対策として、db-implプロンプトの正本を `.claude/workflows/lib/prompts/db-impl.js` に切り出し、`aidd-phase2.js` 側のインライン複製との一字一句の一致を `.claude/workflows/lib/__tests__/workflow-prompt-sync.test.js` が機械的に検証する（`npm test`に含まれる）。
+- **運用ルール（検知手段なし）**: `.claude/workflows/*.js` のプロンプト文言を変更したPRは、マージ前に `npm run eval:workflows <対応するfixtureセット>` を手動実行することが望ましい。CI化（PR時の自動実行）は実エージェント呼び出しの課金コストを理由に見送った。**この運用ルール自体、実行し忘れても気づく機械的な手段が無い**（下記「検知手段のないルールの棚卸し」参照）。将来案として、`.claude/workflows/*.js` が変更されたPRに対し、evalが最近実行された形跡（タイムスタンプファイル等）の有無だけを軽量にチェックするgit hookを検討したが、今回は見送った。
+
 ## 引き継ぎフォーマット
 
 「できました」で終わる完了報告は禁止。作業完了時（PR本文・セッション終了報告・
@@ -187,6 +200,7 @@ any code. Heed deprecation notices.
 | 直接DDL実行禁止（migration経由限定） | 本ファイル「DBスキーマ変更ルール」 | 事後のスキーマドリフト検知（issue #305）はあるが、実行しようとした瞬間に止める事前ブロックはない |
 | seed・スクリーンショットに実在施設名を使わない | 本ファイル「テスト環境・データ衛生ルール」 | |
 | `aidd-phase2.js`のSpec Check/Manifest Check関連プロンプトを変更した際のfault injection訓練の実施自体 | 本ファイル「fault injection訓練の実施タイミング（issue #395）」 | 訓練の手順・fixture・setup/teardownスクリプトは用意した（[`fault-injection-drill.md`](./fault-injection-drill.md)）が、「変更時に必ず訓練を実施すること」自体を機械的に強制する手段（例: 該当プロンプト変更を検知してブロックするpre-commit等）は無い。実施記録の記入漏れにも気づく仕組みが無い |
+| `.claude/workflows/*.js` 変更時の`npm run eval:workflows`手動実行 | 本ファイル「AIDDワークフロープロンプトのeval」 | CI化は実エージェント呼び出しの課金コストで見送り。実行し忘れに気づく手段は無い（issue #391） |
 
 ## fault injection訓練の実施タイミング（issue #395）
 
@@ -215,3 +229,5 @@ any code. Heed deprecation notices.
 | `scripts/check-agent-progress-gap.sh` | agent-progress記録漏れの機械検知（issue #339） |
 | [`docs/agents/fault-injection-drill.md`](./fault-injection-drill.md) | `aidd-phase2.js`のdeny-by-defaultゲート実測訓練のランブック（issue #395） |
 | `scripts/aidd-fault-injection-setup.sh` / `scripts/aidd-fault-injection-teardown.sh` | fault injection訓練用の`.aidd/run-manifest.json`差し替え・復元（issue #395） |
+| `scripts/eval-workflow-prompts.sh` / `scripts/eval-fixtures/` | AIDDワークフロープロンプトのeval基盤（issue #391） |
+| `.claude/workflows/lib/prompts/` | ワークフロー内プロンプト文字列の正本（Workflow DSL側へはインライン複製、sync testで乖離検知） |
