@@ -1,0 +1,10 @@
+{
+  "specPath": ".claude/workflows/__fixtures__/fault-injection/tampered-spechash/SPEC.md",
+  "specHash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "baseCommit": "0000000000000000000000000000000000000000",
+  "changedFiles": [],
+  "approval": {
+    "approvedBy": "huuriekaiseki@gmail.com",
+    "approvedAt": "2026-04-01T00:00:00+09:00"
+  }
+}
