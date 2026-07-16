@@ -238,6 +238,10 @@ const [contractResult, dbResult] = await parallel([
     )}`,
     { label: 'contract-writer', phase: 'Contract + DB', agentType: 'contract-writer', schema: AGENT_RESULT_SCHEMA }
   ),
+  // db-implプロンプトの正本は .claude/workflows/lib/prompts/db-impl.js（buildDbImplPrompt）。
+  // Workflow DSLはrequire不可のためここに同一内容をインライン複製している。
+  // 一字一句の同期は .claude/workflows/lib/__tests__/workflow-prompt-sync.test.js が検証する
+  // （npm testに含まれる。乖離時は即座にテスト失敗する。issue #391）。
   () => agent(
     `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに supabase/migrations/ のマイグレーションファイルを実装してください。src/types/ / src/lib/ / src/app/ は触らないこと。\nPart 2にDBスキーマ変更が不要と明記されている場合（例:「該当なし」「DB変更なし」）は、何も実装せずstatus: passでdetailにその旨（不要と判断した根拠）を書いて報告すること。これはblocked（着手不能）ではない。${guide(
       'マイグレーション実装が完了した、またはPart2にDBスキーマ変更が不要と明記されており対応不要と判断した',
