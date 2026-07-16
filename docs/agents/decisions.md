@@ -205,3 +205,14 @@ common.mdの分量は増え続けており、prose追加1件ごとに他ルー�
 検知は`scripts/check-agent-progress-gap.sh`（loop-observabilityのgap検知と同じ「期待件数 vs
 実測件数」パターンを再利用）として実装済み。残る2件（router非経由でのTRI/RISK対象変更検知、
 引き継ぎフォーマット実施検知）は優先度順に別途実装する（未着手、issue #339）。
+
+**追記の原則（issue #411）:** 新しい検知・検証メカニズムを足すときは、「その起動トリガーは
+機械か人か」を先に確認する。人起動（フロー実行の前後でエージェントが手順として実行する形）
+なら、それは第3層ルールの削減ではなく追加であり、下記の棚卸し表に行が1つ増えるだけである。
+具体的には、hook / CI / cron / npm test のどれに載るかを先に決め、載らないなら新規に作らず
+既存の機械ゲートの拡張を探す。2026-07-16のmentor設計レビューで、`npm run eval:workflows`の
+手動実行（issue #391）・fault injection訓練の実施（issue #395）・gap check（issue #339）の
+実行自体が、いずれも人起動の第3層ルールとして棚卸し表に舞い戻ってきていることが確認された
+（検証メカニズムのメタ階層が自己申告→transcript突合→gap check→fault injection/evalの4段まで
+増殖し、機械トリガーで自動的に回るのはprompt sync test（npm test内）とSessionStart hookのみ
+という実測に基づく）。
