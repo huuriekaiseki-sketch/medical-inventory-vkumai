@@ -156,10 +156,9 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "scripts/doc-suggest-check.sh",
-            "timeout": 15,
-            "statusMessage": "domain.md/decisions.md更新候補を確認中..."
+            "type": "agent",
+            "prompt": "$ARGUMENTS のtranscript_pathをReadツールで読み、このセッション中にEdit/Write/MultiEditツールで変更されたファイルパスをGrepツールで抽出してください（tool_useブロックのnameとinput.file_pathを探す）。\n\n変更ファイルが1件もない場合、または変更ファイルの中に以下のいずれにも実質的に該当しないものしかない場合は、何も返さず終了してください（発火しない）:\n- supabase/migrations/ 配下\n- src/lib/supabase/ 配下\n- middleware.ts\n- ファイルパスまたは実際の変更内容がfacility/tenant/organization/inventory/RLS/policy/authのいずれかのドメインに実質的に関わるもの\n\n該当ファイルがある場合は、それぞれReadツールで現在の内容を確認し、単なるコメント修正・タイポ修正・変数名変更など設計判断を含まない変更か、それとも後戻りしづらい・記録がないと後から理由が分からなくなる・本当にトレードオフがあった設計判断（例: RLSポリシーの新規追加や変更方針、権限境界の変更、DBスキーマ変更の理由）を含む変更かを判断してください。単にキーワードに一致するだけでは発火条件にしないこと。\n\n後者に該当する場合のみ、docs/agents/domain.mdとdocs/agents/decisions.mdをReadツールで確認し、その設計判断がまだ記録されていないことを確認してください。\n\n重複通知の抑止: 同じtranscript_pathをGrepし、「domain.md（新しいドメイン用語）とdocs/agents/decisions.md」という文言を含むsystemMessageが既にこのセッション内に出力されていないか確認してください。存在する場合は今回は発火しないでください。\n\n通知すべきと判断した場合は、次の日本語メッセージのみを返してください（説明や前置きは不要）:\n「このセッションはfacility/tenant/RLS等のドメインに触れています。docs/agents/domain.md（新しいドメイン用語）とdocs/agents/decisions.md（後戻りしづらい・トレードオフのある設計判断）に追記すべき内容がないか確認してください。」\n\n通知すべきでないと判断した場合は、何も返さないでください。",
+            "statusMessage": "domain.md/decisions.md更新候補を確認中(agent hook)..."
           },
           {
             "type": "command",

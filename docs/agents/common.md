@@ -200,7 +200,7 @@ any code. Heed deprecation notices.
 | ルール | 所在 | 備考 |
 |---|---|---|
 | `aidd-phase1-router`を入口に使うこと自体（TRI/RISK判定の実施） | 本ファイル「TRI/RISK 機械判定基準」 | 判定ロジック自体は機械的だが、routerを経由せず直接実装に入れば判定がまるごとスキップされる（優先度2候補） |
-| 引き継ぎフォーマットの実施 | 本ファイル「引き継ぎフォーマット」 | 既存Stop hook（`doc-suggest-check.sh`等）の拡張候補（優先度3候補） |
+| 引き継ぎフォーマットの実施 | 本ファイル「引き継ぎフォーマット」 | 既存Stop hook（`ai-check-suggest.sh`等）の拡張候補（優先度3候補） |
 | ブランチ運用ルール（`origin/main`起点でのbranch作成） | 本ファイル「ブランチ運用ルール」 | 過去に古いローカル`main`起点でbranch作成し手戻りが発生した実績あり。着手前PR確認のうち「マージ済みPRが乗っている」ケースのみ`scripts/check-branch-pr-status.sh`（SessionStart hook）で検知済み。「別issueの未マージPRが乗っている」ケースと`origin/main`起点確認自体は未検知のまま |
 | サーキットブレーカー（`/goal`設定・テスト修正3回まで・フロー全体上限） | ルートの`CLAUDE.md` | |
 | 停止①②以外で止まらず自律進行すること | ルートの`CLAUDE.md`「絶対ルール」 | |

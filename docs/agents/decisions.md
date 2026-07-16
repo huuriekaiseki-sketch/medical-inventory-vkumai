@@ -216,3 +216,44 @@ common.mdの分量は増え続けており、prose追加1件ごとに他ルー�
 （検証メカニズムのメタ階層が自己申告→transcript突合→gap check→fault injection/evalの4段まで
 増殖し、機械トリガーで自動的に回るのはprompt sync test（npm test内）とSessionStart hookのみ
 という実測に基づく）。
+
+## なぜdoc-suggest-check.shをbashのgrep判定からtype: "agent" hookのセッション自己検査型に置き換えたか（issue #418）
+
+`scripts/doc-suggest-check.sh`（Stop hook）は`git diff HEAD`の内容に`facility|tenant|RLS`等の
+キーワードが含まれるかのgrep判定で、単語一致だけで発火するため偽陽性が多かった（例:
+コメント中に`RLS`という単語があるだけの変更でも発火する）。issue #418で、Claude Codeの
+`type: "agent"` hook（Read/Grep/Globを持つサブエージェントが意味レベルで判定する、
+experimental機能）への置き換えを検討した。
+
+**実装前に確認した前提（gate check）:** `type: "agent"`が公式ドキュメント
+（https://code.claude.com/docs/en/hooks）に実在するかを最初に確認した。複数回の独立した
+fetchで一貫して「`type: "agent"`: spawn a subagent that can use tools like Read, Grep, and
+Glob to verify conditions before returning a decision. Agent hooks are experimental and may
+change.」という記述が確認でき、実在を確認した。
+
+**実装時に発覚した制約と、それが引き起こした設計変更:** agent hookが使えるツールはRead/Grep/
+Globのみで、Bash・Writeは使えない（5回の独立したfetchで一貫してこの3ツールのみが挙げられ、
+Bash/Writeへの言及は一度もなかった）。このため、旧実装が依存していた以下の2点をそのままagent
+hookに移植できないことが判明した:
+1. `git diff HEAD`の実行（Bash必須）
+2. セッションIDごとのハッシュ状態ファイルへの書き込みによる重複通知抑止（Write必須）
+
+ユーザーと協議の上、「セッション自己検査型」で再設計した。agent hookのプロンプトが、hook入力
+JSON（`$ARGUMENTS`）に含まれる`transcript_path`（自セッションのtranscript）をRead/Grepし、
+(a) Edit/Write/MultiEditツールで変更されたファイルパスをtool_useブロックから抽出することで
+`git diff`の代替とし、(b) 過去に同じ内容のsystemMessageを既にこのセッション内で出力していないか
+をtranscript内で文字列検索することで、ハッシュファイルなしにセッション内重複抑止を実現する設計
+にした。
+
+もともとのハッシュ抑止も`SESSION_ID`単位（`${SESSION_ID}.hash`、7日で自動掃除）だったため、
+実質的にセッションスコープの重複抑止であり、今回の設計変更はこの点で対象範囲を変えていない
+（セッションをまたいだ抑止は元々存在しなかった）。
+
+**未検証のまま残っている点（既知の限界）:** agent hookの正確な出力契約（サブアシスタントの
+最終応答がどのようにsystemMessage/decisionへ変換されるか）は、ドキュメントの取得が繰り返し
+途中で切れたため確定できなかった。プロンプトの末尾で、既存のcommand hookと同一の日本語文言を
+返すよう明示的に指示することで、既存の`systemMessage`表示規約に合わせる設計にしている。また、
+実際にStop hookとして発火するかどうか・実行時間がtimeout（デフォルト60秒）に収まるかどうかは、
+本セッション内では検証不可能（Stop hookは自セッション終了時に発火するため、自分自身の
+セッション内から観測できない）。次回以降の実セッションで実際に発火することを人間が確認する
+必要がある。
