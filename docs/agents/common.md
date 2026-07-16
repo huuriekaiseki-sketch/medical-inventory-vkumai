@@ -210,15 +210,18 @@ tokens/costのエクスポートを確認できる最小限のOTLP/HTTP(json)受
 `scripts/otel-debug-collector.mjs`として用意した（`node scripts/otel-debug-collector.mjs`で
 `http://localhost:4318`に待ち受け、受信内容を`logs/otel-debug-collector.jsonl`に記録する）。
 
-**既知の制約（2026-07-16時点で未検証）**:
-- `settings.local.json`の`env`ブロックが、既に起動中のセッションに動的反映されるかは
-  公式ドキュメントに明記が無い。確実に反映させるには新しいセッションで開始すること
-- 上記の制約により、本issueの完了条件（collector側でtokens/costを確認できる証跡）は
-  このセッション内では検証できていない。次回セッション開始時に`scripts/otel-debug-collector.mjs`
-  を起動した状態で何らかの操作を行い、`logs/otel-debug-collector.jsonl`にtokens/costを含む
-  metricが記録されることを確認し、issue #417にコメントすることを推奨する
-- 送信先はローカル（`http://localhost:4318`）のみ。外部SaaS（Honeycomb/Datadog等）への送信は
-  医療関連プロジェクトのため必ずユーザー承認を得てから別途検討する
+**検証済み（2026-07-16）**: 既に起動中のセッション（親プロセス）は`settings.local.json`の
+`env`変更を動的に拾わないため、`claude -p ... --no-session-persistence`で**新規プロセス**を
+1回起動し、`scripts/otel-debug-collector.mjs`で実際に受信できることを確認した。
+`claude_code.token.usage`（input/output/cacheRead/cacheCreationをmodel別に区別）と
+`claude_code.cost.usage`（USD、model別）の両metricが実際にエクスポートされていることを
+生データで確認済み（例: `claude_code.cost.usage`が`model: claude-sonnet-5`で実数値、
+`claude_code.token.usage`が`type: cacheRead`等の内訳付きで実数値として届く）。
+**したがって既存の起動中セッションでこの設定を有効化したい場合は、新しいセッションを
+開始する必要がある**（設定ファイルを保存しただけでは反映されない）。
+
+送信先はローカル（`http://localhost:4318`）のみ。外部SaaS（Honeycomb/Datadog等）への送信は
+医療関連プロジェクトのため必ずユーザー承認を得てから別途検討する。
 
 ## AIDDワークフロープロンプトのeval（issue #391）
 
