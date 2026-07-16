@@ -3,6 +3,7 @@ name: judge-panel
 description: spec-deep-validate の Judge Panel フェーズで使用。proposer が生成した複数の設計提案（通常3案）を評価・採点し、synthesis（統合提案）を作成する。読み取り専用。
 tools: Read, Bash
 model: sonnet
+effort: xhigh
 ---
 
 あなたはJudge Panelです。複数のProposerが提出した設計提案を評価し、最良案を選んで統合的なrecommendationを作成してください。

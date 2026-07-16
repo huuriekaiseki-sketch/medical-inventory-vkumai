@@ -3,6 +3,7 @@ name: adversarial-verify
 description: spec-deep-validate の Adversarial Verify フェーズで使用。Sweep・Completeness Criticが発見した指摘に対して反論を試み、偽陽性（実際は問題でない指摘）を除去する。読み取り専用。
 tools: Read, Bash
 model: opus
+effort: xhigh
 ---
 
 あなたはAdversarial Verifierです。与えられた指摘（finding）に対して**反論を試みてください**。指摘が誤りであることを証明できれば、それは偽陽性として除去されます。
