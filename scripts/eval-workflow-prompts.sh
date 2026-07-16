@@ -78,10 +78,19 @@ run_agent() {
     printf '%s' "$prompt" | eval "$EVAL_WORKFLOW_PROMPTS_AGENT_CMD"
     return $?
   fi
-  # --setting-sources "": Stop hook等を継承させない(verify-claims.shが2026-07-14に経験した
-  # 再帰暴走と同型の事故を防ぐ)。--no-session-persistence: 使い捨て実行のためtranscriptを残さない。
+  # --setting-sources ""はhook再帰防止(verify-claims.shが2026-07-14に経験した再帰暴走と同型の
+  # 事故を防ぐ)に必要だが、これを付けると.claude/agents/*.mdのファイル探索によるカスタムagent型
+  # 解決も同時に無効化されてしまい、`--agent implementer`が
+  # `--agent 'implementer' not found`で失敗する(issue #391で実機確認)。--setting-sourcesは
+  # 弱めず、代わりにagent定義自体を--agentsフラグで明示的に注入することで解決する。
+  # 呼び出し時点のcwdは常にfixture用clone($CLONE_DIR/repo)配下になっている
+  # (run_agent_with_timeoutの呼び出し元 `cd "$CLONE_DIR/repo" && run_agent_with_timeout ...` 参照)。
+  local agent_md="$PWD/.claude/agents/${AGENT_TYPE}.md"
+  local agents_json
+  agents_json="$(node "$SCRIPT_DIR/lib/build-eval-agent-json.mjs" "$agent_md" "$AGENT_TYPE")"
   printf '%s' "$prompt" | claude -p --agent "$AGENT_TYPE" --model "$MODEL" \
     --json-schema "$JSON_SCHEMA" \
+    --agents "$agents_json" \
     --setting-sources "" \
     --no-session-persistence
 }
