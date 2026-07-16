@@ -58,6 +58,23 @@ describe('summarize-loop-observability.sh', () => {
     expect(output).toContain(
       '- [2026-07-02T01:00:00Z] loop=agentic agent=implementer feature=admin-role attempt=1 scenario="unit test" reason="型エラー"'
     )
+    expect(output).toContain('- implementer: 試行2件 / pass=1 / fail=1')
+    expect(output).toContain('- reviewer: 試行1件 / pass=1 / fail=0')
+    expect(output).toContain('- 一度もfailを返していないagent: reviewer')
+  })
+
+  it('omits the never-failed callout when every agent has failed at least once (issue #412)', () => {
+    writeRecords([
+      {
+        timestamp: '2026-07-02T01:00:00Z', loop: 'developer', agent: 'implementer',
+        feature: 'admin-role', attempt: 1, model: 'sonnet', tokens: null, costUsd: null,
+        intent: 'add role field', scenario: 'unit test', result: 'fail', reason: '型エラー',
+      },
+    ])
+
+    const output = run(['--log-file', logFile])
+
+    expect(output).not.toContain('一度もfailを返していないagent')
   })
 
   it('reports no failures when every record passed', () => {
