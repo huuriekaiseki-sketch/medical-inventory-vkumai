@@ -19,6 +19,12 @@ set -euo pipefail
 # ペイロードにstatus（pass/fail/blocked）フィールドは含まれないため、pass/fail/blockedの
 # 意味判定はここでは行わない。「SubagentStopが発火した」という事実のみが「エージェントが
 # 完了処理まで到達した」ことの機械的な証拠になる。
+#
+# issue #423ステップ3: agent()のopts.labelはペイロードに含まれないため、呼び出し側
+# （aidd-phase2.js）はプロンプト本文の先頭に「INTENT: <label> feature=<feature>」という
+# 規約行を埋め込む。ここではagent_transcript_pathが指すtranscriptファイルをテキストとして
+# grepし、規約行を抽出できた場合のみベストエフォートでintentLineフィールドに追記する
+# （②feature/attempt層。抽出できなくてもhook自体は失敗させない＝欠落は許容する）。
 
 LOG_FILE="${SUBAGENT_HOOK_SKELETON_LOG_FILE:-logs/subagent-skeleton.jsonl}"
 
@@ -41,6 +47,16 @@ mkdir -p "$(dirname "$LOG_FILE")"
 
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
+# INTENT規約行の抽出（ベストエフォート）。transcriptはJSONL（1行1エントリ）だが、規約行
+# `INTENT: <label> feature=<feature>` は通常のASCII文字のみで構成されるためJSON文字列内でも
+# エスケープされずそのまま現れる。厳密なJSON構造のパースは行わず、テキストとして最初の
+# 一致だけを取り出す（transcriptの正確なスキーマに依存しないための割り切り）。
+INTENT_LINE=""
+if [[ -n "$AGENT_TRANSCRIPT_PATH" && -f "$AGENT_TRANSCRIPT_PATH" ]]; then
+  INTENT_LINE="$(grep -m 1 -oE 'INTENT: [^"\\]+' "$AGENT_TRANSCRIPT_PATH" 2>/dev/null || true)"
+fi
+INTENT_VALUE="${INTENT_LINE#INTENT: }"
+
 jq -nc \
   --arg timestamp "$TIMESTAMP" \
   --arg hookEvent "$HOOK_EVENT" \
@@ -49,6 +65,7 @@ jq -nc \
   --arg agentType "$AGENT_TYPE" \
   --arg agentTranscriptPath "$AGENT_TRANSCRIPT_PATH" \
   --arg lastAssistantMessage "$LAST_ASSISTANT_MESSAGE" \
+  --arg intentValue "$INTENT_VALUE" \
   '{
     timestamp: $timestamp,
     hookEvent: $hookEvent,
@@ -57,7 +74,8 @@ jq -nc \
     agentType: $agentType
   }
   + (if $agentTranscriptPath != "" then {agentTranscriptPath: $agentTranscriptPath} else {} end)
-  + (if $lastAssistantMessage != "" then {lastAssistantMessage: $lastAssistantMessage} else {} end)' \
+  + (if $lastAssistantMessage != "" then {lastAssistantMessage: $lastAssistantMessage} else {} end)
+  + (if $intentValue != "" then {intent: $intentValue} else {} end)' \
   >> "$LOG_FILE"
 
 exit 0

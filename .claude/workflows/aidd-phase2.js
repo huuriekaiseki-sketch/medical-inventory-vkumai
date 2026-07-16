@@ -28,6 +28,20 @@ export const meta = {
 // ────────────────────────────────────────────────────────────────────
 
 const specPath = args?.specPath ?? 'SPEC.md'
+// feature名が呼び出し元から与えられていない場合は'unknown'を使う（write_aidd_stats.sh等の
+// 既存の自己申告系と同じフォールバック規約。docs/agents/common.md「サブエージェント進捗の
+// 可視化」参照）。
+const feature = args?.feature ?? 'unknown'
+
+// issue #423ステップ3: feature/attemptを「モデルの自己申告」ではなく「コードが決定的に
+// 埋め込む構造化データ」に変える。agent()のopts.labelはSubagentStop hookのペイロードに
+// 含まれない（issue #423ステップ1の実験で確認済み）ため、プロンプト本文の先頭に規約行を
+// 埋め込み、hookがagent_transcript_path経由でtranscriptを読んだ際に正規表現で復元できる
+// ようにする。既存のprompt文字列（db-implプロンプトのsync test対象を含む）の中身は一切
+// 変更せず、外側から文字列連結するだけなので workflow-prompt-sync.test.js には影響しない。
+function withIntent(label, prompt) {
+  return `INTENT: ${label} feature=${feature}\n\n${prompt}`
+}
 
 // docs/agents/agent-result-schema.md 参照。実装/統合/レビュー系はpass/fail/blockedの3値。
 // findingsはfail時の重大度分類（severity.js参照）。Sweep/Draft/Adversarial Verify
@@ -132,11 +146,11 @@ const SPEC_CHECK_SCHEMA = {
 }
 
 const specCheck = await agent(
-  `Readツールで ${specPath} が存在し読み込めるか確認してください。指定されたパス以外のファイル（例: リポジトリルート直下の別のSPEC.md）が見つかっても、それは無視して絶対に読まないでください。それ以外は何もしないでください。\n\n完了報告のactualPathフィールドに、実際にReadツールへ渡した絶対パスを（今回指定された ${specPath} をそのまま解決したもので）必ず記載してください。${guide(
+  withIntent('spec-check', `Readツールで ${specPath} が存在し読み込めるか確認してください。指定されたパス以外のファイル（例: リポジトリルート直下の別のSPEC.md）が見つかっても、それは無視して絶対に読まないでください。それ以外は何もしないでください。\n\n完了報告のactualPathフィールドに、実際にReadツールへ渡した絶対パスを（今回指定された ${specPath} をそのまま解決したもので）必ず記載してください。${guide(
     `${specPath}が存在し読み込めた`,
     '（未使用: このエージェントはpass/blockedの2値のみ返す）',
     `${specPath}が存在しない、または読み込めない`
-  )}`,
+  )}`),
   { label: 'spec-check', phase: 'Spec Check', agentType: 'reviewer', schema: SPEC_CHECK_SCHEMA }
 )
 
@@ -200,11 +214,11 @@ const MANIFEST_CHECK_SCHEMA = {
 }
 
 const manifestCheck = await agent(
-  `.aidd/run-manifest.json を Read ツールで読んでください（docs/agents/run-manifest.md にスキーマの説明があります）。\n\n以下を順に確認してください。\n1. .aidd/run-manifest.json が存在しない → blocked。detailに「Run Manifestが存在しません」と書く。\n2. manifest.approval（approvedBy/approvedAt）が無い → blocked。detailに「停止①の承認が記録されていません」と書く。\n3. manifest.specHash が無い → blocked。detailに「specHashが記録されていません」と書く。\n4. 上記が揃っていれば、${specPath} の現在の内容からsha256ハッシュを計算し（Bashツールで shasum -a 256 ${specPath} 等を使ってよい）、manifest.specHash と比較する。\n   - 一致すれば pass。detailに「specHash一致（承認後にSPEC.mdの変更なし）」と書く。\n   - 不一致であれば blocked。detailに「specHash不一致: レビュー承認後にSPEC.mdが変更された可能性があります（manifestの値と実際の値の両方を明記）」と書く。${guide(
+  withIntent('manifest-check', `.aidd/run-manifest.json を Read ツールで読んでください（docs/agents/run-manifest.md にスキーマの説明があります）。\n\n以下を順に確認してください。\n1. .aidd/run-manifest.json が存在しない → blocked。detailに「Run Manifestが存在しません」と書く。\n2. manifest.approval（approvedBy/approvedAt）が無い → blocked。detailに「停止①の承認が記録されていません」と書く。\n3. manifest.specHash が無い → blocked。detailに「specHashが記録されていません」と書く。\n4. 上記が揃っていれば、${specPath} の現在の内容からsha256ハッシュを計算し（Bashツールで shasum -a 256 ${specPath} 等を使ってよい）、manifest.specHash と比較する。\n   - 一致すれば pass。detailに「specHash一致（承認後にSPEC.mdの変更なし）」と書く。\n   - 不一致であれば blocked。detailに「specHash不一致: レビュー承認後にSPEC.mdが変更された可能性があります（manifestの値と実際の値の両方を明記）」と書く。${guide(
     'specHashが一致し、承認記録も揃っている',
     '（未使用: このエージェントはpass/blockedの2値のみ返す）',
     'manifestが存在しない、承認記録が無い、またはspecHashが不一致'
-  )}`,
+  )}`),
   { label: 'manifest-check', phase: 'Manifest Check', agentType: 'reviewer', schema: MANIFEST_CHECK_SCHEMA }
 )
 
@@ -231,11 +245,11 @@ phase('Contract + DB')
 
 const [contractResult, dbResult] = await parallel([
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに src/types/ の型定義・APIインターフェース型を確定させてください。${guide(
+    withIntent('contract-writer', `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに src/types/ の型定義・APIインターフェース型を確定させてください。${guide(
       '型定義・APIインターフェース型を確定できた',
       '型定義を試みたが不完全・矛盾がある',
       'SPEC.mdが存在しない/読めない'
-    )}`,
+    )}`),
     { label: 'contract-writer', phase: 'Contract + DB', agentType: 'contract-writer', schema: AGENT_RESULT_SCHEMA }
   ),
   // db-implプロンプトの正本は .claude/workflows/lib/prompts/db-impl.js（buildDbImplPrompt）。
@@ -243,11 +257,11 @@ const [contractResult, dbResult] = await parallel([
   // 一字一句の同期は .claude/workflows/lib/__tests__/workflow-prompt-sync.test.js が検証する
   // （npm testに含まれる。乖離時は即座にテスト失敗する。issue #391）。
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに supabase/migrations/ のマイグレーションファイルを実装してください。src/types/ / src/lib/ / src/app/ は触らないこと。\nPart 2にDBスキーマ変更が不要と明記されている場合（例:「該当なし」「DB変更なし」）は、何も実装せずstatus: passでdetailにその旨（不要と判断した根拠）を書いて報告すること。これはblocked（着手不能）ではない。\nDBスキーマ変更が必要そうだが、対象テーブル名・カラム設計・facilityスコープ（RLS）等をPart2や既存の型契約（src/types/）から安全に確定できない場合も、推測でマイグレーションを実装しようとせずstatus: blockedで不足している情報を具体的に書いて報告すること。これはfail（実装エラー・矛盾）ではなくblocked（着手に必要な情報が足りない）として扱う。${guide(
+    withIntent('db-impl', `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに supabase/migrations/ のマイグレーションファイルを実装してください。src/types/ / src/lib/ / src/app/ は触らないこと。\nPart 2にDBスキーマ変更が不要と明記されている場合（例:「該当なし」「DB変更なし」）は、何も実装せずstatus: passでdetailにその旨（不要と判断した根拠）を書いて報告すること。これはblocked（着手不能）ではない。\nDBスキーマ変更が必要そうだが、対象テーブル名・カラム設計・facilityスコープ（RLS）等をPart2や既存の型契約（src/types/）から安全に確定できない場合も、推測でマイグレーションを実装しようとせずstatus: blockedで不足している情報を具体的に書いて報告すること。これはfail（実装エラー・矛盾）ではなくblocked（着手に必要な情報が足りない）として扱う。${guide(
       'マイグレーション実装が完了した、またはPart2にDBスキーマ変更が不要と明記されており対応不要と判断した',
       'マイグレーションの実装を試みたがSQLの構文誤り・既存スキーマとの矛盾等の実装エラーが生じた',
       'SPEC.mdが存在しない、Part2にDB変更の要否自体を判断できる記載が無い、またはDB変更は必要そうだが対象テーブル・カラム設計・facilityスコープを安全に確定できるだけの情報が無い'
-    )}`,
+    )}`),
     { label: 'db-impl', phase: 'Contract + DB', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   ),
 ])
@@ -289,15 +303,15 @@ const implGuide = guide(
 
 const [dataResult, apiResult, uiResult] = await parallel([
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/lib/supabase/ のデータアクセス関数を実装してください。\n型定義（src/types/）は確定済みです。\n触ってよいファイル: src/lib/supabase/ と src/lib/*/repository.ts。\n\n## contract-writer完了報告\n${contractResult?.detail}\n\n## db-impl完了報告\n${dbResult?.detail}${implGuide}`,
+    withIntent('data-impl', `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/lib/supabase/ のデータアクセス関数を実装してください。\n型定義（src/types/）は確定済みです。\n触ってよいファイル: src/lib/supabase/ と src/lib/*/repository.ts。\n\n## contract-writer完了報告\n${contractResult?.detail}\n\n## db-impl完了報告\n${dbResult?.detail}${implGuide}`),
     { label: 'data-impl', phase: 'Implement', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   ),
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/app/**/route.ts（/api配下に限らない）を実装してください。\n型定義（src/types/）は確定済みです。\nPart 2 に記載の関数シグネチャに従って src/lib/ の関数を呼ぶこと（実装がまだでも名前・型が確定していれば前進可）。\n触ってよいファイル: src/app/**/route.ts のみ。\n\n## contract-writer完了報告\n${contractResult?.detail}\n\n## db-impl完了報告\n${dbResult?.detail}${implGuide}`,
+    withIntent('api-impl', `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/app/**/route.ts（/api配下に限らない）を実装してください。\n型定義（src/types/）は確定済みです。\nPart 2 に記載の関数シグネチャに従って src/lib/ の関数を呼ぶこと（実装がまだでも名前・型が確定していれば前進可）。\n触ってよいファイル: src/app/**/route.ts のみ。\n\n## contract-writer完了報告\n${contractResult?.detail}\n\n## db-impl完了報告\n${dbResult?.detail}${implGuide}`),
     { label: 'api-impl', phase: 'Implement', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   ),
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/app/(pages)/ と src/components/ のUIを実装してください。\n型定義（src/types/）は確定済みです。\n触ってよいファイル: src/app/(pages)/ と src/components/ のみ。\n\n## contract-writer完了報告\n${contractResult?.detail}${implGuide}`,
+    withIntent('ui-impl', `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/app/(pages)/ と src/components/ のUIを実装してください。\n型定義（src/types/）は確定済みです。\n触ってよいファイル: src/app/(pages)/ と src/components/ のみ。\n\n## contract-writer完了報告\n${contractResult?.detail}${implGuide}`),
     { label: 'ui-impl', phase: 'Implement', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   ),
 ])
@@ -334,11 +348,11 @@ logMinorOnlyPassThrough('Implement', [dataResult, apiResult, uiResult])
 phase('Integrate')
 
 const integrationResult = await agent(
-  `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用ならSupabase CLIで適用する）\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. npx tsc --noEmit を実行 → 型エラーがあれば修正（3回まで。issue #46のDONE基準に型検査を含める）\n6. 全テスト・lint・tsc緑を確認して報告\n7. .aidd/run-manifest.json をReadツールで読み、manifest.baseCommitを取得する（無ければこのステップはスキップしてよい）。取得できた場合、Bashツールで \`git diff --name-only \${baseCommit}\`（baseCommitはmanifestの値に置き換える）を実行し、変更されたファイル一覧を取得する。取得できたら .aidd/run-manifest.json の changedFiles フィールドをその一覧で上書きし、Writeツールで保存する（docs/agents/run-manifest.md 参照。他フィールドは変更しないこと）。\n\n## 各完了報告\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${guide(
+  withIntent('integrator', `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用ならSupabase CLIで適用する）\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. npx tsc --noEmit を実行 → 型エラーがあれば修正（3回まで。issue #46のDONE基準に型検査を含める）\n6. 全テスト・lint・tsc緑を確認して報告\n7. .aidd/run-manifest.json をReadツールで読み、manifest.baseCommitを取得する（無ければこのステップはスキップしてよい）。取得できた場合、Bashツールで \`git diff --name-only \${baseCommit}\`（baseCommitはmanifestの値に置き換える）を実行し、変更されたファイル一覧を取得する。取得できたら .aidd/run-manifest.json の changedFiles フィールドをその一覧で上書きし、Writeツールで保存する（docs/agents/run-manifest.md 参照。他フィールドは変更しないこと）。\n\n## 各完了報告\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${guide(
     'npm test・npm run lint・npx tsc --noEmitが最終的に全て緑で統合完了',
     '3回の修正試行後もtest/lint/tscのいずれかが赤のまま',
     'SPEC.mdが見つからない、またはいずれかのimplエージェントの完了報告に「仕様書が見つからない」「作業を開始できない」旨の記述がある'
-  )}`,
+  )}`),
   { label: 'integrator', phase: 'Integrate', agentType: 'integrator', schema: AGENT_RESULT_SCHEMA }
 )
 
@@ -416,7 +430,7 @@ while (true) {
 
   reviewResults = await parallel(
     REVIEW_DIMENSIONS.map(dim => () => agent(
-      `まず ${specPath} を Read ツールで読んでください。\n観点「${dim.label}」の視点のみでレビューしてください。\n指摘のみを箇条書きで返す。修正はしない。問題なければ「指摘なし」と返す。${reviewGuide}`,
+      withIntent(`review:${dim.key}:R${reviewAttempt}`, `まず ${specPath} を Read ツールで読んでください。\n観点「${dim.label}」の視点のみでレビューしてください。\n指摘のみを箇条書きで返す。修正はしない。問題なければ「指摘なし」と返す。${reviewGuide}`),
       { label: `review:${dim.key}:R${reviewAttempt}`, agentType: 'reviewer', phase: 'Review', schema: AGENT_RESULT_SCHEMA }
     ))
   )
@@ -471,11 +485,11 @@ while (true) {
     .join('\n\n')
 
   await agent(
-    `まず ${specPath} を Read ツールで読んでください。\n以下はコードレビューで検出された指摘です。該当箇所を修正してください（修正のみ、レビューはしない）。\n\n${retryFindings}${guide(
+    withIntent(`implementer-retry:R${reviewAttempt}`, `まず ${specPath} を Read ツールで読んでください。\n以下はコードレビューで検出された指摘です。該当箇所を修正してください（修正のみ、レビューはしない）。\n\n${retryFindings}${guide(
       '指摘箇所をすべて修正できた',
       '修正を試みたが解決できない指摘が残る',
       '指摘内容から修正対象・該当ファイルが特定できない'
-    )}`,
+    )}`),
     { label: `implementer-retry:R${reviewAttempt}`, phase: 'Review', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   )
   countLoggable('implementer')
