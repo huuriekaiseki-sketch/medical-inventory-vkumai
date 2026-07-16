@@ -14,6 +14,7 @@
     "test:e2e": "playwright test",
     "e2e:auth": "npx -y tsx e2e/generate-auth-state.ts",
     "loop-summary": "bash scripts/summarize-loop-observability.sh",
+    "find-av-precision-summary": "bash scripts/summarize-find-av-precision.sh",
     "eval:workflows": "bash scripts/eval-workflow-prompts.sh",
     "ai:check": "npm run typecheck && npm run lint && npm run test && npm run test:e2e"
   },

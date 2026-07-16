@@ -230,7 +230,11 @@ const findResults = await parallel(
   ))
 )
 
-const allFindResults = findResults.filter(Boolean).flatMap(r => r.findings)
+// issue #432: findingsに発見元のlensをタグ付けする（precision集計をlens別に出すため）。
+// findResultsはFINDERSと同じ順序で並列実行されているため、インデックスで対応付けられる。
+const allFindResults = findResults
+  .map((r, i) => (r?.findings ?? []).map(f => ({ ...f, lens: FINDERS[i].lens })))
+  .flat()
 const seen = new Set()
 const dedupedFindings = allFindResults.filter(f => {
   const key = f.title.slice(0, 30)
@@ -268,6 +272,32 @@ const verdicts = await parallel(
 const survivedFromVerify = toVerify.filter((_, i) => !verdicts[i]?.refuted)
 const survived = [...survivedFromVerify, ...autoSurvivedMinor]
 log(`Adversarial Verify完了: critical/important ${toVerify.length}件検証 → ${survivedFromVerify.length}件生存（+minor自動生存${autoSurvivedMinor.length}件、計${survived.length}件）`)
+
+// issue #432: Find指摘のAV生存率（Sweep指摘のprecisionではない。理由は
+// .claude/workflows/lib/find-av-precision.js のコメント参照）。正本・単体テストは
+// .claude/workflows/lib/find-av-precision.js の computeFindAvPrecision。
+// Workflow DSLはrequire不可のためインライン複製している（プロンプト文言ではなく
+// 集計ロジックのみのため、変更時はfind-av-precision.js側も手動で追従させること）。
+function computeFindAvPrecision(dedupedFindings, toVerify, verdicts, autoSurvivedMinor) {
+  const survivedFromVerify = toVerify.filter((_, i) => !verdicts[i]?.refuted)
+  const survived = [...survivedFromVerify, ...autoSurvivedMinor]
+  const byLens = {}
+  toVerify.forEach((f, i) => {
+    const lens = f?.lens ?? 'unknown'
+    byLens[lens] ??= { verified: 0, survived: 0 }
+    byLens[lens].verified++
+    if (!verdicts[i]?.refuted) byLens[lens].survived++
+  })
+  return {
+    findCount: dedupedFindings.length,
+    verifiedCount: toVerify.length,
+    survivedCount: survived.length,
+    autoSurvivedMinorCount: autoSurvivedMinor.length,
+    survivalRate: toVerify.length > 0 ? survivedFromVerify.length / toVerify.length : null,
+    byLens,
+  }
+}
+const findAvPrecision = computeFindAvPrecision(dedupedFindings, toVerify, verdicts, autoSurvivedMinor)
 
 // ─── Phase 6: Completeness Critic ────────────────────────────────────
 phase('Completeness Critic')
@@ -424,4 +454,5 @@ return {
   winner:      winner?.proposal,
   winnerScore: winner?.avgScore,
   synthesis,
+  findAvPrecision,
 }
