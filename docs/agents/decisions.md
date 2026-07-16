@@ -206,6 +206,39 @@ common.mdの分量は増え続けており、prose追加1件ごとに他ルー�
 実測件数」パターンを再利用）として実装済み。残る2件（router非経由でのTRI/RISK対象変更検知、
 引き継ぎフォーマット実施検知）は優先度順に別途実装する（未着手、issue #339）。
 
+## なぜ品質ゲートの効果測定をpass/fail集計のみに絞り、blocked実績は対象外にしたか（issue #412）
+
+2026-07-16のmentor設計レビューで、AIDD品質ゲート群（Spec Check / Manifest Check / Adversarial
+Verify / Judge Panel等）が「実際に何件の欠陥を止めたか」を示すデータが構造的に存在しないことが
+指摘された。効果測定の本格版（issue #394）は集中維持のためnot plannedクローズ済みのため、
+`logs/loop-observability.jsonl`の集計のみで済む最小構成として着手した。
+
+**実装前に判明した前提の誤り:** issue #412の起票時点では「ゲートのblocked/fail実績は
+loop-observability.jsonlに記録されている」という前提だったが、実装着手時に検証したところ誤り
+だった。`scripts/log-loop-observability.sh`の`--result`は`pass|fail`の2値のみを受け付け
+（`.claude/agents/reviewer.md`の呼び出し例も`pass`/`fail`のみ）、`blocked`は
+`aidd-phase2.js`のAGENT_RESULT_SCHEMAが返す独立した値（Spec Check/Manifest Check/Contract+DB/
+Implement/Integrate/Reviewの各ゲート）で、Workflowの戻り値（`stats.blockedAt`等）としてその場に
+出るだけであり、リポジトリ内のどのファイルにも永続化されていない。
+
+このため今回のスコープは、loop-observability.jsonlに実在するreviewer/implementer/judge-panelの
+pass/fail実績（試行回数・fail率のagent別集計）に絞った。ゲート本体（Spec Check等）のblocked
+実績を可視化するには、`aidd-phase2.js`側にblocked判定時のログ永続化を追加する別スコープの作業が
+必要であり、今回は着手していない。
+
+**なぜ機械トリガーをGitHub Actions cronではなくStop hookにしたか:** schema-drift-check.yml
+（issue #305）と同じ「月次cron + 既存ログの集計」パターンを検討したが、`logs/`は
+`.gitignore`で除外されておりリポジトリにコミットされない（ローカル専用ログ）。GitHub Actions
+はfresh checkoutで動くためローカルの`logs/loop-observability.jsonl`を参照できず、この方式は
+不採用にした。代わりに、セッション終了ごとに必ず発火する既存のStop hook機構
+（`scripts/doc-suggest-check.sh`等と同じパターン）を使い、`.claude/.gate-effectiveness-state/
+last-summary-at`のmtimeで前回出力から30日経過したかを判定して間引く方式にした。これにより
+「起動トリガーは機械」という原則（issue #411のレビューで確認した観点）を保ちながら、GitHub
+Secretsやリモートのステータス源を新設せずに済む。
+
+**関連**: #394（クローズ済みの本格版効果測定）、#411（「起動トリガーは機械か人か」の原則）、
+#305（同型パターンだが本件では不採用にした理由の比較対象）
+
 **追記の原則（issue #411）:** 新しい検知・検証メカニズムを足すときは、「その起動トリガーは
 機械か人か」を先に確認する。人起動（フロー実行の前後でエージェントが手順として実行する形）
 なら、それは第3層ルールの削減ではなく追加であり、下記の棚卸し表に行が1つ増えるだけである。
@@ -216,6 +249,65 @@ common.mdの分量は増え続けており、prose追加1件ごとに他ルー�
 （検証メカニズムのメタ階層が自己申告→transcript突合→gap check→fault injection/evalの4段まで
 増殖し、機械トリガーで自動的に回るのはprompt sync test（npm test内）とSessionStart hookのみ
 という実測に基づく）。
+
+## なぜdoc-suggest-check.shをbashのgrep判定からtype: "agent" hookのセッション自己検査型に置き換えたか（issue #418）
+
+`scripts/doc-suggest-check.sh`（Stop hook）は`git diff HEAD`の内容に`facility|tenant|RLS`等の
+キーワードが含まれるかのgrep判定で、単語一致だけで発火するため偽陽性が多かった（例:
+コメント中に`RLS`という単語があるだけの変更でも発火する）。issue #418で、Claude Codeの
+`type: "agent"` hook（Read/Grep/Globを持つサブエージェントが意味レベルで判定する、
+experimental機能）への置き換えを検討した。
+
+**実装前に確認した前提（gate check）:** `type: "agent"`が公式ドキュメント
+（https://code.claude.com/docs/en/hooks）に実在するかを最初に確認した。複数回の独立した
+fetchで一貫して「`type: "agent"`: spawn a subagent that can use tools like Read, Grep, and
+Glob to verify conditions before returning a decision. Agent hooks are experimental and may
+change.」という記述が確認でき、実在を確認した。
+
+**実装時に発覚した制約と、それが引き起こした設計変更:** agent hookが使えるツールはRead/Grep/
+Globのみで、Bash・Writeは使えない（5回の独立したfetchで一貫してこの3ツールのみが挙げられ、
+Bash/Writeへの言及は一度もなかった）。このため、旧実装が依存していた以下の2点をそのままagent
+hookに移植できないことが判明した:
+1. `git diff HEAD`の実行（Bash必須）
+2. セッションIDごとのハッシュ状態ファイルへの書き込みによる重複通知抑止（Write必須）
+
+ユーザーと協議の上、「セッション自己検査型」で再設計した。agent hookのプロンプトが、hook入力
+JSON（`$ARGUMENTS`）に含まれる`transcript_path`（自セッションのtranscript）をRead/Grepし、
+(a) Edit/Write/MultiEditツールで変更されたファイルパスをtool_useブロックから抽出することで
+`git diff`の代替とし、(b) 過去に同じ内容のsystemMessageを既にこのセッション内で出力していないか
+をtranscript内で文字列検索することで、ハッシュファイルなしにセッション内重複抑止を実現する設計
+にした。
+
+もともとのハッシュ抑止も`SESSION_ID`単位（`${SESSION_ID}.hash`、7日で自動掃除）だったため、
+実質的にセッションスコープの重複抑止であり、今回の設計変更はこの点で対象範囲を変えていない
+（セッションをまたいだ抑止は元々存在しなかった）。
+
+**未検証のまま残っている点（既知の限界）:** agent hookの正確な出力契約（サブアシスタントの
+最終応答がどのようにsystemMessage/decisionへ変換されるか）は、ドキュメントの取得が繰り返し
+途中で切れたため確定できなかった。プロンプトの末尾で、既存のcommand hookと同一の日本語文言を
+返すよう明示的に指示することで、既存の`systemMessage`表示規約に合わせる設計にしている。
+
+**訂正（実装直後に判明）:** 実装時点では「Stop hookは自セッション終了時にのみ発火するため
+本セッション内では検証不可能」と誤って想定していたが、これは誤りだった。Stopイベントは
+「Claudeが応答を終えるたび」に発火する（セッション全体の終了時だけではない）ため、この
+`.claude/settings.json`変更をコミットした同一セッション内で、次の応答終了時に実際に
+agent hookが発火し、フィードバックとして観測できた。
+
+**実地確認（issue #418実装直後、同一セッション内）:** 「重複通知抑止条件に該当。同じ文言
+『domain.md（新しいドメイン用語）とdocs/agents/decisions.md』がセッション内に既に3回存在する
+ため、発火しない」という判定結果が実際に返り、以下2点を確認できた:
+1. agent hookは実際に発火する（実在確認だけでなく動作確認も取れた）
+2. transcript自己検査によるセッション内重複抑止ロジックが機能した
+
+**同時に判明した設計の粗さ:** 上記の3回の一致は、hookが過去に本当にこの文言を
+systemMessageとして出力した履歴ではなく、**assistant自身がこのセッション中に説明文・
+コミットメッセージ・PR本文で同じ文言を引用したことによる一致**だった。現在のdedup判定は
+「transcript中にその文言がどこかに存在するか」しか見ておらず、「hookが過去に本当に発火した
+結果として存在するのか」を区別できていない。今回はたまたま正しい結果（抑止すべき状況で
+抑止）になったが、一般には、assistant自身の会話文に同じ文言が含まれるだけで、本来初回発火
+すべき状況でも誤って抑止されるリスクがある。この区別（hook出力由来かassistant自身の発話
+由来か）を厳密につけるには、transcript内のhook出力エントリだけを対象にGrepするような、
+より狭い検索パターンへの改善が必要だが、今回はスコープ外として未対応のまま残す。
 
 ## issue #399の根本原因確定と修正（Workflowスクリプトのargs文字列化バグ）
 
