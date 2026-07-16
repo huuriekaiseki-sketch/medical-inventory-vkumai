@@ -250,6 +250,34 @@ beforeデータの取得手段が存在せず（`logs/`はgitignore対象で、`
 - 本仕組みは最初から機械検知（CI）のため、実装後に「検知手段のないルールの棚卸し」表への
   行追加は不要（issue #411の原則どおり）
 
+## Find→Adversarial Verify precision記録（issue #432）
+
+**起票時の前提の訂正:** issue #432は当初「Sweep指摘のprecisionをAdversarial Verify裁定結果
+から集計する（追加のLLM呼び出しゼロ）」という想定だったが、`aidd-1-1-deep-task.js`の実装を
+確認したところ、Adversarial Verifyが裁定するのはFindフェーズ（仕様書ドラフトへのlogic/data/
+security/ux/performance5軸の再発見）の指摘であり、Sweepフェーズ（ui/data/db/types軸の
+コードベース調査）の指摘ではないことが判明した（両者は別の生成プロセスで、構造的に1:1対応
+しない）。このため実装は「Find指摘のAV生存率」として行った（詳細な理由は
+`.claude/workflows/lib/find-av-precision.js`のコメント参照）。
+
+- `aidd-1-1-deep-task.js`の戻り値`stats`に`findAvPrecision`（findCount/verifiedCount/
+  survivedCount/autoSurvivedMinorCount/survivalRate/lens別内訳`byLens`）を追加した。
+  純粋な集計ロジックの正本は`.claude/workflows/lib/find-av-precision.js`の
+  `computeFindAvPrecision`（Workflow DSLはrequire不可のためaidd-1-1-deep-task.js内に
+  インライン複製。severity.js等と同じパターン）
+- 上記#429の`snapshot-agent-baseline.sh`の「既知の限界」（`rounds`/`findingCount`が戻り値
+  にのみ存在しどのJSONLにも永続化されない）と同型の構造的限界を持つ。Workflow DSL自体が
+  filesystem API不可のため、フロー完了後にオーケストレーター（Claude Code）が
+  `scripts/log-find-av-precision.sh --feature "<feature名>" '<findAvPrecisionのJSON>'`を
+  呼んで`logs/find-av-precision.jsonl`へ永続化する必要がある。これは人/エージェント起動の
+  第3層ルールであり、呼び忘れを機械的に検知する手段は無い（issue #411原則に照らし、
+  今回は機械検知までは実装していない）
+- `npm run find-av-precision-summary`（実体は`scripts/summarize-find-av-precision.sh`）で
+  feature別・lens別の生存率を集計できる
+- **限界**: AV自体もLLM判定でありground truthではない（AVが正しい指摘を誤って棄却する
+  ケースはこの指標では測れない）。Sweepの見落とし率（recall）を測る別issue（#431）との
+  二本立ての片翼として扱うこと
+
 ## AIDDワークフロープロンプトのeval（issue #391）
 
 `.claude/workflows/*.js` 内の自然言語プロンプト（例: db-implの「DBスキーマ変更不要ならblockedではなくpass」という判定基準）は、ユニットテストが効かず、修正の妥当性が「次回実フローでの目視確認」頼みになりがちだった（issue #389のフォローアップ）。fixture SPEC.mdを実際のエージェント（`claude -p --agent <agentType>`、本番と同じモデル）に読ませ、期待するstatus判定になるかを回帰テストする仕組みを用意した。
