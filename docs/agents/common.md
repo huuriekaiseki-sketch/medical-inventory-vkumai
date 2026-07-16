@@ -244,6 +244,61 @@ collectorであり、常時稼働ではない。issue #419（effortフィール�
   相当する属性は無く、`query_source`（例: `"main"`）等の粗い区別に留まる。サブエージェント
   単位での突合には、タイムスタンプの近接性等の追加のヒューリスティックが必要（未実装）。
 
+## agents設定変更時のbaselineスナップショット機械強制（issue #429）
+
+issue #419の完了条件「loop-observabilityでbefore/afterのコスト・精度を比較」は、着手時点で
+beforeデータの取得手段が存在せず（`logs/`はgitignore対象で、`tokens`/`costUsd`もnull固定）、
+構造的に実施不能だった。「変更前に計測を取る」を散文の運用ルールとして追加するだけでは、
+[「検知手段のないルールの棚卸し」](#検知手段のないルールの棚卸しissue-339)の第3層ルールが
+1行増えるだけになる（issue #411の原則: 新しい検知メカニズムは起動トリガーが機械か人かを
+先に確認する）。よってCIによる機械トリガーで設計した。
+
+- **`scripts/snapshot-agent-baseline.sh`**: `logs/loop-observability.jsonl` /
+  `logs/subagent-skeleton.jsonl`（存在すれば`logs/otel-debug-collector.jsonl`の有無も記録）から
+  agentType別の実行件数・所要時間を集計し、`docs/agents/baselines/<date>.json`として
+  **git管理下**に書き出す（`logs/`がgit管理外であることがissue #419のbefore消失の根本原因の
+  ため、集計スナップショットをコミットする形で解消する）。
+  - **既知の限界**: `rounds`・`findingCount`はWorkflowの戻り値（`stats`）にのみ存在し、
+    現状どのJSONLにも永続化されていない。Workflow完了直後にオーケストレーターが
+    `docs/agents/baselines/<date>.json`の`workflowRuns`配列へ手動で追記して補うこと
+    （初期値は`docs/agents/baselines/2026-07-16.json`の`workflowRuns`参照）
+- **`scripts/check-agent-baseline-freshness.sh`** + `.github/workflows/agent-baseline-check.yml`:
+  `.claude/agents/*.md`のfrontmatter`model:`/`effort:`行、または`.claude/workflows/*.js`の
+  `opts.model`/`opts.effort`にPR内で差分があるのに、同じPRに`docs/agents/baselines/`の
+  更新が含まれていない場合、GitHub Actionsの`::warning::`アノテーションを出す
+  （**block ではなく warning のみ**。まずは可視化から始める方針）。issue #422
+  （`effort`追加PR）を対象に実行し、警告が正しく出ることを確認済み
+- 本仕組みは最初から機械検知（CI）のため、実装後に「検知手段のないルールの棚卸し」表への
+  行追加は不要（issue #411の原則どおり）
+
+## Find→Adversarial Verify precision記録（issue #432）
+
+**起票時の前提の訂正:** issue #432は当初「Sweep指摘のprecisionをAdversarial Verify裁定結果
+から集計する（追加のLLM呼び出しゼロ）」という想定だったが、`aidd-1-1-deep-task.js`の実装を
+確認したところ、Adversarial Verifyが裁定するのはFindフェーズ（仕様書ドラフトへのlogic/data/
+security/ux/performance5軸の再発見）の指摘であり、Sweepフェーズ（ui/data/db/types軸の
+コードベース調査）の指摘ではないことが判明した（両者は別の生成プロセスで、構造的に1:1対応
+しない）。このため実装は「Find指摘のAV生存率」として行った（詳細な理由は
+`.claude/workflows/lib/find-av-precision.js`のコメント参照）。
+
+- `aidd-1-1-deep-task.js`の戻り値`stats`に`findAvPrecision`（findCount/verifiedCount/
+  survivedCount/autoSurvivedMinorCount/survivalRate/lens別内訳`byLens`）を追加した。
+  純粋な集計ロジックの正本は`.claude/workflows/lib/find-av-precision.js`の
+  `computeFindAvPrecision`（Workflow DSLはrequire不可のためaidd-1-1-deep-task.js内に
+  インライン複製。severity.js等と同じパターン）
+- 上記#429の`snapshot-agent-baseline.sh`の「既知の限界」（`rounds`/`findingCount`が戻り値
+  にのみ存在しどのJSONLにも永続化されない）と同型の構造的限界を持つ。Workflow DSL自体が
+  filesystem API不可のため、フロー完了後にオーケストレーター（Claude Code）が
+  `scripts/log-find-av-precision.sh --feature "<feature名>" '<findAvPrecisionのJSON>'`を
+  呼んで`logs/find-av-precision.jsonl`へ永続化する必要がある。これは人/エージェント起動の
+  第3層ルールであり、呼び忘れを機械的に検知する手段は無い（issue #411原則に照らし、
+  今回は機械検知までは実装していない）
+- `npm run find-av-precision-summary`（実体は`scripts/summarize-find-av-precision.sh`）で
+  feature別・lens別の生存率を集計できる
+- **限界**: AV自体もLLM判定でありground truthではない（AVが正しい指摘を誤って棄却する
+  ケースはこの指標では測れない）。Sweepの見落とし率（recall）を測る別issue（#431）との
+  二本立ての片翼として扱うこと
+
 ## AIDDワークフロープロンプトのeval（issue #391）
 
 `.claude/workflows/*.js` 内の自然言語プロンプト（例: db-implの「DBスキーマ変更不要ならblockedではなくpass」という判定基準）は、ユニットテストが効かず、修正の妥当性が「次回実フローでの目視確認」頼みになりがちだった（issue #389のフォローアップ）。fixture SPEC.mdを実際のエージェント（`claude -p --agent <agentType>`、本番と同じモデル）に読ませ、期待するstatus判定になるかを回帰テストする仕組みを用意した。

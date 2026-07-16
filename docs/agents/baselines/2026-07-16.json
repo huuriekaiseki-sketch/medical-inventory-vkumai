@@ -1,0 +1,46 @@
+{
+  "generatedAt": "2026-07-16T12:03:34Z",
+  "note": "rounds/findingCountはWorkflow戻り値にのみ存在し現状永続化されていないため、Workflow完了直後にオーケストレーターがこのファイルへ手動で追記すること(issue #429)。",
+  "subagentSkeletonByType": [
+    {
+      "agentType": "(unknown)",
+      "runs": 14,
+      "avgDurationMs": null,
+      "totalDurationMs": null
+    },
+    {
+      "agentType": "claude-code-guide",
+      "runs": 3,
+      "avgDurationMs": 43000,
+      "totalDurationMs": 129000
+    },
+    {
+      "agentType": "sweep-ui",
+      "runs": 2,
+      "avgDurationMs": 71000,
+      "totalDurationMs": 142000
+    }
+  ],
+  "loopObservabilityByAgent": [
+    {
+      "agent": "reviewer",
+      "entries": 1,
+      "totalTokens": null,
+      "totalCostUsd": null
+    }
+  ],
+  "otelDebugCollectorPresent": false,
+  "workflowRuns": [
+    {
+      "workflow": "aidd-phase1",
+      "recordedAt": "2026-07-16",
+      "context": "Phase 1 Sweep（issue #419のeffort:low適用直後の初回実測。issue #429の初期baseline）",
+      "agents": 5,
+      "totalTokens": 349988,
+      "durationSeconds": 301,
+      "errors": 0,
+      "sweepCount": 4,
+      "validFindings": 3
+    }
+  ]
+}
