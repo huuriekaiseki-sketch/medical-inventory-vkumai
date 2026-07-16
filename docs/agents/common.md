@@ -174,6 +174,55 @@ agentTranscriptPath?, lastAssistantMessage?}`形式で自動記録される。�
 - 既存の`log-agent-progress.sh` / `log-loop-observability.sh` / gap check群は削除しておらず、
   新方式と併存させている（新方式が安定稼働することを確認してから、廃止を別issueで検討する）
 
+## OpenTelemetryと自作JSONLの役割分担（issue #417）
+
+`scripts/log-loop-observability.sh`の自作JSONLは`tokens`/`costUsd`フィールドが常に`null`固定
+であり、実測できていなかった。Claude Codeは公式にOpenTelemetryをサポートしており、
+トークン数・コスト・ツール実行を自動でエクスポートできる（[monitoring-usage](https://code.claude.com/docs/en/monitoring-usage)）。
+
+**役割分担（両者は併用が正・どちらか一方に統合しない）:**
+
+| 手段 | 記録する内容 | 記録手段 |
+|---|---|---|
+| OTel | tokens・cost・latency・API呼び出し回数等の定量メトリクス | Claude Code本体が自動エクスポート |
+| 自作JSONL（loop-observability / agent-progress / subagent-skeleton） | intent・scenario・pass-fail等のループエンジニアリング固有の意味づけ | 自己申告 or hook（[「サブエージェント骨格記録の機械強制」](#サブエージェント骨格記録の機械強制issue-423)参照） |
+
+**ローカル環境変数（重要: `settings.json`ではなく`settings.local.json`に置くこと）:**
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_LOGS_EXPORTER": "otlp",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+  }
+}
+```
+
+チーム共有の`.claude/settings.json`には入れない。ローカルcollectorを立てていない他の開発者の
+セッションで、毎回OTLPエンドポイントへの接続失敗ノイズが出てしまうため（2026-07-16に判断）。
+有効化したい人だけが各自の`settings.local.json`（gitignore対象）に設定する。
+
+**ローカルcollectorの検証手段**: 本番でGrafana等を導入する前段階として、Dockerを使わずに
+tokens/costのエクスポートを確認できる最小限のOTLP/HTTP(json)受信サーバを
+`scripts/otel-debug-collector.mjs`として用意した（`node scripts/otel-debug-collector.mjs`で
+`http://localhost:4318`に待ち受け、受信内容を`logs/otel-debug-collector.jsonl`に記録する）。
+
+**検証済み（2026-07-16）**: 既に起動中のセッション（親プロセス）は`settings.local.json`の
+`env`変更を動的に拾わないため、`claude -p ... --no-session-persistence`で**新規プロセス**を
+1回起動し、`scripts/otel-debug-collector.mjs`で実際に受信できることを確認した。
+`claude_code.token.usage`（input/output/cacheRead/cacheCreationをmodel別に区別）と
+`claude_code.cost.usage`（USD、model別）の両metricが実際にエクスポートされていることを
+生データで確認済み（例: `claude_code.cost.usage`が`model: claude-sonnet-5`で実数値、
+`claude_code.token.usage`が`type: cacheRead`等の内訳付きで実数値として届く）。
+**したがって既存の起動中セッションでこの設定を有効化したい場合は、新しいセッションを
+開始する必要がある**（設定ファイルを保存しただけでは反映されない）。
+
+送信先はローカル（`http://localhost:4318`）のみ。外部SaaS（Honeycomb/Datadog等）への送信は
+医療関連プロジェクトのため必ずユーザー承認を得てから別途検討する。
+
 ## AIDDワークフロープロンプトのeval（issue #391）
 
 `.claude/workflows/*.js` 内の自然言語プロンプト（例: db-implの「DBスキーマ変更不要ならblockedではなくpass」という判定基準）は、ユニットテストが効かず、修正の妥当性が「次回実フローでの目視確認」頼みになりがちだった（issue #389のフォローアップ）。fixture SPEC.mdを実際のエージェント（`claude -p --agent <agentType>`、本番と同じモデル）に読ませ、期待するstatus判定になるかを回帰テストする仕組みを用意した。
