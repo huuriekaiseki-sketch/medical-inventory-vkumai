@@ -78,10 +78,10 @@ while (dryRounds < 2 && round <= maxRounds) {
     : `タスク: ${taskDescription}`) + SWEEP_GUIDE
 
   const [uiResult, dataResult, dbResult, typesResult] = await parallel([
-    () => agent(sweepPrompt, { label: `sweep-ui:R${round}`,    agentType: 'sweep-ui',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB }),
-    () => agent(sweepPrompt, { label: `sweep-data:R${round}`,  agentType: 'sweep-data',  phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB }),
-    () => agent(sweepPrompt, { label: `sweep-db:R${round}`,    agentType: 'sweep-db',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB }),
-    () => agent(sweepPrompt, { label: `sweep-types:R${round}`, agentType: 'sweep-types', phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB }),
+    () => agent(sweepPrompt, { label: `sweep-ui:R${round}`,    agentType: 'sweep-ui',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
+    () => agent(sweepPrompt, { label: `sweep-data:R${round}`,  agentType: 'sweep-data',  phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
+    () => agent(sweepPrompt, { label: `sweep-db:R${round}`,    agentType: 'sweep-db',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
+    () => agent(sweepPrompt, { label: `sweep-types:R${round}`, agentType: 'sweep-types', phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
   ])
   const axisResults = { ui: uiResult, data: dataResult, db: dbResult, types: typesResult }
 
