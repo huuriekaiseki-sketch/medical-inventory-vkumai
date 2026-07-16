@@ -23,15 +23,21 @@ set -euo pipefail
 #   EVAL_WORKFLOW_PROMPTS_FIXTURES_DIR  - fixtureセットの置き場所（省略時は $REPO_DIR/scripts/eval-fixtures）
 #   EVAL_WORKFLOW_PROMPTS_LOCK_DIR      - サーキットブレーカー用ロック置き場
 #   EVAL_WORKFLOW_PROMPTS_MAX_CONCURRENT - 同時実行を許すeval呼び出し数の上限（省略時は2）
-#   EVAL_WORKFLOW_PROMPTS_TIMEOUT_SECONDS - 1fixtureあたりのタイムアウト秒数（省略時は300。実装作業を伴うため verify-claims.sh より長め）
+#   EVAL_WORKFLOW_PROMPTS_TIMEOUT_SECONDS - 1fixtureあたりのタイムアウト秒数（省略時は420。実装作業を伴うため
+#                                         verify-claims.shより長め。特に「本当に要否判断不能」なfixture
+#                                         （例: case-4-genuinely-ambiguous）はdocs/agents/decisions.md・
+#                                         domain.md・既存migration一覧を読み込んで判断するため300秒では
+#                                         実測でタイムアウトすることがあった。issue #401）
 #   EVAL_WORKFLOW_PROMPTS_AGENT_CMD     - 実際の`claude -p`呼び出しの代わりに使うコマンド
+#   EVAL_WORKFLOW_PROMPTS_DEBUG_DIR     - 指定すると各caseの生出力を<case名>.raw.txtとして保存
+#                                         する（status不一致の原因調査用。issue #401）
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${EVAL_WORKFLOW_PROMPTS_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FIXTURES_ROOT="${EVAL_WORKFLOW_PROMPTS_FIXTURES_DIR:-$REPO_DIR/scripts/eval-fixtures}"
 LOCK_DIR="${EVAL_WORKFLOW_PROMPTS_LOCK_DIR:-$REPO_DIR/.claude/.eval-lock}"
 MAX_CONCURRENT="${EVAL_WORKFLOW_PROMPTS_MAX_CONCURRENT:-2}"
-TIMEOUT_SECONDS="${EVAL_WORKFLOW_PROMPTS_TIMEOUT_SECONDS:-300}"
+TIMEOUT_SECONDS="${EVAL_WORKFLOW_PROMPTS_TIMEOUT_SECONDS:-420}"
 
 FIXTURE_SET="${1:-}"
 if [ -z "$FIXTURE_SET" ]; then
@@ -88,10 +94,19 @@ run_agent() {
   local agent_md="$PWD/.claude/agents/${AGENT_TYPE}.md"
   local agents_json
   agents_json="$(node "$SCRIPT_DIR/lib/build-eval-agent-json.mjs" "$agent_md" "$AGENT_TYPE")"
+  # --permission-mode bypassPermissions: issue #401で実機確認した交絡要因の対策。これが無いと
+  # headlessな`claude -p`呼び出しでは承認者が接続されておらずWrite/Bashの権限確認が永久に
+  # 解決されず（例: db-implのcase-1-db-changeが「Write権限が承認されないためマイグレーションを
+  # 一度も作成できなかった」という理由でstatus: failになる）、プロンプトの判定基準そのものとは
+  # 無関係な理由でstatus不一致になっていた（docs/agents/common.mdに「未検証の既知ギャップ」として
+  # 記録されていたものを実機確認・解消）。呼び出し先は必ず使い捨てのgit clone
+  # ($CLONE_DIR/repo、eval-workflow-prompts.sh本体側で用意)であり実リポジトリは汚さないため、
+  # 全権限の自動承認は許容する。
   printf '%s' "$prompt" | claude -p --agent "$AGENT_TYPE" --model "$MODEL" \
     --json-schema "$JSON_SCHEMA" \
     --agents "$agents_json" \
     --setting-sources "" \
+    --permission-mode bypassPermissions \
     --no-session-persistence
 }
 
@@ -174,6 +189,10 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
 
   AGENT_EXIT=0
   AGENT_OUTPUT="$(cd "$CLONE_DIR/repo" && run_agent_with_timeout "$PROMPT")" || AGENT_EXIT=$?
+  if [ -n "${EVAL_WORKFLOW_PROMPTS_DEBUG_DIR:-}" ]; then
+    mkdir -p "$EVAL_WORKFLOW_PROMPTS_DEBUG_DIR"
+    printf '%s' "$AGENT_OUTPUT" > "$EVAL_WORKFLOW_PROMPTS_DEBUG_DIR/$case_name.raw.txt"
+  fi
   rm -rf "$CLONE_DIR"
 
   if [ "$AGENT_EXIT" -ne 0 ]; then

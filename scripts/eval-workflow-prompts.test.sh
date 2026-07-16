@@ -176,6 +176,11 @@ assert_contains "$RUN_AGENT_BLOCK" '--no-session-persistence' "claude -p呼び�
 # しまい、これが無いと`--agent 'implementer' not found`で失敗する(issue #391で実機確認した
 # 実バグの再発防止。最終レビュー指摘3)。
 assert_contains "$RUN_AGENT_BLOCK" '--agents "$agents_json"' "claude -p呼び出しに--agentsでagent定義が注入されている(--setting-sources \"\"によるカスタムagent型未検出の回避)"
+# issue #401: --permission-mode bypassPermissionsが無いと、headless実行では承認者不在のため
+# Write/Bashの権限確認が解決されずstatus: failになる(db-implのcase-1-db-changeで実機確認)。
+# プロンプトの判定基準とは無関係な理由でstatus不一致になる交絡要因だったため、使い捨てclone
+# 前提で全権限を自動承認するようにした。
+assert_contains "$RUN_AGENT_BLOCK" '--permission-mode bypassPermissions' "claude -p呼び出しに--permission-mode bypassPermissionsが付いている(headless実行でのWrite/Bash権限確認スタック防止、issue #401)"
 
 echo "=== scenario 6: git cloneが失敗する → 当該fixtureをNGとして継続実行し、全体をabortしない(レビュー指摘1) ==="
 rm -f "$MOCK_CALL_LOG"
