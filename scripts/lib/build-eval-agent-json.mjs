@@ -27,6 +27,10 @@ try {
 const frontmatterMatch = raw.match(/^---\n[\s\S]*?\n---\n/)
 const body = (frontmatterMatch ? raw.slice(frontmatterMatch[0].length) : raw).trim()
 
+// 注意: frontmatterのtools:/model:はここで意図的に引き継いでいない(description/promptのみ
+// 使用。`claude -p --agents`が公式にサポートする形に合わせている)。そのため、evalで動く
+// エージェントは実際のサブエージェント定義より広い/異なるツール面で動く可能性がある
+// (既知の制約。smoke testで見つかったcase-1/case-3のstatus不一致を追ったissueを参照)。
 const agentsJson = {
   [agentType]: {
     description: 'eval-workflow-prompts fixture agent',
