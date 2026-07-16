@@ -172,6 +172,10 @@ echo "=== scenario 5: claude -p呼び出しに--setting-sources \"\"と--no-sess
 RUN_AGENT_BLOCK="$(awk '/^run_agent\(\)/,/^}/' "$SCRIPT")"
 assert_contains "$RUN_AGENT_BLOCK" '--setting-sources ""' "claude -p呼び出しに--setting-sources \"\"が付いている(Stop hook再帰発火防止)"
 assert_contains "$RUN_AGENT_BLOCK" '--no-session-persistence' "claude -p呼び出しに--no-session-persistenceが付いている"
+# --setting-sources ""は.claude/agents/*.mdのファイル探索によるカスタムagent型解決も無効化して
+# しまい、これが無いと`--agent 'implementer' not found`で失敗する(issue #391で実機確認した
+# 実バグの再発防止。最終レビュー指摘3)。
+assert_contains "$RUN_AGENT_BLOCK" '--agents "$agents_json"' "claude -p呼び出しに--agentsでagent定義が注入されている(--setting-sources \"\"によるカスタムagent型未検出の回避)"
 
 echo "=== scenario 6: git cloneが失敗する → 当該fixtureをNGとして継続実行し、全体をabortしない(レビュー指摘1) ==="
 rm -f "$MOCK_CALL_LOG"
