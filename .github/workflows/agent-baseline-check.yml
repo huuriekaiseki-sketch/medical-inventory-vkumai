@@ -1,0 +1,24 @@
+# WHY: issue #429。.claude/agents/*.md のmodel:/effort:や.claude/workflows/*.jsの
+# opts.model/opts.effortを変更したPRで、docs/agents/baselines/の更新が抜けていないかを
+# 機械的に警告する(issue #411の原則: 新しい検知メカニズムは起動トリガーを機械にする)。
+# issue #419がまさにこの抜け漏れ(before計測手段が無いままeffort変更をマージした)で
+# 効果測定できなくなった反省から導入。まずはwarningのみで、マージをブロックしない。
+
+name: Agent Baseline Freshness Check
+
+on:
+  pull_request:
+    paths:
+      - '.claude/agents/**'
+      - '.claude/workflows/**'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check agent baseline freshness
+        run: bash scripts/check-agent-baseline-freshness.sh "origin/${{ github.event.pull_request.base.ref }}" HEAD
