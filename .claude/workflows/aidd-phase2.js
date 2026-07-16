@@ -243,10 +243,10 @@ const [contractResult, dbResult] = await parallel([
   // 一字一句の同期は .claude/workflows/lib/__tests__/workflow-prompt-sync.test.js が検証する
   // （npm testに含まれる。乖離時は即座にテスト失敗する。issue #391）。
   () => agent(
-    `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに supabase/migrations/ のマイグレーションファイルを実装してください。src/types/ / src/lib/ / src/app/ は触らないこと。\nPart 2にDBスキーマ変更が不要と明記されている場合（例:「該当なし」「DB変更なし」）は、何も実装せずstatus: passでdetailにその旨（不要と判断した根拠）を書いて報告すること。これはblocked（着手不能）ではない。${guide(
+    `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに supabase/migrations/ のマイグレーションファイルを実装してください。src/types/ / src/lib/ / src/app/ は触らないこと。\nPart 2にDBスキーマ変更が不要と明記されている場合（例:「該当なし」「DB変更なし」）は、何も実装せずstatus: passでdetailにその旨（不要と判断した根拠）を書いて報告すること。これはblocked（着手不能）ではない。\nDBスキーマ変更が必要そうだが、対象テーブル名・カラム設計・facilityスコープ（RLS）等をPart2や既存の型契約（src/types/）から安全に確定できない場合も、推測でマイグレーションを実装しようとせずstatus: blockedで不足している情報を具体的に書いて報告すること。これはfail（実装エラー・矛盾）ではなくblocked（着手に必要な情報が足りない）として扱う。${guide(
       'マイグレーション実装が完了した、またはPart2にDBスキーマ変更が不要と明記されており対応不要と判断した',
-      'マイグレーションを試みたがエラー・矛盾がある',
-      'SPEC.mdが存在しない、またはPart2にDB変更の要否自体を判断できる記載が無い'
+      'マイグレーションの実装を試みたがSQLの構文誤り・既存スキーマとの矛盾等の実装エラーが生じた',
+      'SPEC.mdが存在しない、Part2にDB変更の要否自体を判断できる記載が無い、またはDB変更は必要そうだが対象テーブル・カラム設計・facilityスコープを安全に確定できるだけの情報が無い'
     )}`,
     { label: 'db-impl', phase: 'Contract + DB', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
   ),
