@@ -152,6 +152,20 @@
         ]
       }
     ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "scripts/log-subagent-hook-skeleton.sh", "timeout": 5 }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "scripts/log-subagent-hook-skeleton.sh", "timeout": 5 }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
