@@ -121,11 +121,12 @@ hook側で機械チェックする。検証サブエージェント自身がLLM�
 
 **issue #348: マーカー作成行為そのものを人間確認(ask)で強制する。** 当初の設計では「VS Code側セッションに依頼してtouchする形でも可」としていたが、これだとブロックされた本人(エージェント自身)が人間に断りなく黙ってスキップ用ファイルを作成し、指摘を直さずすり抜けられてしまう抜け道になっていた。これを塞ぐため、PreToolUse hook `scripts/check-skip-marker-write.sh` を追加した:
 
-- `tool_name`が`Bash`の場合は`tool_input.command`全体(リダイレクト先パスを含む)、`Write`/`Edit`の場合は`tool_input.file_path`を対象に、正規表現 `\.claude/\.verify-state/[^/]+\.skip` にマッチするかを調べる
+- `tool_name`が`Bash`の場合は`tool_input.command`全体(リダイレクト先パスを含む)、`Write`/`Edit`/`MultiEdit`の場合は`tool_input.file_path`を対象に、正規表現 `\.claude/\.verify-state/[^/]+\.skip` にマッチするかを調べる
 - マッチした場合、`permissionDecision: "ask"` を返す(`hookSpecificOutput.hookEventName: "PreToolUse"`)。これにより、touch・echo・python等の手段を問わず、`.skip`ファイルへの書き込みを試みた瞬間に通常の権限確認ダイアログが表示される。人間がその場で承認しない限り作成されない
 - マッチしない場合は何も出力せずexit 0(allow/denyには関与せず、通常の権限フローに委ねる)
-- `.claude/settings.json`の`hooks.PreToolUse`に`matcher: "Bash|Write|Edit"`で登録している。**この`matcher`はツール名の完全一致(exact match)のリストであり、`"MultiEdit"`のような別名ツールには一致しない。**将来Claude Code側に別名の書き込み系ツールが追加された場合は、`matcher`と`scripts/check-skip-marker-write.sh`内の`case`文の両方を更新する必要がある(片方だけ直しても検知が効かない)
-- **cwd変更後の相対パス操作への対策(issue #348追加修正)**: 当初の実装は正規表現によるコマンド文字列の直接一致のみだったため、`cd .claude/.verify-state && touch abc.skip`という単一コマンド、または事前に`cd .claude/.verify-state`を実行済みの状態で別のBash呼び出しとして`touch abc.skip`のみを実行する、という**難読化ですらない通常の操作**で検知をすり抜けられることが4観点レビューで実証された。これに対し、(1)コマンド文字列中に`.claude/.verify-state`というディレクトリ参照と相対パスの`.skip`トークンの両方が含まれる場合、(2)hook入力の`cwd`フィールド(セッション間で持続する現在の作業ディレクトリ)が`.claude/.verify-state`配下を指しており、かつ対象文字列に相対パスの`.skip`トークンが含まれる場合、の2つを追加で検知するようにした
+- `.claude/settings.json`の`hooks.PreToolUse`に`matcher: "Bash|Write|Edit|MultiEdit"`で登録している。**この`matcher`はツール名の完全一致(exact match)のリストである。**当初`MultiEdit`が抜けており、`Edit`と同じくfile_pathを持つ書き込み系ツールであるにもかかわらず検知対象外だったため追加した(コードレビューで指摘・修正済み)。将来さらに別名の書き込み系ツール(file_path以外のパラメータ名で書き込み先を指定するものを含む)が追加された場合は、`matcher`と`scripts/check-skip-marker-write.sh`内の`case`文の両方を更新する必要がある(片方だけ直しても検知が効かない)。**この二重管理は一度実際にMultiEdit抜け漏れという形で顕在化したため、`scripts/check-skip-marker-write.test.sh`のシナリオ13で`.claude/settings.json`の`matcher`一覧と本スクリプトの`case`文のツール一覧を機械的に突き合わせ、片方だけ更新した場合はテストが失敗するようにしている(単一情報源化ではなく整合性チェックによる再発防止)**
+- **cwd変更後の相対パス操作への対策(issue #348追加修正)**: 当初の実装は正規表現によるコマンド文字列の直接一致のみだったため、`cd .claude/.verify-state && touch abc.skip`という単一コマンド、または事前に`cd .claude/.verify-state`を実行済みの状態で別のBash呼び出しとして`touch abc.skip`のみを実行する、という**難読化ですらない通常の操作**で検知をすり抜けられることが4観点レビューで実証された。これに対し、(1)コマンド文字列中に`cd .claude/.verify-state`という**cd操作としての**ディレクトリ参照と相対パスの`.skip`トークンの両方が含まれる場合、(2)hook入力の`cwd`フィールド(セッション間で持続する現在の作業ディレクトリ)が`.claude/.verify-state`配下を指しており、かつ対象文字列に相対パスの`.skip`トークンが含まれる場合、の2つを追加で検知するようにした
+- **誤検知(false positive)修正(issue #348コードレビュー指摘)**: (1)の判定を「コマンド文字列中に`.claude/.verify-state`というディレクトリ参照が単に含まれるか」で実装すると、`ls .claude/.verify-state && rm old-backup.skip`のように、ディレクトリを読み取るだけの操作(cdを伴わない)と、無関係な場所にある別の`*.skip`ファイルへの操作が同一コマンド文字列中にたまたま同居しているだけで誤って`ask`になる問題があった。ディレクトリ参照は`cd`という移動操作を伴う場合のみ対象とするよう正規表現を絞り込み、この誤検知を解消した
 
 **実機検証で確認した安全側への倒れ方**: `--permission-mode bypassPermissions`かつheadlessモード(人間が確認に応答できない自律実行環境)で実際に検証したところ、hookが返す`permissionDecision: "ask"`は無視されず、確認相手が存在しない場合はツール実行が拒否される側に倒れることを確認済み。つまり「誰も見ていない完全放置の自律実行中に黙って`.skip`が作成されてしまう」ケースは発生しない(応答待ちのまま進まない=ブロック継続と同じ安全側の挙動)。**この検証は本実装時点のセッション内で一度実施したものであり、自動回帰テストとしては存在しない。**再現可能な形でリポジトリに残っているのは正規表現マッチ部分の`scripts/check-skip-marker-write.test.sh`のみで、`bypassPermissions`環境での実際のask強制の挙動そのものは手動一回検証にとどまる。
 
@@ -355,6 +356,9 @@ claude_auto_issue / aidd_session_report が並走する。Claude Codeのhook実�
   8. `command`が`python3 -c "open('.claude/.verify-state/abc.skip','w').close()"`のようなpython3経由の書き込み → `ask`
   9. `command`が`node -e "require('fs').writeFileSync('.claude/.verify-state/abc.skip','')"`のようなnode経由の書き込み → `ask`
   10. `Edit`で`file_path`が`.claude/.verify-state/abc.skip` → `ask`
+  11. **(コードレビュー指摘・マッチャー抜け漏れ修正)** `MultiEdit`で`file_path`が`.claude/.verify-state/abc.skip` → `ask`
+  12. **(コードレビュー指摘・誤検知修正)** `command`が`ls .claude/.verify-state && rm old-backup.skip`(cdを伴わないディレクトリ参照+無関係な`.skip`ファイルへの操作) → 何も出力されない
+  13. **(コードレビュー指摘・matcher/case文の二重管理による抜け漏れの再発防止)** `.claude/settings.json`の`matcher`一覧と本スクリプトの`case`文のツール一覧(Bash/Write/Edit/MultiEdit)を機械的に突き合わせ、一致することを確認する(片方だけ更新された場合にテストが落ちるようにする回帰テスト)
 
 ## 対象範囲外(YAGNI)
 
