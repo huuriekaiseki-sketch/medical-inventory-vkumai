@@ -223,6 +223,33 @@ tokens/costのエクスポートを確認できる最小限のOTLP/HTTP(json)受
 送信先はローカル（`http://localhost:4318`）のみ。外部SaaS（Honeycomb/Datadog等）への送信は
 医療関連プロジェクトのため必ずユーザー承認を得てから別途検討する。
 
+## agents設定変更時のbaselineスナップショット機械強制（issue #429）
+
+issue #419の完了条件「loop-observabilityでbefore/afterのコスト・精度を比較」は、着手時点で
+beforeデータの取得手段が存在せず（`logs/`はgitignore対象で、`tokens`/`costUsd`もnull固定）、
+構造的に実施不能だった。「変更前に計測を取る」を散文の運用ルールとして追加するだけでは、
+[「検知手段のないルールの棚卸し」](#検知手段のないルールの棚卸しissue-339)の第3層ルールが
+1行増えるだけになる（issue #411の原則: 新しい検知メカニズムは起動トリガーが機械か人かを
+先に確認する）。よってCIによる機械トリガーで設計した。
+
+- **`scripts/snapshot-agent-baseline.sh`**: `logs/loop-observability.jsonl` /
+  `logs/subagent-skeleton.jsonl`（存在すれば`logs/otel-debug-collector.jsonl`の有無も記録）から
+  agentType別の実行件数・所要時間を集計し、`docs/agents/baselines/<date>.json`として
+  **git管理下**に書き出す（`logs/`がgit管理外であることがissue #419のbefore消失の根本原因の
+  ため、集計スナップショットをコミットする形で解消する）。
+  - **既知の限界**: `rounds`・`findingCount`はWorkflowの戻り値（`stats`）にのみ存在し、
+    現状どのJSONLにも永続化されていない。Workflow完了直後にオーケストレーターが
+    `docs/agents/baselines/<date>.json`の`workflowRuns`配列へ手動で追記して補うこと
+    （初期値は`docs/agents/baselines/2026-07-16.json`の`workflowRuns`参照）
+- **`scripts/check-agent-baseline-freshness.sh`** + `.github/workflows/agent-baseline-check.yml`:
+  `.claude/agents/*.md`のfrontmatter`model:`/`effort:`行、または`.claude/workflows/*.js`の
+  `opts.model`/`opts.effort`にPR内で差分があるのに、同じPRに`docs/agents/baselines/`の
+  更新が含まれていない場合、GitHub Actionsの`::warning::`アノテーションを出す
+  （**block ではなく warning のみ**。まずは可視化から始める方針）。issue #422
+  （`effort`追加PR）を対象に実行し、警告が正しく出ることを確認済み
+- 本仕組みは最初から機械検知（CI）のため、実装後に「検知手段のないルールの棚卸し」表への
+  行追加は不要（issue #411の原則どおり）
+
 ## AIDDワークフロープロンプトのeval（issue #391）
 
 `.claude/workflows/*.js` 内の自然言語プロンプト（例: db-implの「DBスキーマ変更不要ならblockedではなくpass」という判定基準）は、ユニットテストが効かず、修正の妥当性が「次回実フローでの目視確認」頼みになりがちだった（issue #389のフォローアップ）。fixture SPEC.mdを実際のエージェント（`claude -p --agent <agentType>`、本番と同じモデル）に読ませ、期待するstatus判定になるかを回帰テストする仕組みを用意した。
