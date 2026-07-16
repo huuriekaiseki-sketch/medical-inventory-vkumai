@@ -22,8 +22,12 @@ export const meta = {
 // 2. 【停止①】仕様書を人間に提示し、承認を得るまで Phase 3 に進まない
 // ────────────────────────────────────────────────────────────────────
 
-const taskDescription = args?.taskDescription ?? '現在のコードベース全体の調査'
-const maxRounds = args?.maxRounds ?? 3
+// Workflowツール実行系のargsがverbatimでなく文字列化されて渡ってくる既知の不具合への回避策
+// （.claude/workflows/aidd-phase1-router.js・.claude/workflows/lib/resolve-workflow-args.js
+// と同一パターン。issue #399の調査で本ファイルにもガードが無いことが判明した）。
+const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
+const taskDescription = parsedArgs?.taskDescription ?? '現在のコードベース全体の調査'
+const maxRounds = parsedArgs?.maxRounds ?? 3
 
 // docs/agents/agent-result-schema.md 参照
 const AGENT_RESULT_SCHEMA_PB = {

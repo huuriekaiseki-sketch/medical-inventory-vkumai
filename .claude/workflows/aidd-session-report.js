@@ -15,11 +15,16 @@ export const meta = {
 //   notes?: string,           // 人間が追記したいメモ（任意）
 // }
 
-const feature     = args?.feature  ?? 'unknown-feature'
-const date        = args?.date     ?? '????-??-??'
-const phase1Stats = args?.phase1Stats ?? null
-const phase2Stats = args?.phase2Stats ?? null
-const notes       = args?.notes    ?? ''
+// Workflowツール実行系のargsがverbatimでなく文字列化されて渡ってくる既知の不具合への回避策
+// （.claude/workflows/aidd-phase1-router.js・.claude/workflows/lib/resolve-workflow-args.js
+// と同一パターン。issue #399の調査で本ファイルにもガードが無いことが判明した）。
+const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
+
+const feature     = parsedArgs?.feature  ?? 'unknown-feature'
+const date        = parsedArgs?.date     ?? '????-??-??'
+const phase1Stats = parsedArgs?.phase1Stats ?? null
+const phase2Stats = parsedArgs?.phase2Stats ?? null
+const notes       = parsedArgs?.notes    ?? ''
 
 phase('Report')
 
