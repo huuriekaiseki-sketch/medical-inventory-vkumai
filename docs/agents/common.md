@@ -137,6 +137,43 @@ any code. Heed deprecation notices.
     （hooks非継承・セッション非永続化・同時実行数上限）を初回コミットから組み込んだ上でのみ
     着手する。issue本文に理由を明記済み。
 
+## サブエージェント骨格記録の機械強制（issue #423）
+
+上記の`agent-progress.jsonl` / `loop-observability.jsonl`は、いずれもエージェントへの
+自然言語指示（「◯◯のタイミングで呼ぶこと」）に依存しており、呼び忘れると記録が丸ごと
+欠落する構造的弱点を持つ（2026-07-07以降、実際に5日分欠落した実績がある）。これに対し、
+`SubagentStart`/`SubagentStop` hookは「LLMが実行を選ぶことに頼らず決定論的に実行される」
+ため、呼び忘れという故障モード自体を構造的に解消できる。
+
+**保証レベル3層（新旧の役割分担）:**
+
+| 層 | 内容 | 記録手段 | 保証レベル |
+|---|---|---|---|
+| ① 骨格 | agent_id・agent_type・開始/終了・timestamp | `scripts/log-subagent-hook-skeleton.sh`（`SubagentStart`/`SubagentStop` hook） | 機械強制（呼び忘れ得ない） |
+| ② feature/attempt | どの機能・何回目の試行か | `scripts/log-agent-progress.sh` / `scripts/log-loop-observability.sh`（自然言語指示） | ベストエフォート（label規約化は未着手、issue #423ステップ3） |
+| ③ 自由記述intent/scenario | 何をしようとしていたかの説明 | 同上 | ベストエフォート（欠落許容） |
+
+`logs/subagent-skeleton.jsonl`に、通常のAgent tool経由・Workflowの`agent()`呼び出し経由の
+両方のサブエージェント起動が、`{timestamp, hookEvent, sessionId, agentId, agentType,
+agentTranscriptPath?, lastAssistantMessage?}`形式で自動記録される。フィールド名はissue #423
+ステップ1の実験で実際に観測したhookペイロード（`agent_id`・`agent_type`・
+`agent_transcript_path`・`last_assistant_message`等）に基づく。
+
+**既知の限界:**
+- ペイロードに`status`（pass/fail/blocked）フィールドは含まれない。`SubagentStop`が発火した
+  という事実は「エージェントが完了処理まで到達した」ことの証拠にしかならず、pass/fail/blocked
+  の意味判定は引き続き自己申告・transcript突合（`scripts/verify-agent-progress-transcript.sh`）
+  に委ねる
+- このログは**セッション全体で共通**であり、1つのAIDDフロー実行にスコープされない。並行して
+  他の作業（別のAgent tool呼び出し等）が走っていると、そのイベントも同じファイルに混在する。
+  特定のフロー実行に絞り込みたい場合は、`agentTranscriptPath`が
+  `subagents/workflows/wf_<runId>/`配下かどうかで判別する
+- ②feature/attemptを「モデルの善意の報告」から「コードが決定的に埋め込む構造化データ」に
+  変えるlabel規約化（issue #423ステップ3、例: `agent()`呼び出しの`label`に
+  `implementer:${feature}:attempt${n}`規約を導入する）は未着手のまま残っている
+- 既存の`log-agent-progress.sh` / `log-loop-observability.sh` / gap check群は削除しておらず、
+  新方式と併存させている（新方式が安定稼働することを確認してから、廃止を別issueで検討する）
+
 ## AIDDワークフロープロンプトのeval（issue #391）
 
 `.claude/workflows/*.js` 内の自然言語プロンプト（例: db-implの「DBスキーマ変更不要ならblockedではなくpass」という判定基準）は、ユニットテストが効かず、修正の妥当性が「次回実フローでの目視確認」頼みになりがちだった（issue #389のフォローアップ）。fixture SPEC.mdを実際のエージェント（`claude -p --agent <agentType>`、本番と同じモデル）に読ませ、期待するstatus判定になるかを回帰テストする仕組みを用意した。
