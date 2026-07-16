@@ -1,0 +1,6 @@
+{
+  "specPath": ".claude/workflows/__fixtures__/fault-injection/missing-approval/SPEC.md",
+  "specHash": "4e0b21340b7f4e17da3fa1cc93bb6f83bb1b411bad92254ee939a77ffa4b1351",
+  "baseCommit": "0000000000000000000000000000000000000000",
+  "changedFiles": []
+}
