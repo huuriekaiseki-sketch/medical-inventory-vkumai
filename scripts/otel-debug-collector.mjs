@@ -15,14 +15,44 @@
 //   OTEL_EXPORTER_OTLP_PROTOCOL=http/json
 //   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 //
-// 受信したリクエストは標準出力に要約を出し、生JSONは logs/otel-debug-collector.jsonl に追記する。
+// 受信したリクエストは標準出力に要約を出し、生JSONは logs/otel/YYYY-MM-DD.jsonl に日付ローテーション
+// して追記する（issue #430）。起動時に保持期間（既定30日、OTEL_DEBUG_COLLECTOR_RETENTION_DAYS
+// で変更可）より古いログファイルを削除する。単一ファイルへの無限追記だと肥大化するのと、
+// 「設定変更前のbaseline取得」を事後クエリにする（issue #419の教訓）には日付単位で参照できる
+// 形が必要なため。
 
 import http from 'node:http'
-import { appendFileSync, mkdirSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+import { join } from 'node:path'
 
 const PORT = process.env.OTEL_DEBUG_COLLECTOR_PORT ?? 4318
-const LOG_FILE = process.env.OTEL_DEBUG_COLLECTOR_LOG_FILE ?? 'logs/otel-debug-collector.jsonl'
-mkdirSync('logs', { recursive: true })
+const LOG_DIR = process.env.OTEL_DEBUG_COLLECTOR_LOG_DIR ?? 'logs/otel'
+const RETENTION_DAYS = Number(process.env.OTEL_DEBUG_COLLECTOR_RETENTION_DAYS ?? 30)
+mkdirSync(LOG_DIR, { recursive: true })
+
+function currentLogFile() {
+  const date = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+  return join(LOG_DIR, `${date}.jsonl`)
+}
+
+function pruneOldLogs() {
+  if (!(RETENTION_DAYS > 0)) return // 0以下は無効化（保持期間の管理をしない）
+  const cutoffMs = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000
+  let removed = 0
+  for (const name of readdirSync(LOG_DIR)) {
+    if (!/^\d{4}-\d{2}-\d{2}\.jsonl$/.test(name)) continue
+    const path = join(LOG_DIR, name)
+    if (statSync(path).mtimeMs < cutoffMs) {
+      unlinkSync(path)
+      removed++
+    }
+  }
+  if (removed > 0) {
+    console.log(`otel-debug-collector: 保持期間（${RETENTION_DAYS}日）を過ぎたログファイルを${removed}件削除しました`)
+  }
+}
+
+pruneOldLogs()
 
 function summarizeMetrics(body) {
   const names = new Set()
@@ -57,7 +87,7 @@ const server = http.createServer((req, res) => {
       console.log(`[${timestamp}] ${req.method} ${req.url} — 未知のエンドポイント`)
     }
 
-    appendFileSync(LOG_FILE, JSON.stringify({ timestamp, url: req.url, body: parsed ?? raw }) + '\n')
+    appendFileSync(currentLogFile(), JSON.stringify({ timestamp, url: req.url, body: parsed ?? raw }) + '\n')
 
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end('{}')
@@ -66,5 +96,5 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`otel-debug-collector: http://localhost:${PORT} で待ち受け中（Ctrl+Cで停止）`)
-  console.log(`受信ログ: ${LOG_FILE}`)
+  console.log(`受信ログ: ${LOG_DIR}/YYYY-MM-DD.jsonl（日付ローテーション、保持期間${RETENTION_DAYS}日）`)
 })
