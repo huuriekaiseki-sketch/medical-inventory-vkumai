@@ -186,6 +186,12 @@
             "command": "scripts/verify-claims.sh",
             "timeout": 90,
             "statusMessage": "直前ターンの主張を裏取り中..."
+          },
+          {
+            "type": "command",
+            "command": "scripts/gate-effectiveness-monthly-check.sh",
+            "timeout": 15,
+            "statusMessage": "品質ゲート月次サマリを確認中..."
           }
         ]
       }

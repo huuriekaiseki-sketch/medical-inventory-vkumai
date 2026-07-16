@@ -206,6 +206,39 @@ common.mdの分量は増え続けており、prose追加1件ごとに他ルー�
 実測件数」パターンを再利用）として実装済み。残る2件（router非経由でのTRI/RISK対象変更検知、
 引き継ぎフォーマット実施検知）は優先度順に別途実装する（未着手、issue #339）。
 
+## なぜ品質ゲートの効果測定をpass/fail集計のみに絞り、blocked実績は対象外にしたか（issue #412）
+
+2026-07-16のmentor設計レビューで、AIDD品質ゲート群（Spec Check / Manifest Check / Adversarial
+Verify / Judge Panel等）が「実際に何件の欠陥を止めたか」を示すデータが構造的に存在しないことが
+指摘された。効果測定の本格版（issue #394）は集中維持のためnot plannedクローズ済みのため、
+`logs/loop-observability.jsonl`の集計のみで済む最小構成として着手した。
+
+**実装前に判明した前提の誤り:** issue #412の起票時点では「ゲートのblocked/fail実績は
+loop-observability.jsonlに記録されている」という前提だったが、実装着手時に検証したところ誤り
+だった。`scripts/log-loop-observability.sh`の`--result`は`pass|fail`の2値のみを受け付け
+（`.claude/agents/reviewer.md`の呼び出し例も`pass`/`fail`のみ）、`blocked`は
+`aidd-phase2.js`のAGENT_RESULT_SCHEMAが返す独立した値（Spec Check/Manifest Check/Contract+DB/
+Implement/Integrate/Reviewの各ゲート）で、Workflowの戻り値（`stats.blockedAt`等）としてその場に
+出るだけであり、リポジトリ内のどのファイルにも永続化されていない。
+
+このため今回のスコープは、loop-observability.jsonlに実在するreviewer/implementer/judge-panelの
+pass/fail実績（試行回数・fail率のagent別集計）に絞った。ゲート本体（Spec Check等）のblocked
+実績を可視化するには、`aidd-phase2.js`側にblocked判定時のログ永続化を追加する別スコープの作業が
+必要であり、今回は着手していない。
+
+**なぜ機械トリガーをGitHub Actions cronではなくStop hookにしたか:** schema-drift-check.yml
+（issue #305）と同じ「月次cron + 既存ログの集計」パターンを検討したが、`logs/`は
+`.gitignore`で除外されておりリポジトリにコミットされない（ローカル専用ログ）。GitHub Actions
+はfresh checkoutで動くためローカルの`logs/loop-observability.jsonl`を参照できず、この方式は
+不採用にした。代わりに、セッション終了ごとに必ず発火する既存のStop hook機構
+（`scripts/doc-suggest-check.sh`等と同じパターン）を使い、`.claude/.gate-effectiveness-state/
+last-summary-at`のmtimeで前回出力から30日経過したかを判定して間引く方式にした。これにより
+「起動トリガーは機械」という原則（issue #411のレビューで確認した観点）を保ちながら、GitHub
+Secretsやリモートのステータス源を新設せずに済む。
+
+**関連**: #394（クローズ済みの本格版効果測定）、#411（「起動トリガーは機械か人か」の原則）、
+#305（同型パターンだが本件では不採用にした理由の比較対象）
+
 **追記の原則（issue #411）:** 新しい検知・検証メカニズムを足すときは、「その起動トリガーは
 機械か人か」を先に確認する。人起動（フロー実行の前後でエージェントが手順として実行する形）
 なら、それは第3層ルールの削減ではなく追加であり、下記の棚卸し表に行が1つ増えるだけである。
