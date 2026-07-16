@@ -27,7 +27,11 @@ export const meta = {
 // 書き出しに必要な値（baseCommit）だけをここで収集し、返却値経由でオーケストレーター
 // に渡す。
 
-const taskDescription = args?.taskDescription ?? '現在のコードベース全体の調査'
+// Workflowツール実行系のargsがverbatimでなく文字列化されて渡ってくる既知の不具合への回避策
+// （.claude/workflows/aidd-phase1-router.js・.claude/workflows/lib/resolve-workflow-args.js
+// と同一パターン。issue #399の調査で本ファイルにもガードが無いことが判明した）。
+const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
+const taskDescription = parsedArgs?.taskDescription ?? '現在のコードベース全体の調査'
 
 // docs/agents/agent-result-schema.md 参照。調査系エージェントに「失敗」概念は無いため pass/blocked の2値
 const AGENT_RESULT_SCHEMA = {

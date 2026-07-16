@@ -27,7 +27,12 @@ export const meta = {
 //    （structured-review は Claude から勝手に呼ばない）
 // ────────────────────────────────────────────────────────────────────
 
-const specPath = args?.specPath ?? 'SPEC.md'
+// Workflowツール実行系のargsがverbatimでなく文字列化されて渡ってくる既知の不具合への回避策
+// （.claude/workflows/aidd-phase1-router.js・.claude/workflows/lib/resolve-workflow-args.js
+// と同一パターン。issue #399: このガードが無かったため、Spec Checkが常にデフォルト値
+// 'SPEC.md'を対象にしてしまい、指定specPathにファイルが存在しない異常系を検知できなかった）。
+const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
+const specPath = parsedArgs?.specPath ?? 'SPEC.md'
 
 // docs/agents/agent-result-schema.md 参照。実装/統合/レビュー系はpass/fail/blockedの3値。
 // findingsはfail時の重大度分類（severity.js参照）。Sweep/Draft/Adversarial Verify
