@@ -187,6 +187,7 @@ any code. Heed deprecation notices.
 | 直接DDL実行禁止（migration経由限定） | 本ファイル「DBスキーマ変更ルール」 | 事後のスキーマドリフト検知（issue #305）はあるが、実行しようとした瞬間に止める事前ブロックはない |
 | seed・スクリーンショットに実在施設名を使わない | 本ファイル「テスト環境・データ衛生ルール」 | |
 | `aidd-phase2.js`のSpec Check/Manifest Check関連プロンプトを変更した際のfault injection訓練の実施自体 | 本ファイル「fault injection訓練の実施タイミング（issue #395）」 | 訓練の手順・fixture・setup/teardownスクリプトは用意した（[`fault-injection-drill.md`](./fault-injection-drill.md)）が、「変更時に必ず訓練を実施すること」自体を機械的に強制する手段（例: 該当プロンプト変更を検知してブロックするpre-commit等）は無い。実施記録の記入漏れにも気づく仕組みが無い |
+| `aidd-phase2.js`のdb-implプロンプトを変更した際の`scripts/eval-workflow-prompts.sh`実行自体 | 本ファイル「AIDDワークフロープロンプトのeval（issue #391）」 | eval実行自体は用意したが、「db-implプロンプトを変更したら必ず実行すること」を機械的に強制する手段（該当プロンプト変更を検知してブロックするpre-commit等）は無い。CI組み込みもしていない |
 
 ## fault injection訓練の実施タイミング（issue #395）
 
@@ -199,6 +200,39 @@ any code. Heed deprecation notices.
 されており、`.claude/workflows/lib/`配下の純粋関数ミラーとそのテストはプロンプト文言の変更に
 自動追従しない（issue #348で発覚した回避穴と同種のギャップ）。単体テストのgreenだけでは
 「実行パスの本体が本当にblockedを返すこと」は証明されないため、実測訓練で埋める。
+
+## AIDDワークフロープロンプトのeval（issue #391）
+
+`.claude/workflows/aidd-phase2.js` の db-impl プロンプト（Contract + DBフェーズ）を変更した場合、
+マージ前に `bash scripts/eval-workflow-prompts.sh` を実行し、fixture SPEC 3種（①DB変更あり
+②「該当なし」明記 ③DB言及なし）に対する判定が期待通り（①pass ②pass ③blocked）であることを
+確認すること。verify-claims.shと同型のサーキットブレーカー（同時実行数上限・hooks非継承・
+セッション非永続化）を備えており、実行コストが発生する（既定モデルは`claude-sonnet-5`、
+`EVAL_WORKFLOW_MODEL`で上書き可）。
+
+背景・既知の限界:
+- db-implプロンプトは `.claude/workflows/aidd-phase2.js` 内のテンプレートリテラルであり、
+  Workflow DSLはrequire不可のためスクリプト側は手動複製している。プロンプト文言を変更した
+  場合、`scripts/eval-workflow-prompts.sh` 内の `db_impl_prompt()` も手動で追従させること
+  （自動では同期されない。`.claude/workflows/lib/manifest-check.js`と同じ制約）。
+- ③「DB言及なし」fixtureは実測で結果が割れることを確認済み（2026-07-16）: 実装セットの
+  列挙を伴わない曖昧なSPECに対し、モデルが「言及がないので判断不能→blocked」と
+  「文脈から必要性を推論して独断で実装→pass」のどちらに転ぶかが試行によって揺れる
+  （sonnet-5でも同一fixtureに対しblocked/passの両方の実測結果あり）。これはdb-implプロンプト
+  自体が「要否を判断できる記載が無い場合はblocked」という指示をモデルに厳密に守らせる
+  強制力を持たないことを示しており、evalスクリプト側の不具合ではない。プロンプト文言自体の
+  強化（曖昧な場合は独断で実装せず必ずblockedとする旨をより明示する等）は本issueのスコープ外
+  として別issue化を検討すること。
+- `claude -p`のCLI直接呼び出しはWorkflow DSL内部の`agent({schema})`のようなスキーマ強制
+  機能を持たない。プロンプト末尾でJSON形式を指示しても、説明文の前置きやコードフェンスで
+  囲まれた出力が返ることがある（実測確認）。`scripts/eval-workflow-prompts.sh`は出力の各行を
+  末尾から順にパースし`.status`キーを持つ最後の行を採用することである程度吸収しているが、
+  JSON自体が複数行に整形された場合は救えない。
+- 曖昧なfixture（特に③）はモデルの探索が長くなり、タイムアウト（既定180秒）に達することが
+  ある。`EVAL_WORKFLOW_TIMEOUT_SECONDS`で調整可能。
+- `.claude/workflows/*.js` 全体を対象にした自動実行（CI等への組み込み）は行っていない。
+  マージ前に人間またはAIエージェントが手動で実行する運用とする（実行し忘れを機械的に検知する
+  手段は無い。「検知手段のないルールの棚卸し」参照）。
 
 ## 重要ファイルへのパス
 
@@ -213,5 +247,6 @@ any code. Heed deprecation notices.
 | [`docs/agents/run-manifest.md`](./run-manifest.md) | AIDDフローのspecHash/baseCommit突合用Run Manifestのスキーマ |
 | `scripts/log-agent-progress.sh` / `scripts/show-agent-status.sh` | サブエージェント進捗の記録・一覧表示（issue #18） |
 | `scripts/check-agent-progress-gap.sh` | agent-progress記録漏れの機械検知（issue #339） |
+| `scripts/eval-workflow-prompts.sh` | AIDDワークフロープロンプト（db-implプロンプト）のfixture回帰eval（issue #391） |
 | [`docs/agents/fault-injection-drill.md`](./fault-injection-drill.md) | `aidd-phase2.js`のdeny-by-defaultゲート実測訓練のランブック（issue #395） |
 | `scripts/aidd-fault-injection-setup.sh` / `scripts/aidd-fault-injection-teardown.sh` | fault injection訓練用の`.aidd/run-manifest.json`差し替え・復元（issue #395） |
