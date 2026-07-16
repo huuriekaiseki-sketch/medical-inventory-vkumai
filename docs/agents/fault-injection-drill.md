@@ -63,6 +63,7 @@ Issue作成後、この実施記録欄に対応Issue番号を記入する。
 |---|---|---|---|---|---|---|
 | 2026-07-16 | implementer (Claude Sonnet 5) | 未実測（fixture/スクリプト動作のみ確認） | 未実測（同左） | 未実測（同左） | 未実測（同左） | - |
 | 2026-07-16 | orchestrator (Claude Sonnet 5、Workflowツール経由で4シナリオ全て実測完了) | **不一致**: 期待`Spec Check`、実際`Manifest Check`（後述の原因により） | 一致（`Manifest Check`、正しい理由） | 一致（`Manifest Check`、正しい理由。フィクスチャ固有の詳細も正確に言及） | 一致（`Manifest Check`、正しい理由。正しいファイルの実ハッシュ`69ce73d4...`で比較） | **#399** |
+| 2026-07-16 | orchestrator（PR #402マージ後の再検証、SPEC.md欠如シナリオのみ再実施） | **不一致（継続）**: 期待`Spec Check`、実際`Manifest Check`。ただし原因はPR #402が対処した非対称バグとは別物と判明（後述） | 未実施 | 未実施 | 未実施 | **#399（追記コメント）** |
 
 > **注記（2026-07-16、1回目=implementer実施分）**: fixture・setup/teardownスクリプトの動作
 > （`.aidd/run-manifest.json`の上書き・バックアップ・復元・`specPath`出力・未知シナリオでの
@@ -90,6 +91,29 @@ Issue作成後、この実施記録欄に対応Issue番号を記入する。
 > 「4シナリオ全て一致すれば訓練成功」という当初の完了条件には到達していないが、これは
 > issue #395が本来検知しようとしていた種類の実害そのものであり、訓練としては成功している
 > （不一致を見つけて即issue化するというSPEC決定事項通りの運用ができた）。
+
+> **注記（2026-07-16、3回目=PR #402マージ後の再検証）**: PR #402が追加した「実際にReadした絶対パス
+> (`actualPath`)の自己申告 + 指定specPathとの機械照合」を検証するため、SPEC.md欠如シナリオを再実行
+> したところ、期待通りの`blockedAt: "Spec Check"`にはならず、再び`Manifest Check`でblockedになった。
+> 生transcript（`agent-a3f097c0d8d3c2817.jsonl`）を確認すると、Spec Checkエージェントへ送られた
+> 生のプロンプトは今回も文字通り`"Readツールで SPEC.md が存在し..."`であり、`${specPath}`が
+> デフォルト値`'SPEC.md'`のままだった。加えて今回はManifest Check側（`agent-a17013fba7940dccb.jsonl`）
+> のプロンプトも`"...SPEC.md の現在の内容から..."`とデフォルト値になっていた（ただしstep1の
+> manifest不在で早期blockedしたためstep4は未到達、影響は未検証）。
+>
+> 切り分けのため、`aidd-phase2.js`を経由しない最小の独立ワークフロー（`args`をログ出力するだけの
+> スクリプト）を`Workflow({ script: ..., args: { specPath: "..." } })`で実行したところ、
+> `args`自体が期待通りに渡っておらず、`specPath`が終始デフォルト値`'SPEC.md'`だった
+> （`{"specPath":"SPEC.md","result":{"detail":"SPEC.md"}}`）。
+>
+> これは、issue #399が当初特定した「スクリプト内で最初に呼ばれるagent()呼び出しだけが
+> `args.specPath`を反映しない」という**非対称バグ**とは別の、より根本的な症状である可能性が高い
+> （今回はSpec Check・Manifest Check双方、さらに`aidd-phase2.js`を介さない最小スクリプトの
+> `args`受け渡し自体が機能していなかった）。つまり**今回の再検証では、PR #402の機械照合ロジック
+> 自体が正しく動くかどうかを検証できていない**（`specPath`変数が終始デフォルト値のままだったため、
+> 照合ロジックの分岐に到達する条件＝「actualPathが指定specPathと不一致」という前提が
+> そもそも成立しなかった）。このセッション固有の環境要因（Workflowツールのバージョン・実行環境等）
+> の可能性があるため、別セッション・別環境での再検証を推奨する。詳細はissue #399に追記コメント。
 
 ## 次回実施予定日
 
