@@ -39,6 +39,28 @@ SUMMARY="$(jq -s -r '
     "- loop別: agentic=\($agentic), developer=\($developer), external=\($external)",
     "- 結果: pass=\($pass), fail=\($fail), other=\($other)",
     "",
+    "## Agent別（品質ゲートの発火実績。blocked状態はこのログに記録されないため対象外。issue #412）",
+    (
+      if $total == 0 then empty
+      else
+        ($all | group_by(.agent)[] |
+          . as $g |
+          ($g[0].agent) as $agent |
+          ($g | length) as $attempts |
+          ($g | map(select(.result == "pass")) | length) as $p |
+          ($g | map(select(.result == "fail")) | length) as $f |
+          "- \($agent): 試行\($attempts)件 / pass=\($p) / fail=\($f)"
+        ),
+        (
+          ($all | group_by(.agent) | map(select(any(.[]; .result == "fail")) | .[0].agent)) as $everFailed
+          | ($all | group_by(.agent) | map(.[0].agent) - $everFailed) as $neverFailed
+          | if ($neverFailed | length) > 0 then
+              "- 一度もfailを返していないagent: \($neverFailed | sort | join(", "))"
+            else empty end
+        ),
+        ""
+      end
+    ),
     "## Feature別",
     (
       if $total == 0 then empty
