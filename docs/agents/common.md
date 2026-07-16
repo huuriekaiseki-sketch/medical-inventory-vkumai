@@ -223,6 +223,27 @@ tokens/costのエクスポートを確認できる最小限のOTLP/HTTP(json)受
 送信先はローカル（`http://localhost:4318`）のみ。外部SaaS（Honeycomb/Datadog等）への送信は
 医療関連プロジェクトのため必ずユーザー承認を得てから別途検討する。
 
+**常時記録化と起動忘れ検知（issue #430）**: `otel-debug-collector.mjs`はデバッグ用の手動起動
+collectorであり、常時稼働ではない。issue #419（effortフィールド追加の効果測定）でbefore/after
+比較ができなかった真因は「変更前に計測を忘れた」という運用ミスではなく、「tokens/costが
+どこにも常時記録されていない」という構造の問題だった。これに対応するため以下を実装した:
+
+- `otel-debug-collector.mjs`は`logs/otel/YYYY-MM-DD.jsonl`に日付ローテーションして記録する
+  （既定30日で古いログを自動削除。`OTEL_DEBUG_COLLECTOR_RETENTION_DAYS`で変更可）。単一ファイル
+  への無限追記による肥大化を避け、日付単位で過去のbaselineを事後クエリできるようにした
+- SessionStart hook（`scripts/check-otel-collector-status.sh`）が、`CLAUDE_CODE_ENABLE_TELEMETRY=1`
+  が設定されているにもかかわらずcollectorに接続できない場合に警告する。issue #411原則
+  （「起動トリガーは機械か人か」）に照らし、常時起動そのもの（launchd常駐化等）までは行わず、
+  「起動し忘れても気づける」という最小限のバーに留めた。OTelを有効化していない（既定）環境では
+  何もしない
+- **実測（2026-07-16）**: OTelの各metric（`claude_code.session.count`/`cost.usage`/
+  `token.usage`/`active_time.total`）のdata point属性に`session.id`（Claude Codeのhook入力
+  JSONと同じUUID形式）が含まれることを実際のheadlessセッションで確認した。これにより、
+  自作JSONL（loop-observability.jsonl等、hook入力の`session_id`を記録している）とOTel側の
+  データを`session.id`で突合できる。ただし`agentType`（reviewer/implementer等の粒度）に
+  相当する属性は無く、`query_source`（例: `"main"`）等の粗い区別に留まる。サブエージェント
+  単位での突合には、タイムスタンプの近接性等の追加のヒューリスティックが必要（未実装）。
+
 ## AIDDワークフロープロンプトのeval（issue #391）
 
 `.claude/workflows/*.js` 内の自然言語プロンプト（例: db-implの「DBスキーマ変更不要ならblockedではなくpass」という判定基準）は、ユニットテストが効かず、修正の妥当性が「次回実フローでの目視確認」頼みになりがちだった（issue #389のフォローアップ）。fixture SPEC.mdを実際のエージェント（`claude -p --agent <agentType>`、本番と同じモデル）に読ませ、期待するstatus判定になるかを回帰テストする仕組みを用意した。
