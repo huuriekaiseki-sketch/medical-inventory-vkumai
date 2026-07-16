@@ -52,7 +52,6 @@ e2e/.auth/*.json
 .playwright-mcp/
 
 # Stop hookのセッション内重複提案抑止用の一時状態（ローカル専用）
-/.claude/.doc-suggest-state/
 /.claude/.ai-check-suggest-state/
 /.claude/.verify-state/
 /.claude/.gate-effectiveness-state/
