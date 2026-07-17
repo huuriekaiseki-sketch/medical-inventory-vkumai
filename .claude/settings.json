@@ -86,6 +86,8 @@
       "Bash(bash scripts/check-run-manifest-presence.test.sh*)",
       "Bash(scripts/check-direct-ddl-execution.sh *)",
       "Bash(bash scripts/check-direct-ddl-execution.test.sh*)",
+      "Bash(scripts/check-automode-config.sh *)",
+      "Bash(bash scripts/check-automode-config.test.sh*)",
       "Bash(curl -s http://localhost:*)",
       "Bash(sort *)",
       "Bash(ps *)",
@@ -148,6 +150,11 @@
           {
             "type": "command",
             "command": "scripts/check-otel-collector-status.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "scripts/check-automode-config.sh",
             "timeout": 5
           }
         ]

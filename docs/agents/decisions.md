@@ -459,3 +459,51 @@ common.mdの既存文言「execute_sql等」という書き方自体が、この
 （MCPツールの抜け道）とは独立に、実装者自身のセルフテストで見つかった。issue #438の
 「実装前に実機確認する」という教訓の延長で、「実装後もテストで実機確認する」ことの価値を
 改めて示す事例になった。
+
+## なぜautoMode(hard_deny)を個人設定のみにし、SessionStart hookで設定し忘れを検知することにしたか（issue #439）
+
+issue #439は当初「autoMode設定(hard_deny)で医療データ外部送信・RLS無効化を無条件ブロックする」
+という機能導入提案だったが、ゲート条件確認（公式ドキュメント実機確認）の結果、issue #438の
+`sandbox.credentials`と同型の制約が判明し、方針を変更した。
+
+**確認した事実（推測ではなく公式ドキュメントの原文で確認済み）:** `autoMode`のclassifierは
+`.claude/settings.json`・`.claude/settings.local.json`（どちらもリポジトリのディレクトリ内に
+存在するファイル）から`autoMode`設定を読まない。
+出典: https://code.claude.com/docs/en/auto-mode-config.md 「Where the classifier reads
+configuration」セクション。理由も明記されている: "a checked-in repo or a build step could
+otherwise inject its own allow rules"（コミットされたリポジトリやビルドステップが、独自の
+許可ルールを勝手に注入できてしまうため）。`.claude/settings.local.json`を対象外にしている
+理由も同様（"Excluding .claude/settings.local.json also closes the case where a repository
+commits the file or a local tool or build step writes it."）。
+
+この事実確認自体、当初は調査エージェントの要約を鵜呑みにしそうになったが、「その理由は
+本当にドキュメントに書かれているのか、それとも推測か」という指摘を受けて出典URLと原文引用を
+再確認する一手間を挟んだ。issue #438の「実装前に実機確認する」を、「実機確認の結果自体も
+一次情報で裏取りする」までもう一段踏み込んだ形。
+
+**判明した仕様（下書き想定と一致した部分）:** キー名（`environment`/`hard_deny`/`soft_deny`/
+`allow`）・評価順序（`hard_deny → soft_deny → allow → 明示的なユーザー意図`、`permissions.deny`
+より後に評価される追加の層）は下書きどおりだった。
+
+**判明した既知の限界（下書きに無かった情報）:** 各classifier呼び出しはトークンコストが
+増加する。また3回連続/20回総ブロックで自動fallbackする仕様があり、「ユーザー意図でも
+上書き不可の無条件ブロック」という説明どおりには機能しきらない可能性がある（一定数
+ブロックが続くと効かなくなる）。
+
+**結論・設計判断:** `autoMode`はプロジェクト側にコミットして全員へ強制する形では実装
+できない。issue #438のcredentials設定と同じ構造的制約であり、[「Bashサンドボックス機能は
+現行toolchainと非互換のため保留」](#なぜbashサンドボックス機能issue-438を導入せず保留にしたか)
+と同種の判断が必要になった。ただし#438（toolchain非互換で使用そのものが不可能）とは異なり、
+#439は「使うこと自体は個人設定で可能・プロジェクト側からは強制できないだけ」という違いが
+あるため、保留にはせず「推奨設定をdocs/agents/common.mdに文書化し、各自の
+`~/.claude/settings.json`への追加を促す」個人オプトイン方式で実装した。
+
+**「書いただけでは気づかれない」への追加対応:** ドキュメント化のみで終えると、issue #423
+（loop-observability記録漏れ、自然言語指示への依存が実際に5日分の記録欠落を招いた事例）と
+同型の弱さが残るという指摘を受け、`scripts/check-automode-config.sh`（SessionStart hook）を
+追加した。個人設定に`autoMode.hard_deny`が存在しなければセッション開始時に警告する
+（block不可・warningのみ、`check-otel-collector-status.sh`と同じパターン）。ただし
+`hard_deny`の**内容**（実際に医療データ外部送信・RLS無効化を正しくカバーしているか）までは
+検証しない。存在チェックに留めた理由は、`environment`/`hard_deny`が自然言語記述であり、
+内容の妥当性を機械的に判定する信頼できる方法が無いため（issue #438のcredentials同様、
+platform側の内部メカニズムが完全には文書化されていない）。
