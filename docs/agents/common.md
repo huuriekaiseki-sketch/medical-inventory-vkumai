@@ -244,6 +244,13 @@ collectorであり、常時稼働ではない。issue #419（effortフィール�
   相当する属性は無く、`query_source`（例: `"main"`）等の粗い区別に留まる。サブエージェント
   単位での突合には、タイムスタンプの近接性等の追加のヒューリスティックが必要（未実装）。
 
+## Bashサンドボックス機能は現行toolchainと非互換のため保留（issue #438）
+
+実機検証の結果、`sandbox.enabled: true`はgh/supabase CLI（Go製）のHTTPS通信をTLS証明書検証
+エラーで壊すことが確認された。本プロジェクトの開発フローはgh・supabase CLIの両方に強く依存して
+おり導入できない。検証結果・原因の切り分け・再開条件は
+[`decisions.md`の該当項目](./decisions.md#なぜbashサンドボックス機能issue-438を導入せず保留にしたか)を参照。
+
 ## agents設定変更時のbaselineスナップショット機械強制（issue #429）
 
 issue #419の完了条件「loop-observabilityでbefore/afterのコスト・精度を比較」は、着手時点で
