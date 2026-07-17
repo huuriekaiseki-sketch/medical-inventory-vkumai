@@ -350,3 +350,52 @@ Spec CheckとManifest Checkで挙動が違う」「再検証結果が再現し�
 一部説明している可能性がある（過去の調査がどちらの呼び出し方を使ったかは記録が無く確認
 できないため、断定はできない）。今後ワークフロースクリプトの挙動を調査・検証する際は、
 `name`ではなく`scriptPath`で実ファイルを指定することを推奨する。
+
+## なぜBashサンドボックス機能（issue #438）を導入せず保留にしたか
+
+issue #438は、公式docs調査で見つかったBashサンドボックス機能（OSレベル分離、macOSはSeatbelt
+実装）を導入し、無人自律実行の安全基盤（データ流出経路の構造的な遮断）を強化する提案だった。
+実装前のゲート条件確認（公式ドキュメントでの仕様実機確認）の過程で、下書き前提との相違が
+複数見つかり、最終的に実機検証で「現行toolchainとは非互換」という結論に至った。
+
+**背景の経緯（下書き前提との相違、判明順）:**
+1. `sandbox.credentials`（deny/mask）は、セキュリティ設計上プロジェクト側設定
+   （`.claude/settings.local.json`含む）では無視され、ユーザー個人の`~/.claude/settings.json`
+   でしか効かない。リポジトリにコミット/共有できるのは`filesystem`/`network`設定のみ
+2. 下書きが想定していた「まずfallback許容モードで観測開始」という専用モードは公式には
+   存在しない。代わりに`allowUnsandboxedCommands`（既定true）がある
+
+**`filesystem.allowWrite`のスコープ設計（実装時点の判断）:** サンドボックスの目的が書き込み
+制限である以上、`$HOME/**`のような広い許可は制約を骨抜きにする。本プロジェクトのCLAUDE.md
+運用が実際にcwd外（`$HOME`配下）への書き込みを要求する箇所を`write_aidd_stats.sh`/
+`aidd_session_report.sh`の実装を読んで洗い出し、`~/.claude/aidd-session-stats/`（書き込み
+先ディレクトリ）と`~/.claude/pending_issues.jsonl`（issue自動作成用の単一ファイル）の2パスに
+個別列挙で絞った。この設計自体は妥当だったが、後述の通りそもそもsandbox自体が導入不能と
+判明したため未使用のまま終わっている。
+
+**実機検証で確定した非互換性:** 隔離ディレクトリ（本体リポジトリとは別）でheadlessセッション
+（`claude -p`）を用い、`sandbox.enabled: true`の複数パターンでgh/supabase CLIの動作を検証した。
+
+| 設定パターン | 認証方式 | 結果 |
+|---|---|---|
+| network.allowedDomains設定あり | keychain(通常) | `gh`がTLS証明書検証エラーで失敗（`x509: OSStatus -26276`） |
+| filesystem.allowWriteのみ（network設定なし） | keychain(通常) | `gh auth status`がkeychainアクセスエラーで失敗（2回再現） |
+| filesystem.allowWriteのみ（network設定なし、確認済み） | GH_TOKEN環境変数（keychain回避） | `gh issue list`がTLS証明書検証エラーで失敗（`x509: OSStatus -26276`） |
+| 同上 | SUPABASE_ACCESS_TOKEN環境変数（keychain回避） | `supabase projects list`が同一のTLS証明書検証エラーで失敗（`x509: OSStatus -26276`） |
+| サンドボックス無効（対照実験） | 通常 | `gh issue list`成功（終了コード0） |
+
+**結論:** `network.allowedDomains`の設定有無に関わらず、`sandbox.enabled: true`にした時点で
+Bashの通信がTLS中継の対象になる。keychain認証を環境変数トークンで迂回してもTLS層で同じ
+エラーが再発することから、keychainアクセスの問題とTLS中継の問題は別々に存在し、片方を回避
+してももう片方で壊れる、という二重の壁だった。gh・supabase CLIの両方で同一エラーが再現して
+おり、Go製CLI全般に共通する非互換性である可能性が高い（curlは同様の状況で成功しており、
+影響を受けるのはGoの`crypto/tls`がサンドボックスのTLS中継プロキシ証明書を信頼しないケースに
+限られると考えられる）。
+
+このリポジトリの開発フローはgh（issue/PR管理）・supabase CLI（migration/DB操作）の両方に
+強く依存しており、`sandbox.enabled: true`を有効化すると開発が成立しない。upstream側でTLS
+中継プロキシの証明書をGoバイナリが信頼できるようにする対応（またはサンドボックス側に除外
+設定）が提供されるまで、issue #438は保留とする。
+
+**再開条件:** Claude Code側のリリースノートでsandbox×Go製CLIの既知問題に対応が入った場合、
+またはTLS中継を回避しつつ書き込み制限のみ有効化する設定が新たに追加された場合。
