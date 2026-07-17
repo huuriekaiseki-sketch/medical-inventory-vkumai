@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { asString, asOptionalString, asNumber, asEnum } from '@/lib/mapping'
+import { asString, asOptionalString, asNumber, asNullableNumber, asEnum } from '@/lib/mapping'
 import { jstDayStart, jstDayEnd } from '@/lib/jst-date-range'
 import { KEYWORD_SCAN_LIMIT, type OrderRepositoryFilter } from '@/lib/orders/list-filter'
 import type { CaseOrder, CaseOrderInput, CaseOrderItem } from '@/types/order'
@@ -14,6 +14,7 @@ interface CaseOrderItemRow {
   lot?: unknown
   ubd?: unknown
   quantity?: unknown
+  unit_price?: unknown
   created_at?: unknown
 }
 
@@ -39,6 +40,7 @@ export function mapItem(row: CaseOrderItemRow): CaseOrderItem {
     lot: asOptionalString(row.lot),
     ubd: asOptionalString(row.ubd),
     quantity: asNumber(row.quantity),
+    unitPrice: asNullableNumber(row.unit_price),
     createdAt: asString(row.created_at),
   }
 }
