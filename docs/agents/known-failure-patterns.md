@@ -46,6 +46,26 @@ Next.js API Route（`requireFacilityAccess`等）を経由せず直接呼び出�
 
 詳細: [`decisions.md`](./decisions.md#なぜ施設分離をrls--is_facility_member関数で実現したか)
 
+### 新しい認可プリミティブ導入時、既存のSECURITY DEFINER関数が取り残される（issue #458）
+
+**チェック内容:** `is_admin()`のような新しい認可プリミティブを導入し、既存のRLSポリシーを
+一斉更新する変更（`CREATE POLICY`の書き換え等）を行う場合、**同じタイミングで既存の
+SECURITY DEFINER関数（手書きWHERE句で認可を実装しているもの）も棚卸しの対象に含める**。
+
+**なぜ再発したか:** `get_distributor_product_price_history` RPCは`is_admin()`導入前に
+書かれており、`is_facility_member(...)`のみで認可していた。翌日`is_admin()`が導入され、
+全RLSポリシーに`OR is_admin()`が一斉追加されたが、このRPCは**RLSポリシーではなく
+SECURITY DEFINER関数内の手書きWHERE句**だったため、その一斉更新の対象から漏れた。
+RLSポリシーの棚卸し（`pg_policies`を見る、または`CREATE POLICY`をgrepする）では
+この種の関数は見つからない。「RLSポリシー」と「SECURITY DEFINER関数内の認可ロジック」は
+別物であり、片方だけを更新して安心してはいけない。
+
+**推奨:** 新しい認可プリミティブを追加する変更では、RLSポリシーの一斉更新と合わせて
+`grep -rl "SECURITY DEFINER" supabase/migrations/*.sql`で全SECURITY DEFINER関数を洗い出し、
+その認可プリミティブ導入前に書かれたものが同様の認可チェックを持っているか確認する。
+
+詳細: [`docs/specs/issue-458-459-price-history-admin-and-unit-price.md`](../specs/issue-458-459-price-history-admin-and-unit-price.md)（横断確認の実施結果を含む）
+
 ### クエリパラメータのバリデーション漏れ（NaN・負数・上限）
 
 **チェック内容:** APIルートで `Number(request.nextUrl.searchParams.get(...))` のように
