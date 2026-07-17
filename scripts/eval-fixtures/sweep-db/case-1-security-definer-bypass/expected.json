@@ -1,0 +1,4 @@
+{
+  "expectedFilePathContains": "eval_fixture_recall.sql",
+  "expectedKeywords": ["SECURITY DEFINER", "認可", "is_facility_member"]
+}

@@ -299,6 +299,46 @@ security/ux/performance5軸の再発見）の指摘であり、Sweepフェーズ
   ケースはこの指標では測れない）。Sweepの見落とし率（recall）を測る別issue（#431）との
   二本立ての片翼として扱うこと
 
+## Sweep recallベンチマーク（issue #431）
+
+issue #419のような設定変更（effort/model）に対して「精度が落ちていないか」を検証する手段が
+無かった。同一タスクのeffort有り/無しA/B比較はground truthが無く「差分」しか測れないため、
+既知欠陥を埋め込んだfixtureで見落とし率（recall）を測る仕組みを、issue #391のeval基盤
+（`scripts/eval-workflow-prompts.sh`）と同じload-bearing workaroundを再利用して構築した。
+[「Find→Adversarial Verify precision記録」](#findadversarial-verify-precision記録issue-432)
+（指摘の生存率＝偽陽性側）と対になる、見落とし側の指標。
+
+- `npm run` 経由ではなく `scripts/eval-sweep-recall.sh <layer>`（例: `sweep-ui`）で直接実行する
+  （db-implのeval同様、実エージェント呼び出しの課金コストのためCI化は見送り、手動実行）
+- fixtureは `scripts/eval-fixtures/sweep-<layer>/case-*/files/` に、既知の失敗パターン
+  （[`known-failure-patterns.md`](./known-failure-patterns.md)）を埋め込んだファイルツリーを置く
+  形式。db-implのSPEC.md単体コピー方式とは異なり、fixtureごとに任意のファイルツリーをclone先へ
+  上書き配置する（sweepは特定のSPEC.mdではなくリポジトリ全体を調査するため）。現在4層それぞれ
+  1ケースずつ用意済み: sweep-ui（Suspenseフォールバック未設定）・sweep-data（issue #24型の
+  requireAuth欠落）・sweep-db（SECURITY DEFINER + GRANT EXECUTEの認可バイパス）・sweep-types
+  （型定義とmapperの層間フィールド不一致）
+- 判定は決定的（`expectedFilePathContains`の部分文字列 かつ `expectedKeywords`のいずれか1つが
+  sweep出力detailに含まれていればヒット）。LLM judgeは使わない（判定器自体が非決定になると
+  回帰テストの意味が薄れるため。issue本文の設計判断）
+- プロンプト本文のドリフト対策として、sweepプロンプトの正本を
+  `.claude/workflows/lib/prompts/sweep.js` に切り出し、`aidd-phase1.js` /
+  `aidd-1-1-deep-task.js` 側のインライン複製との一致を
+  `.claude/workflows/lib/__tests__/sweep-prompt-sync.test.js` が検証する（`npm test`に含まれる）
+- eval-workflow-prompts.shのload-bearing workaround（`--setting-sources ""` + `--agents`注入、
+  `--permission-mode bypassPermissions`、git clone隔離、`--no-session-persistence`、同時実行数
+  上限のサーキットブレーカー）をそのまま再利用している
+- **実機検証済み（2026-07-17）**: sweep-uiは実エージェントでrecall 1/1を確認。sweep-dataは
+  harness経由の自動実行では後述のタイムアウト・レート制限に阻まれたが、同一fixtureに対する
+  手動実行で実際に欠陥（`requireAuth`欠落）を検出できることを確認済み。sweep-db/sweep-typesは
+  モックでのharness配線検証のみで、実機での最終確認はセッション利用上限に達したため次回に
+  持ち越し
+- **既知の制約**:
+  - sweep-dataは全APIルート・data層を実走査するため、実測で数分〜30分近くかかることがある
+    （デフォルトタイムアウトを300→900秒に変更したが、それでも足りない可能性がある）
+  - 実エージェント呼び出しのため、Claude Codeのセッション利用上限に達すると実行できなくなる
+    （issue #407と同様、このリポジトリ側では制御できない外部制約）
+- 将来layer・caseを追加する場合は `scripts/eval-fixtures/sweep-<layer>/case-*/` を増やすだけでよい
+
 ## AIDDワークフロープロンプトのeval（issue #391）
 
 `.claude/workflows/*.js` 内の自然言語プロンプト（例: db-implの「DBスキーマ変更不要ならblockedではなくpass」という判定基準）は、ユニットテストが効かず、修正の妥当性が「次回実フローでの目視確認」頼みになりがちだった（issue #389のフォローアップ）。fixture SPEC.mdを実際のエージェント（`claude -p --agent <agentType>`、本番と同じモデル）に読ませ、期待するstatus判定になるかを回帰テストする仕組みを用意した。
@@ -396,7 +436,7 @@ security/ux/performance5軸の再発見）の指摘であり、Sweepフェーズ
 |---|---|---|---|---|
 | args `typeof === 'string'` → `JSON.parse`防御 | `.claude/workflows/aidd-phase1-router.js`（正本: `.claude/workflows/lib/resolve-workflow-args.js`） | Workflowツールがargsをobjectで渡してもstringで届く不具合（[`decisions.md`](./decisions.md#なぜaidd-phase1-routerjsでargsをjsonparseする防御コードを入れたか)） | **解除**: ツール側がargsを常にobjectで渡すよう修正されれば、この分岐に到達しなくなるだけで副作用なし（前方互換設計のため削除は任意）。**破損**: このガード自体が壊れることは想定しにくい（`typeof`判定のみのため） | `resolve-workflow-args.test.js`（npm test内） |
 | `--setting-sources ""` + `--agents`フラグでのagent定義注入 | `scripts/lib/build-eval-agent-json.mjs` | `--setting-sources ""`が`.claude/agents/*.md`探索も無効化する挙動 | **解除**: `--setting-sources`が`.claude/agents/`探索のみを無効化しないよう修正されれば不要。**破損**: `--agents`フラグのJSON構造・優先順位が変更されると`--agent implementer`解決自体が失敗し、evalの実エージェント呼び出しが全滅する（common.md「AIDDワークフロープロンプトのeval」に既述のload-bearing箇所） | JSON出力形式は`build-eval-agent-json.test.mjs`（npm test内）で検証済み。**ただし実際に`claude -p --agents ... --agent <type>`でagent解決できるかどうかの専用smoke testは無い**（`claude -p`の実呼び出しが必要でCI化見送り済みのため、issue #391と同じ判断。`npm run eval:workflows db-impl`を手動実行した際に暗黙的に再検証されるのみ） |
-| プロンプト正本の切り出し＋インライン複製＋sync test | `.claude/workflows/lib/prompts/db-impl.js` ⇔ `aidd-phase2.js`、`.claude/workflows/lib/spec-check.js` / `manifest-check.js` ⇔ `aidd-phase2.js` | Workflow DSLがfilesystem API不可でローカルモジュールをrequire/importできない制約 | **解除**: Workflow DSLがローカルモジュールをimportできるようになれば、インライン複製自体が不要になり正本を直接importする形に変えられる。**破損**: プロンプト文言変更時にインライン複製側を追従させ忘れると乖離する（これを検知するのがsync testの目的そのもの） | `workflow-prompt-sync.test.js`（npm test内） |
+| プロンプト正本の切り出し＋インライン複製＋sync test | `.claude/workflows/lib/prompts/db-impl.js` ⇔ `aidd-phase2.js`、`.claude/workflows/lib/spec-check.js` / `manifest-check.js` ⇔ `aidd-phase2.js`、`.claude/workflows/lib/prompts/sweep.js` ⇔ `aidd-phase1.js` / `aidd-1-1-deep-task.js` | Workflow DSLがfilesystem API不可でローカルモジュールをrequire/importできない制約 | **解除**: Workflow DSLがローカルモジュールをimportできるようになれば、インライン複製自体が不要になり正本を直接importする形に変えられる。**破損**: プロンプト文言変更時にインライン複製側を追従させ忘れると乖離する（これを検知するのがsync testの目的そのもの） | `workflow-prompt-sync.test.js` / `sweep-prompt-sync.test.js`（npm test内） |
 | eval fixture manifestとaidd-phase2.js内スキーマ定義の同期 | `scripts/eval-fixtures/db-impl/manifest.json` ⇔ `aidd-phase2.js`内のスキーマ定義 | 同上（Workflow DSL importの制約） | **解除**: 同上。**破損**: スキーマ定義がドリフトすると、evalが実際のプロンプトと異なるスキーマでテストしてしまい気づかれない | `eval-fixture-manifest-schema-sync.test.js`（npm test内） |
 | 進捗・観測ログの自然言語指示依存 | `scripts/log-agent-progress.sh` / `scripts/log-loop-observability.sh`呼び出し | Workflow DSLがfilesystem API不可で、ワークフロー本体から機械的にログを書き込めない制約 | **解除**: 同上（importまたは直接fs書き込みが可能になれば、本体側から機械的に記録できる設計に変更可能）。**破損**: 元々「壊れる」ものではなく「そもそも書かれない」リスクが常態（自然言語指示依存のため） | 記録漏れの事後検知（`check-loop-observability-gap.sh` / `check-agent-progress-gap.sh`）はあるが、その実行自体が人起動であり第3層ルールとして上表に残っている（issue #411） |
 
