@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createCaseOrder, listCaseOrders } from '@/lib/case-orders/repository'
+import { createCaseOrder, listCaseOrders, mapItem } from '@/lib/case-orders/repository'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeChainableQuery(result: { data: unknown; error: unknown }): any {
@@ -184,5 +184,40 @@ describe('listCaseOrders', () => {
   it('Supabaseエラー時に例外を投げる', async () => {
     const { db } = makeMockListDb({ data: null, error: { message: 'DB error' } })
     await expect(listCaseOrders(db, 'f-1')).rejects.toThrow('DB error')
+  })
+})
+
+// issue #459: unit_priceカラムがアプリ層で無視されていた回帰テスト
+describe('mapItem', () => {
+  it('unit_priceが数値の場合、unitPriceに数値としてマッピングされる', () => {
+    const item = mapItem({
+      id: 'i-1', case_order_id: 'co-1', jan: '4901234567890',
+      lot: null, ubd: null, quantity: 1, unit_price: 1234.5, created_at: '2026-06-24T00:00:00Z',
+    })
+    expect(item.unitPrice).toBe(1234.5)
+  })
+
+  it('unit_priceがNUMERIC型で文字列として返ってきても数値に変換される', () => {
+    const item = mapItem({
+      id: 'i-1', case_order_id: 'co-1', jan: '4901234567890',
+      lot: null, ubd: null, quantity: 1, unit_price: '1234.50', created_at: '2026-06-24T00:00:00Z',
+    })
+    expect(item.unitPrice).toBe(1234.5)
+  })
+
+  it('unit_priceがnull(既存データ)の場合、unitPriceはnullになる', () => {
+    const item = mapItem({
+      id: 'i-1', case_order_id: 'co-1', jan: '4901234567890',
+      lot: null, ubd: null, quantity: 1, unit_price: null, created_at: '2026-06-24T00:00:00Z',
+    })
+    expect(item.unitPrice).toBeNull()
+  })
+
+  it('unit_priceが未定義の場合もエラーにならずnullになる', () => {
+    const item = mapItem({
+      id: 'i-1', case_order_id: 'co-1', jan: '4901234567890',
+      lot: null, ubd: null, quantity: 1, created_at: '2026-06-24T00:00:00Z',
+    })
+    expect(item.unitPrice).toBeNull()
   })
 })

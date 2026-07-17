@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createLoanOrder, listLoanOrders } from '@/lib/loan-orders/repository'
+import { createLoanOrder, listLoanOrders, mapItem } from '@/lib/loan-orders/repository'
 
 function makeMockRpcDb(rpcResult: unknown): SupabaseClient {
   return { rpc: vi.fn().mockResolvedValue(rpcResult) } as unknown as SupabaseClient
@@ -143,5 +143,32 @@ describe('listLoanOrders', () => {
   it('Supabaseエラー時に例外を投げる', async () => {
     const { db } = makeMockListDb({ data: null, error: { message: 'DB error' } })
     await expect(listLoanOrders(db, 'f-1')).rejects.toThrow('DB error')
+  })
+})
+
+// issue #459: unit_priceカラムがアプリ層で無視されていた回帰テスト
+describe('mapItem', () => {
+  it('unit_priceが数値の場合、unitPriceに数値としてマッピングされる', () => {
+    const item = mapItem({
+      id: 'i-1', loan_order_id: 'lo-1', jan: '4901234567890',
+      name: 'テスト器具', quantity: 1, unit_price: 30000, created_at: '2026-06-24T00:00:00Z',
+    })
+    expect(item.unitPrice).toBe(30000)
+  })
+
+  it('unit_priceがnull(既存データ)の場合、unitPriceはnullになる', () => {
+    const item = mapItem({
+      id: 'i-1', loan_order_id: 'lo-1', jan: '4901234567890',
+      name: 'テスト器具', quantity: 1, unit_price: null, created_at: '2026-06-24T00:00:00Z',
+    })
+    expect(item.unitPrice).toBeNull()
+  })
+
+  it('unit_priceが未定義の場合もエラーにならずnullになる', () => {
+    const item = mapItem({
+      id: 'i-1', loan_order_id: 'lo-1', jan: '4901234567890',
+      name: 'テスト器具', quantity: 1, created_at: '2026-06-24T00:00:00Z',
+    })
+    expect(item.unitPrice).toBeNull()
   })
 })
