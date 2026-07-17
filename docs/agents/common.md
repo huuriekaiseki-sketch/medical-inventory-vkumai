@@ -174,6 +174,19 @@ agentTranscriptPath?, lastAssistantMessage?}`形式で自動記録される。�
 - 既存の`log-agent-progress.sh` / `log-loop-observability.sh` / gap check群は削除しておらず、
   新方式と併存させている（新方式が安定稼働することを確認してから、廃止を別issueで検討する）
 
+**第4の記録層の候補（issue #442調査、未実装）**: Workflowツールが`agent()`呼び出しごとに
+書き出す`journal.jsonl`（`subagents/workflows/wf_<runId>/journal.jsonl`）を実機観測したところ、
+各行の`agentId`フィールドが同じディレクトリの`agent-<agentId>.jsonl`（フルtranscript）・
+`agent-<agentId>.meta.json`（メタデータ）のファイル名と完全一致することを確認した
+（`{"type":"result","key":"v2:<promptとoptsのハッシュ>","agentId":"...","result":{...}}`という形式）。
+これにより、`reconstruct-loop-observability.ts`が現在transcriptの最終メッセージをパースして
+復元している`result`（status/detail等）を、journal.jsonlの`result`フィールドから
+パース不要で直接取得できる可能性がある。ただし`key`はハッシュ値のみでprompt本文を含まないため、
+agentType/feature/labelの復元には引き続きtranscript/meta.json側の情報が必要（この制約は
+変わらない）。また journal.jsonlは**Workflowツール経由の`agent()`呼び出しでのみ生成される**
+（通常のAgent tool直接起動には存在しない）。`reconstruct-loop-observability.ts`への実際の
+組み込みは未着手（別issueで検討）。
+
 ## OpenTelemetryと自作JSONLの役割分担（issue #417）
 
 `scripts/log-loop-observability.sh`の自作JSONLは`tokens`/`costUsd`フィールドが常に`null`固定
@@ -482,3 +495,5 @@ issue #419のような設定変更（effort/model）に対して「精度が落�
 | `scripts/aidd-fault-injection-setup.sh` / `scripts/aidd-fault-injection-teardown.sh` | fault injection訓練用の`.aidd/run-manifest.json`差し替え・復元（issue #395） |
 | `scripts/eval-workflow-prompts.sh` / `scripts/eval-fixtures/` | AIDDワークフロープロンプトのeval基盤（issue #391） |
 | `.claude/workflows/lib/prompts/` | ワークフロー内プロンプト文字列の正本（Workflow DSL側へはインライン複製、sync testで乖離検知） |
+| `.claude/workflows/lib/budget-guard.js` | Loop Until Dryへのbudgetガード判定ロジックの正本（issue #442） |
+| [`docs/agents/workflow-resume-runbook.md`](./workflow-resume-runbook.md) | Workflow実行が中断した際の`resumeFromRunId`再開手順（issue #442） |
