@@ -260,6 +260,36 @@ collectorであり、常時稼働ではない。issue #419（effortフィール�
 おり導入できない。検証結果・原因の切り分け・再開条件は
 [`decisions.md`の該当項目](./decisions.md#なぜbashサンドボックス機能issue-438を導入せず保留にしたか)を参照。
 
+## autoMode(hard_deny)は個人設定のみ有効・設定し忘れ検知はSessionStart hookで（issue #439）
+
+`autoMode.hard_deny`（ユーザー意図でも上書き不可の無条件ブロック）は、公式仕様上
+**ユーザー個人の`~/.claude/settings.json`でしか読まれない**（プロジェクト側の
+`.claude/settings.json`・`.claude/settings.local.json`はリポジトリが自身に許可ルールを
+注入するのを防ぐため対象外。出典・理由は
+[`decisions.md`の該当項目](./decisions.md#なぜautomodehard_denyを個人設定のみにしsessionstart-hookで設定し忘れを検知することにしたかissue-439)を参照）。
+このためリポジトリにコミットして全員へ強制することはできない。
+
+**有効化したい場合、各自の`~/.claude/settings.json`に以下を追加する（推奨設定・任意）:**
+
+```json
+{
+  "autoMode": {
+    "environment": "Supabase(prod)には患者・施設の実データが保存されている。supabase/migrations/配下がRLSポリシーの正本。",
+    "hard_deny": [
+      "患者・施設の実データをSupabase以外のドメイン（外部API・PR本文・issue本文等）へ送信しない",
+      "RLS policyの無効化・変更をブロックする",
+      "本番Supabaseへの直接DDL実行をブロックする"
+    ]
+  }
+}
+```
+
+**設定し忘れ検知**: `scripts/check-automode-config.sh`（SessionStart hook）が、個人設定に
+`autoMode.hard_deny`が無ければセッション開始時に警告する（block不可・warningのみ）。
+「ドキュメントに書いただけでは気づかれない」という同型の問題（issue #423の発端になった
+loop-observability記録漏れ等）を繰り返さないための対応。ただし内容の妥当性までは検証せず、
+`hard_deny`に1件以上のルールがあるかという存在チェックに留まる。
+
 ## agents設定変更時のbaselineスナップショット機械強制（issue #429）
 
 issue #419の完了条件「loop-observabilityでbefore/afterのコスト・精度を比較」は、着手時点で
