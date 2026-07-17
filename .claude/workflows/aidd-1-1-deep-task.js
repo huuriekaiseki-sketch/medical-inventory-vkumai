@@ -64,6 +64,22 @@ status と detail を返すこと。
 - status: "pass"=批評を完了した(追加調査の要否は問わない) / "blocked"=Sweep結果が空で批評に着手できなかった
 - detail: 批評の本文。追加調査が必要な場合は「追加調査対象:」に続けて記述すること`
 
+// budgetガード（issue #442）。正本・単体テストは .claude/workflows/lib/budget-guard.js。
+// Workflow DSLはrequire不可のためインライン複製している（judge-panel.js等と同一パターン）。
+// budget.totalが未設定(null)なら常にfalseを返し、既存動作を完全に維持する（後方互換）。
+// 1ラウンドはSweep 4エージェント + Completeness Critic 1エージェント。閾値はissue #442
+// 調査時点の実測（軽量Sweep 5エージェントで約28万トークン）に安全マージンを載せた仮置き値。
+const MIN_BUDGET_FOR_SWEEP_ROUND = 400_000
+function isBudgetExhausted(minRemainingForRound) {
+  return Boolean(budget?.total && budget.remaining() < minRemainingForRound)
+}
+function shouldContinueSweepLoop(dryRounds, round, maxRounds, minRemainingForRound) {
+  if (dryRounds >= 2) return false
+  if (round > maxRounds) return false
+  if (isBudgetExhausted(minRemainingForRound)) return false
+  return true
+}
+
 // ─── Phase 1-2: Sweep + Completeness Critic ──────────────────────────
 let round = 1
 let dryRounds = 0
@@ -75,7 +91,7 @@ const seenFindingKeys = { ui: new Set(), data: new Set(), db: new Set(), types: 
 let lastRoundBlockedAxes = []
 let additionalContext = ''
 
-while (dryRounds < 2 && round <= maxRounds) {
+while (shouldContinueSweepLoop(dryRounds, round, maxRounds, MIN_BUDGET_FOR_SWEEP_ROUND)) {
   log(`Sweepラウンド ${round}/${maxRounds} 開始`)
   phase('Sweep')
 
@@ -151,11 +167,16 @@ const sweepSummary = [
   `## 型整合性\n${allFindings.types.join('\n') || '指摘なし'}`,
 ].join('\n\n')
 
-// converged: dryRounds到達（新規指摘が尽きた）による正常終了。falseならラウンド上限到達による打ち切りで、
-// 未解決の指摘が残っている可能性がある（issue #293: 上限到達時も常に「Sweep完了」と報告していた問題）
+// converged: dryRounds到達（新規指摘が尽きた）による正常終了。falseの場合、ラウンド上限到達か
+// budget不足のいずれかによる打ち切りで、未解決の指摘が残っている可能性がある
+// （issue #293: 上限到達時も常に「Sweep完了」と報告していた問題。issue #442でbudget切れの
+// ケースも同様に一律「ラウンド上限到達」と誤報しないよう区別を追加）
 const sweepConverged = dryRounds >= 2
+const sweepBudgetExhausted = !sweepConverged && isBudgetExhausted(MIN_BUDGET_FOR_SWEEP_ROUND)
 if (sweepConverged) {
   log(`Sweep完了（収束）: ${round - 1}ラウンド`)
+} else if (sweepBudgetExhausted) {
+  log(`Sweep未完了: budget残高不足のため打ち切り（残り${budget.remaining()}トークン < 閾値${MIN_BUDGET_FOR_SWEEP_ROUND}）。未解決の指摘が残っている可能性があります`)
 } else {
   log(`Sweep未完了: ラウンド上限(${maxRounds})に到達したため打ち切り。未解決の指摘が残っている可能性があります`)
 }
@@ -185,6 +206,7 @@ if (draftSpec?.status !== 'pass') {
   return {
     sweepFindings: allFindings,
     sweepConverged,
+    sweepBudgetExhausted,
     sweepBlockedAxes: lastRoundBlockedAxes,
     draftSpec,
     blocked: true,
@@ -449,6 +471,7 @@ const synthesis = await agent(
 return {
   sweepFindings: allFindings,
   sweepConverged,
+  sweepBudgetExhausted,
   sweepBlockedAxes: lastRoundBlockedAxes,
   draftSpec,
   survived,
