@@ -82,6 +82,10 @@
       "Bash(bash scripts/verify-claims.test.sh*)",
       "Bash(scripts/check-skip-marker-write.sh *)",
       "Bash(bash scripts/check-skip-marker-write.test.sh*)",
+      "Bash(scripts/check-run-manifest-presence.sh *)",
+      "Bash(bash scripts/check-run-manifest-presence.test.sh*)",
+      "Bash(scripts/check-direct-ddl-execution.sh *)",
+      "Bash(bash scripts/check-direct-ddl-execution.test.sh*)",
       "Bash(curl -s http://localhost:*)",
       "Bash(sort *)",
       "Bash(ps *)",
@@ -154,6 +158,18 @@
         "matcher": "Bash|Write|Edit|MultiEdit",
         "hooks": [
           { "type": "command", "command": "scripts/check-skip-marker-write.sh", "timeout": 5 }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "scripts/check-run-manifest-presence.sh", "timeout": 5 }
+        ]
+      },
+      {
+        "matcher": "Bash|mcp__.*execute_sql",
+        "hooks": [
+          { "type": "command", "command": "scripts/check-direct-ddl-execution.sh", "timeout": 5 }
         ]
       }
     ],
