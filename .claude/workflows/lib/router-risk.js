@@ -48,9 +48,20 @@ function matchTaskKeywords(taskDescription) {
 //               実行できない[filesystem/Node.js API access無し]ため、呼び出し側がgit diff等で
 //               取得して渡す）
 // 戻り値: { isHighRisk, matchedKeywords, matchedPaths }
+//
+// changedFilesが1件以上渡されている場合はmatchedPaths（パスベース判定）のみでisHighRiskを
+// 決める。taskDescriptionのキーワード一致は「〜には触れない」のような否定文脈でも単純な
+// 単語出現で一致してしまい、実際には対象外のパスしか変更しないタスクを高リスクと誤判定する
+// ことがあった（issue #456：matchedPaths: []なのにmatchedKeywordsだけで深掘り調査に誤って
+// 振り分けられ、無関係なドメインの大規模Sweepが走った実例）。変更対象ファイルが分かっている
+// 場合はそちらの方が確度が高いため、そちらを信頼する。
+// changedFilesが空（未指定含む）の場合は、パスベース判定ができないため、後方互換として
+// キーワード一致のみで判定する（issue #286時点の挙動を維持）。
+// matchedKeywordsはisHighRiskの判定に使われない場合でも、補助情報としてそのまま返す。
 export function classifyRisk(taskDescription, changedFiles = []) {
   const matchedKeywords = matchTaskKeywords(taskDescription)
   const matchedPaths = (changedFiles ?? []).filter(isHighRiskPath)
-  const isHighRisk = matchedKeywords.length > 0 || matchedPaths.length > 0
+  const hasChangedFiles = (changedFiles ?? []).length > 0
+  const isHighRisk = hasChangedFiles ? matchedPaths.length > 0 : matchedKeywords.length > 0
   return { isHighRisk, matchedKeywords, matchedPaths }
 }

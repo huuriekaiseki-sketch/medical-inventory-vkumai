@@ -1,0 +1,44 @@
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const ROUTER_FILE = path.resolve(__dirname, '../../aidd-phase1-router.js')
+const LIB_FILE = path.resolve(__dirname, '../router-risk.js')
+
+// router-risk.js（正本、vitestでテスト可能）とaidd-phase1-router.js（Workflow DSL、
+// require不可のためインライン複製）の判定ロジックが乖離していないかを検証する（issue #456）。
+// judge-panel.js等と異なり、この判定ロジックは一度ドリフトすると「否定文脈の誤判定」のような
+// 静かなコスト増を招くため（issue #456自体がその実例）、軽量なsync testを設けた。
+// テンプレートリテラルの抽出（sweep-prompt-sync.test.js）とは異なりロジックの一部なので、
+// 判定式・定数配列の文字列を素朴に抽出して比較する簡易チェックに留める。
+function extractArray(source, varName) {
+  const match = source.match(new RegExp(`const ${varName} = (\\[[^\\]]*\\])`, 's'))
+  return match ? match[1] : null
+}
+
+describe('router-risk.jsとaidd-phase1-router.jsの判定ロジック同期(issue #456)', () => {
+  it('isHighRisk判定式（changedFiles提供時はmatchedPathsのみで判定する式）が両ファイルに同じ形で存在する', () => {
+    const routerSource = readFileSync(ROUTER_FILE, 'utf-8')
+    const libSource = readFileSync(LIB_FILE, 'utf-8')
+    const CORE_LOGIC = 'hasChangedFiles ? matchedPaths.length > 0 : matchedKeywords.length > 0'
+
+    expect(routerSource).toContain(CORE_LOGIC)
+    expect(libSource).toContain(CORE_LOGIC)
+  })
+
+  it('RISK_DOMAIN_KEYWORDSが両ファイルで同じ内容', () => {
+    const routerSource = readFileSync(ROUTER_FILE, 'utf-8')
+    const libSource = readFileSync(LIB_FILE, 'utf-8')
+
+    expect(extractArray(routerSource, 'RISK_DOMAIN_KEYWORDS')).toBe(extractArray(libSource, 'RISK_DOMAIN_KEYWORDS'))
+  })
+
+  it('RISK_PATH_PREFIXESが両ファイルで同じ内容', () => {
+    const routerSource = readFileSync(ROUTER_FILE, 'utf-8')
+    const libSource = readFileSync(LIB_FILE, 'utf-8')
+
+    expect(extractArray(routerSource, 'RISK_PATH_PREFIXES')).toBe(extractArray(libSource, 'RISK_PATH_PREFIXES'))
+  })
+})

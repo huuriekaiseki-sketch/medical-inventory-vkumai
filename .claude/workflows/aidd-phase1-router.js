@@ -11,8 +11,11 @@ export const meta = {
 // changedFiles: 変更対象ファイルパスの配列。Workflowスクリプト自体はgit diffを実行できない
 //   （filesystem/Node.js APIアクセス無し）ため、呼び出し側（Claude Code）が
 //   `git diff --name-only` や変更予定ファイルリストから取得して渡すこと。
-// 判定優先順位: changedFilesのパス一致（common.md TRI/RISK基準）を優先し、
-//   taskDescriptionのキーワード一致は補助判定として残す（どちらか一方でも該当すれば深掘りへ。issue #286）
+// 判定優先順位: changedFilesが1件以上ある場合はパス一致（matchedPaths）のみで判定する。
+//   taskDescriptionのキーワード一致は「〜には触れない」等の否定文脈でも単純一致してしまうため
+//   （issue #456）、変更対象ファイルが分かっている場合はそちらを信頼する。changedFilesが
+//   空（未指定含む）の場合のみ、後方互換としてキーワード一致で判定する（issue #286時点の挙動）。
+//   正本・単体テストは .claude/workflows/lib/router-risk.js を参照。
 
 // common.md記載のパスベース基準: supabase/migrations/ 配下、src/lib/supabase/ 配下
 const RISK_PATH_PREFIXES = ['supabase/migrations/', 'src/lib/supabase/']
@@ -60,7 +63,8 @@ phase('Route')
 const lowerTask = taskDescription.toLowerCase()
 const matchedKeywords = RISK_KEYWORDS.filter(kw => lowerTask.includes(kw.toLowerCase()))
 const matchedPaths = changedFiles.filter(isHighRiskPath)
-const isHighRisk = matchedKeywords.length > 0 || matchedPaths.length > 0
+const hasChangedFiles = changedFiles.length > 0
+const isHighRisk = hasChangedFiles ? matchedPaths.length > 0 : matchedKeywords.length > 0
 
 log(
   isHighRisk
