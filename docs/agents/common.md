@@ -327,16 +327,26 @@ issue #419のような設定変更（effort/model）に対して「精度が落�
 - eval-workflow-prompts.shのload-bearing workaround（`--setting-sources ""` + `--agents`注入、
   `--permission-mode bypassPermissions`、git clone隔離、`--no-session-persistence`、同時実行数
   上限のサーキットブレーカー）をそのまま再利用している
-- **実機検証済み（2026-07-17）**: sweep-uiは実エージェントでrecall 1/1を確認。sweep-dataは
-  harness経由の自動実行では後述のタイムアウト・レート制限に阻まれたが、同一fixtureに対する
-  手動実行で実際に欠陥（`requireAuth`欠落）を検出できることを確認済み。sweep-db/sweep-typesは
-  モックでのharness配線検証のみで、実機での最終確認はセッション利用上限に達したため次回に
-  持ち越し
+- **実機検証済み（2026-07-17、4層すべてrecall 1/1を確認）**: 当初sweep-db/sweep-typesは実機で
+  ミスを検出したが、原因を調査したところharnessではなくfixture設計側の問題と判明し、修正後は
+  4層すべてでrecall 1/1を達成した。
+  - sweep-db: fixtureのmigrationファイル名が`2999年`という非現実的なタイムスタンプだったため
+    注目されにくく、また参照先テーブル`eval_fixture_recall_items`を定義していなかったため、
+    「意図した認可チェック欠落」ではなく「テーブル未定義」という別の（意図しない）欠陥に
+    注意が逸れていた。タイムスタンプを現実的な値に修正し、参照先テーブル定義を追加して解消
+  - sweep-types: 当初のfixtureは`EvalFixtureRecallItem & { internalNote: ... }`という交差型で
+    戻り値を宣言しており、TypeScript的には正当な型であるため「型不一致」として弱すぎた。
+    宣言型どおりの戻り値型に変更し、余剰プロパティを`@ts-expect-error`で明示する形に修正して
+    解消（この状態は実際にTypeScriptの余剰プロパティチェックに引っかかる、より明確な不一致）
+  - sweep-typesは同一fixtureで1回目MISS・2回目HITと、実行間で結果が変動した（haikuモデルの
+    出力ゆらぎによる残存する非決定性。db-implのcase-4と同種の限界）
 - **既知の制約**:
   - sweep-dataは全APIルート・data層を実走査するため、実測で数分〜30分近くかかることがある
     （デフォルトタイムアウトを300→900秒に変更したが、それでも足りない可能性がある）
   - 実エージェント呼び出しのため、Claude Codeのセッション利用上限に達すると実行できなくなる
     （issue #407と同様、このリポジトリ側では制御できない外部制約）
+  - モデル（haiku）の出力ゆらぎにより、同一fixtureでも実行のたびにHIT/MISSが変動しうる
+    （完全な決定性は保証できない。複数回実行して傾向を見ることを推奨）
 - 将来layer・caseを追加する場合は `scripts/eval-fixtures/sweep-<layer>/case-*/` を増やすだけでよい
 
 ## AIDDワークフロープロンプトのeval（issue #391）
