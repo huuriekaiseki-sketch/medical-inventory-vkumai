@@ -20,15 +20,17 @@ set -euo pipefail
 #   EVAL_SWEEP_RECALL_FIXTURES_DIR  - fixtureセットの置き場所（省略時は $REPO_DIR/scripts/eval-fixtures）
 #   EVAL_SWEEP_RECALL_LOCK_DIR      - サーキットブレーカー用ロック置き場
 #   EVAL_SWEEP_RECALL_MAX_CONCURRENT - 同時実行を許すeval呼び出し数の上限（省略時は2）
-#   EVAL_SWEEP_RECALL_TIMEOUT_SECONDS - 1caseあたりのタイムアウト秒数（省略時は300）
+#   EVAL_SWEEP_RECALL_TIMEOUT_SECONDS - 1caseあたりのタイムアウト秒数（省略時は900。sweep-dataは
+#     全リポジトリのAPIルート・data層を走査するため実測で数分〜30分近くかかることがある）
 #   EVAL_SWEEP_RECALL_AGENT_CMD     - 実際の`claude -p`呼び出しの代わりに使うコマンド
+#   EVAL_SWEEP_RECALL_DEBUG_DIR     - 指定すると各caseの生出力(JSON)を<case名>.jsonとして保存する
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${EVAL_SWEEP_RECALL_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FIXTURES_ROOT="${EVAL_SWEEP_RECALL_FIXTURES_DIR:-$REPO_DIR/scripts/eval-fixtures}"
 LOCK_DIR="${EVAL_SWEEP_RECALL_LOCK_DIR:-$REPO_DIR/.claude/.eval-sweep-recall-lock}"
 MAX_CONCURRENT="${EVAL_SWEEP_RECALL_MAX_CONCURRENT:-2}"
-TIMEOUT_SECONDS="${EVAL_SWEEP_RECALL_TIMEOUT_SECONDS:-300}"
+TIMEOUT_SECONDS="${EVAL_SWEEP_RECALL_TIMEOUT_SECONDS:-900}"
 
 LAYER="${1:-}"
 if [ -z "$LAYER" ]; then
@@ -76,6 +78,8 @@ run_agent() {
   fi
   # scripts/eval-workflow-prompts.shと同じ理由でこの組み合わせが必要
   # (docs/agents/common.md「ツール制約回避のload-bearing workaround棚卸し」参照)。
+  # --permission-mode bypassPermissions: issue #401で実機確認された対策。呼び出し先は
+  # 必ず使い捨てのgit clone上であり実リポジトリは汚さないため全権限自動承認を許容する。
   local agent_md="$PWD/.claude/agents/${AGENT_TYPE}.md"
   local agents_json
   agents_json="$(node "$SCRIPT_DIR/lib/build-eval-agent-json.mjs" "$agent_md" "$AGENT_TYPE")"
@@ -83,6 +87,7 @@ run_agent() {
     --json-schema "$JSON_SCHEMA" \
     --agents "$agents_json" \
     --setting-sources "" \
+    --permission-mode bypassPermissions \
     --no-session-persistence
 }
 
@@ -152,6 +157,11 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
   AGENT_EXIT=0
   AGENT_OUTPUT="$(cd "$CLONE_DIR/repo" && run_agent_with_timeout "$PROMPT")" || AGENT_EXIT=$?
   rm -rf "$CLONE_DIR"
+
+  if [ -n "${EVAL_SWEEP_RECALL_DEBUG_DIR:-}" ]; then
+    mkdir -p "$EVAL_SWEEP_RECALL_DEBUG_DIR"
+    printf '%s' "$AGENT_OUTPUT" > "$EVAL_SWEEP_RECALL_DEBUG_DIR/${case_name}.json"
+  fi
 
   if [ "$AGENT_EXIT" -ne 0 ]; then
     MISS_LINES="$MISS_LINES
