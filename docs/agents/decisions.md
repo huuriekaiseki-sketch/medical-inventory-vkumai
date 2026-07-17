@@ -431,3 +431,111 @@ Claude（オーケストレーター）が改めて`Workflow({ name: "aidd-phase
 という現行フローを変更しない。「一元制御」という言葉が示唆する自動化は、停止①という
 安全装置とは原理的に両立しないため、Workflow DSL側の制約緩和（人間承認待ちプリミティブの
 追加等）が将来提供されない限り再検討しない。
+
+## なぜissue #444のPreToolUse hookを警告のみ/denyの二段構えにしたか
+
+issue #444（issue #339の優先度2候補2件の機械化）で、2本のPreToolUse hookを実装した。
+
+**① `scripts/check-run-manifest-presence.sh`（Write/Edit/MultiEdit、警告のみ）:**
+TRI/RISK基準に該当する高リスクパスへの書き込み時に`.aidd/run-manifest.json`が無ければ、
+`aidd-phase1-router`を経由せず直接実装に入った可能性を警告する。**ブロックしない**理由は、
+Phase 1調査の初期段階（run-manifest.jsonがまだ書き出されていない正当なタイミング）や、
+AIDDフローを使わない軽微な修正でも高リスクパスに触れることが普通にあり、これらを毎回denyや
+askで止めると開発体験を大きく損なうため。まずは`additionalContext`でモデルに気づかせる
+observeファーストの設計とした（issue #438の教訓とは別に、[OTel](#opentelemetryと自作jsonlの役割分担issue-417)・
+[baseline snapshot](#agents設定変更時のbaselineスナップショット機械強制issue-429)等と同じ
+「まず観測から」という一貫した方針）。
+
+v1スコープは**存在チェックのみ**とし、issue原案にあった「鮮度」（baseCommitと現在のHEADの
+乖離検知等）は見送った。長時間の実装セッションでは正当な理由でHEADが進むことが多く、
+鮮度判定を入れると誤検知率が上がるリスクの方が高いと判断した。
+
+**② `scripts/check-direct-ddl-execution.sh`（Bash + MCP、deny）:**
+`supabase db execute`・`psql`直接実行によるmigrationファイルを経由しないDDL適用を無条件で
+denyする。①と異なりwarningではなくdenyにした理由は、common.mdの既存ルール
+「execute_sql等による直接実行・直接DDL適用は禁止（ローカル・リモート問わず）」が既に
+例外なき禁止として明文化されており、「まず観測」の余地がない（正当なユースケースが
+存在しない）ため。`supabase db push`/`db reset`等はmigration適用の正規手段そのものであり
+対象外とした（denyすると正しいワークフローを壊す）。SQL内容の解析（DDL文かどうかの判定）は
+せず、コマンド/ツール自体を丸ごとdenyする設計とした（内容ベースの判定は誤検知・すり抜け
+双方のリスクが高く、`scripts/check-skip-marker-write.sh`と同じ設計方針）。
+
+**実装レビュー時に見つかったスコープの穴（MCPツール経由の抜け道）:** 当初の設計は
+`matcher: "Bash"`のみで、`supabase db execute`/`psql`のBash実行だけを対象にしていた。
+レビューで「Supabase MCPサーバーの`execute_sql`ツールを直接呼び出せば、このガードレールを
+素通りする」という指摘を受けた。確認したところ、このリポジトリの`.mcp.json`には現時点で
+Supabase MCPサーバーは定義されておらず、今すぐ悪用可能な状態ではなかったが、個人設定や
+将来の追加でMCPサーバーが有効化された場合に備え、matcherを`"Bash|mcp__.*execute_sql"`
+（サーバー名を固定しない正規表現）に拡張し、スクリプト側もcase文で両方を扱うようにした。
+common.mdの既存文言「execute_sql等」という書き方自体が、この種のMCPツールを念頭に置いた
+表現だったと考えられる。
+
+**実装中に実機で発見した2件のバグ（テスト作成時に自己適用して判明）:**
+1. `check-run-manifest-presence.sh`の初期実装は、`tool_input.file_path`が絶対パスの場合に
+   そのままドメインキーワード（`inventory`等）と正規表現照合していた。このリポジトリ自身が
+   「medical-inventory-vkumai」という名前のため、**リポジトリ内外を問わずあらゆる書き込みで
+   常に誤検知する**バグだった。実際にこのhookを自分自身で動かした際、スクラッチディレクトリ
+   （リポジトリ外）への無関係なファイル書き込みで発火し、その場で発覚した。修正として、
+   `tool_input.file_path`を必ずリポジトリルートからの相対パスに正規化してから照合するように
+   変更した。単純な文字列prefix比較では不十分で、macOSの`/var` → `/private/var`シンボリック
+   リンクにより`git rev-parse --show-toplevel`（正規化済みパスを返す）と`tool_input.file_path`
+   （非正規化パスのことがある）が文字列として一致しないケースがテスト作成時に発覚したため、
+   `python3`の`os.path.realpath`で両者を同じ基準に正規化してから`os.path.relpath`で相対パスを
+   求める方式にした。
+2. `check-direct-ddl-execution.sh`の初期実装は、コマンド境界の表現に`\b`（単語境界）を
+   使っていたが、bashの`[[ =~ ]]`（POSIX ERE相当）は`\b`を単語境界として解釈せず、
+   パターンごと静かにマッチしなくなっていた（`supabase db execute`が検知されないという
+   形でテスト失敗として顕在化）。`[[:space:]]|$`を使った明示的な境界表現に置き換えて修正した。
+
+いずれも「テストを書いて実際に動かす」ことで発見できたバグであり、レビューコメントの指摘
+（MCPツールの抜け道）とは独立に、実装者自身のセルフテストで見つかった。issue #438の
+「実装前に実機確認する」という教訓の延長で、「実装後もテストで実機確認する」ことの価値を
+改めて示す事例になった。
+
+## なぜautoMode(hard_deny)を個人設定のみにし、SessionStart hookで設定し忘れを検知することにしたか（issue #439）
+
+issue #439は当初「autoMode設定(hard_deny)で医療データ外部送信・RLS無効化を無条件ブロックする」
+という機能導入提案だったが、ゲート条件確認（公式ドキュメント実機確認）の結果、issue #438の
+`sandbox.credentials`と同型の制約が判明し、方針を変更した。
+
+**確認した事実（推測ではなく公式ドキュメントの原文で確認済み）:** `autoMode`のclassifierは
+`.claude/settings.json`・`.claude/settings.local.json`（どちらもリポジトリのディレクトリ内に
+存在するファイル）から`autoMode`設定を読まない。
+出典: https://code.claude.com/docs/en/auto-mode-config.md 「Where the classifier reads
+configuration」セクション。理由も明記されている: "a checked-in repo or a build step could
+otherwise inject its own allow rules"（コミットされたリポジトリやビルドステップが、独自の
+許可ルールを勝手に注入できてしまうため）。`.claude/settings.local.json`を対象外にしている
+理由も同様（"Excluding .claude/settings.local.json also closes the case where a repository
+commits the file or a local tool or build step writes it."）。
+
+この事実確認自体、当初は調査エージェントの要約を鵜呑みにしそうになったが、「その理由は
+本当にドキュメントに書かれているのか、それとも推測か」という指摘を受けて出典URLと原文引用を
+再確認する一手間を挟んだ。issue #438の「実装前に実機確認する」を、「実機確認の結果自体も
+一次情報で裏取りする」までもう一段踏み込んだ形。
+
+**判明した仕様（下書き想定と一致した部分）:** キー名（`environment`/`hard_deny`/`soft_deny`/
+`allow`）・評価順序（`hard_deny → soft_deny → allow → 明示的なユーザー意図`、`permissions.deny`
+より後に評価される追加の層）は下書きどおりだった。
+
+**判明した既知の限界（下書きに無かった情報）:** 各classifier呼び出しはトークンコストが
+増加する。また3回連続/20回総ブロックで自動fallbackする仕様があり、「ユーザー意図でも
+上書き不可の無条件ブロック」という説明どおりには機能しきらない可能性がある（一定数
+ブロックが続くと効かなくなる）。
+
+**結論・設計判断:** `autoMode`はプロジェクト側にコミットして全員へ強制する形では実装
+できない。issue #438のcredentials設定と同じ構造的制約であり、[「Bashサンドボックス機能は
+現行toolchainと非互換のため保留」](#なぜbashサンドボックス機能issue-438を導入せず保留にしたか)
+と同種の判断が必要になった。ただし#438（toolchain非互換で使用そのものが不可能）とは異なり、
+#439は「使うこと自体は個人設定で可能・プロジェクト側からは強制できないだけ」という違いが
+あるため、保留にはせず「推奨設定をdocs/agents/common.mdに文書化し、各自の
+`~/.claude/settings.json`への追加を促す」個人オプトイン方式で実装した。
+
+**「書いただけでは気づかれない」への追加対応:** ドキュメント化のみで終えると、issue #423
+（loop-observability記録漏れ、自然言語指示への依存が実際に5日分の記録欠落を招いた事例）と
+同型の弱さが残るという指摘を受け、`scripts/check-automode-config.sh`（SessionStart hook）を
+追加した。個人設定に`autoMode.hard_deny`が存在しなければセッション開始時に警告する
+（block不可・warningのみ、`check-otel-collector-status.sh`と同じパターン）。ただし
+`hard_deny`の**内容**（実際に医療データ外部送信・RLS無効化を正しくカバーしているか）までは
+検証しない。存在チェックに留めた理由は、`environment`/`hard_deny`が自然言語記述であり、
+内容の妥当性を機械的に判定する信頼できる方法が無いため（issue #438のcredentials同様、
+platform側の内部メカニズムが完全には文書化されていない）。
