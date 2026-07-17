@@ -48,6 +48,8 @@ const AGENT_RESULT_SCHEMA_PFB = {
   required: ['status', 'detail'],
 }
 
+// 正本: .claude/workflows/lib/prompts/sweep.js。Workflow DSLはrequire不可のため
+// インライン複製している。同期は sweep-prompt-sync.test.js が検証する（issue #431）。
 const SWEEP_GUIDE = `
 
 ## 出力形式

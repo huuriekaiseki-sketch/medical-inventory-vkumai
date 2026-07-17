@@ -1,0 +1,4 @@
+{
+  "expectedFilePathContains": "eval-fixture-recall/[id]/route.ts",
+  "expectedKeywords": ["requireAuth", "認証", "認可"]
+}
