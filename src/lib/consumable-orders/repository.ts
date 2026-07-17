@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { asString, asNumber, asEnum } from '@/lib/mapping'
+import { asString, asNumber, asNullableNumber, asEnum } from '@/lib/mapping'
 import { jstDayStart, jstDayEnd } from '@/lib/jst-date-range'
 import { KEYWORD_SCAN_LIMIT, type OrderRepositoryFilter } from '@/lib/orders/list-filter'
 import type { ConsumableOrder, ConsumableOrderInput, ConsumableOrderItem } from '@/types/order'
@@ -11,6 +11,7 @@ interface ConsumableOrderItemRow {
   consumable_order_id?: unknown
   consumable_id?: unknown
   quantity?: unknown
+  unit_price?: unknown
   created_at?: unknown
   // keyword絞り込み時のみ nested join で取得される（listConsumableOrders の戻り値には含めない）
   consumables?: { name?: unknown; jan?: unknown } | null
@@ -33,6 +34,7 @@ export function mapItem(row: ConsumableOrderItemRow): ConsumableOrderItem {
     consumableOrderId: asString(row.consumable_order_id),
     consumableId: asString(row.consumable_id),
     quantity: asNumber(row.quantity),
+    unitPrice: asNullableNumber(row.unit_price),
     createdAt: asString(row.created_at),
   }
 }

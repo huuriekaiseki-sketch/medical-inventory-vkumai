@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { asString, asOptionalString, asNumber, asEnum } from '@/lib/mapping'
+import { asString, asOptionalString, asNumber, asNullableNumber, asEnum } from '@/lib/mapping'
 import { jstDayStart, jstDayEnd } from '@/lib/jst-date-range'
 import { KEYWORD_SCAN_LIMIT, type OrderRepositoryFilter } from '@/lib/orders/list-filter'
 import type { LoanOrder, LoanOrderInput, LoanOrderItem } from '@/types/order'
@@ -12,6 +12,7 @@ interface LoanOrderItemRow {
   jan?: unknown
   name?: unknown
   quantity?: unknown
+  unit_price?: unknown
   created_at?: unknown
 }
 
@@ -32,6 +33,7 @@ export function mapItem(row: LoanOrderItemRow): LoanOrderItem {
     jan: asOptionalString(row.jan),
     name: asString(row.name),
     quantity: asNumber(row.quantity),
+    unitPrice: asNullableNumber(row.unit_price),
     createdAt: asString(row.created_at),
   }
 }

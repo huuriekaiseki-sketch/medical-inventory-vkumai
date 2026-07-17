@@ -20,6 +20,8 @@ export type CaseOrderItem = {
   lot?: string
   ubd?: string
   quantity: number
+  /** 発注時点の単価スナップショット。既存データ(unit_price追加前)はnull */
+  unitPrice: number | null
   createdAt: string
 }
 
@@ -70,6 +72,8 @@ export type ConsumableOrderItem = {
   consumableOrderId: string
   consumableId: string
   quantity: number
+  /** 発注時点の単価スナップショット。既存データ(unit_price追加前)はnull */
+  unitPrice: number | null
   createdAt: string
 }
 
@@ -99,6 +103,8 @@ export type LoanOrderItem = {
   jan?: string
   name: string
   quantity: number
+  /** 発注時点の単価スナップショット。既存データ(unit_price追加前)はnull */
+  unitPrice: number | null
   createdAt: string
 }
 
