@@ -90,6 +90,8 @@
       "Bash(bash scripts/check-automode-config.test.sh*)",
       "Bash(scripts/check-blocked-issues-staleness.sh *)",
       "Bash(bash scripts/check-blocked-issues-staleness.test.sh*)",
+      "Bash(scripts/check-fault-injection-drill-staleness.sh *)",
+      "Bash(bash scripts/check-fault-injection-drill-staleness.test.sh*)",
       "Bash(curl -s http://localhost:*)",
       "Bash(sort *)",
       "Bash(ps *)",
@@ -163,6 +165,11 @@
             "type": "command",
             "command": "scripts/check-blocked-issues-staleness.sh",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "scripts/check-fault-injection-drill-staleness.sh",
+            "timeout": 5
           }
         ]
       }
