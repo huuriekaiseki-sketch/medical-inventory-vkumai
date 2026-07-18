@@ -343,6 +343,15 @@ context使用率・セッションコスト・5h/7dレート制限の消費状�
 おり導入できない。検証結果・原因の切り分け・再開条件は
 [`decisions.md`の該当項目](./decisions.md#なぜbashサンドボックス機能issue-438を導入せず保留にしたか)を参照。
 
+## Channels（issue #448）は今回のユースケース（夜間ジョブ通知）に不向きなため見送り
+
+公式Channels（research preview、Telegram/Discord/iMessage連携）を夜間検査ジョブの通知先に
+使う提案があったが、実機確認の結果「イベントはセッションが開いている間のみ届く」という
+制約があり、Claude Codeセッションが閉じている夜間の時間帯にcron等から起動したジョブの結果を
+通知するという想定用途と噛み合わないことが判明した。加えてデータ暗号化・HIPAA等の規制対応が
+公式ドキュメントに未記載という懸念も残る。詳細・再開条件は
+[`decisions.md`の該当項目](./decisions.md#なぜchannelsissue-448を導入せず見送ったか)を参照。
+
 ## blockedラベルの再開条件見直しはSessionStart hookで機械ポーリング（issue #453）
 
 `blocked`ラベルの再開条件（例: issue #438の`decisions.md`記載事項）を誰がいつ見直すかの
