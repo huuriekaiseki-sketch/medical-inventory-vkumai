@@ -49,7 +49,7 @@ medical-inventory-vkumai/               ← このプロジェクト
     │   ├── structured-review/SKILL.md  ← 最終構造化レビュー（Phase 5後）
     │   └── e2e-runner/SKILL.md         ← E2Eテスト・スクリーンショット
     └── workflows/
-        ├── aidd-phase1-router.js       ← Phase 1 入口。TRI/RISKキーワードでaidd-phase1/aidd-1-1-deep-taskへ自動振り分け
+        ├── aidd-phase1-router.js       ← Phase 1 入口。TRI/RISKキーワードでaidd-phase1/aidd-1-1-deep-task/メタ改修軽量ルート(issue #457)へ自動振り分け
         ├── aidd-phase1.js              ← Phase 1 調査ワークフロー（軽量Sweep。routerから呼ばれる）
         ├── aidd-phase2.js              ← Phase 3-5 実装〜検証ワークフロー
         ├── aidd-1-1-deep-task.js       ← 深掘り調査・仕様検証（routerから高リスク判定時に呼ばれる）

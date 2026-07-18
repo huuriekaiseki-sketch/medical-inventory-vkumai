@@ -5,7 +5,22 @@
 // 説明文にキーワードが無くても、変更ファイルパスがRLS/auth/facility等のドメインに
 // 触れる場合は深掘りパスに振り分ける（ファイルパス一致を優先、キーワード一致は補助判定として残す）。
 // aidd-phase1-router.js（Workflow DSL、require不可）にも同一ロジックをインラインで複製している。
-// このファイルはvitestでの単体テスト用の正本。
+// このファイルはvitestでの単体テスト用の正本。同期は
+// .claude/workflows/lib/__tests__/router-risk-sync.test.js が検証する（issue #457）。
+//
+// 【issue #457】パイプライン自体のメタ改修（.claude/workflows/・.claude/agents/・
+// docs/agents/配下のみの変更）は、プロダクトコード向けのTRI/RISK基準（RISK_KEYWORDSの
+// 単純文字列一致）にかけると2つの問題が起きていた:
+//   1. taskDescriptionに「DB/RLS/authには触れない」という否定文を書いても"auth"等の単語が
+//      キーワード一致し、changedFilesが実際は高リスク領域に一切該当しないのに深掘り調査へ
+//      誤って振り分けられる（キーワードマッチは文脈を解釈しないため）
+//   2. 軽量Sweepの4軸（UI/データ/DB/型）はプロダクトコード向けの分類軸であり、
+//      ツール層の変更に対してはui/data/types軸が「対象コードが無いので当然指摘なし」を
+//      返すだけの無駄な実行になる
+// 対応: 「changedFilesが全てツール層(META_PATH_PREFIXES配下)のみ」という条件を、
+// 既存のキーワード一致・パス一致判定より「先に」評価する。この条件を満たさない限り
+// 従来のisHighRiskPath/matchTaskKeywords判定には一切影響しない（プロダクトコード向けの
+// 既存TRI/RISK判定は緩めない）。理由の詳細はdocs/agents/decisions.md参照。
 
 // 意図的に安全側に倒す（common.md TRI/RISK原則: 迷ったら高リスク側）。
 // false positive（軽微なタスクが深掘りに回る＝時間コスト増）は許容し、
@@ -43,14 +58,49 @@ function matchTaskKeywords(taskDescription) {
   return RISK_KEYWORDS.filter(kw => lower.includes(kw.toLowerCase()))
 }
 
+// issue #457: パイプライン自体のメタ改修パス（AIDDワークフロー定義・エージェント定義・
+// エージェント向けドキュメント）。プロダクトコードのRISK_PATH_PREFIXES/RISK_DOMAIN_KEYWORDS
+// とは別カテゴリであり、意図的にこの3つのみに限定する（安全側に倒すため、対象を広げない）。
+const META_PATH_PREFIXES = ['.claude/workflows/', '.claude/agents/', 'docs/agents/']
+
+function isMetaPipelinePath(filePath) {
+  const normalized = String(filePath).toLowerCase().replace(/\\/g, '/').replace(/^\.\//, '')
+  return META_PATH_PREFIXES.some(prefix => normalized.startsWith(prefix))
+}
+
+// changedFilesが1件以上あり、かつ全件がMETA_PATH_PREFIXES配下の場合のみtrue。
+// changedFilesが空（未指定）の場合は「メタ改修と確認できない」としてfalseを返し、
+// 既存のtaskDescription/パスベース判定（isHighRiskPath・matchTaskKeywords）に委ねる。
+function isMetaPipelineOnlyChange(changedFiles) {
+  const files = changedFiles ?? []
+  if (files.length === 0) return false
+  return files.every(isMetaPipelinePath)
+}
+
 // taskDescription: 人間が書いた説明文（補助判定、後方互換のため残す）
 // changedFiles: 変更対象ファイルパスの配列（優先判定。Workflowスクリプト自体はgit diffを
 //               実行できない[filesystem/Node.js API access無し]ため、呼び出し側がgit diff等で
 //               取得して渡す）
 // 戻り値: { isHighRisk, matchedKeywords, matchedPaths }
-export function classifyRisk(taskDescription, changedFiles = []) {
+function classifyRisk(taskDescription, changedFiles = []) {
   const matchedKeywords = matchTaskKeywords(taskDescription)
   const matchedPaths = (changedFiles ?? []).filter(isHighRiskPath)
   const isHighRisk = matchedKeywords.length > 0 || matchedPaths.length > 0
   return { isHighRisk, matchedKeywords, matchedPaths }
 }
+
+// isHighRisk判定に加え、issue #457のメタ改修カテゴリを含めた3方向ルーティングを決定する。
+// isMetaPipelineOnlyChangeをisHighRisk判定より必ず先に評価すること
+// （changedFilesが全てツール層のみの場合、taskDescriptionの否定文脈由来の
+// キーワード誤検知[symptom 1]の影響を受けずにmetaルートへ確定させるため）。
+// 戻り値: { route: 'meta'|'deep'|'light', isHighRisk, isMetaChange, matchedKeywords, matchedPaths }
+export function classifyRoute(taskDescription, changedFiles = []) {
+  if (isMetaPipelineOnlyChange(changedFiles)) {
+    return { route: 'meta', isHighRisk: false, isMetaChange: true, matchedKeywords: [], matchedPaths: [] }
+  }
+  const { isHighRisk, matchedKeywords, matchedPaths } = classifyRisk(taskDescription, changedFiles)
+  return { route: isHighRisk ? 'deep' : 'light', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths }
+}
+
+// 後方互換用に従来のclassifyRiskもexportしたまま維持する（既存テスト・呼び出し元との互換性）。
+export { classifyRisk }

@@ -35,6 +35,34 @@ Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、Pr
 理由・鮮度判定を見送った理由は同スクリプトのコメント、経緯は
 [`decisions.md`](./decisions.md#なぜissue-444のpretooluse-hookを警告のみdenyの二段構えにしたか)を参照。
 
+### 第5カテゴリ: パイプライン自体のメタ改修（issue #457）
+
+上記のTRI/RISK基準は「プロダクトコード変更」を前提にしており、`.claude/workflows/`・
+`.claude/agents/`・`docs/agents/`配下のみを変更する「パイプライン自体のメタ改修」タスクには
+機械的に2つの誤判定を起こしていた。
+
+- **症状1（キーワード誤検知）**: taskDescriptionに「DB/RLS/authには触れない」という
+  否定文を含めても、"auth"/"facility"/"rls"等の単語が単純文字列一致し、changedFilesが
+  実際は高リスク領域に一切該当しない（matchedPaths: []）にもかかわらず深掘り調査
+  （`aidd-1-1-deep-task`）へ誤って振り分けられる
+- **症状2（無駄な4軸Sweep）**: 軽量Sweep（`aidd-phase1`）の4軸（UI/データ/DB/型）は
+  プロダクトコード向けの分類軸であり、`.claude/workflows/*.js`のようなツール層の変更には
+  UI/データ/型の3軸が「対象コードがそもそも存在しないので当然指摘なし」を返すだけになる
+
+**対応（`aidd-phase1-router.js`）**: changedFilesが1件以上あり、かつ**全件**が
+`.claude/workflows/`・`.claude/agents/`・`docs/agents/`のいずれか配下の場合のみ、
+既存のキーワード一致・パス一致判定（上記の高リスクパス判定）より**先に**「メタ改修」と
+確定させ、Sweepを一切実行しない専用の軽量ルートへ振り分ける。この条件を満たさない限り
+（1件でもプロダクトコードが混在する、あるいはchangedFiles自体が空の場合）、この分岐は
+一切発火せず、既存のTRI/RISK判定（プロダクトコード向け）はそのまま適用される。「メタ改修
+パスが先に判定される」ことと「既存の高リスクパス判定を緩めない」ことは独立した設計であり、
+どちらもこの優先順位によって両立している。設計判断の詳細は
+[`decisions.md`](./decisions.md#なぜメタ改修判定をキーワードマッチより先に評価することにしたかissue-457)を参照。
+
+正本は`.claude/workflows/lib/router-risk.js`（`classifyRoute`）、`aidd-phase1-router.js`側の
+インライン複製との同期は`.claude/workflows/lib/__tests__/router-risk-sync.test.js`が検証する
+（`npm test`に含まれる。他のプロンプト同期テストと同型のガード）。
+
 ## テスト環境・データ衛生ルール
 
 - **E2E/BSGはテスト専用Supabaseのみに接続する。** 接続情報は `.env.test` に置く（`.env.test.example` 参照）。
@@ -504,6 +532,7 @@ issue #419のような設定変更（effort/model）に対して「精度が落�
 | args `typeof === 'string'` → `JSON.parse`防御 | `.claude/workflows/aidd-phase1-router.js`（正本: `.claude/workflows/lib/resolve-workflow-args.js`） | Workflowツールがargsをobjectで渡してもstringで届く不具合（[`decisions.md`](./decisions.md#なぜaidd-phase1-routerjsでargsをjsonparseする防御コードを入れたか)） | **解除**: ツール側がargsを常にobjectで渡すよう修正されれば、この分岐に到達しなくなるだけで副作用なし（前方互換設計のため削除は任意）。**破損**: このガード自体が壊れることは想定しにくい（`typeof`判定のみのため） | `resolve-workflow-args.test.js`（npm test内） |
 | `--setting-sources ""` + `--agents`フラグでのagent定義注入 | `scripts/lib/build-eval-agent-json.mjs` | `--setting-sources ""`が`.claude/agents/*.md`探索も無効化する挙動 | **解除**: `--setting-sources`が`.claude/agents/`探索のみを無効化しないよう修正されれば不要。**破損**: `--agents`フラグのJSON構造・優先順位が変更されると`--agent implementer`解決自体が失敗し、evalの実エージェント呼び出しが全滅する（common.md「AIDDワークフロープロンプトのeval」に既述のload-bearing箇所） | JSON出力形式は`build-eval-agent-json.test.mjs`（npm test内）で検証済み。**ただし実際に`claude -p --agents ... --agent <type>`でagent解決できるかどうかの専用smoke testは無い**（`claude -p`の実呼び出しが必要でCI化見送り済みのため、issue #391と同じ判断。`npm run eval:workflows db-impl`を手動実行した際に暗黙的に再検証されるのみ） |
 | プロンプト正本の切り出し＋インライン複製＋sync test | `.claude/workflows/lib/prompts/db-impl.js` ⇔ `aidd-phase2.js`、`.claude/workflows/lib/spec-check.js` / `manifest-check.js` ⇔ `aidd-phase2.js`、`.claude/workflows/lib/prompts/sweep.js` ⇔ `aidd-phase1.js` / `aidd-1-1-deep-task.js` | Workflow DSLがfilesystem API不可でローカルモジュールをrequire/importできない制約 | **解除**: Workflow DSLがローカルモジュールをimportできるようになれば、インライン複製自体が不要になり正本を直接importする形に変えられる。**破損**: プロンプト文言変更時にインライン複製側を追従させ忘れると乖離する（これを検知するのがsync testの目的そのもの） | `workflow-prompt-sync.test.js` / `sweep-prompt-sync.test.js`（npm test内） |
+| TRI/RISK・メタ改修判定ロジックの切り出し＋インライン複製＋sync test | `.claude/workflows/lib/router-risk.js` ⇔ `aidd-phase1-router.js`（issue #457） | 同上（Workflow DSL importの制約）。プロンプト（テンプレートリテラル）ではなく`const`配列・`function`宣言の複製のため、`extract-declaration.js`という別の抽出ユーティリティを使う | **解除**: 同上。**破損**: `classifyRoute`等の関数・定数配列を変更したのに`aidd-phase1-router.js`側のインライン複製を追従させ忘れると乖離する | `router-risk-sync.test.js`（npm test内） |
 | eval fixture manifestとaidd-phase2.js内スキーマ定義の同期 | `scripts/eval-fixtures/db-impl/manifest.json` ⇔ `aidd-phase2.js`内のスキーマ定義 | 同上（Workflow DSL importの制約） | **解除**: 同上。**破損**: スキーマ定義がドリフトすると、evalが実際のプロンプトと異なるスキーマでテストしてしまい気づかれない | `eval-fixture-manifest-schema-sync.test.js`（npm test内） |
 | 進捗・観測ログの自然言語指示依存 | `scripts/log-agent-progress.sh` / `scripts/log-loop-observability.sh`呼び出し | Workflow DSLがfilesystem API不可で、ワークフロー本体から機械的にログを書き込めない制約 | **解除**: 同上（importまたは直接fs書き込みが可能になれば、本体側から機械的に記録できる設計に変更可能）。**破損**: 元々「壊れる」ものではなく「そもそも書かれない」リスクが常態（自然言語指示依存のため） | 記録漏れの事後検知（`check-loop-observability-gap.sh` / `check-agent-progress-gap.sh`）はあるが、その実行自体が人起動であり第3層ルールとして上表に残っている（issue #411） |
 
