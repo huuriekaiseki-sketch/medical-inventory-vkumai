@@ -11,6 +11,9 @@ const LIB_FILE = path.resolve(__dirname, '../router-risk.js')
 // aidd-phase1-router.js（Workflow DSL、require不可）内にインライン複製されたTRI/RISK・
 // メタ改修判定ロジックが、lib/router-risk.js の正本と一字一句ドリフトしていないかを検証する
 // （issue #457。workflow-prompt-sync.test.js / sweep-prompt-sync.test.js と同型のガード）。
+// issue #456で追加された簡易版sync test（CORE_LOGIC文字列の部分一致チェック）は、classifyRisk
+// を宣言単位で丸ごと比較するこちらのテストに統合した（classifyRiskをDECLARATIONSに含めており、
+// 部分一致よりも厳密にドリフトを検知できるため）。
 const DECLARATIONS = [
   'RISK_KEYWORDS',
   'RISK_PATH_PREFIXES',
@@ -24,7 +27,7 @@ const DECLARATIONS = [
   'classifyRoute',
 ]
 
-describe('aidd-phase1-router.jsのTRI/RISK・メタ改修判定ロジック同期(issue #457)', () => {
+describe('aidd-phase1-router.jsのTRI/RISK・メタ改修判定ロジック同期(issue #456, #457)', () => {
   const routerSource = readFileSync(ROUTER_FILE, 'utf-8')
   const libSource = readFileSync(LIB_FILE, 'utf-8')
 

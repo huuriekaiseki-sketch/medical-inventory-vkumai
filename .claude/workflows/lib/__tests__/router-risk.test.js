@@ -52,6 +52,23 @@ describe('classifyRisk', () => {
     const result = classifyRisk('ボタンの色を変える')
     expect(result.isHighRisk).toBe(false)
   })
+
+  it('changedFilesが提供されmatchedPathsが空なら、taskDescriptionに否定文脈でキーワードが含まれていても高リスクとしない（issue #456: ルーター誤判定の再現ケース）', () => {
+    const result = classifyRisk(
+      'DB/RLS/auth/facility等のドメインには触れない。.claude/workflows/*.jsのみを変更する',
+      ['.claude/workflows/aidd-1-1-deep-task.js', '.claude/workflows/aidd-phase2.js']
+    )
+    expect(result.isHighRisk).toBe(false)
+    expect(result.matchedPaths).toEqual([])
+    // キーワード自体は否定文脈でも引き続き検出される（isHighRiskの判定には使わないが、補助情報として残す）
+    expect(result.matchedKeywords.length).toBeGreaterThan(0)
+  })
+
+  it('changedFilesが提供されていてもmatchedPathsが1件でもあれば高リスク（キーワードが無くても）', () => {
+    const result = classifyRisk('画面の調整のみ', ['src/lib/supabase/orders.ts', 'src/components/Button.tsx'])
+    expect(result.isHighRisk).toBe(true)
+    expect(result.matchedPaths).toEqual(['src/lib/supabase/orders.ts'])
+  })
 })
 
 describe('classifyRoute（issue #457）', () => {

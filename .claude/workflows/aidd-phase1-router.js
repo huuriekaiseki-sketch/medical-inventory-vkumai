@@ -13,10 +13,12 @@ export const meta = {
 //   `git diff --name-only` や変更予定ファイルリストから取得して渡すこと。
 // 判定優先順位（issue #457で3段階に変更。common.md TRI/RISK機械判定基準の節を参照）:
 //   1. changedFilesが全てメタ改修パス（META_PATH_PREFIXES）配下 → 最優先でmetaルート
-//      （taskDescriptionのキーワード一致より必ず先に評価。否定文脈["DB/RLS/authには触れない"]
-//       によるキーワード誤検知の影響を受けないようにするため。issue #457 症状1対策）
-//   2. 上記に該当しなければ、changedFilesのパス一致（優先）とtaskDescriptionのキーワード一致
-//      （補助）でdeep/lightを判定（従来通り。issue #286）
+//      （Sweep自体を起動しない。issue #457 症状2対策）
+//   2. 上記に該当しなければ、changedFilesが1件以上ある場合はパス一致（matchedPaths）のみで
+//      isHighRiskを判定する。taskDescriptionのキーワード一致は「〜には触れない」等の
+//      否定文脈でも単純一致してしまうため（issue #456）、変更対象ファイルが分かっている
+//      場合はそちらを信頼する。changedFilesが空（未指定含む）の場合のみ、後方互換として
+//      キーワード一致で判定する（issue #286時点の挙動）。
 // 以下のconst/function群は .claude/workflows/lib/router-risk.js の正本と一字一句同期している
 // （同期は .claude/workflows/lib/__tests__/router-risk-sync.test.js が検証する。issue #457）。
 
@@ -80,17 +82,29 @@ function isMetaPipelineOnlyChange(changedFiles) {
 //               実行できない[filesystem/Node.js API access無し]ため、呼び出し側がgit diff等で
 //               取得して渡す）
 // 戻り値: { isHighRisk, matchedKeywords, matchedPaths }
+//
+// changedFilesが1件以上渡されている場合はmatchedPaths（パスベース判定）のみでisHighRiskを
+// 決める。taskDescriptionのキーワード一致は「〜には触れない」のような否定文脈でも単純な
+// 単語出現で一致してしまい、実際には対象外のパスしか変更しないタスクを高リスクと誤判定する
+// ことがあった（issue #456：matchedPaths: []なのにmatchedKeywordsだけで深掘り調査に誤って
+// 振り分けられ、無関係なドメインの大規模Sweepが走った実例）。変更対象ファイルが分かっている
+// 場合はそちらの方が確度が高いため、そちらを信頼する。
+// changedFilesが空（未指定含む）の場合は、パスベース判定ができないため、後方互換として
+// キーワード一致のみで判定する（issue #286時点の挙動を維持）。
+// matchedKeywordsはisHighRiskの判定に使われない場合でも、補助情報としてそのまま返す。
 function classifyRisk(taskDescription, changedFiles = []) {
   const matchedKeywords = matchTaskKeywords(taskDescription)
   const matchedPaths = (changedFiles ?? []).filter(isHighRiskPath)
-  const isHighRisk = matchedKeywords.length > 0 || matchedPaths.length > 0
+  const hasChangedFiles = (changedFiles ?? []).length > 0
+  const isHighRisk = hasChangedFiles ? matchedPaths.length > 0 : matchedKeywords.length > 0
   return { isHighRisk, matchedKeywords, matchedPaths }
 }
 
 // isHighRisk判定に加え、issue #457のメタ改修カテゴリを含めた3方向ルーティングを決定する。
-// isMetaPipelineOnlyChangeをisHighRisk判定より必ず先に評価すること
-// （changedFilesが全てツール層のみの場合、taskDescriptionの否定文脈由来の
-// キーワード誤検知[symptom 1]の影響を受けずにmetaルートへ確定させるため）。
+// isMetaPipelineOnlyChangeをclassifyRisk呼び出しより必ず先に評価する。changedFilesが
+// 全てツール層のみの場合、classifyRisk（issue #456の修正でmatchedPathsのみ判定に既に
+// なっている）を呼ぶまでもなくmetaルートへ確定させ、Sweep自体を起動しないことでissue #457
+// symptom 2（無駄な4軸Sweep実行）を避ける。
 // 戻り値: { route: 'meta'|'deep'|'light', isHighRisk, isMetaChange, matchedKeywords, matchedPaths }
 function classifyRoute(taskDescription, changedFiles = []) {
   if (isMetaPipelineOnlyChange(changedFiles)) {

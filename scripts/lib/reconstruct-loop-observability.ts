@@ -160,6 +160,68 @@ export function deriveIntent(promptText: string | null): string {
 const SCENARIO_UNKNOWN = '(transcriptから復元: scenario情報は失われている)'
 const MAX_REASON_LENGTH = 300
 
+// issue #462: Workflowツールが`agent()`呼び出しごとに書き出す`journal.jsonl`は、各行が
+// `{"type":"started"|"result","key":"v2:<promptとoptsのハッシュ>","agentId":"...","result"?:...}`
+// という形式で、`agentId`が同じディレクトリの`agent-<agentId>.jsonl`/`.meta.json`と一致する
+// ことを実機観測済み（docs/agents/common.md「サブエージェント骨格記録の機械強制」参照）。
+// `result`フィールドの形は必ずしも{status,detail,findings?}のStructuredOutput互換オブジェクトとは
+// 限らず、実データではagent()がプレーンな文字列（例: コミットハッシュ文字列）を返すケースも
+// 観測されている。そのためstatusが既知の値である場合のみ「構造化されたresult」とみなし、
+// それ以外（文字列・statusを持たないobject等）は従来のtranscriptパース結果へフォールバックする。
+const KNOWN_STATUSES = new Set(['pass', 'fail', 'blocked'])
+
+interface JournalLine {
+  type?: string
+  agentId?: string
+  result?: unknown
+}
+
+interface JournalResultPayload {
+  status?: unknown
+  detail?: unknown
+  findings?: unknown
+}
+
+export interface JournalStructuredResult {
+  status: AgentTranscriptSummary['status']
+  detail: string | null
+  findings: Finding[] | null
+}
+
+function parseJournalLine(line: string): JournalLine | null {
+  try {
+    return JSON.parse(line) as JournalLine
+  } catch {
+    return null
+  }
+}
+
+function extractStructuredJournalResult(result: unknown): JournalStructuredResult | null {
+  if (typeof result !== 'object' || result === null) return null
+  const payload = result as JournalResultPayload
+  if (typeof payload.status !== 'string' || !KNOWN_STATUSES.has(payload.status)) return null
+
+  return {
+    status: payload.status as AgentTranscriptSummary['status'],
+    detail: typeof payload.detail === 'string' ? payload.detail : null,
+    findings: Array.isArray(payload.findings) ? (payload.findings as Finding[]) : null,
+  }
+}
+
+// journal.jsonlの`type:"result"`行をagentIdごとにMap化する。同じagentIdの行が複数あった場合は
+// 最後に出現したものを採用する（journal.jsonlは追記専用ログのため、後勝ちが最新の実行結果）。
+export function parseJournalResults(lines: string[]): Map<string, JournalStructuredResult> {
+  const results = new Map<string, JournalStructuredResult>()
+  for (const raw of lines) {
+    const parsed = parseJournalLine(raw)
+    if (!parsed || parsed.type !== 'result' || typeof parsed.agentId !== 'string') continue
+
+    const structured = extractStructuredJournalResult(parsed.result)
+    if (structured) results.set(parsed.agentId, structured)
+  }
+  return results
+}
+
 export function pairAgentFiles(filenames: string[]): { agentId: string; jsonlFile: string; metaFile: string }[] {
   const jsonlFiles = new Set(filenames.filter((f) => /^agent-.+\.jsonl$/.test(f)))
   const metaFiles = new Set(filenames.filter((f) => /^agent-.+\.meta\.json$/.test(f)))
@@ -226,14 +288,40 @@ interface WorkflowAgentMeta {
   agentType?: string
 }
 
+const JOURNAL_FILENAME = 'journal.jsonl'
+
+// journal.jsonlはWorkflowツール経由の`agent()`呼び出しでのみ生成される（通常のAgent tool
+// 直接起動には存在しない）。存在しない場合は空のMapを返し、呼び出し側は自動的に
+// transcriptパース方式（従来どおりの`parseAgentTranscriptLines`の結果）にフォールバックする。
+function loadJournalResults(wfDirPath: string, filenames: string[]): Map<string, JournalStructuredResult> {
+  if (!filenames.includes(JOURNAL_FILENAME)) return new Map()
+  const lines = readFileSync(join(wfDirPath, JOURNAL_FILENAME), 'utf-8').split('\n').filter(Boolean)
+  return parseJournalResults(lines)
+}
+
 export function reconstructWorkflowDir(wfDirPath: string, feature: string): LoopObservabilityEntry[] {
   const filenames = readdirSync(wfDirPath)
   const pairs = pairAgentFiles(filenames)
+  const journalResults = loadJournalResults(wfDirPath, filenames)
 
   const parsed = pairs.map(({ agentId, jsonlFile, metaFile }) => {
     const meta = JSON.parse(readFileSync(join(wfDirPath, metaFile), 'utf-8')) as WorkflowAgentMeta
     const lines = readFileSync(join(wfDirPath, jsonlFile), 'utf-8').split('\n').filter(Boolean)
-    const summary = parseAgentTranscriptLines(lines)
+    const transcriptSummary = parseAgentTranscriptLines(lines)
+
+    // journal.jsonlに該当agentIdの構造化resultがあればstatus/detail/findingsをそちらで上書きする
+    // （journal.jsonlにはmodel/tokens/timestamp/promptTextが含まれないため、それらは引き続き
+    // transcriptパース結果を使う）。無ければtranscriptパース結果のままフォールバックする。
+    const journalResult = journalResults.get(agentId)
+    const summary: AgentTranscriptSummary = journalResult
+      ? {
+          ...transcriptSummary,
+          status: journalResult.status,
+          detail: journalResult.detail,
+          findings: journalResult.findings,
+        }
+      : transcriptSummary
+
     return { agentId, agentType: meta.agentType ?? 'unknown', startTimestamp: summary.startTimestamp, summary }
   })
 
