@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { classifyRisk } from '../router-risk.js'
+import { classifyRisk, classifyRoute } from '../router-risk.js'
 
 describe('classifyRisk', () => {
   it('taskDescriptionにキーワードがあれば高リスク（後方互換）', () => {
@@ -68,5 +68,62 @@ describe('classifyRisk', () => {
     const result = classifyRisk('画面の調整のみ', ['src/lib/supabase/orders.ts', 'src/components/Button.tsx'])
     expect(result.isHighRisk).toBe(true)
     expect(result.matchedPaths).toEqual(['src/lib/supabase/orders.ts'])
+  })
+})
+
+describe('classifyRoute（issue #457）', () => {
+  it('症状1の再現ケース: 「DB/RLS/authには触れない」という否定文でもchangedFilesが.claude/workflows/配下のみならmetaルートになる', () => {
+    const result = classifyRoute(
+      'AIDDルーターのメタ改修判定を追加する。DB/RLS/authには触れない。',
+      ['.claude/workflows/aidd-phase1-router.js']
+    )
+    expect(result.route).toBe('meta')
+    expect(result.isMetaChange).toBe(true)
+    expect(result.matchedKeywords).toEqual([])
+    expect(result.matchedPaths).toEqual([])
+  })
+
+  it('changedFilesが.claude/agents/配下のみでもmetaルートになる', () => {
+    const result = classifyRoute('sweepエージェントのプロンプトを調整', ['.claude/agents/sweep-db.md'])
+    expect(result.route).toBe('meta')
+  })
+
+  it('changedFilesがdocs/agents/配下のみでもmetaルートになる', () => {
+    const result = classifyRoute('common.mdにルール追記', ['docs/agents/common.md'])
+    expect(result.route).toBe('meta')
+  })
+
+  it('changedFilesがツール層とプロダクトコードの混在ならmetaルートにならず、既存のTRI/RISK判定に従う（高リスクパスがあればdeep）', () => {
+    const result = classifyRoute('ルーター調整とfacility周りの修正', [
+      '.claude/workflows/aidd-phase1-router.js',
+      'src/app/(pages)/facility/settings/page.tsx',
+    ])
+    expect(result.route).toBe('deep')
+    expect(result.isMetaChange).toBe(false)
+    expect(result.matchedPaths).toContain('src/app/(pages)/facility/settings/page.tsx')
+  })
+
+  it('changedFilesがツール層と無関係なプロダクトコードの混在ならmetaルートにならず、既存判定でlightになりうる', () => {
+    const result = classifyRoute('リファクタ', ['.claude/workflows/aidd-phase1-router.js', 'src/components/Button.tsx'])
+    expect(result.route).toBe('light')
+    expect(result.isMetaChange).toBe(false)
+  })
+
+  it('changedFiles未指定（空配列）ならmetaルートにならず、taskDescriptionのキーワード判定に従う', () => {
+    const result = classifyRoute('facility周りのバグ修正', [])
+    expect(result.route).toBe('deep')
+    expect(result.isMetaChange).toBe(false)
+  })
+
+  it('changedFiles未指定・taskDescriptionにもキーワードが無ければlightルートになる', () => {
+    const result = classifyRoute('ボタンの色を変える', [])
+    expect(result.route).toBe('light')
+  })
+
+  it('既存の高リスクパス判定（supabase/migrations/等）はメタ改修判定の追加後も一切緩まない', () => {
+    const result = classifyRoute('ちょっとしたリファクタ', ['supabase/migrations/20260711000000_add_index.sql'])
+    expect(result.route).toBe('deep')
+    expect(result.isHighRisk).toBe(true)
+    expect(result.isMetaChange).toBe(false)
   })
 })
