@@ -715,3 +715,41 @@ API従量課金という追加コストが重複して発生するだけにな�
 
 **再開条件:** ローカルセッションでは手が回らない規模までissue/PR量が増えた場合、または
 API課金がClaude Pro/Maxサブスクに統合される等、追加コスト構造が変わった場合。
+
+## なぜissue #443の夜間バッチ構想をSessionStart hookに縮小したか
+
+issue #443は「検知手段のないルールの棚卸し」（issue #339）の第3層ルールのうち、検査
+スクリプト自体はあるのに起動が人依存のもの（loop-observability/agent-progress gap check・
+baseline鮮度チェック・fault injection四半期訓練・eval:workflows未実行検知）を、OS launchd等の
+夜間バッチジョブでまとめて機械トリガー化する提案だった。
+
+**実装前に対象スクリプトを実際に読んで判明した制約:**
+- `scripts/check-loop-observability-gap.sh`・`scripts/check-agent-progress-gap.sh`は
+  `--before N --expected M`という、**単発のAIDDフロー実行の直前直後の件数差分**を引数に
+  要求する設計だった。これは「フロー実行直後にオーケストレーターが呼ぶ」ことを前提にした
+  チェックであり、独立した夜間バッチジョブには「直前のフロー」という文脈が無いため、
+  そのままでは呼び出せない
+- `scripts/check-agent-baseline-freshness.sh`（issue #429）も同様に、`<base-ref> <head-ref>`
+  というPR diffを前提にした設計で、CI（PRの差分チェック）用途としては正しく機能している。
+  夜間バッチに無理に転用する動機が薄い
+- eval:workflows（`scripts/eval-workflow-prompts.sh`）は`logs/`に何も書き込んでおらず、
+  「最終実行日時」を記録する仕組み自体がそもそも存在しなかった。未実行検知を作るには、
+  まず実行記録の仕組みを別途追加する必要がある（本issueの前提が成立していなかった）
+
+**唯一そのまま実装可能だったもの:** `docs/agents/fault-injection-drill.md`の
+「## 次回実施予定日」欄は、既に「次回実施予定日」という単一の日付フィールドを持ち、
+「リマインド機構は無い」と明記されていた（issue #443がまさに埋めようとしていたギャップ
+そのもの）。これだけは追加の前提無しに、日付比較だけで機械化できた。
+
+**OS launchdを見送り、SessionStart hookに一本化した判断:** issue原案は「launchdはClaude
+不要で軽い」という利点を挙げていたが、launchdの`.plist`インストール（`~/Library/LaunchAgents/`
+配下への恒久的な登録、`launchctl load`によるOS常駐サービス化）は、リポジトリの外側で
+ユーザーの実行環境そのものに手を入れる操作であり、しかも無人でGitHub issue作成等の外部作用を
+持ちうる。これは今回セッション内で完結する他の変更（フックスクリプト追加等）とは質的に
+異なるリスクを持つと判断した。一方、SessionStart hookは既にこのリポジトリで「機械トリガー」
+として扱われており（issue #411の原則を満たす。`check-blocked-issues-staleness.sh`（issue
+#453）と同型）、恒久的なOS常駐サービスを新設せずとも「セッションが始まった時に気づける」
+という目的は達成できる。この判断により、issue原案の「棚卸し表から最大4行削減」という見込みは
+実質1行（fault injection訓練の放置検知）に縮小したが、残りの3項目（gap check 2件・
+eval:workflows未実行検知）は本issueとは別に、それぞれの前提（実行記録の仕組み等）を
+別途整備してから再検討することとした。
