@@ -372,6 +372,21 @@ GitHub Actions内でclaude-code-action（@claudeメンションでのissue/PR自
 設計判断の詳細は
 [`decisions.md`の該当項目](./decisions.md#なぜblockedラベルの再開条件見直しをcronではなくsessionstart-hookのポーリングにしたかissue-453)を参照。
 
+## 定期実行の機械トリガー化はSessionStart hookに一本化、OS launchdは見送り（issue #443）
+
+issue #443は当初「OS launchd等による夜間バッチジョブで、複数の人起動チェック（gap check・
+baseline鮮度・fault injection訓練・eval:workflows未実行検知）をまとめて機械トリガー化する」
+という提案だった。調査の結果、対象として挙げられていたチェックの大半（`check-loop-observability-gap.sh`・
+`check-agent-progress-gap.sh`は単発フロー実行の前後差分が前提、`check-agent-baseline-freshness.sh`
+はCI/PR diff前提、eval:workflowsは実行記録の仕組み自体が無い）が夜間バッチに転用できないと
+判明し、実装可能だったのは`scripts/check-fault-injection-drill-staleness.sh`
+（`docs/agents/fault-injection-drill.md`「## 次回実施予定日」の期限切れ検知）1件のみだった。
+
+OS launchd等の常時稼働の仕組みは、無人でGitHub issue作成等の外部作用を持ちうる恒久的な
+バックグラウンドサービスの新設になるため導入を見送り、`#453`と同じSessionStart hook
+パターンに一本化した。設計判断の詳細は
+[`decisions.md`の該当項目](./decisions.md#なぜissue-443の夜間バッチ構想をsessionstart-hookに縮小したか)を参照。
+
 ## autoMode(hard_deny)は個人設定のみ有効・設定し忘れ検知はSessionStart hookで（issue #439）
 
 `autoMode.hard_deny`（ユーザー意図でも上書き不可の無条件ブロック）は、公式仕様上
