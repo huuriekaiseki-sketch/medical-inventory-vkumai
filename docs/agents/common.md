@@ -326,15 +326,40 @@ context使用率・セッションコスト・5h/7dレート制限の消費状�
   含まれない。statusline.shはClaude Code本体からstdin経由で呼ばれる性質上vitest対象外という、
   `show-agent-status.sh`等と同じ理由）。公式ドキュメント掲載のサンプルJSON・欠落パターンを
   fixtureとして固定した
-- **未実装（issue #446の設計案2）**: `subagentStatusLine`（AIDD並列実行中のサブエージェント行を
-  カスタマイズする設定）は今回見送った。公式ドキュメントに`tasks`配列の各フィールド名
-  （`id`/`name`/`type`/`status`/`description`/`label`/`startTime`/`model`/`contextWindowSize`/
-  `tokenCount`/`tokenSamples`/`cwd`）は記載があるものの、メインのstatusLineと異なりフィールド値の
-  完全なJSONサンプルが提供されておらず（特に`startTime`の型・フォーマットが未確認）、実機観測も
-  現行の実行環境（Claude Agent SDK経由）ではstatusLine自体が呼び出されず不可能だった。
-  誤った型の想定で実装すると気づかれないまま壊れるため、確度の低いフィールド仮定のまま実装するのは
-  見送り、`show-agent-status.sh`（履歴側）で当面代替する。実機（通常のターミナルCLI）で
-  `tasks`配列の実際のJSONを観測できる環境がある場合は、別issueとして着手すること
+- **`subagentStatusLine`実装（issue #446の設計案2、2026-07-18実機観測により着手）**: 見送りの
+  理由だった「フィールド値の完全なJSONサンプルが無い・`startTime`の型が未確認」を、実際の
+  ターミナルCLI（通常のインタラクティブ`claude`セッション、Claude Agent SDK経由のセッションでは
+  `subagentStatusLine`自体が発火しないため不可）で解消してから実装した。
+  - **実機観測の手順**: `scripts/subagent-statusline-debug-collector.sh`を一時的に
+    `subagentStatusLine`として`settings.local.json`に配線し、受け取った生JSONを
+    `logs/subagent-statusline-debug.jsonl`（gitignore対象）にそのまま追記するだけの捕捉専用
+    スクリプトを用意した。人間が実際のターミナルでExploreエージェントを複数並列実行する
+    タスクを依頼し、パネル表示中に捕捉した
+  - **実機観測で確定した事実**:
+    - `startTime`はUnix epochミリ秒（13桁、実測値`1784374971089`は2026-07-18と整合）
+    - `tasks[]`の各要素に`name`が無いケースがある（Task tool経由の`local_agent`型は
+      `label`/`description`のみで`name`は付与されない）
+    - タスク完了時は`status`が`"done"`等に変わるのではなく、**`tasks`配列から丸ごと消える**
+      （実測ではrunning以外のstatus値は一度も観測できなかった）
+    - `contextWindowSize`はモデル未解決時は省略される（公式ドキュメント記載どおり実測でも確認）
+  - 上記を踏まえ`scripts/subagent-statusline.sh`を実装した。表示内容は
+    `<状態アイコン> <label優先のフォールバック名> <tokenCountをk単位に整形> <context使用率%>`を
+    `columns`幅に切り詰めて`{"id":..., "content":...}`形式で1行ずつ出力する
+  - **既知の未確認事項**: `status`が`"running"`以外の値を取るケース（`waiting`/`failed`等）は
+    実機で一度も観測できておらず、アイコン分岐は公式ドキュメントの一般的な語彙からの類推に
+    とどまる。`startTime`から経過時間を表示する機能は型が確定した後でも今回は実装していない
+    （tokenベースの表示のみで着手条件を満たしたため。追加する場合は別issueで検討すること）
+  - 個人opt-in方式・テスト方針は上記statusline.shと同じ。設定は
+    ```json
+    {
+      "subagentStatusLine": {
+        "type": "command",
+        "command": "<リポジトリ絶対パス>/scripts/subagent-statusline.sh"
+      }
+    }
+    ```
+    テストは`scripts/subagent-statusline.test.sh`（`bash scripts/subagent-statusline.test.sh`で
+    実行、`npm test`には含まれない。fixtureは実機捕捉した実際のJSON構造を元にしている）
 
 ## Bashサンドボックス機能は現行toolchainと非互換のため保留（issue #438）
 
