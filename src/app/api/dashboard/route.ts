@@ -19,8 +19,15 @@ export async function GET() {
       return apiError('認証が必要です', 401)
     }
 
-    // WHY: 自分が所属する施設のみを対象にすることで施設間データ隔離を担保する
-    // （RLSに加えてアプリ側でも facilityId を絞り込む多層防御）
+    // WHY: 自分が所属する施設のみを対象にすることで施設間データ隔離を担保する（issue #460）。
+    // ここでのfacilityIdはクライアント入力を一切経由せず、listUserFacilities(db, user.id)
+    // （user.idはrequireAuth経由のセッション由来）からのみ得ている。user_facilitiesへの読み取りは
+    // クエリ絞り込み(.eq('user_id', userId))とRLS(self_read: user_id = auth.uid())の二重で保護され、
+    // 下流のcase_orders等も is_facility_member RLS で独立に保護される。
+    // news/route.ts・hospital-prices/[id]/route.tsのrequireFacilityAccessは「クライアントが指定した
+    // facilityId（またはクライアント指定IDで引いたレコードのfacilityId）」を検証するためのものであり、
+    // ここでは検証対象となるクライアント入力自体が存在しないため使用しない（同じ関数を混ぜて使うと
+    // 「なぜここだけ違うパターンか」の判断がその都度必要になり、かえって見落としの元になる）。
     const memberships = await listUserFacilities(db, user.id)
 
     const facilitySummaries: DashboardFacilitySummary[] = await Promise.all(
