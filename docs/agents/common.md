@@ -343,6 +343,16 @@ context使用率・セッションコスト・5h/7dレート制限の消費状�
 おり導入できない。検証結果・原因の切り分け・再開条件は
 [`decisions.md`の該当項目](./decisions.md#なぜbashサンドボックス機能issue-438を導入せず保留にしたか)を参照。
 
+## blockedラベルの再開条件見直しはSessionStart hookで機械ポーリング（issue #453）
+
+`blocked`ラベルの再開条件（例: issue #438の`decisions.md`記載事項）を誰がいつ見直すかの
+仕組みが無かった問題は、cron等の常時稼働ではなく`scripts/check-blocked-issues-staleness.sh`
+（SessionStart hook）による最小限のポーリングで解決した。`blocked`ラベルの付いたOPEN issueが
+既定90日（`BLOCKED_ISSUE_STALE_DAYS`で変更可）以上更新されていなければ警告する
+（block不可・warningのみ、`check-branch-pr-status.sh`と同じフェイクgh注入によるテストパターン）。
+設計判断の詳細は
+[`decisions.md`の該当項目](./decisions.md#なぜblockedラベルの再開条件見直しをcronではなくsessionstart-hookのポーリングにしたかissue-453)を参照。
+
 ## autoMode(hard_deny)は個人設定のみ有効・設定し忘れ検知はSessionStart hookで（issue #439）
 
 `autoMode.hard_deny`（ユーザー意図でも上書き不可の無条件ブロック）は、公式仕様上
