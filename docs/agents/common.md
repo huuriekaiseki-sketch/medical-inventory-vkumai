@@ -352,6 +352,16 @@ context使用率・セッションコスト・5h/7dレート制限の消費状�
 公式ドキュメントに未記載という懸念も残る。詳細・再開条件は
 [`decisions.md`の該当項目](./decisions.md#なぜchannelsissue-448を導入せず見送ったか)を参照。
 
+## claude-code-action（issue #447）は費用対効果の観点で見送り
+
+GitHub Actions内でclaude-code-action（@claudeメンションでのissue/PR自動対応）を導入する
+提案があったが、Anthropic API keyでの従量課金（既存のClaude Pro/Maxサブスクとは別建て）が
+必須と判明した。技術的には導入可能だが、このリポジトリの運用はローカルのClaude Codeセッション
+（既存サブスクの範囲内）で既にissueトリアージ・PR作成をこなせており、追加コストに見合う
+明確な必要性が無いと判断した。issue #438・#448（技術的非互換・設計思想の不一致）とは異なる
+「単純な費用対効果」の判断であることに注意。詳細・再開条件は
+[`decisions.md`の該当項目](./decisions.md#なぜclaude-code-actionissue-447を導入せず見送ったか)を参照。
+
 ## blockedラベルの再開条件見直しはSessionStart hookで機械ポーリング（issue #453）
 
 `blocked`ラベルの再開条件（例: issue #438の`decisions.md`記載事項）を誰がいつ見直すかの
