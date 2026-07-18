@@ -35,6 +35,23 @@ Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、Pr
 理由・鮮度判定を見送った理由は同スクリプトのコメント、経緯は
 [`decisions.md`](./decisions.md#なぜissue-444のpretooluse-hookを警告のみdenyの二段構えにしたか)を参照。
 
+**AIDDパイプライン自体のメタ改修時はSweepをスキップする（issue #457）**: issue #442の実施中に、
+`.claude/workflows/`・`.claude/agents/`・`docs/agents/`のみを変更するタスク（＝AIDDパイプライン
+自体の改修）に対して4軸並列Sweep（aidd-phase1）を実行すると、UI/データ/型の3軸は「指摘なし」
+（対象コードがそもそも存在しないので当然）、DB軸のみが「タスク指示と実際のタスクが矛盾している」
+と報告する構造的な無駄が判明した（ルーターの否定文脈誤判定バグ症状1はissue #456で別途解消済み）。
+これに対し`aidd-phase1-router.js`（正本の判定ロジックは`.claude/workflows/lib/router-risk.js`）に
+`isMetaModification`判定を追加した:
+- changedFilesが1件以上あり、**全て**`.claude/workflows/`・`.claude/agents/`・`docs/agents/`配下
+  の場合にtrueとなり、`isHighRisk`判定より優先する（メタ改修パスがドメインキーワード
+  （例: `docs/agents/policy-notes.md`の"policy"）を偶然含んでいても高リスク扱いにしない）
+- trueの場合、`aidd-phase1`・`aidd-1-1-deep-task`のどちらも呼ばずroute: `meta-modification`で
+  即座に返す（agents: 0）。issue #442・#456で実績のある「サブエージェントを使わず直接Read/Grepで
+  調査する」パターンを、ルーターが機械的に指示する形にした
+- プロダクトコードとの混在（例: ルーターとUIコンポーネントを同時に直すタスク）は
+  メタ改修と扱わない（プロダクトコード側の調査は引き続き必要なため）
+- 同期は`.claude/workflows/lib/__tests__/router-risk-sync.test.js`が検証する（`npm test`に含まれる）
+
 ## テスト環境・データ衛生ルール
 
 - **E2E/BSGはテスト専用Supabaseのみに接続する。** 接続情報は `.env.test` に置く（`.env.test.example` 参照）。

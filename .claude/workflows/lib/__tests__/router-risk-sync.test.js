@@ -41,4 +41,25 @@ describe('router-risk.jsとaidd-phase1-router.jsの判定ロジック同期(issu
 
     expect(extractArray(routerSource, 'RISK_PATH_PREFIXES')).toBe(extractArray(libSource, 'RISK_PATH_PREFIXES'))
   })
+
+  it('META_PATH_PREFIXESが両ファイルで同じ内容（issue #457）', () => {
+    const routerSource = readFileSync(ROUTER_FILE, 'utf-8')
+    const libSource = readFileSync(LIB_FILE, 'utf-8')
+
+    expect(extractArray(routerSource, 'META_PATH_PREFIXES')).toBe(extractArray(libSource, 'META_PATH_PREFIXES'))
+  })
+
+  it('isMetaModification判定式（isHighRiskより優先する式）が両ファイルに同じ形で存在する（issue #457）', () => {
+    const routerSource = readFileSync(ROUTER_FILE, 'utf-8')
+    const libSource = readFileSync(LIB_FILE, 'utf-8')
+    const META_LOGIC = 'hasChangedFiles && changedFiles.every(isMetaPath)'
+    const RISK_WITH_META_LOGIC = 'isMetaModification ? false : hasChangedFiles ? matchedPaths.length > 0 : matchedKeywords.length > 0'
+
+    // lib側はローカル変数名がchangedFilesではなく引数(changedFiles ?? [])のため、
+    // メタ判定式のみ表記が異なる。式の意味的な同一性は router-risk.test.js のテストケース
+    // （router-risk.jsの単体テスト）とaidd-phase1-router.jsの手動レビューで担保する。
+    expect(routerSource).toContain(META_LOGIC)
+    expect(routerSource).toContain(RISK_WITH_META_LOGIC)
+    expect(libSource).toContain(RISK_WITH_META_LOGIC)
+  })
 })

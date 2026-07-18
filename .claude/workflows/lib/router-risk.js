@@ -30,12 +30,23 @@ const RISK_PATH_PREFIXES = ['supabase/migrations/', 'src/lib/supabase/']
 // common.md記載のドメインキーワード（ファイルパス・ファイル名に含まれるかで判定）
 const RISK_DOMAIN_KEYWORDS = ['auth', 'facility', 'tenant', 'organization', 'inventory', 'rls', 'policy']
 
+// AIDDパイプライン自体（ツール層）のパス（issue #457）。プロダクトコード向けの4軸Sweepは
+// これらの変更に対して無意味（対象コードがそもそも存在しないため3軸が「指摘なし」を返すだけ）
+// なので、変更ファイルが全てこれらの配下ならSweep自体をスキップし、直接Read/Grep調査へ回す
+// （issue #442・#456で実績のあるパターン）。
+const META_PATH_PREFIXES = ['.claude/workflows/', '.claude/agents/', 'docs/agents/']
+
 function isHighRiskPath(filePath) {
   const normalized = String(filePath).toLowerCase().replace(/\\/g, '/')
   if (RISK_PATH_PREFIXES.some(prefix => normalized.startsWith(prefix))) return true
   // middleware.ts はプロジェクト内のすべてのmiddlewareが対象（common.md）
   if (normalized === 'middleware.ts' || normalized.endsWith('/middleware.ts')) return true
   return RISK_DOMAIN_KEYWORDS.some(kw => normalized.includes(kw))
+}
+
+function isMetaPath(filePath) {
+  const normalized = String(filePath).toLowerCase().replace(/\\/g, '/')
+  return META_PATH_PREFIXES.some(prefix => normalized.startsWith(prefix))
 }
 
 function matchTaskKeywords(taskDescription) {
@@ -58,10 +69,17 @@ function matchTaskKeywords(taskDescription) {
 // changedFilesが空（未指定含む）の場合は、パスベース判定ができないため、後方互換として
 // キーワード一致のみで判定する（issue #286時点の挙動を維持）。
 // matchedKeywordsはisHighRiskの判定に使われない場合でも、補助情報としてそのまま返す。
+//
+// isMetaModification: changedFilesが1件以上あり、かつ全てMETA_PATH_PREFIXES配下の場合にtrue
+// （issue #457）。プロダクトコードとの混在（例: ルーターとUIを同時に直す）はメタ改修と
+// 扱わない（プロダクトコード側の調査は依然として必要なため）。isMetaModificationがtrueの
+// 場合はisHighRiskの判定より優先する（メタ改修パスがdocs/agents/policy-notes.mdのように
+// 偶然RISK_DOMAIN_KEYWORDSの語を含んでいても、高リスク扱いにしない）。
 export function classifyRisk(taskDescription, changedFiles = []) {
   const matchedKeywords = matchTaskKeywords(taskDescription)
   const matchedPaths = (changedFiles ?? []).filter(isHighRiskPath)
   const hasChangedFiles = (changedFiles ?? []).length > 0
-  const isHighRisk = hasChangedFiles ? matchedPaths.length > 0 : matchedKeywords.length > 0
-  return { isHighRisk, matchedKeywords, matchedPaths }
+  const isMetaModification = hasChangedFiles && (changedFiles ?? []).every(isMetaPath)
+  const isHighRisk = isMetaModification ? false : hasChangedFiles ? matchedPaths.length > 0 : matchedKeywords.length > 0
+  return { isHighRisk, matchedKeywords, matchedPaths, isMetaModification }
 }

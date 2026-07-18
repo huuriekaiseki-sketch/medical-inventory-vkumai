@@ -69,4 +69,37 @@ describe('classifyRisk', () => {
     expect(result.isHighRisk).toBe(true)
     expect(result.matchedPaths).toEqual(['src/lib/supabase/orders.ts'])
   })
+
+  it('changedFilesが全て.claude/workflows/配下ならメタ改修と判定する（issue #457）', () => {
+    const result = classifyRisk('Workflow DSL未使用機能の採用', ['.claude/workflows/aidd-phase2.js', '.claude/workflows/aidd-1-1-deep-task.js'])
+    expect(result.isMetaModification).toBe(true)
+  })
+
+  it('changedFilesが全て.claude/agents/配下ならメタ改修と判定する（issue #457）', () => {
+    const result = classifyRisk('reviewerエージェントの指示文を調整', ['.claude/agents/reviewer.md'])
+    expect(result.isMetaModification).toBe(true)
+  })
+
+  it('changedFilesが全てdocs/agents/配下ならメタ改修と判定する（issue #457）', () => {
+    const result = classifyRisk('common.mdにルールを追記', ['docs/agents/common.md'])
+    expect(result.isMetaModification).toBe(true)
+  })
+
+  it('changedFilesがメタ改修パスとプロダクトコードの混在なら、メタ改修とは判定しない', () => {
+    const result = classifyRisk('ルーターとUIを両方直す', ['.claude/workflows/aidd-phase1-router.js', 'src/app/page.tsx'])
+    expect(result.isMetaModification).toBe(false)
+  })
+
+  it('changedFilesが空ならメタ改修と判定しない', () => {
+    const result = classifyRisk('現在のコードベース全体の調査', [])
+    expect(result.isMetaModification).toBe(false)
+  })
+
+  it('メタ改修パスがドメインキーワードを含んでいても、メタ改修判定がisHighRiskより優先される（issue #457症状2の再現ケース）', () => {
+    // docs/agents/配下だが「policy」という語をファイル名に含むため、素朴なキーワード一致だと
+    // 誤ってRISK_DOMAIN_KEYWORDSにヒットしうる。メタ改修判定が優先されるべきケース。
+    const result = classifyRisk('AIDDのpolicyドキュメントを更新', ['docs/agents/policy-notes.md'])
+    expect(result.isMetaModification).toBe(true)
+    expect(result.isHighRisk).toBe(false)
+  })
 })
