@@ -294,6 +294,48 @@ collectorであり、常時稼働ではない。issue #419（effortフィール�
   相当する属性は無く、`query_source`（例: `"main"`）等の粗い区別に留まる。サブエージェント
   単位での突合には、タイムスタンプの近接性等の追加のヒューリスティックが必要（未実装）。
 
+## statuslineでcontext・コスト・レート制限を可視化（issue #446）
+
+サーキットブレーカー運用（ルートの`CLAUDE.md`参照）は`/goal`のターン/時間上限設定に依存するが、
+context使用率・セッションコスト・5h/7dレート制限の消費状況を気づく手段が手動確認
+（`/context`等の実行）のみで、常時可視化する仕組みが無かった。公式のstatusline機能
+（stdin JSONをシェルスクリプトに渡し、出力をターミナル下部に表示する仕組み。
+[公式ドキュメント](https://code.claude.com/docs/en/statusline)でスキーマを確認済み）を使い、
+`scripts/statusline.sh`として実装した。
+
+- 表示内容: モデル名・現在のgitブランチ・context使用率（`context_window.used_percentage`）・
+  セッションコスト（`cost.total_cost_usd`）・5時間/週次レート制限使用率
+  （`rate_limits.five_hour/seven_day.used_percentage`）
+- `rate_limits`はClaude.ai Pro/Max契約かつセッション最初のAPI応答後にのみ存在し、
+  `context_window.used_percentage`もセッション序盤は`null`になりうる（公式ドキュメント記載の
+  既知の欠落パターン）ため、いずれも`jq`の`// empty`で欠落・nullを許容し、値が無い項目は
+  行から消える設計にした
+- **個人opt-in方式**: [OpenTelemetryの節](#opentelemetryと自作jsonlの役割分担issue-417)と同じ
+  理由（表示スタイルの好み・ターミナルのUnicode/絵文字対応状況は開発者ごとに異なるため）で、
+  チーム共有の`.claude/settings.json`には登録しない。有効化したい人だけ各自の
+  `settings.local.json`（gitignore対象）に以下を追加する:
+  ```json
+  {
+    "statusLine": {
+      "type": "command",
+      "command": "<リポジトリ絶対パス>/scripts/statusline.sh"
+    }
+  }
+  ```
+- テストは`scripts/statusline.test.sh`（`bash scripts/statusline.test.sh`で実行、`npm test`には
+  含まれない。statusline.shはClaude Code本体からstdin経由で呼ばれる性質上vitest対象外という、
+  `show-agent-status.sh`等と同じ理由）。公式ドキュメント掲載のサンプルJSON・欠落パターンを
+  fixtureとして固定した
+- **未実装（issue #446の設計案2）**: `subagentStatusLine`（AIDD並列実行中のサブエージェント行を
+  カスタマイズする設定）は今回見送った。公式ドキュメントに`tasks`配列の各フィールド名
+  （`id`/`name`/`type`/`status`/`description`/`label`/`startTime`/`model`/`contextWindowSize`/
+  `tokenCount`/`tokenSamples`/`cwd`）は記載があるものの、メインのstatusLineと異なりフィールド値の
+  完全なJSONサンプルが提供されておらず（特に`startTime`の型・フォーマットが未確認）、実機観測も
+  現行の実行環境（Claude Agent SDK経由）ではstatusLine自体が呼び出されず不可能だった。
+  誤った型の想定で実装すると気づかれないまま壊れるため、確度の低いフィールド仮定のまま実装するのは
+  見送り、`show-agent-status.sh`（履歴側）で当面代替する。実機（通常のターミナルCLI）で
+  `tasks`配列の実際のJSONを観測できる環境がある場合は、別issueとして着手すること
+
 ## Bashサンドボックス機能は現行toolchainと非互換のため保留（issue #438）
 
 実機検証の結果、`sandbox.enabled: true`はgh/supabase CLI（Go製）のHTTPS通信をTLS証明書検証
