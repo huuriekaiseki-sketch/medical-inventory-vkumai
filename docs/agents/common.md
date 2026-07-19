@@ -389,6 +389,31 @@ GitHub Actions内でclaude-code-action（@claudeメンションでのissue/PR自
 「単純な費用対効果」の判断であることに注意。詳細・再開条件は
 [`decisions.md`の該当項目](./decisions.md#なぜclaude-code-actionissue-447を導入せず見送ったか)を参照。
 
+## security-guidanceプラグインでknown-failure-patterns.mdを機械検知化（issue #440）
+
+公式プラグイン`security-guidance@claude-plugins-official`を導入し、`docs/agents/
+known-failure-patterns.md`のチェックリスト（自然言語のみ、レビュー系エージェントが
+「読むこと」に依存していた）の一部を機械検知化した。`.claude/settings.json`の
+`enabledPlugins`にチーム共有で有効化した（per-edit層は無料でありセキュリティ検知機能を
+チーム全員に一律適用すべきという判断。詳細は`decisions.md`参照）。
+
+- `.claude/security-patterns.json`: `rls_bypass`（RLS無効化・ポリシー変更検知）・
+  `bare_sql_in_data_layer`（`src/lib/supabase/**`での生SQL実行検知）・
+  `possible_real_facility_name`（seed/E2E/eval-fixturesパスへの実在施設名らしき文字列の検知）・
+  `security_definer_grant`（`SECURITY DEFINER`関数の検知）の4パターンを定義
+- `.claude/claude-security-guidance.md`: RLS/facility境界の原則（全ポリシーが`auth.uid()`
+  または`facility_id`参照、admin判定はDB role経由、機微データをINFO以上でログ出力しない等）
+  を自然言語で記述
+- **既知の限界**: プラグインの実際のインストール（`/plugin install
+  security-guidance@claude-plugins-official`）は対話的な操作が必要で、このセッションでは
+  実行できていない。`enabledPlugins`の設定のみ先行してコミットしており、実際に機能するかは
+  次回以降のセッションで人間が`/plugin install`を実行してから確認する必要がある
+- ターン末diffレビュー・commit時レビューはモデル呼び出しを伴いトークンコストが発生する
+  （`ENABLE_STOP_REVIEW=0`・`ENABLE_COMMIT_REVIEW=0`環境変数で個別に無効化可能）。今回は
+  per-edit層と合わせて3層とも有効化する判断をした（人間の確認済み）
+- 詳細・スキーマの出典は
+  [`decisions.md`の該当項目](./decisions.md#なぜsecurity-guidanceプラグインissue-440をチーム共有で全層有効化したか)を参照。
+
 ## blockedラベルの再開条件見直しはSessionStart hookで機械ポーリング（issue #453）
 
 `blocked`ラベルの再開条件（例: issue #438の`decisions.md`記載事項）を誰がいつ見直すかの

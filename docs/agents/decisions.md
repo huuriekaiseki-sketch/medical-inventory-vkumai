@@ -785,3 +785,49 @@ issue #441は「CLAUDE.mdのサーキットブレーカー運用（`/goal`設定
    別レイヤーの防御であることをCLAUDE.mdに追記した
 3. 検知不能という結論自体を棚卸し表の該当行に追記し、今後の検討で「issue #441は解決済みなのに
    なぜまだ棚卸し表に載っているのか」と誤解されないようにした
+
+## なぜsecurity-guidanceプラグイン（issue #440）をチーム共有で全層有効化したか
+
+issue #440は「公式のsecurity-guidance機能を導入し、`known-failure-patterns.md`の自然言語
+チェックリストを機械検知化する」という提案で、ゲート条件（機能の正確な名称・導入手順・
+`security-patterns.yaml`のスキーマを公式docで実機確認してから着手）に従い実機確認した。
+
+**確認できた事実（下書きとほぼ一致、issue #438・#448とは異なり前提が崩れなかった）:**
+- 正式名称は「Security guidance plugin」（`security-guidance@claude-plugins-official`）。
+  公式プラグインとして実在する
+- 3層構成: ①per-edit正規表現/部分文字列検知（LLM呼び出しなし・無料）②ターン末diffレビュー
+  （モデル呼び出しあり）③commit/push時レビュー（より深いエージェントレビュー、20/時間の上限）
+- 設定ファイルは`.claude/claude-security-guidance.md`（自然言語ガイダンス、特定の見出し構造
+  不要）+ `.claude/security-patterns.yaml`または`.json`（パターン定義）。YAML形式は
+  PyYAMLへの依存が生じるため、外部依存を増やさないよう本プロジェクトでは**JSON形式**を採用した
+- `security-patterns.json`のスキーマ: パターンごとに`rule_name`・`regex`または
+  `substrings`・`paths`（任意、globパターン）・`exclude_paths`（任意）・`reminder`
+  （警告メッセージ、1KB制限）
+- 有効化は`.claude/settings.json`の`enabledPlugins`（オブジェクト形式、
+  `{"security-guidance@claude-plugins-official": true}`）
+- 各層は環境変数で個別に無効化できる（`ENABLE_PATTERN_RULES`・`ENABLE_STOP_REVIEW`・
+  `ENABLE_COMMIT_REVIEW`・`ENABLE_CODE_SECURITY_REVIEW`）
+
+**判断: チーム共有（`.claude/settings.json`）で3層とも有効化。** OTel（issue #417）や
+autoMode（issue #439）は「プラットフォーム側の制約でプロジェクト設定に書いても効かない」
+という技術的制約があったため個人オプトインにしたが、security-guidanceにはそのような制約は
+無い（`enabledPlugins`はプロジェクト側`settings.json`で有効に機能する）。per-edit層が無料で
+価値が明確な一方、ターン末・commit時レビューにはモデル呼び出しに伴うトークンコストが生じる
+ため、「チーム全員に一律適用すべきセキュリティ機能か、個人が選ぶコスト要因か」を人間に確認し、
+医療プロジェクトとしてセキュリティ検知は全員に一律適用すべきという判断で、3層とも共有設定で
+有効化することにした（層ごとの無効化オプションが環境変数として存在することも記録しておき、
+将来コストが問題になった場合に`ENABLE_STOP_REVIEW=0`等で個別に絞れるようにしている）。
+
+**実装したパターン（4件、issue原案どおり）:** `rls_bypass`・`bare_sql_in_data_layer`・
+`possible_real_facility_name`・`security_definer_grant`。正規表現はJS系エンジンでも
+確実に動くよう、インラインフラグ（`(?i)`）に頼らず文字クラス（`[Dd][Ii][Ss]...`）で
+大文字小文字を吸収する書き方に統一した（プラグインの正規表現エンジンの実装言語が
+公式docに明記されておらず、Python固有の`(?i)`構文がサポートされない可能性を考慮した）。
+各パターンはpython3の`re`モジュールでテストケース11件を用いて動作確認済み（実際の
+プラグインの正規表現エンジンでの動作は別途確認が必要、後述の既知の限界参照）。
+
+**既知の限界:** プラグインの実際のインストール（`/plugin install
+security-guidance@claude-plugins-official`）は対話的操作が必要で、このセッションでは
+実行できていない。`enabledPlugins`の設定・パターンファイルの作成までをこのPRで行い、
+実際に機能する状態になっているかの確認は次回以降のセッションで人間が`/plugin install`を
+実行してから行う必要がある。
