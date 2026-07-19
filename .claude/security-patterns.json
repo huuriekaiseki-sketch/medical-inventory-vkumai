@@ -1,0 +1,28 @@
+{
+  "patterns": [
+    {
+      "rule_name": "rls_bypass",
+      "regex": "([Dd][Ii][Ss][Aa][Bb][Ll][Ee]\\s+[Rr][Oo][Ww]\\s+[Ll][Ee][Vv][Ee][Ll]\\s+[Ss][Ee][Cc][Uu][Rr][Ii][Tt][Yy]|[Aa][Ll][Tt][Ee][Rr]\\s+[Pp][Oo][Ll][Ii][Cc][Yy])",
+      "paths": ["**/supabase/migrations/**"],
+      "reminder": "RLSポリシーの無効化・変更の可能性があります。facility/tenantスコープが引き続き正しく機能するか確認してください（docs/agents/known-failure-patterns.md参照）。"
+    },
+    {
+      "rule_name": "bare_sql_in_data_layer",
+      "regex": "(execute_sql|executeRaw|\\.raw\\()",
+      "paths": ["**/src/lib/supabase/**"],
+      "reminder": "生SQL実行の可能性があります。まずSECURITY DEFINERを使わずに済ませられないか検討し、必要な場合はmigrationファイル経由・型付きクエリビルダーの利用を検討してください（docs/agents/known-failure-patterns.md「SECURITY DEFINER + GRANT EXECUTEの認可バイパス」参照）。"
+    },
+    {
+      "rule_name": "possible_real_facility_name",
+      "regex": "(病院|クリニック|医院|医科大学)",
+      "paths": ["**/e2e/**", "**/scripts/eval-fixtures/**", "**/*seed*"],
+      "reminder": "実在施設名に見える文字列が含まれている可能性があります。seed・E2E・スクリーンショットには実在施設名を使わないでください（ダミー名を使用。docs/agents/common.md「テスト環境・データ衛生ルール」参照）。"
+    },
+    {
+      "rule_name": "security_definer_grant",
+      "substrings": ["SECURITY DEFINER"],
+      "paths": ["**/supabase/migrations/**"],
+      "reminder": "SECURITY DEFINER関数です。RLSをバイパスするため、関数内で明示的な認可チェック（is_facility_member(...) OR is_admin()等）を行っているか確認してください。まずSECURITY DEFINERを使わずに済ませられないか検討してください（docs/agents/known-failure-patterns.md「SECURITY DEFINER + GRANT EXECUTEの認可バイパス」参照）。"
+    }
+  ]
+}
