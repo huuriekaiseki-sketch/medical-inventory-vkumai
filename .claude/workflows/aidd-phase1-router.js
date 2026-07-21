@@ -100,17 +100,31 @@ function classifyRisk(taskDescription, changedFiles = []) {
   return { isHighRisk, matchedKeywords, matchedPaths }
 }
 
-// isHighRisk判定に加え、issue #457のメタ改修カテゴリを含めた3方向ルーティングを決定する。
+// isHighRisk判定に加え、issue #457のメタ改修カテゴリ・issue #500の確認保留カテゴリを
+// 含めた4方向ルーティングを決定する。
 // isMetaPipelineOnlyChangeをclassifyRisk呼び出しより必ず先に評価する。changedFilesが
 // 全てツール層のみの場合、classifyRisk（issue #456の修正でmatchedPathsのみ判定に既に
 // なっている）を呼ぶまでもなくmetaルートへ確定させ、Sweep自体を起動しないことでissue #457
 // symptom 2（無駄な4軸Sweep実行）を避ける。
-// 戻り値: { route: 'meta'|'deep'|'light', isHighRisk, isMetaChange, matchedKeywords, matchedPaths }
+// 【issue #500】changedFilesが空（未指定含む）の場合、classifyRiskはキーワード一致のみで
+// isHighRiskを決める（否定文脈を区別できない、issue #456で「後方互換のため」意図的に残した
+// フォールバック）。changedFilesが空になるのはPhase1調査の主要な呼び出し方であり異常系では
+// ないため、このフォールバックはほぼ確実に踏まれ続ける。誤判定時のコストが大きい
+// （実測: 77エージェント・約346万トークン）ため、「changedFilesが空 かつ キーワードのみ
+// 一致」の場合は自動でdeepルートへ振り分けず、confirmルートとして人間の確認に委ねる
+// （decisions.md「なぜchangedFiles空時のキーワード一致フォールバックを人間確認に変えたか」
+// 参照）。changedFilesが1件以上ある場合（パスベース判定が効く場合）はこの分岐を通らず、
+// 従来通りmatchedPathsのみでisHighRiskが決まる（issue #456の修正は変更しない）。
+// 戻り値: { route: 'meta'|'confirm'|'deep'|'light', isHighRisk, isMetaChange, matchedKeywords, matchedPaths }
 function classifyRoute(taskDescription, changedFiles = []) {
   if (isMetaPipelineOnlyChange(changedFiles)) {
     return { route: 'meta', isHighRisk: false, isMetaChange: true, matchedKeywords: [], matchedPaths: [] }
   }
   const { isHighRisk, matchedKeywords, matchedPaths } = classifyRisk(taskDescription, changedFiles)
+  const hasChangedFiles = (changedFiles ?? []).length > 0
+  if (!hasChangedFiles && matchedKeywords.length > 0) {
+    return { route: 'confirm', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths }
+  }
   return { route: isHighRisk ? 'deep' : 'light', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths }
 }
 
@@ -145,6 +159,33 @@ if (route === 'meta') {
       },
       stats: {
         phase: 'phase1-meta',
+        agents: 0,
+        rounds: 0,
+        findingCount: 0,
+        blockedCount: 0,
+        expectedAgentProgressRecords: 0,
+      },
+    },
+  }
+}
+
+// issue #500: changedFilesが空（未指定含む）でキーワードのみ一致した場合、深掘り調査
+// （数十エージェント・数百万トークン規模）を無人で自動起動せず、workflow()を一切呼ばずに
+// 判定保留の結果を返す。呼び出し側（Claude Code）はこの結果を見て、人間に確認してから
+// aidd-1-1-deep-task/aidd-phase1のどちらを明示的に呼び出すか判断すること。
+if (route === 'confirm') {
+  log(`changedFiles未確定でキーワードのみ一致（${matchedKeywords.join(', ')}）→ 深掘りルートへの自動振り分けを保留し、人間の確認を求める`)
+  return {
+    route: 'aidd-phase1-needs-confirmation',
+    matchedKeywords,
+    matchedPaths,
+    isMetaChange,
+    result: {
+      needsConfirmation: true,
+      reason: `changedFilesが空(未指定)の状態で、taskDescription中のキーワード一致（${matchedKeywords.join('、')}）のみでTRI/RISK該当と判定されました。changedFilesが空になるのはPhase1調査の通常の呼び出し方であり、キーワード一致は「〜には触れない」等の否定文脈を区別できません。深掘り調査（aidd-1-1-deep-task）は数十エージェント・数百万トークン規模のコストがかかるため、実際に高リスクドメインへ触れる変更なのか人間に確認してから起動してください。`,
+      suggestion: '対象タスクが実際にauth/facility/tenant/organization/inventory/RLS/policy等のドメインに触れるか確認し、触れる場合はWorkflow(aidd-1-1-deep-task)、触れない場合はWorkflow(aidd-phase1)を明示的に呼び出してください。',
+      stats: {
+        phase: 'phase1-needs-confirmation',
         agents: 0,
         rounds: 0,
         findingCount: 0,

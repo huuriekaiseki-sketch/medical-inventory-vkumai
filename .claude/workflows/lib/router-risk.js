@@ -103,17 +103,31 @@ function classifyRisk(taskDescription, changedFiles = []) {
   return { isHighRisk, matchedKeywords, matchedPaths }
 }
 
-// isHighRisk判定に加え、issue #457のメタ改修カテゴリを含めた3方向ルーティングを決定する。
+// isHighRisk判定に加え、issue #457のメタ改修カテゴリ・issue #500の確認保留カテゴリを
+// 含めた4方向ルーティングを決定する。
 // isMetaPipelineOnlyChangeをclassifyRisk呼び出しより必ず先に評価する。changedFilesが
 // 全てツール層のみの場合、classifyRisk（issue #456の修正でmatchedPathsのみ判定に既に
 // なっている）を呼ぶまでもなくmetaルートへ確定させ、Sweep自体を起動しないことでissue #457
 // symptom 2（無駄な4軸Sweep実行）を避ける。
-// 戻り値: { route: 'meta'|'deep'|'light', isHighRisk, isMetaChange, matchedKeywords, matchedPaths }
+// 【issue #500】changedFilesが空（未指定含む）の場合、classifyRiskはキーワード一致のみで
+// isHighRiskを決める（否定文脈を区別できない、issue #456で「後方互換のため」意図的に残した
+// フォールバック）。changedFilesが空になるのはPhase1調査の主要な呼び出し方であり異常系では
+// ないため、このフォールバックはほぼ確実に踏まれ続ける。誤判定時のコストが大きい
+// （実測: 77エージェント・約346万トークン）ため、「changedFilesが空 かつ キーワードのみ
+// 一致」の場合は自動でdeepルートへ振り分けず、confirmルートとして人間の確認に委ねる
+// （decisions.md「なぜchangedFiles空時のキーワード一致フォールバックを人間確認に変えたか」
+// 参照）。changedFilesが1件以上ある場合（パスベース判定が効く場合）はこの分岐を通らず、
+// 従来通りmatchedPathsのみでisHighRiskが決まる（issue #456の修正は変更しない）。
+// 戻り値: { route: 'meta'|'confirm'|'deep'|'light', isHighRisk, isMetaChange, matchedKeywords, matchedPaths }
 export function classifyRoute(taskDescription, changedFiles = []) {
   if (isMetaPipelineOnlyChange(changedFiles)) {
     return { route: 'meta', isHighRisk: false, isMetaChange: true, matchedKeywords: [], matchedPaths: [] }
   }
   const { isHighRisk, matchedKeywords, matchedPaths } = classifyRisk(taskDescription, changedFiles)
+  const hasChangedFiles = (changedFiles ?? []).length > 0
+  if (!hasChangedFiles && matchedKeywords.length > 0) {
+    return { route: 'confirm', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths }
+  }
   return { route: isHighRisk ? 'deep' : 'light', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths }
 }
 
