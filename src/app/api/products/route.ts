@@ -3,17 +3,35 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listProducts, createProduct } from '@/lib/products/repository'
-import { apiError } from '@/lib/api-error'
-import type { ProductInput } from '@/types/product'
+import { apiError, sanitizeDbError } from '@/lib/api-error'
+import { parseKeyword } from '@/lib/api-keyword-query'
+import type { ProductInput, ProductsApiErrorResponse, ProductsApiQuery, ProductsApiResponse } from '@/types/product'
 
-export async function GET() {
+// WHY: apiError は共通の { error: string } 形式を返すが、ProductsApiErrorResponse型と一致していることを
+//      コンパイル時に保証するため、戻り値をこの型でラップして返す（order.tsの参照実装パターンを踏襲。
+//      レビュー指摘: 型安全 — Set Bで新設したApiQuery/ApiErrorResponse型が未使用のdead typeだった）
+function productsApiError(message: string, status = 500): NextResponse<ProductsApiErrorResponse> {
+  return apiError(message, status)
+}
+
+export async function GET(
+  request: NextRequest
+): Promise<NextResponse<ProductsApiResponse> | NextResponse<ProductsApiErrorResponse>> {
   try {
     const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
-    const products = await listProducts(db)
-    return NextResponse.json({ products })
+    try { await requireAuth(db) } catch { return productsApiError('認証が必要です', 401) }
+
+    const kw = parseKeyword(request.nextUrl.searchParams)
+    if (!kw.ok) return kw.response
+
+    // WHY: ProductsApiQuery型（src/types/product.ts）を実際に参照することで、route側の
+    //      パース結果がSPECで定義した契約と一致していることをコンパイル時に保証する
+    const query: ProductsApiQuery = { ...(kw.keyword ? { keyword: kw.keyword } : {}) }
+
+    const products = await listProducts(db, query)
+    return NextResponse.json({ products } satisfies ProductsApiResponse)
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '製品の取得に失敗しました')
+    return productsApiError(sanitizeDbError(error, '製品の取得に失敗しました'))
   }
 }
 

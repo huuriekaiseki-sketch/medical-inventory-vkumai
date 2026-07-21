@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { KEYWORD_DEBOUNCE_MS } from '@/constants/search'
 
 type Props = {
   dateFrom: string
@@ -16,11 +17,6 @@ const labelClass = 'text-xs font-semibold uppercase tracking-widest mb-1 block'
 const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
 const inputClass = 'rounded border px-3 py-2 text-sm'
 const inputStyle = { borderColor: '#072C2C33', color: '#072C2C' }
-
-// WHY: キーワード入力のたびに親側でURL更新・API再取得が走ると、
-//      1文字入力するごとに無駄なリクエストが発生する（issue #20 レビュー指摘: 正しさ minor）。
-//      300ms入力が止まってからonKeywordChangeを呼ぶことでリクエスト数を抑える
-const KEYWORD_DEBOUNCE_MS = 300
 
 export function OrderHistoryFilters({
   dateFrom,

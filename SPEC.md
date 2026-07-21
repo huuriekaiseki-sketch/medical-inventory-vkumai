@@ -123,7 +123,7 @@ Set F-2: /distributor-products/page.tsx 統合
 ```typescript
 export type KeywordQueryResult =
   | { ok: true; keyword?: string }
-  | { ok: false; response: NextResponse }
+  | { ok: false; response: NextResponse<{ error: string }> }
 
 export function parseKeyword(
   params: URLSearchParams,
@@ -131,10 +131,14 @@ export function parseKeyword(
 ): KeywordQueryResult {
   const maxLength = opts?.maxLength ?? 100
   const raw = params.get('keyword') ?? ''
-  if (raw.length > maxLength) {
+  // WHY: 長さ上限チェックはtrim後の実際に検索へ使う値に対して行う。
+  //      raw（trim前）基準だと前後空白だけで100文字を超えるような入力を不当に400で弾いてしまう
+  //      （レビュー指摘: 正しさ minor — trim前基準だと境界条件で誤判定する）
+  const trimmed = raw.trim()
+  if (trimmed.length > maxLength) {
     return { ok: false, response: apiError(`keyword は ${maxLength} 文字以内で指定してください`, 400) }
   }
-  const keyword = raw.trim() || undefined
+  const keyword = trimmed || undefined
   return { ok: true, keyword }
 }
 ```
@@ -155,6 +159,7 @@ export function sanitizeDbError(error: unknown, fallbackMessage: string): string
 **テスト観点**:
 - `like-pattern.test.ts`: `%`・`_`・`\`・`"`・`,`・`(`・`)`を含むキーワードが正しくエスケープされる（既存`compatibilities/repository.test.ts`のテストケースを移設・再利用）
 - `api-keyword-query.test.ts`: 101文字でng、100文字以内でok、空文字列で`keyword: undefined`
+- `api-keyword-query.test.ts`: 前後に空白を含み、trim後は100文字以内に収まる入力（例: 前後に空白+中身100文字）はokになる（trim前基準の誤判定を防ぐ境界条件テスト）
 - `sanitizeDbError`: どんなErrorを渡してもfallbackMessageのみが返り、元のmessageが含まれない
 
 ---
@@ -204,12 +209,16 @@ export async function listProducts(
   }
 
   const { data, error } = await query
-  if (error) throw error // sanitizeDbErrorはroute.ts側で通す。ここでは生のerrorをそのままthrowする
+  // WHY: sanitizeDbErrorはroute.ts側で通す。ここではrepository層の既存関数（getProduct/
+  //      createProduct等）と同じ `throw new Error(error.message)` パターンに揃える。
+  //      生のPostgrestError（error）をそのままthrowすると同ファイル内の他関数と例外の形が
+  //      不統一になる（レビュー指摘: 型安全 minor — エラースロー方式の不統一）
+  if (error) throw new Error(error.message)
   return data.map(mapProduct)
 }
 ```
 
-注: フィルタなしの呼び出し（既存コード）は後方互換を保つ（引数オプショナル）。
+注: フィルタなしの呼び出し（既存コード）は後方互換を保つ（引数オプショナル）。既存の`getProduct`・`createProduct`・`updateProduct`・`deleteProduct`と同様、DBエラーは常に`throw new Error(error.message)`の形でthrowする（生のPostgrestErrorを直接投げない）。
 
 **ファイル**: `src/lib/distributor-products/repository.ts`
 
@@ -233,7 +242,9 @@ export async function listDistributorProducts(
   }
 
   const { data, error } = await query
-  if (error) throw error
+  // WHY: 同ファイル内の既存関数（getDistributorProduct等）と同じthrow形式に揃える
+  //      （レビュー指摘: 型安全 minor）
+  if (error) throw new Error(error.message)
   return data.map(mapDistributorProduct)
 }
 ```
@@ -249,6 +260,7 @@ export async function listDistributorProducts(
 - keywordに`%`・`_`・`,`が含まれても正しくエスケープされて検索される（誤動作しない）
 - distributor-products: categoryIdフィルタ単体
 - distributor-products: keyword + categoryIdのAND絞り込み
+- distributor-products: 存在しない（DBに登録のない）categoryIdを指定した場合は0件が返る（エラーにならない。受け入れ条件の明示テストケース）
 - 空結果（0件）が正常に返る
 - `compatibilities/repository.test.ts`が差し替え後も全件パスする（回帰確認）
 
@@ -261,19 +273,34 @@ export async function listDistributorProducts(
 ```typescript
 import { parseKeyword } from '@/lib/api-keyword-query'
 import { sanitizeDbError } from '@/lib/api-error'
+import type { ProductsApiErrorResponse, ProductsApiQuery, ProductsApiResponse } from '@/types/product'
 
-export async function GET(request: NextRequest) {
+// WHY: apiErrorは共通の{ error: string }形式を返すが、ProductsApiErrorResponse型と一致していることを
+//      コンパイル時に保証するため、戻り値をこの型でラップして返す（order.tsの参照実装パターンを踏襲）。
+//      Set Bで新設したApiQuery/ApiErrorResponse型を実際に参照し、未使用のdead typeにしない
+//      （レビュー指摘: 型安全 important）
+function productsApiError(message: string, status = 500): NextResponse<ProductsApiErrorResponse> {
+  return apiError(message, status)
+}
+
+export async function GET(
+  request: NextRequest
+): Promise<NextResponse<ProductsApiResponse> | NextResponse<ProductsApiErrorResponse>> {
   try {
     const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { await requireAuth(db) } catch { return productsApiError('認証が必要です', 401) }
 
     const kw = parseKeyword(request.nextUrl.searchParams)
     if (!kw.ok) return kw.response
 
-    const products = await listProducts(db, { keyword: kw.keyword })
+    // WHY: ProductsApiQuery型を実際に参照し、route側のパース結果がSPECで定義した契約と
+    //      一致していることをコンパイル時に保証する
+    const query: ProductsApiQuery = { ...(kw.keyword ? { keyword: kw.keyword } : {}) }
+
+    const products = await listProducts(db, query)
     return NextResponse.json({ products } satisfies ProductsApiResponse)
   } catch (error) {
-    return apiError(sanitizeDbError(error, '製品の取得に失敗しました'))
+    return productsApiError(sanitizeDbError(error, '製品の取得に失敗しました'))
   }
 }
 ```
@@ -283,13 +310,34 @@ export async function GET(request: NextRequest) {
 ```typescript
 import { parseKeyword } from '@/lib/api-keyword-query'
 import { sanitizeDbError } from '@/lib/api-error'
+import type {
+  DistributorProductsApiErrorResponse,
+  DistributorProductsApiQuery,
+  DistributorProductsApiResponse,
+} from '@/types/distributorProduct'
 
+// WHY: categoryId は UUID v4 形式のみ受け付ける。categoriesテーブルのidはgen_random_uuid()
+//      （v4）で払い出される前提だが、これはDB制約（CHECK制約等）で強制されているわけではない。
+//      将来、手動INSERT等でv4以外のUUIDを持つcategoryが作られた場合、そのcategoryIdでの
+//      絞り込みは常に400になる（レビュー指摘: 正しさ minor — DB側で保証されない前提に依存）。
+//      現時点ではcategoriesの作成経路がgen_random_uuid()のみのため実害はないが、
+//      手動INSERTを行う運用が発生した場合はこのバリデーションを見直すこと
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-export async function GET(request: NextRequest) {
+// WHY: apiErrorは共通の{ error: string }形式を返すが、DistributorProductsApiErrorResponse型と
+//      一致していることをコンパイル時に保証するため、戻り値をこの型でラップして返す
+//      （order.tsの参照実装パターンを踏襲。Set Bで新設したApiQuery/ApiErrorResponse型を
+//      実際に参照し、未使用のdead typeにしない。レビュー指摘: 型安全 important）
+function distributorProductsApiError(message: string, status = 500): NextResponse<DistributorProductsApiErrorResponse> {
+  return apiError(message, status)
+}
+
+export async function GET(
+  request: NextRequest
+): Promise<NextResponse<DistributorProductsApiResponse> | NextResponse<DistributorProductsApiErrorResponse>> {
   try {
     const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { await requireAuth(db) } catch { return distributorProductsApiError('認証が必要です', 401) }
 
     const params = request.nextUrl.searchParams
     const kw = parseKeyword(params)
@@ -297,14 +345,18 @@ export async function GET(request: NextRequest) {
 
     const rawCategoryId = params.get('categoryId') ?? ''
     if (rawCategoryId && !UUID_V4_RE.test(rawCategoryId)) {
-      return apiError('categoryId は UUID 形式で指定してください', 400)
+      return distributorProductsApiError('categoryId は UUID 形式で指定してください', 400)
     }
     const categoryId = rawCategoryId || undefined
 
-    const items = await listDistributorProducts(db, { keyword: kw.keyword, categoryId })
+    // WHY: DistributorProductsApiQuery型を実際に参照し、route側のパース結果がSPECで
+    //      定義した契約と一致していることをコンパイル時に保証する
+    const query: DistributorProductsApiQuery = { keyword: kw.keyword, categoryId }
+
+    const items = await listDistributorProducts(db, query)
     return NextResponse.json({ items } satisfies DistributorProductsApiResponse)
   } catch (error) {
-    return apiError(sanitizeDbError(error, '販売店商品の取得に失敗しました'))
+    return distributorProductsApiError(sanitizeDbError(error, '販売店商品の取得に失敗しました'))
   }
 }
 ```
@@ -314,7 +366,8 @@ export async function GET(request: NextRequest) {
 - `src/app/api/distributor-products/__tests__/route.test.ts`に`GET`のimportを追加し、keyword/categoryIdパラメータのテストケースを新設する（既存のPOSTテストはそのまま維持）
 
 **テスト観点**:
-- keyword未指定 → 全件
+- keyword未指定（`?keyword=`パラメータ自体なし） → 全件
+- keyword=（空文字列で明示指定、`?keyword=`） → keyword未指定と同じく全件（両者が同一の挙動になることを明示的に確認する）
 - keyword=abc → フィルタ適用
 - keyword 101文字 → 400
 - distributor-products: categoryId不正形式 → 400
@@ -350,6 +403,7 @@ type Props = {
 - クリアボタンクリックでonClearが呼ばれる
 - keyword prop変更時にテキストボックスが同期される（外部クリア対応）
 - isLoading=trueのとき、ローディング表示が出る（前回入力値は保持される）
+- キーワード入力欄に`maxLength={100}`属性が設定されていることを確認する（受け入れ条件「フロント側もmaxLength属性で入力を制限する」の明示テスト）
 
 ---
 
@@ -381,6 +435,8 @@ type Props = {
 - クリアボタンでonClear
 - categories === undefinedのとき「読み込み中…」表示
 - categories === []のとき通常disabled表示（読み込み中表示ではない）
+- categoriesに値がある場合、デフォルトで value="" ・ラベル「すべてのカテゴリ」のオプションが選択肢の先頭に表示されることを確認する（受け入れ条件の明示テスト。カテゴリ一覧の他のオプションと混同していないか）
+- キーワード入力欄に`maxLength={100}`属性が設定されていることを確認する
 
 ---
 
@@ -397,6 +453,7 @@ type Props = {
 - 再検索中（isLoading）は既存リストを表示したまま薄いローディング表示を重ねる
 - 0件時は「該当する製品がありません」を表示
 - fetch失敗時は既存リストを保持し、`role="alert"` + `bg-red-50 text-red-700`スタイルでエラーバナー表示
+- **レース防止ガード必須**: keyword変更のたびに`useEffect`が再実行されfetchが発火するため、デバウンス後に連続して複数リクエストが飛ぶと、後から発火した古いリクエストのレスポンスが新しいリクエストの結果を上書きする恐れがある。`src/app/orders/page.tsx`（L83-119）の`cancelled`フラグパターンをそのまま踏襲すること（`let cancelled = false` → `fetch`後に`if (cancelled) return` → `useEffect`のクリーンアップで`cancelled = true`）。新規にAbortControllerや別の方式を発明しない
 
 ```tsx
 export default function ProductsPage() {
@@ -420,6 +477,9 @@ function ProductsPageInner() {
 - クリアでURLパラメータが消える
 - 0件時に専用メッセージが表示される
 - fetch失敗時に既存リストが消えずエラーバナーが出る
+- **再検索中に前回の一覧DOM（行）が消えずに表示され続けること**（ローディング表示は重なるが既存リストは残る。「isLoading中は入力値が保持される」というコンポーネント単体テストだけでなく、ページレベルで一覧データが保持されることを確認する）
+- **レース防止**: 先に発火した検索（例: keyword="a"）のfetchが後から発火した検索（keyword="ab"）より遅れて解決しても、画面には最後の検索条件（"ab"）の結果が表示され、"a"の結果で上書きされないこと（`cancelled`フラグの検証。fetchのresolve順を入れ替えてテストする）
+- エラーバナーが`role="alert"`属性と`bg-red-50 text-red-700`クラスの両方を持つことを明示的にアサートする（「エラーバナーが出る」だけでなくスタイル契約を検証する）
 
 ---
 
@@ -434,11 +494,14 @@ function ProductsPageInner() {
   - `distributor-products`は`useEffect(fetchItems, [keyword, categoryId, refreshKey])`
   - DELETE後の`refreshKey`incrementは**distributor-productsのみ**再フェッチを引き起こす。categoriesは再フェッチしない
 - keyword・categoryId変更時のみdistributor-products APIを再フェッチ
+- **レース防止ガード必須**（F-1と同様）: `distributor-products`側の`useEffect(fetchItems, [keyword, categoryId, refreshKey])`にも`src/app/orders/page.tsx`の`cancelled`フラグパターンを適用する。`categories`側の`useEffect`は依存配列が`[]`（マウント時1回のみ）のため同様のレースは原理上発生しないが、他のfetch箇所とパターンを揃えるため同じガードを付けてよい
 
 **テスト観点**: F-1に加え
 - categoryId変更でAPIにcategoryIdパラメータが付与される
 - keywordとcategoryIdの組み合わせがURLに両方反映される
 - DELETE後、distributor-productsは再フェッチされるがcategoriesは再フェッチされない（fetchカウントで確認）
+- **クリアボタンでkeyword・categoryIdの両方がリセットされ、URLパラメータも両方（`?keyword=`と`?categoryId=`）消えることをページレベルで確認する**（E-2コンポーネント単体テストの「onClearが呼ばれる」だけでは、ページ側が実際にURLを両方消すことまでは保証されないため）
+- distributor-products側のレース防止（F-1と同様、keyword/categoryIdの連続変更で古いレスポンスが新しい結果を上書きしないこと）
 
 ---
 
@@ -459,3 +522,4 @@ function ProductsPageInner() {
 3. **LIKEエスケープは自前実装しない**: 必ず`buildIlikeValue`（Set Aで共有化したもの）を経由する。素の`%${keyword}%`を組み立てない
 4. **DBエラーの生メッセージをクライアントに返さない**: 必ず`sanitizeDbError`を経由する
 5. **api-pagination.tsの既存定数**: limit/offsetを将来追加する場合は`parsePagination`を再利用（現仕様では不追加）
+6. **F-1/F-2の再検索フェッチには必ずレース防止ガードを入れる**: `src/app/orders/page.tsx`（L83-119）の`cancelled`フラグパターンを踏襲する。デバウンス後に連続してfetchが発火した場合、先に発火した古いリクエストのレスポンスが後発の新しいリクエストの結果を上書きしないようにする（レビュー指摘: 正しさ important）

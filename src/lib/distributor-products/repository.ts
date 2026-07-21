@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asNumber, asNullableNumber } from '@/lib/mapping'
-import type { DistributorProduct, DistributorProductInput } from '@/types/distributorProduct'
+import { buildIlikeValue } from '@/lib/search/like-pattern'
+import type { DistributorProduct, DistributorProductInput, DistributorProductListFilter } from '@/types/distributorProduct'
 
 const DISTRIBUTOR_PRODUCT_COLUMNS =
   'id, product_id, maker, supplier, name, reimbursement_price, quantity, category_id, created_at, updated_at'
@@ -33,11 +34,24 @@ export function mapDistributorProduct(row: DistributorProductRow): DistributorPr
   }
 }
 
-export async function listDistributorProducts(db: SupabaseClient): Promise<DistributorProduct[]> {
-  const { data, error } = await db
+export async function listDistributorProducts(
+  db: SupabaseClient,
+  filter?: DistributorProductListFilter
+): Promise<DistributorProduct[]> {
+  let query = db
     .from('distributor_products')
     .select(DISTRIBUTOR_PRODUCT_COLUMNS)
     .order('created_at', { ascending: false })
+
+  if (filter?.keyword) {
+    const value = buildIlikeValue(filter.keyword)
+    query = query.or([`name.ilike.${value}`, `maker.ilike.${value}`, `supplier.ilike.${value}`].join(','))
+  }
+  if (filter?.categoryId) {
+    query = query.eq('category_id', filter.categoryId)
+  }
+
+  const { data, error } = await query
   if (error) throw new Error(error.message)
   return data.map(mapDistributorProduct)
 }
