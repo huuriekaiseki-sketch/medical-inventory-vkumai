@@ -1,7 +1,9 @@
 #!/bin/bash
-# WHY: issue #444向けのPreToolUse hook(scripts/check-direct-ddl-execution.sh)の回帰テスト。
+# WHY: issue #444・#485向けのPreToolUse hook(scripts/check-direct-ddl-execution.sh)の回帰テスト。
 # supabase db execute/psqlの直接実行、およびMCP経由のexecute_sql系ツール呼び出しを
-# permissionDecision: "deny"で拒否すること・db push等の正規手段は対象外であることを確認する。
+# permissionDecision: "deny"で拒否すること・db reset等の正規手段は対象外であることを確認する。
+# supabase db pushのみ例外的に対象内（--local明示時のみ許可、フラグ無指定・--linked等は
+# デフォルトでリモート本番を対象とするためdeny。issue #485）。
 #
 # 実行: bash scripts/check-direct-ddl-execution.test.sh
 set -euo pipefail
@@ -66,11 +68,29 @@ run_hook "$input"
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_contains "$OUT" '"permissionDecision": "deny"' "permissionDecision: denyが出力される"
 
-echo "=== scenario 4: supabase db push → 対象外(正規のmigration適用手段) ==="
+echo "=== scenario 4: supabase db push（フラグ無指定） → deny（issue #485: デフォルトでリモート本番が対象のため） ==="
 input="$(jq -n '{tool_name: "Bash", tool_input: {command: "supabase db push"}}')"
 run_hook "$input"
 assert_eq "$EXIT_CODE" "0" "exit 0"
-assert_empty "$OUT" "出力が空である(db pushはdeny対象外)"
+assert_contains "$OUT" '"permissionDecision": "deny"' "permissionDecision: denyが出力される"
+
+echo "=== scenario 4b: supabase db push --local → 対象外(明示的にローカル指定・正規のmigration適用手段) ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "supabase db push --local"}}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "出力が空である(--local明示時はdeny対象外)"
+
+echo "=== scenario 4c: supabase db push --linked → deny（明示的にリモート指定） ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "supabase db push --linked"}}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" '"permissionDecision": "deny"' "permissionDecision: denyが出力される"
+
+echo "=== scenario 4d: npx supabase db push（フラグ無指定） → deny ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "npx supabase db push"}}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" '"permissionDecision": "deny"' "permissionDecision: denyが出力される"
 
 echo "=== scenario 5: supabase db reset → 対象外 ==="
 input="$(jq -n '{tool_name: "Bash", tool_input: {command: "supabase db reset"}}')"
