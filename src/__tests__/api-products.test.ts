@@ -47,11 +47,44 @@ beforeEach(() => {
 describe('GET /api/products', () => {
   it('製品一覧を返す', async () => {
     vi.mocked(listProducts).mockResolvedValue([mockProduct])
-    const res = await listGET()
+    const res = await listGET(makeRequest('/api/products'))
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.products).toHaveLength(1)
     expect(body.products[0].jan).toBe('4901234567890')
+  })
+
+  it('keywordクエリパラメータをlistProductsに渡す', async () => {
+    vi.mocked(listProducts).mockResolvedValue([mockProduct])
+    const res = await listGET(makeRequest('/api/products?keyword=製品A'))
+    expect(res.status).toBe(200)
+    // WHY: このテストファイルは beforeEach で vi.resetAllMocks() を呼ぶため、
+    // createServerSupabase のモック実装（{}を返す）もリセットされ db は undefined になる。
+    // 他の既存テストも同様の前提のため、第1引数の値ではなく listProducts に渡された
+    // filter（第2引数）の内容のみを検証する。
+    expect(vi.mocked(listProducts).mock.calls[0][1]).toEqual({ keyword: '製品A' })
+  })
+
+  it('keywordが101文字なら400を返す', async () => {
+    const res = await listGET(makeRequest(`/api/products?keyword=${'a'.repeat(101)}`))
+    expect(res.status).toBe(400)
+    expect(listProducts).not.toHaveBeenCalled()
+  })
+
+  it('未認証なら401を返す', async () => {
+    const { requireAuth } = await import('@/lib/supabase/require-auth')
+    vi.mocked(requireAuth).mockRejectedValueOnce(new Error('UNAUTHORIZED'))
+    const res = await listGET(makeRequest('/api/products'))
+    expect(res.status).toBe(401)
+  })
+
+  it('DBエラー時は生のエラーメッセージを含まないレスポンスを返す', async () => {
+    vi.mocked(listProducts).mockRejectedValue(new Error('relation "products" does not exist'))
+    const res = await listGET(makeRequest('/api/products'))
+    expect(res.status).toBe(500)
+    const body = await res.json()
+    expect(body.error).not.toContain('relation')
+    expect(body.error).not.toContain('products" does not exist')
   })
 })
 

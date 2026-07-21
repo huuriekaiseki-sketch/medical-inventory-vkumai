@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asNullableString, asString } from '@/lib/mapping'
-import type { Product, ProductInput } from '@/types/product'
+import { buildIlikeValue } from '@/lib/search/like-pattern'
+import type { Product, ProductInput, ProductListFilter } from '@/types/product'
 
 const PRODUCT_COLUMNS = 'id, jan, ref, name, maker, created_at, updated_at'
 
@@ -26,11 +27,23 @@ export function mapProduct(row: ProductRow): Product {
   }
 }
 
-export async function listProducts(db: SupabaseClient): Promise<Product[]> {
-  const { data, error } = await db
+export async function listProducts(
+  db: SupabaseClient,
+  filter?: ProductListFilter
+): Promise<Product[]> {
+  let query = db
     .from('products')
     .select(PRODUCT_COLUMNS)
     .order('created_at', { ascending: false })
+
+  if (filter?.keyword) {
+    const value = buildIlikeValue(filter.keyword)
+    query = query.or(
+      [`name.ilike.${value}`, `maker.ilike.${value}`, `jan.ilike.${value}`, `ref.ilike.${value}`].join(',')
+    )
+  }
+
+  const { data, error } = await query
   if (error) throw new Error(error.message)
   return data.map(mapProduct)
 }
