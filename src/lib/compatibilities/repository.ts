@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asNullableString } from '@/lib/mapping'
 import { mapProduct } from '@/lib/products/repository'
+import { buildIlikeValue } from '@/lib/search/like-pattern'
 import type { Product } from '@/types/product'
 import type { ProductCompatibility, ProductCompatibilityInput } from '@/types/compatibility'
 
@@ -100,19 +101,6 @@ export function mapCompatibility(row: CompatibilityRow): ProductCompatibility {
 export type ListCompatibilitiesFilter = {
   categoryId?: string
   keyword?: string
-}
-
-// WHY: keyword に含まれる % / _ はILIKEのワイルドカード文字なのでバックスラッシュで
-// エスケープする。一方 , ( ) はPostgRESTの or() 式の区切り・グループ文字として予約されており、
-// バックスラッシュエスケープでは効かない（postgrest-jsはこれらをダブルクォートで値全体を
-// 囲むことで安全に渡す方式を採用している）。値全体をダブルクォートで囲み、クォート自体と
-// バックスラッシュはエスケープする。
-function buildIlikeValue(keyword: string): string {
-  const wildcardEscaped = keyword
-    .replace(/\\/g, '\\\\')
-    .replace(/[%_]/g, (c) => `\\${c}`)
-  const quoteEscaped = wildcardEscaped.replace(/"/g, '\\"')
-  return `"%${quoteEscaped}%"`
 }
 
 // WHY: keyword は product1/product2 双方の name/jan/maker への部分一致(OR)を要件とする
