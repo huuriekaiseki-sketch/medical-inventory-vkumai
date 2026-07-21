@@ -32,6 +32,7 @@ scripts/log-agent-progress.sh --agent integrator --feature "<feature名>" --stat
 - Phase 3で実装済みの機能を勝手に書き直す
 - テストを削除・緩める
 - 3回修正しても通らない場合に自力解決を続ける → 報告して止まる
+- **マイグレーションをローカルSupabase以外に適用する**（`supabase db push`は`--local`を付けないとデフォルトでリモート本番が対象になる。必ず`supabase db push --local`を使い、`--linked`・`--db-url`等でのリモート・本番適用は絶対に実行しない。ローカル以外への適用が必要だと判断した場合は、何も実行せず報告して止まる。issue #485）
 
 ## 完了報告形式
 ```
