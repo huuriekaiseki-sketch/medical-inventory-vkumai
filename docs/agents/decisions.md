@@ -231,7 +231,7 @@ pass/fail実績（試行回数・fail率のagent別集計）に絞った。ゲ�
 `.gitignore`で除外されておりリポジトリにコミットされない（ローカル専用ログ）。GitHub Actions
 はfresh checkoutで動くためローカルの`logs/loop-observability.jsonl`を参照できず、この方式は
 不採用にした。代わりに、セッション終了ごとに必ず発火する既存のStop hook機構
-（`scripts/doc-suggest-check.sh`等と同じパターン）を使い、`.claude/.gate-effectiveness-state/
+（`scripts/verify-claims.sh`等と同じパターン）を使い、`.claude/.gate-effectiveness-state/
 last-summary-at`のmtimeで前回出力から30日経過したかを判定して間引く方式にした。これにより
 「起動トリガーは機械」という原則（issue #411のレビューで確認した観点）を保ちながら、GitHub
 Secretsやリモートのステータス源を新設せずに済む。
