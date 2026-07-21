@@ -48,7 +48,7 @@ INPUT="$(cat)"
 SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // "unknown"')"
 TRANSCRIPT_PATH="$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')"
 
-# 7日より古い状態ファイルは掃除する（doc-suggest-check.shと同様のパターン）
+# 7日より古い状態ファイルは掃除する（ai-check-suggest.shと同様のパターン）
 find "$STATE_DIR" -name '*.json' -mtime +7 -delete 2>/dev/null || true
 
 STATE_FILE="$STATE_DIR/${SESSION_ID}.json"
