@@ -1,525 +1,94 @@
-# SPEC: /products・/distributor-products への検索・絞り込みUI追加（issue #483 6-pairフレームワーク2本目）
-
-## Part 1 — 仕様（★人間がレビューする部分）
-
-### 何ができるようになるか（利用者目線）
-
-#### /products（デバイス一覧）
-- テキスト入力でキーワード検索できる（製品名・メーカー名・JANコード・REFコードを対象）
-- クリアボタンで検索条件をリセットできる
-- URLにクエリパラメータが反映され、ブラウザバック・リロードで状態が復元される
-
-#### /distributor-products（販売店商品一覧）
-- テキスト入力でキーワード検索できる（商品名・メーカー名・仕入先を対象）
-- カテゴリセレクトボックスで絞り込みができる
-- キーワード・カテゴリを組み合わせて絞り込みできる（AND）
-- クリアボタンで全条件リセット
-- URLにクエリパラメータが反映される
-
-#### 共通
-- キーワード入力はデバウンス（300ms）でリクエスト最小化
-- 再検索中は**前回の結果を表示したまま**薄いローディング表示を重ねる（結果を消さない）
-- 検索結果0件の場合は「該当する○○がありません」を表示（products/distributor-productsで文言を分ける）
-- fetch失敗時は既存リストを保持したままエラーバナーを表示する（自動リトライは今回スコープ外）
-- 新規検索まわりのエラー表示は `role="alert"` 付き `bg-red-50 text-red-700` スタイルに統一する（distributor-products/page.tsx の既存スタイルに合わせる。products/page.tsx側の既存インラインスタイルとは新規分に限り統一しない＝ページ内スタイル混在は許容）
-
-### 重要な既存実装の発見（調査で確定した事実）
-
-`src/lib/compatibilities/repository.ts:110-146` に、本仕様が必要とする「LIKEエスケープ + PostgREST `.or()` 複合検索」の**実証済み実装**が既に存在する。
-- `buildIlikeValue(keyword)`（L110-116）が `%` `_` `\` `"` をエスケープし、PostgRESTの`.or()`予約文字（`,` `(` `)`）に対応するため値全体をダブルクォートで囲む
-- `query.or([...].join(','))` + `.eq('category_id', ...)` + `.order('created_at', {ascending:false})` が1クエリで共存し、テスト（`__tests__/repository.test.ts`）も存在
-
-→ 本仕様はこの`buildIlikeValue`を**新規実装せず共有関数として抽出・流用する**。自前でLIKEエスケープを書き直さないこと。
-
-### 受け入れ条件（チェックリスト）
-
-#### /products
-- [ ] キーワードを入力すると300ms後にAPIリクエストが発火し、一覧が絞り込まれる
-- [ ] キーワード検索はname・maker・jan・refのOR一致（ILIKE、`buildIlikeValue`でエスケープ済み）で動作する
-- [ ] 空文字列・未入力時は全件を返す（`?keyword=`パラメータ自体を省略する。既に`?keyword=`で来た場合も空扱い）
-- [ ] URLパラメータ`?keyword=xxx`に状態が同期され、リロード後も検索条件が維持される
-- [ ] クリアボタンでkeywordがリセットされ、URLパラメータも消える
-- [ ] `keyword`の長さ上限は100文字。超過時はAPIが400を返しエラーメッセージを表示する（フロント側も`maxLength`属性で入力を制限する）
-- [ ] 認証必須（未認証時は既存の401動作を維持）
-
-#### /distributor-products
-- [ ] キーワード検索はname・maker・supplierのOR一致（ILIKE、`buildIlikeValue`でエスケープ済み）で動作する
-- [ ] カテゴリセレクタでは全カテゴリが選択肢として表示される（ラベル「すべてのカテゴリ」をデフォルト、value=""）
-- [ ] カテゴリを選択するとcategory_idで完全一致フィルタが適用される（存在しないUUIDを指定した場合は0件を返す。存在確認の事前チェックは行わない）
-- [ ] キーワードとカテゴリのAND絞り込みが機能する
-- [ ] URLパラメータ`?keyword=xxx&categoryId=uuid`に状態が同期される
-- [ ] クリアボタンで全条件リセット・URLパラメータも消える
-- [ ] `keyword`の長さ上限は100文字。超過時APIが400を返しエラー表示
-- [ ] `categoryId`はUUID形式（v4）バリデーション（不正値は400）
-
-#### 境界条件（DBスキーマ・認可非変更の確認）
-- [ ] products・distributor_products・categoriesテーブルの列定義・外部キー・RLSポリシーは変更しない
-- [ ] 今回はインデックス追加も行わない（下記「今回やらないこと」参照）
-- [ ] facility/tenant非依存マスタ扱いを変更しない（RLS追加不要）
-- [ ] admin以外でもGETで検索できる（既存権限と同様。根拠: `supabase/migrations/20260629000001_fix_master_rls.sql`の`products_select`・`distributor_products_select`ポリシーが`FOR SELECT TO authenticated USING (true)`）
-
-### 今回やらないこと（スコープ外・意図的な見送り）
-
-- **検索用DBインデックス追加**: `ILIKE '%keyword%'`（前後ワイルドカード）はB-treeインデックスで高速化されない。今インデックスを追加してもマイグレーションリスクが増えるだけで性能改善はゼロ。本番で実測して遅ければ`pg_trgm`+GINインデックスへの移行を別issueで検討する
-- **categoryIdの実在確認**: UUID形式チェックのみ行い、DB側の実在チェック（追加のround trip）は行わない。存在しないUUIDは自然に0件が返る
-- **E2Eテスト（Playwright）**: 「URLリロード後に状態復元」はユニットテストでは検証できずE2Eが必要だが、今回のスコープには含めない。必要なら別issue化する
-- **レスポンスキー名の統一**: `/api/products`は`{products}`、`/api/distributor-products`は`{items}`のまま。既存クライアントとの互換性維持のため意図的に統一しない
-- **products/page.tsx側の既存エラースタイルの統一**: 新規追加分のみ`role="alert"`スタイルに統一し、既存のインラインスタイルバナーはそのまま残す
-
-### 人間の決定事項（2026-07-21 停止①レビューで確定）
-
-1. **Enterキーでの即時検索 → 追加しない。** デバウンス（300ms）のみとする。理由: 1本目（施設セレクタUI）と規模感を揃えるのが本検証の目的であり、UX上位の追加機能はスコープを広げるだけのため
-2. **`buildIlikeValue`の共有化 → `compatibilities/repository.ts`も含めて共有関数化する（Yes）。** 理由: 発見されたcritical指摘（LIKEワイルドカードのエスケープ漏れ）は実際のセキュリティ上の穴であり、自前で書き直すより実証済みの実装を再利用する方が確実。回帰テスト範囲が広がるコストは「正しさを広げる」ものとして許容する
-
-### 操作の流れ
-
-1. ユーザーが`/products`または`/distributor-products`を開く
-2. キーワード入力欄に入力 → 300ms後に自動で絞り込まれる（前回結果は消さず薄いローディング表示）
-3. （distributor-productsのみ）カテゴリセレクタで絞り込みを追加
-4. クリアボタンで全条件リセット
-5. URLはこれらの状態と常に同期し、リロード・ブラウザバックで復元される
-
-📸 スクリーンショット対象: `/products`・`/distributor-products`（検索前後の状態、クリア後の状態）
-
----
-
-## Part 2 — 実装計画（AI用）
-
-### 実装セット一覧（依存順）
-
-```
-Set A: 共有ヘルパー新設（LIKEエスケープ + キーワードクエリパーサ + DBエラーサニタイズ）
-Set B: 型定義拡張（types/product.ts, types/distributorProduct.ts）
-Set C: Repository層フィルタ追加（lib/products/repository.ts, lib/distributor-products/repository.ts, lib/compatibilities/repository.tsの差し替え）
-Set D: API Route拡張（api/products/route.ts, api/distributor-products/route.ts）+ 既存テスト修正
-Set E-1: 検索フォームコンポーネント新規作成（components/products/ProductSearchFilters.tsx）
-Set E-2: 検索フォームコンポーネント新規作成（components/distributor-products/DistributorProductSearchFilters.tsx）
-Set F-1: /products/page.tsx 統合
-Set F-2: /distributor-products/page.tsx 統合
-```
-
-依存グラフ:
-- AはB・Cに先行（共有ヘルパーが先）
-- CはDに先行
-- DはF-1/F-2に先行
-- E-1/E-2はDと並列可（インタフェース合意後）
-- F-1/F-2はD・E-1/E-2完了後
-
-**旧ドラフトからの変更点**: 旧「Set A: DBマイグレーション（インデックス追加）」は削除（今回やらないこと参照）。新Set Aは共有ヘルパー新設に差し替え。
-
----
-
-### 各セットの詳細
-
-#### Set A: 共有ヘルパー新設
-
-**ファイル**: `src/lib/search/like-pattern.ts`（新規）
-
-`src/lib/compatibilities/repository.ts:110-116`の`buildIlikeValue`をこのファイルに抽出し、`compatibilities/repository.ts`側はこの共有関数をimportして使うよう差し替える。実装内容は既存のものをそのまま移設する（新規に書き直さない）。
-
-**ファイル**: `src/lib/api-keyword-query.ts`（新規）
-
-`src/lib/api-pagination.ts`の`parsePagination`と対称な設計で実装する:
-```typescript
-export type KeywordQueryResult =
-  | { ok: true; keyword?: string }
-  | { ok: false; response: NextResponse<{ error: string }> }
-
-export function parseKeyword(
-  params: URLSearchParams,
-  opts?: { maxLength?: number }
-): KeywordQueryResult {
-  const maxLength = opts?.maxLength ?? 100
-  const raw = params.get('keyword') ?? ''
-  // WHY: 長さ上限チェックはtrim後の実際に検索へ使う値に対して行う。
-  //      raw（trim前）基準だと前後空白だけで100文字を超えるような入力を不当に400で弾いてしまう
-  //      （レビュー指摘: 正しさ minor — trim前基準だと境界条件で誤判定する）
-  const trimmed = raw.trim()
-  if (trimmed.length > maxLength) {
-    return { ok: false, response: apiError(`keyword は ${maxLength} 文字以内で指定してください`, 400) }
-  }
-  const keyword = trimmed || undefined
-  return { ok: true, keyword }
-}
-```
-
-**ファイル**: `src/lib/api-error.ts`（既存ファイルに追加）
-
-```typescript
-// WHY: Supabase/Postgresの生エラーメッセージにはテーブル名・制約名が含まれうるため、
-//      クライアントに返す前に必ずこの関数を通してスキーマ情報の漏洩を防ぐ
-export function sanitizeDbError(error: unknown, fallbackMessage: string): string {
-  // 23505(unique_violation)・23503(foreign_key_violation)等、既存の個別コードハンドリングがあれば維持する。
-  // それ以外は生メッセージを返さずfallbackMessageのみ返す。詳細はconsole.errorでサーバ側ログにのみ記録する。
-  console.error(error)
-  return fallbackMessage
-}
-```
-
-**テスト観点**:
-- `like-pattern.test.ts`: `%`・`_`・`\`・`"`・`,`・`(`・`)`を含むキーワードが正しくエスケープされる（既存`compatibilities/repository.test.ts`のテストケースを移設・再利用）
-- `api-keyword-query.test.ts`: 101文字でng、100文字以内でok、空文字列で`keyword: undefined`
-- `api-keyword-query.test.ts`: 前後に空白を含み、trim後は100文字以内に収まる入力（例: 前後に空白+中身100文字）はokになる（trim前基準の誤判定を防ぐ境界条件テスト）
-- `sanitizeDbError`: どんなErrorを渡してもfallbackMessageのみが返り、元のmessageが含まれない
-
----
-
-#### Set B: 型定義拡張
-
-**ファイル**: `src/types/product.ts`
-
-```typescript
-export type ProductsApiQuery = { keyword?: string }
-export type ProductsApiResponse = { products: Product[] }
-export type ProductsApiErrorResponse = { error: string }
-```
-
-**ファイル**: `src/types/distributorProduct.ts`
-
-```typescript
-export type DistributorProductsApiQuery = { keyword?: string; categoryId?: string }
-export type DistributorProductsApiResponse = { items: DistributorProduct[] }
-export type DistributorProductsApiErrorResponse = { error: string }
-```
-
-参照実装: `src/types/order.ts:198-218`（OrdersApiQuery/Response/ErrorResponse）
-
-**テスト観点**: 型定義のみ。ランタイムテスト不要
-
----
-
-#### Set C: Repository層フィルタ追加
-
-**ファイル**: `src/lib/products/repository.ts`
-
-```typescript
-import { buildIlikeValue } from '@/lib/search/like-pattern'
-
-export type ProductListFilter = { keyword?: string }
-
-export async function listProducts(
-  db: SupabaseClient,
-  filter?: ProductListFilter
-): Promise<Product[]> {
-  let query = db.from('products').select(PRODUCT_COLUMNS).order('created_at', { ascending: false })
-
-  if (filter?.keyword) {
-    const value = buildIlikeValue(filter.keyword)
-    query = query.or([`name.ilike.${value}`, `maker.ilike.${value}`, `jan.ilike.${value}`, `ref.ilike.${value}`].join(','))
-  }
-
-  const { data, error } = await query
-  // WHY: sanitizeDbErrorはroute.ts側で通す。ここではrepository層の既存関数（getProduct/
-  //      createProduct等）と同じ `throw new Error(error.message)` パターンに揃える。
-  //      生のPostgrestError（error）をそのままthrowすると同ファイル内の他関数と例外の形が
-  //      不統一になる（レビュー指摘: 型安全 minor — エラースロー方式の不統一）
-  if (error) throw new Error(error.message)
-  return data.map(mapProduct)
-}
-```
-
-注: フィルタなしの呼び出し（既存コード）は後方互換を保つ（引数オプショナル）。既存の`getProduct`・`createProduct`・`updateProduct`・`deleteProduct`と同様、DBエラーは常に`throw new Error(error.message)`の形でthrowする（生のPostgrestErrorを直接投げない）。
-
-**ファイル**: `src/lib/distributor-products/repository.ts`
-
-```typescript
-import { buildIlikeValue } from '@/lib/search/like-pattern'
-
-export type DistributorProductListFilter = { keyword?: string; categoryId?: string }
-
-export async function listDistributorProducts(
-  db: SupabaseClient,
-  filter?: DistributorProductListFilter
-): Promise<DistributorProduct[]> {
-  let query = db.from('distributor_products').select(DISTRIBUTOR_PRODUCT_COLUMNS).order('created_at', { ascending: false })
-
-  if (filter?.keyword) {
-    const value = buildIlikeValue(filter.keyword)
-    query = query.or([`name.ilike.${value}`, `maker.ilike.${value}`, `supplier.ilike.${value}`].join(','))
-  }
-  if (filter?.categoryId) {
-    query = query.eq('category_id', filter.categoryId)
-  }
-
-  const { data, error } = await query
-  // WHY: 同ファイル内の既存関数（getDistributorProduct等）と同じthrow形式に揃える
-  //      （レビュー指摘: 型安全 minor）
-  if (error) throw new Error(error.message)
-  return data.map(mapDistributorProduct)
-}
-```
-
-**ファイル**: `src/lib/compatibilities/repository.ts`
-
-`buildIlikeValue`のローカル定義を削除し、`src/lib/search/like-pattern.ts`からimportするよう差し替える（振る舞いは変えない、単なる抽出）。
-
-**テスト観点** (`src/lib/products/__tests__/repository.test.ts` 等):
-- keywordなし → 全件返却
-- keywordあり → name/maker/jan/refのいずれかに含む行のみ返却
-- keywordが大文字小文字を区別しない
-- keywordに`%`・`_`・`,`が含まれても正しくエスケープされて検索される（誤動作しない）
-- distributor-products: categoryIdフィルタ単体
-- distributor-products: keyword + categoryIdのAND絞り込み
-- distributor-products: 存在しない（DBに登録のない）categoryIdを指定した場合は0件が返る（エラーにならない。受け入れ条件の明示テストケース）
-- 空結果（0件）が正常に返る
-- `compatibilities/repository.test.ts`が差し替え後も全件パスする（回帰確認）
-
----
-
-#### Set D: API Route拡張
-
-**ファイル**: `src/app/api/products/route.ts`
-
-```typescript
-import { parseKeyword } from '@/lib/api-keyword-query'
-import { sanitizeDbError } from '@/lib/api-error'
-import type { ProductsApiErrorResponse, ProductsApiQuery, ProductsApiResponse } from '@/types/product'
-
-// WHY: apiErrorは共通の{ error: string }形式を返すが、ProductsApiErrorResponse型と一致していることを
-//      コンパイル時に保証するため、戻り値をこの型でラップして返す（order.tsの参照実装パターンを踏襲）。
-//      Set Bで新設したApiQuery/ApiErrorResponse型を実際に参照し、未使用のdead typeにしない
-//      （レビュー指摘: 型安全 important）
-function productsApiError(message: string, status = 500): NextResponse<ProductsApiErrorResponse> {
-  return apiError(message, status)
-}
-
-export async function GET(
-  request: NextRequest
-): Promise<NextResponse<ProductsApiResponse> | NextResponse<ProductsApiErrorResponse>> {
-  try {
-    const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return productsApiError('認証が必要です', 401) }
-
-    const kw = parseKeyword(request.nextUrl.searchParams)
-    if (!kw.ok) return kw.response
-
-    // WHY: ProductsApiQuery型を実際に参照し、route側のパース結果がSPECで定義した契約と
-    //      一致していることをコンパイル時に保証する
-    const query: ProductsApiQuery = { ...(kw.keyword ? { keyword: kw.keyword } : {}) }
-
-    const products = await listProducts(db, query)
-    return NextResponse.json({ products } satisfies ProductsApiResponse)
-  } catch (error) {
-    return productsApiError(sanitizeDbError(error, '製品の取得に失敗しました'))
-  }
-}
-```
-
-**ファイル**: `src/app/api/distributor-products/route.ts`
-
-```typescript
-import { parseKeyword } from '@/lib/api-keyword-query'
-import { sanitizeDbError } from '@/lib/api-error'
-import type {
-  DistributorProductsApiErrorResponse,
-  DistributorProductsApiQuery,
-  DistributorProductsApiResponse,
-} from '@/types/distributorProduct'
-
-// WHY: categoryId は UUID v4 形式のみ受け付ける。categoriesテーブルのidはgen_random_uuid()
-//      （v4）で払い出される前提だが、これはDB制約（CHECK制約等）で強制されているわけではない。
-//      将来、手動INSERT等でv4以外のUUIDを持つcategoryが作られた場合、そのcategoryIdでの
-//      絞り込みは常に400になる（レビュー指摘: 正しさ minor — DB側で保証されない前提に依存）。
-//      現時点ではcategoriesの作成経路がgen_random_uuid()のみのため実害はないが、
-//      手動INSERTを行う運用が発生した場合はこのバリデーションを見直すこと
-const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
-// WHY: apiErrorは共通の{ error: string }形式を返すが、DistributorProductsApiErrorResponse型と
-//      一致していることをコンパイル時に保証するため、戻り値をこの型でラップして返す
-//      （order.tsの参照実装パターンを踏襲。Set Bで新設したApiQuery/ApiErrorResponse型を
-//      実際に参照し、未使用のdead typeにしない。レビュー指摘: 型安全 important）
-function distributorProductsApiError(message: string, status = 500): NextResponse<DistributorProductsApiErrorResponse> {
-  return apiError(message, status)
-}
-
-export async function GET(
-  request: NextRequest
-): Promise<NextResponse<DistributorProductsApiResponse> | NextResponse<DistributorProductsApiErrorResponse>> {
-  try {
-    const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return distributorProductsApiError('認証が必要です', 401) }
-
-    const params = request.nextUrl.searchParams
-    const kw = parseKeyword(params)
-    if (!kw.ok) return kw.response
-
-    const rawCategoryId = params.get('categoryId') ?? ''
-    if (rawCategoryId && !UUID_V4_RE.test(rawCategoryId)) {
-      return distributorProductsApiError('categoryId は UUID 形式で指定してください', 400)
-    }
-    const categoryId = rawCategoryId || undefined
-
-    // WHY: DistributorProductsApiQuery型を実際に参照し、route側のパース結果がSPECで
-    //      定義した契約と一致していることをコンパイル時に保証する
-    const query: DistributorProductsApiQuery = { keyword: kw.keyword, categoryId }
-
-    const items = await listDistributorProducts(db, query)
-    return NextResponse.json({ items } satisfies DistributorProductsApiResponse)
-  } catch (error) {
-    return distributorProductsApiError(sanitizeDbError(error, '販売店商品の取得に失敗しました'))
-  }
-}
-```
-
-**完了条件（既存テスト更新を含む。これを含めて1コミットの完了条件とする）**:
-- `src/__tests__/api-products.test.ts:50`付近の`listGET()`（引数なし呼び出し）を`listGET(makeRequest('/api/products'))`に修正し、keywordクエリのテストケースを追加する
-- `src/app/api/distributor-products/__tests__/route.test.ts`に`GET`のimportを追加し、keyword/categoryIdパラメータのテストケースを新設する（既存のPOSTテストはそのまま維持）
-
-**テスト観点**:
-- keyword未指定（`?keyword=`パラメータ自体なし） → 全件
-- keyword=（空文字列で明示指定、`?keyword=`） → keyword未指定と同じく全件（両者が同一の挙動になることを明示的に確認する）
-- keyword=abc → フィルタ適用
-- keyword 101文字 → 400
-- distributor-products: categoryId不正形式 → 400
-- 未認証 → 401
-- DBエラー時、レスポンスに生のエラーメッセージ（テーブル名等）が含まれないことを確認する
-
----
-
-#### Set E-1: ProductSearchFilters コンポーネント
-
-**ファイル**: `src/components/products/ProductSearchFilters.tsx`
-
-Props:
-```typescript
-type Props = {
-  keyword: string
-  isLoading: boolean
-  onKeywordChange: (value: string) => void
-  onClear: () => void
-}
-```
-
-実装方針:
-- `OrderHistoryFilters.tsx`のデバウンス実装（300ms、prevKeywordパターン）を踏襲する前に、まず`OrderHistoryFilters.tsx`が実在し実装が現在のユースケースに適切か確認する
-- デバウンス定数`KEYWORD_DEBOUNCE_MS = 300`は`src/constants/search.ts`（新規）に切り出し、`OrderHistoryFilters.tsx`・E-1・E-2が同じ値を参照する
-- キーワード入力に`maxLength={100}`属性を設定する
-- キーワード入力の`id="product-keyword"`でlabel紐付け
-- クリアボタン
-
-**テスト観点** (`ProductSearchFilters.test.tsx`):
-- キーワード入力後300ms以内はonKeywordChangeが呼ばれない
-- 300ms後にonKeywordChangeが値付きで呼ばれる
-- クリアボタンクリックでonClearが呼ばれる
-- keyword prop変更時にテキストボックスが同期される（外部クリア対応）
-- isLoading=trueのとき、ローディング表示が出る（前回入力値は保持される）
-- キーワード入力欄に`maxLength={100}`属性が設定されていることを確認する（受け入れ条件「フロント側もmaxLength属性で入力を制限する」の明示テスト）
-
----
-
-#### Set E-2: DistributorProductSearchFilters コンポーネント
-
-**ファイル**: `src/components/distributor-products/DistributorProductSearchFilters.tsx`
-
-Props:
-```typescript
-type Props = {
-  keyword: string
-  categoryId: string
-  categories: Category[] | undefined // undefined=ローディング中、[]=0件
-  isLoading: boolean
-  onKeywordChange: (value: string) => void
-  onCategoryChange: (value: string) => void
-  onClear: () => void
-}
-```
-
-実装方針:
-- キーワード: E-1と同様のデバウンスパターン、`maxLength={100}`
-- カテゴリセレクト: `<select>`で`value=""`を「すべてのカテゴリ」オプションとし、変更時は即座に`onCategoryChange`呼び出し（デバウンス不要）
-- `categories === undefined`（ローディング中）は「読み込み中…」表示でセレクタdisabled、`categories === []`（0件確定）は通常のdisabled表示、と区別する
-
-**テスト観点** (`DistributorProductSearchFilters.test.tsx`):
-- カテゴリ変更でonCategoryChangeが即時呼ばれる
-- キーワードdebounceが300ms動作する
-- クリアボタンでonClear
-- categories === undefinedのとき「読み込み中…」表示
-- categories === []のとき通常disabled表示（読み込み中表示ではない）
-- categoriesに値がある場合、デフォルトで value="" ・ラベル「すべてのカテゴリ」のオプションが選択肢の先頭に表示されることを確認する（受け入れ条件の明示テスト。カテゴリ一覧の他のオプションと混同していないか）
-- キーワード入力欄に`maxLength={100}`属性が設定されていることを確認する
-
----
-
-#### Set F-1: /products/page.tsx 統合
-
-**ファイル**: `src/app/products/page.tsx`
-
-変更ポイント:
-- `useSearchParams`を追加し`Suspense`でラップする（known-failure-patterns.md対応）
-- **既存の`useRouter`ロジック（新規登録・編集・削除遷移）は全て`ProductsPageInner`に移動する**。外側の`ProductsPage`はSuspenseラッパーのみとする
-- URLパラメータ`keyword`を読み取り、fetch URLに付与
-- `ProductSearchFilters`コンポーネントを配置
-- keyword変更時に`router.replace`でURL更新
-- 再検索中（isLoading）は既存リストを表示したまま薄いローディング表示を重ねる
-- 0件時は「該当する製品がありません」を表示
-- fetch失敗時は既存リストを保持し、`role="alert"` + `bg-red-50 text-red-700`スタイルでエラーバナー表示
-- **レース防止ガード必須**: keyword変更のたびに`useEffect`が再実行されfetchが発火するため、デバウンス後に連続して複数リクエストが飛ぶと、後から発火した古いリクエストのレスポンスが新しいリクエストの結果を上書きする恐れがある。`src/app/orders/page.tsx`（L83-119）の`cancelled`フラグパターンをそのまま踏襲すること（`let cancelled = false` → `fetch`後に`if (cancelled) return` → `useEffect`のクリーンアップで`cancelled = true`）。新規にAbortControllerや別の方式を発明しない
-
-```tsx
-export default function ProductsPage() {
-  return (
-    <Suspense fallback={<div>読み込み中...</div>}>
-      <ProductsPageInner />
-    </Suspense>
-  )
-}
-
-function ProductsPageInner() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  // keyword state, fetch, handleDelete, 新規登録/編集遷移 は全てここに集約
-}
-```
-
-**テスト観点**:
-- URLに`?keyword=abc`があると初期状態で絞り込まれた状態
-- キーワード変更でURLが更新される
-- クリアでURLパラメータが消える
-- 0件時に専用メッセージが表示される
-- fetch失敗時に既存リストが消えずエラーバナーが出る
-- **再検索中に前回の一覧DOM（行）が消えずに表示され続けること**（ローディング表示は重なるが既存リストは残る。「isLoading中は入力値が保持される」というコンポーネント単体テストだけでなく、ページレベルで一覧データが保持されることを確認する）
-- **レース防止**: 先に発火した検索（例: keyword="a"）のfetchが後から発火した検索（keyword="ab"）より遅れて解決しても、画面には最後の検索条件（"ab"）の結果が表示され、"a"の結果で上書きされないこと（`cancelled`フラグの検証。fetchのresolve順を入れ替えてテストする）
-- エラーバナーが`role="alert"`属性と`bg-red-50 text-red-700`クラスの両方を持つことを明示的にアサートする（「エラーバナーが出る」だけでなくスタイル契約を検証する）
-
----
-
-#### Set F-2: /distributor-products/page.tsx 統合
-
-**ファイル**: `src/app/distributor-products/page.tsx`
-
-変更ポイント: F-1と同様のSuspenseラップ + `keyword`と`categoryId`の両方をURLパラメータ化
-
-- **categoriesとdistributor-productsのフェッチを2つのuseEffectに分離する**:
-  - `categories`は`useEffect(fetchCategories, [])`（マウント時のみ、独立）
-  - `distributor-products`は`useEffect(fetchItems, [keyword, categoryId, refreshKey])`
-  - DELETE後の`refreshKey`incrementは**distributor-productsのみ**再フェッチを引き起こす。categoriesは再フェッチしない
-- keyword・categoryId変更時のみdistributor-products APIを再フェッチ
-- **レース防止ガード必須**（F-1と同様）: `distributor-products`側の`useEffect(fetchItems, [keyword, categoryId, refreshKey])`にも`src/app/orders/page.tsx`の`cancelled`フラグパターンを適用する。`categories`側の`useEffect`は依存配列が`[]`（マウント時1回のみ）のため同様のレースは原理上発生しないが、他のfetch箇所とパターンを揃えるため同じガードを付けてよい
-
-**テスト観点**: F-1に加え
-- categoryId変更でAPIにcategoryIdパラメータが付与される
-- keywordとcategoryIdの組み合わせがURLに両方反映される
-- DELETE後、distributor-productsは再フェッチされるがcategoriesは再フェッチされない（fetchカウントで確認）
-- **クリアボタンでkeyword・categoryIdの両方がリセットされ、URLパラメータも両方（`?keyword=`と`?categoryId=`）消えることをページレベルで確認する**（E-2コンポーネント単体テストの「onClearが呼ばれる」だけでは、ページ側が実際にURLを両方消すことまでは保証されないため）
-- distributor-products側のレース防止（F-1と同様、keyword/categoryIdの連続変更で古いレスポンスが新しい結果を上書きしないこと）
-
----
-
-### 並列グループ宣言
-
-| グループ | 並列実行可能セット | 触るファイル |
-|---|---|---|
-| Group 1 | A | `src/lib/search/like-pattern.ts`, `src/lib/api-keyword-query.ts`, `src/lib/api-error.ts`, `src/lib/compatibilities/repository.ts` |
-| Group 2（Aに依存） | B | `src/types/product.ts`, `src/types/distributorProduct.ts` |
-| Group 3（Bに依存, 並列） | C-products, C-distributor | `src/lib/products/repository.ts`, `src/lib/distributor-products/repository.ts` |
-| Group 4（Cに依存, 並列） | D-products, D-distributor, E-1, E-2 | `src/app/api/products/route.ts`, `src/app/api/distributor-products/route.ts`, `src/components/products/ProductSearchFilters.tsx`, `src/components/distributor-products/DistributorProductSearchFilters.tsx` |
-| Group 5（D・Eに依存, 並列） | F-1, F-2 | `src/app/products/page.tsx`, `src/app/distributor-products/page.tsx` |
-
-### 実装時に踏む必須チェック
-
-1. **known-failure-patterns.md「Suspenseフォールバック未設定」**: F-1/F-2で`useSearchParams`導入時、Suspenseラップ必須
-2. **known-failure-patterns.md「クエリパラメータのバリデーション漏れ」**: Set Dでkeyword長さ上限・categoryId UUID形式チェックを必ず実装（`parseKeyword`経由）
-3. **LIKEエスケープは自前実装しない**: 必ず`buildIlikeValue`（Set Aで共有化したもの）を経由する。素の`%${keyword}%`を組み立てない
-4. **DBエラーの生メッセージをクライアントに返さない**: 必ず`sanitizeDbError`を経由する
-5. **api-pagination.tsの既存定数**: limit/offsetを将来追加する場合は`parsePagination`を再利用（現仕様では不追加）
-6. **F-1/F-2の再検索フェッチには必ずレース防止ガードを入れる**: `src/app/orders/page.tsx`（L83-119）の`cancelled`フラグパターンを踏襲する。デバウンス後に連続してfetchが発火した場合、先に発火した古いリクエストのレスポンスが後発の新しいリクエストの結果を上書きしないようにする（レビュー指摘: 正しさ important）
+# SPEC: journal.jsonlのresultをverify-agent-progress-transcriptの突合にも統合する（issue #493 残スコープ）
+
+- issue: #493
+- feature名: `issue-493-journal-result-integration`
+- baseCommit: `460514d15c306ecb4c0e3fb0a36dbd755cb0075a`
+- 作成日: 2026-07-22
+
+## Part 1: 背景・スコープ確定の経緯（★人間がレビューする部分）
+
+issue #493の「やること」1〜3（`scripts/lib/reconstruct-loop-observability.ts`への
+journal.jsonl優先分岐・フォールバック・unit test）は、**issue #462のPR #467
+（2026-07-18マージ、コミット`eba2c10`）で既に実装済み**であることをコード・テスト・
+マージ履歴で確認した。issue #493（2026-07-21起票）は`docs/agents/common.md`の
+「組み込みは未着手」という陳腐化した記述を根拠にしていたため、実装済み分が
+重複起票されている。
+
+したがって本仕様のスコープは以下の2点のみ:
+
+1. **「やること」4（未実装分）**: `scripts/lib/verify-agent-progress-transcript.ts`の
+   `loadTranscripts`に、journal.jsonlのresult優先取得ロジックを統合する
+2. **ドキュメント訂正**: `docs/agents/common.md`「第4の記録層の候補」節の
+   「組み込みは未着手（別issueで検討）」記述を実態（実装済み）に合わせて更新する
+
+### Phase 1 Sweepの指摘との対応
+
+- types軸「loadTranscriptsがjournal.jsonl統合ロジックを実装していない」→ 本仕様の主対象
+- types軸「common.md行214-225の陳腐化記述」→ 本仕様で更新
+- types軸「TranscriptRecordにfindingsフィールドが無い」「model/promptTextを無視」→
+  **対応しない**（下記「対応しないこと」参照）
+- db/data/ui軸の指摘 → すべて本issueと無関係な既存コードへの一般指摘のためスコープ外
+  （dbの既知指摘は既存issue群・decisions.mdの管理範囲）
+
+## Part 2: 変更内容
+
+### 2-1. `scripts/lib/reconstruct-loop-observability.ts`
+
+- 既存のモジュール内private関数 `loadJournalResults(wfDirPath, filenames)` を
+  **`export`に変更する（ロジック変更なし）**。verify側から同一ロジックを再利用するため。
+  - 二重実装（インライン複製）を避ける。同一プロセスのNode/vitestから使うため
+    Workflow DSLのimport制約は無関係であり、通常のimportでよい。
+
+### 2-2. `scripts/lib/verify-agent-progress-transcript.ts`
+
+- `loadTranscripts(projectDir)` 内で、各`wf_*`ディレクトリ処理時に
+  `loadJournalResults(wfDir, filenames)` を呼び、該当`agentId`の構造化result
+  （`status`が`pass|fail|blocked`のもの）があれば `TranscriptRecord` の
+  `status`/`detail` をjournal側の値で上書きする。無いagentIdは従来どおり
+  `parseAgentTranscriptLines`の結果のまま（フォールバック維持）。
+- `endTimestamp`は従来どおりtranscript側から取得する（journal.jsonlには
+  タイムスタンプが無いため。時刻近接突合`matchRecords`のロジックは一切変更しない）。
+- 効果: `compareStatus`/`compareDetail`が参照するstatus/detailの源泉が、
+  transcript最終メッセージのパース（StructuredOutputブロック探索）から、
+  Workflowツールが機械的に書き出したresultへ置き換わり、突合の意味判定の
+  精度・堅牢性が上がる（transcript形式変化への耐性・パース失敗時のnull回避）。
+
+### 2-3. `scripts/lib/verify-agent-progress-transcript.test.ts`
+
+以下のケースを追加（既存の`loadTranscripts`系テストのfixture方式に合わせる）:
+
+1. journal.jsonlに該当agentIdの構造化resultがある場合、`TranscriptRecord.status/detail`
+   がjournal側の値になる（transcript側と異なる値で検証）
+2. journal.jsonlが存在しない場合、従来のtranscriptパース結果のまま（回帰確認）
+3. journal.jsonlはあるが該当agentIdの行が無い／resultがプレーン文字列の場合、
+   そのagentはtranscriptパース結果へフォールバックする
+
+### 2-4. `docs/agents/common.md`
+
+- 「第4の記録層の候補（issue #442調査、未実装）」節を「実装済み」の記述に更新:
+  - reconstruct側の組み込みはissue #462（PR #467）で実装済み
+  - verify側（本issue #493）の組み込みも実装済み
+  - 「journal.jsonlはWorkflow経由でのみ生成される」「keyはハッシュのみで
+    agentType/feature復元にはtranscript/meta.jsonが必要」という制約の記述は維持
+
+## 並列グループ宣言
+
+- **グループ1（単独・並列化なし）**: 2-1〜2-4すべて。変更ファイル4つは相互依存
+  （exportの追加→import→テスト→ドキュメント）のため、implementer 1体で直列実装する。
+
+## 受け入れ条件
+
+- journal.jsonlがあるWorkflow実行分の`TranscriptRecord`で、status/detailが
+  transcriptパースなしにjournal由来の値になる（unit testで検証）
+- journal.jsonlが無い場合（Agent tool直接起動）の従来動作が維持される（unit testで検証）
+- `npm test` green / `npm run lint` green
+- `matchRecords`の突合アルゴリズム（時刻近接・貪欲割り当て）に挙動変化が無い
+
+## 対応しないこと（明示的スコープ外）
+
+- `TranscriptRecord`への`findings`/`model`/`promptText`フィールド追加:
+  検証ロジック（`compareStatus`/`compareDetail`）が参照しないため追加しない（YAGNI）
+- `JournalResultPayload`のキャスト改善: 既存コードの型スタイルであり実行時検証で
+  補完済み。本issueのスコープ外
+- Phase 1 Sweepのdb/data軸指摘（既存マイグレーション・API層への一般指摘）: 本issueと無関係
+- DB・データ取得層・UI・RLS・migrationには一切触れない

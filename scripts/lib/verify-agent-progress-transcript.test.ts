@@ -1,13 +1,36 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   buildReport,
   compareDetail,
   compareStatus,
   extractAgentType,
+  loadTranscripts,
   matchRecords,
   type SelfReportRecord,
   type TranscriptRecord,
 } from './verify-agent-progress-transcript'
+
+function line(obj: unknown): string {
+  return JSON.stringify(obj)
+}
+
+function agentTranscriptLines(status: string, detail: string, timestamp: string): string {
+  return [
+    line({ type: 'user', message: { role: 'user', content: 'p' }, timestamp: '2026-07-11T03:00:00.000Z' }),
+    line({
+      type: 'assistant',
+      message: {
+        model: 'claude-sonnet-5',
+        content: [{ type: 'tool_use', name: 'StructuredOutput', input: { status, detail } }],
+        usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      },
+      timestamp,
+    }),
+  ].join('\n')
+}
 
 describe('extractAgentType', () => {
   it('agentType単体の完全一致を認識する', () => {
@@ -128,6 +151,77 @@ describe('matchRecords', () => {
     const { matched, unmatchedSelf } = matchRecords([weirdSelf], [baseTranscript])
     expect(matched).toHaveLength(0)
     expect(unmatchedSelf).toHaveLength(1)
+  })
+})
+
+describe('loadTranscripts', () => {
+  it('journal.jsonlに該当agentIdの構造化resultがある場合、TranscriptRecordのstatus/detailがjournal側の値になる', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'load-transcripts-journal-test-'))
+    const wfDir = join(projectDir, 'wf_1')
+    mkdirSync(wfDir)
+    writeFileSync(
+      join(wfDir, 'agent-a1.jsonl'),
+      agentTranscriptLines('fail', 'transcript側のdetail(journal側で上書きされるはず)', '2026-07-11T03:00:01.000Z'),
+      'utf-8',
+    )
+    writeFileSync(join(wfDir, 'agent-a1.meta.json'), JSON.stringify({ agentType: 'implementer' }), 'utf-8')
+    writeFileSync(
+      join(wfDir, 'journal.jsonl'),
+      [
+        line({ type: 'started', key: 'v2:xxx', agentId: 'a1' }),
+        line({ type: 'result', key: 'v2:xxx', agentId: 'a1', result: { status: 'pass', detail: 'journal側のdetail' } }),
+      ].join('\n'),
+      'utf-8',
+    )
+
+    const records = loadTranscripts(projectDir)
+    expect(records).toHaveLength(1)
+    expect(records[0].status).toBe('pass')
+    expect(records[0].detail).toBe('journal側のdetail')
+    // endTimestampはjournal.jsonlに存在しないためtranscript側の値のまま
+    expect(records[0].endTimestamp).toBe('2026-07-11T03:00:01.000Z')
+  })
+
+  it('journal.jsonlが存在しない場合、従来のtranscriptパース結果のままとする（回帰確認）', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'load-transcripts-no-journal-test-'))
+    const wfDir = join(projectDir, 'wf_2')
+    mkdirSync(wfDir)
+    writeFileSync(
+      join(wfDir, 'agent-a2.jsonl'),
+      agentTranscriptLines('blocked', 'transcriptのみのdetail', '2026-07-11T03:00:01.000Z'),
+      'utf-8',
+    )
+    writeFileSync(join(wfDir, 'agent-a2.meta.json'), JSON.stringify({ agentType: 'reviewer' }), 'utf-8')
+
+    const records = loadTranscripts(projectDir)
+    expect(records).toHaveLength(1)
+    expect(records[0].status).toBe('blocked')
+    expect(records[0].detail).toBe('transcriptのみのdetail')
+  })
+
+  it('journal.jsonlはあるが該当agentIdの行が無い、またはresultがプレーン文字列の場合はtranscriptパース結果へフォールバックする', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'load-transcripts-fallback-test-'))
+    const wfDir = join(projectDir, 'wf_3')
+    mkdirSync(wfDir)
+    writeFileSync(
+      join(wfDir, 'agent-a3.jsonl'),
+      agentTranscriptLines('pass', 'transcript側フォールバックのdetail', '2026-07-11T03:00:01.000Z'),
+      'utf-8',
+    )
+    writeFileSync(join(wfDir, 'agent-a3.meta.json'), JSON.stringify({ agentType: 'implementer' }), 'utf-8')
+    writeFileSync(
+      join(wfDir, 'journal.jsonl'),
+      [
+        line({ type: 'result', key: 'v2:yyy', agentId: 'a-other', result: { status: 'fail', detail: '別agent' } }),
+        line({ type: 'result', key: 'v2:zzz', agentId: 'a3', result: 'af57a6077ca388dede819b409c55a1216b5eb329' }),
+      ].join('\n'),
+      'utf-8',
+    )
+
+    const records = loadTranscripts(projectDir)
+    expect(records).toHaveLength(1)
+    expect(records[0].status).toBe('pass')
+    expect(records[0].detail).toBe('transcript側フォールバックのdetail')
   })
 })
 
