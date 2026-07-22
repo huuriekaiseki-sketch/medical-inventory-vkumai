@@ -40,6 +40,20 @@ stats JSON は標準入力ではなく**第4引数**で渡す（パイプ・リ�
 ```
 ※ start を呼び忘れた場合は phase1_start_at がフォールバックで使われる
 
+## gap check state 記録ルール（issue #488）
+AIDDフロー実行時は、上記statsと合わせて以下も呼ぶ（gap check本体はStop hookが自動実行する。
+手動での check-*-gap.sh 実行は再検証したい場合のみでよい。詳細は `docs/agents/common.md`
+「loop-observabilityログの記録漏れ検知」参照）:
+
+```bash
+# 1. フロー開始時（Phase 1の前に1回。件数計測はスクリプトが行う）
+scripts/record-gap-check-state.sh before
+
+# 2. 各フェーズ完了後（戻り値のexpected件数を加算記録。無い方の引数は省略可）
+scripts/record-gap-check-state.sh expected --agent-progress 4
+scripts/record-gap-check-state.sh expected --loop-observability 10 --agent-progress 12
+```
+
 ## 絶対ルール
 - 確認を求めるのは「仕様レビュー（停止①）」と「構造化レビュー（停止②）」の2箇所のみ。
 - それ以外は止まらず自律的に進める。
