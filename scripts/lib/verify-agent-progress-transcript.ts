@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { pairAgentFiles, parseAgentTranscriptLines } from './reconstruct-loop-observability'
+import { loadJournalResults, pairAgentFiles, parseAgentTranscriptLines } from './reconstruct-loop-observability'
 
 // WHY: docs/agents/common.md「サブエージェント進捗の可視化（issue #18）」に列挙されている
 //      進捗記録対象agentType一覧。ここに無い名前（Find/Adversarial Verify等の一部）はそもそも
@@ -246,6 +246,12 @@ export function loadTranscripts(projectDir: string): TranscriptRecord[] {
   for (const wfDir of findWorkflowDirs(projectDir)) {
     const filenames = readdirSync(wfDir)
     const pairs = pairAgentFiles(filenames)
+    // issue #493: journal.jsonlにその agentId の構造化result（status/detail）があれば、
+    // transcript最終メッセージのパース結果より優先して使う（endTimestampはjournal.jsonlに
+    // タイムスタンプが無いため引き続きtranscript側から取得し、matchRecordsの時刻近接突合
+    // ロジックには影響しない）。journal.jsonlが無い/該当agentIdが無い場合は従来どおり
+    // transcriptパース結果のままフォールバックする。
+    const journalResults = loadJournalResults(wfDir, filenames)
     for (const { agentId, jsonlFile, metaFile } of pairs) {
       let agentType = 'unknown'
       try {
@@ -256,13 +262,14 @@ export function loadTranscripts(projectDir: string): TranscriptRecord[] {
       }
       const lines = readFileSync(join(wfDir, jsonlFile), 'utf-8').split('\n').filter(Boolean)
       const summary = parseAgentTranscriptLines(lines)
+      const journalResult = journalResults.get(agentId)
       records.push({
         wfDir,
         agentId,
         agentType,
         endTimestamp: summary.endTimestamp,
-        status: summary.status,
-        detail: summary.detail,
+        status: journalResult ? journalResult.status : summary.status,
+        detail: journalResult ? journalResult.detail : summary.detail,
       })
     }
   }
