@@ -39,6 +39,9 @@ stats JSON は標準入力ではなく**第4引数**で渡す（パイプ・リ�
 ~/write_aidd_stats.sh phase2 "" "" '{"implAgents":2,"reviewAgents":4,"totalAgents":7,"implSuccessCount":2}'
 ```
 ※ start を呼び忘れた場合は phase1_start_at がフォールバックで使われる
+※ start の呼び忘れは Stop hook（`scripts/check-aidd-stats-recorded.sh`、issue #495）が
+  Workflow実行の形跡と突き合わせて機械検知し警告する（セッションにつき1回・warningのみ。
+  phase単位の呼び忘れは検知対象外）
 
 ## gap check state 記録ルール（issue #488）
 AIDDフロー実行時は、上記statsと合わせて以下も呼ぶ（gap check本体はStop hookが自動実行する。

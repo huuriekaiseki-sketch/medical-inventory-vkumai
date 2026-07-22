@@ -238,6 +238,12 @@
             "command": "scripts/check-gap-check-state.sh",
             "timeout": 90,
             "statusMessage": "AIDD gap check stateを確認中(issue #488)..."
+          },
+          {
+            "type": "command",
+            "command": "scripts/check-aidd-stats-recorded.sh",
+            "timeout": 15,
+            "statusMessage": "AIDD stats記録の有無を確認中(issue #495)..."
           }
         ]
       }
