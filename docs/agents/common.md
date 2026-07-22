@@ -211,18 +211,26 @@ agentTranscriptPath?, lastAssistantMessage?}`形式で自動記録される。�
 - 既存の`log-agent-progress.sh` / `log-loop-observability.sh` / gap check群は削除しておらず、
   新方式と併存させている（新方式が安定稼働することを確認してから、廃止を別issueで検討する）
 
-**第4の記録層の候補（issue #442調査、未実装）**: Workflowツールが`agent()`呼び出しごとに
-書き出す`journal.jsonl`（`subagents/workflows/wf_<runId>/journal.jsonl`）を実機観測したところ、
-各行の`agentId`フィールドが同じディレクトリの`agent-<agentId>.jsonl`（フルtranscript）・
-`agent-<agentId>.meta.json`（メタデータ）のファイル名と完全一致することを確認した
-（`{"type":"result","key":"v2:<promptとoptsのハッシュ>","agentId":"...","result":{...}}`という形式）。
-これにより、`reconstruct-loop-observability.ts`が現在transcriptの最終メッセージをパースして
-復元している`result`（status/detail等）を、journal.jsonlの`result`フィールドから
-パース不要で直接取得できる可能性がある。ただし`key`はハッシュ値のみでprompt本文を含まないため、
-agentType/feature/labelの復元には引き続きtranscript/meta.json側の情報が必要（この制約は
-変わらない）。また journal.jsonlは**Workflowツール経由の`agent()`呼び出しでのみ生成される**
-（通常のAgent tool直接起動には存在しない）。`reconstruct-loop-observability.ts`への実際の
-組み込みは未着手（別issueで検討）。
+**第4の記録層（issue #442調査 → issue #462・#493で組み込み済み）**: Workflowツールが
+`agent()`呼び出しごとに書き出す`journal.jsonl`（`subagents/workflows/wf_<runId>/journal.jsonl`）
+を実機観測したところ、各行の`agentId`フィールドが同じディレクトリの`agent-<agentId>.jsonl`
+（フルtranscript）・`agent-<agentId>.meta.json`（メタデータ）のファイル名と完全一致することを
+確認した（`{"type":"result","key":"v2:<promptとoptsのハッシュ>","agentId":"...","result":{...}}`
+という形式）。これにより、transcriptの最終メッセージをパースして復元している`result`
+（status/detail等）を、journal.jsonlの`result`フィールドからパース不要で直接取得できる。
+ただし`key`はハッシュ値のみでprompt本文を含まないため、agentType/feature/labelの復元には
+引き続きtranscript/meta.json側の情報が必要（この制約は変わらない）。また journal.jsonlは
+**Workflowツール経由の`agent()`呼び出しでのみ生成される**（通常のAgent tool直接起動には
+存在しない）。
+
+- **reconstruct側の組み込み（issue #462、PR #467でマージ済み）**: `reconstruct-loop-observability.ts`の
+  `reconstructWorkflowDir`が`loadJournalResults`（`export`済み）でjournal.jsonlの構造化result
+  （statusが`pass|fail|blocked`のもの）を優先し、無ければ従来のtranscriptパース結果へ
+  フォールバックする
+- **verify側の組み込み（issue #493で実装済み）**: `verify-agent-progress-transcript.ts`の
+  `loadTranscripts`も同じ`loadJournalResults`を再利用し、`TranscriptRecord`の`status`/`detail`
+  をjournal.jsonl優先で取得する（`endTimestamp`はjournal.jsonlにタイムスタンプが無いため
+  引き続きtranscript側から取得し、`matchRecords`の時刻近接突合ロジックには影響しない）
 
 ## OpenTelemetryと自作JSONLの役割分担（issue #417）
 
