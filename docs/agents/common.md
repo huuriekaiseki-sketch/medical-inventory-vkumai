@@ -105,11 +105,27 @@ Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、Pr
   依存しており強制力がない（Workflow DSL自体がfilesystem API不可のため、ワークフロー本体側から
   機械的にログを書き込むことはできない）。2026-07-07以降、実際に記録が5日分丸ごと欠落していた
   事例がある。理由は [`decisions.md`](./decisions.md) 参照。
-- **AIDDフロー（Phase 2以降）を実行する前後で、必ず以下を行うこと。**
-  1. 実行前に `wc -l logs/loop-observability.jsonl` で行数を記録する（ファイルが無ければ0）
-  2. フロー完了後、戻り値の `stats.expectedLoopObservabilityRecords` を確認する
-  3. `scripts/check-loop-observability-gap.sh --before <1の値> --expected <2の値>` を実行する
-  4. `hasGap: true`（exit 1）になった場合、記録漏れとして扱い、issue化するか原因を調査する
+- **AIDDフロー（Phase 2以降）を実行する前後で、必ず以下を行うこと（issue #488でStop hook
+  自動実行化済み）。**
+  1. フロー開始時（Phase 1前に1回）に `scripts/record-gap-check-state.sh before` を実行する
+     （件数の計測・記録はスクリプトが行う。手動のwc -l/jq計測は不要になった）
+  2. 各フェーズ完了後、戻り値の `stats.expectedLoopObservabilityRecords` /
+     `stats.expectedAgentProgressRecords` をその都度記録する（加算方式のため、フェーズごとに
+     順に呼べば合算される。無い方の引数は省略する）:
+     ```bash
+     # phase1完了後（expectedAgentProgressRecordsのみ返るフェーズの例）
+     scripts/record-gap-check-state.sh expected --agent-progress 4
+     # phase2完了後（両方返るフェーズの例）
+     scripts/record-gap-check-state.sh expected --loop-observability 10 --agent-progress 12
+     ```
+  3. gap check本体はStop hook（`scripts/check-gap-check-state.sh`）がターン終了時に自動実行し、
+     `hasGap: true` ならsystemMessageで警告する（実行後にstateファイルは自動クリアされる）。
+     手動での `scripts/check-loop-observability-gap.sh --before N --expected M` 実行は
+     再検証したい場合のみでよい
+  4. 警告が出た場合、記録漏れとして扱い、issue化するか原因を調査する
+  - **既知の限界**: stateファイルへの記録（上記1・2）自体は依然オーケストレーターの
+    自己申告（Workflow DSLがfilesystem API不可のため）。「書いたのにcheckし忘れる」は
+    Stop hookで構造的に消えたが、「そもそも書き忘れる」は残る
 - これは「記録漏れを機械的に検知する」ものであり、記録そのものを保証する仕組みではない
   （エージェント任せの記録に依存する構造自体の解消は別途検討中）。
 - 記録漏れが発生した過去分は、`scripts/lib/reconstruct-loop-observability.ts` で
@@ -141,11 +157,16 @@ Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、Pr
   つまり「進捗が表示されない」ことは「本当に止まっている」のか「そもそも記録し忘れている」のか
   区別できない。
 - **記録漏れの検知（issue #339、loop-observabilityと同型の仕組み）は実装済み。**
-  `aidd-phase1.js` / `aidd-phase2.js` を実行する前後で、必ず以下を行うこと。
-  1. 実行前に `jq -s '[.[] | select(.status == "done" or .status == "failed")] | length' logs/agent-progress.jsonl` で件数を記録する（ファイルが無ければ0）
-  2. フロー完了後、戻り値の `stats.expectedAgentProgressRecords` を確認する
-  3. `scripts/check-agent-progress-gap.sh --before <1の値> --expected <2の値>` を実行する
-  4. `hasGap: true`（exit 1）になった場合、記録漏れとして扱い、issue化するか原因を調査する
+  `aidd-phase1.js` / `aidd-phase2.js` を実行する前後の手順は、loop-observability側と共通の
+  gap check state方式（issue #488でStop hook自動実行化済み。上記
+  [「loop-observabilityログの記録漏れ検知」](#loop-observabilityログの記録漏れ検知)の手順参照）:
+  1. フロー開始時に `scripts/record-gap-check-state.sh before` を実行する（agent-progressの
+     done/failed件数もこの1回で同時に記録される）
+  2. フロー完了後、戻り値の `stats.expectedAgentProgressRecords` を
+     `scripts/record-gap-check-state.sh expected --agent-progress <値>` で記録する
+  3. gap check本体はStop hookが自動実行する。手動での
+     `scripts/check-agent-progress-gap.sh --before N --expected M` は再検証時のみでよい
+  4. 警告が出た場合、記録漏れとして扱い、issue化するか原因を調査する
   - 判定ロジックは `.claude/workflows/lib/agent-progress-gap.js`（loop-observability-gap.jsの
     computeGapを再利用）、期待件数の算出は `.claude/workflows/lib/agent-progress-expectation.js`
     （`aidd-phase2.js` 側はWorkflow DSL制約によりインライン複製）を参照。
@@ -649,6 +670,7 @@ issue #419のような設定変更（effort/model）に対して「精度が落�
 | サーキットブレーカー（`/goal`設定・テスト修正3回まで・フロー全体上限） | ルートの`CLAUDE.md` | issue #441で検知手段を調査したが、「`/goal`が設定されているか」を外部から機械的に問い合わせるAPI/hookは公式に存在しないと判明（実機確認済み）。条件テンプレート化・役割分担の明文化（Workflow内部retryとの切り分け）は完了したが、呼び忘れ自体の検知は依然できないままこの表に残る |
 | 停止①②以外で止まらず自律進行すること | ルートの`CLAUDE.md`「絶対ルール」 | |
 | AIDD stats書き出し（各フェーズでの`write_aidd_stats.sh`呼び出し） | ルートの`CLAUDE.md` | 呼び忘れても気づく手段がない |
+| gap check stateの記録（`record-gap-check-state.sh` before/expectedの呼び出し） | ルートの`CLAUDE.md`「gap check state 記録ルール」 | gap check本体の実行はissue #488でStop hookに機械化済み。ただしこの記録呼び出し自体の呼び忘れ検知は無い（AIDD stats書き出しと同型。Workflow DSLがfilesystem API不可のため自己申告依存が残る） |
 | seed・スクリーンショットに実在施設名を使わない | 本ファイル「テスト環境・データ衛生ルール」 | per-edit層で部分検知（`.claude/security-patterns.json`の`possible_real_facility_name`、issue #440）。ただし`/plugin install security-guidance@claude-plugins-official`の実機有効性は未確認、かつスクリーンショット・issue添付・E2E失敗ログは検知対象外 |
 | `aidd-phase2.js`のSpec Check/Manifest Check関連プロンプトを変更した際のfault injection訓練の実施自体 | 本ファイル「fault injection訓練の実施タイミング（issue #395）」 | 訓練の手順・fixture・setup/teardownスクリプトは用意した（[`fault-injection-drill.md`](./fault-injection-drill.md)）が、「変更時に必ず訓練を実施すること」自体を機械的に強制する手段（例: 該当プロンプト変更を検知してブロックするpre-commit等）は無い。実施記録の記入漏れにも気づく仕組みが無い |
 | `.claude/workflows/*.js` 変更時の`npm run eval:workflows`手動実行 | 本ファイル「AIDDワークフロープロンプトのeval」 | CI化は実エージェント呼び出しの課金コストで見送り。実行し忘れに気づく手段は無い（issue #391） |
@@ -680,7 +702,7 @@ issue #419のような設定変更（effort/model）に対して「精度が落�
 | プロンプト正本の切り出し＋インライン複製＋sync test | `.claude/workflows/lib/prompts/db-impl.js` ⇔ `aidd-phase2.js`、`.claude/workflows/lib/spec-check.js` / `manifest-check.js` ⇔ `aidd-phase2.js`、`.claude/workflows/lib/prompts/sweep.js` ⇔ `aidd-phase1.js` / `aidd-1-1-deep-task.js` | Workflow DSLがfilesystem API不可でローカルモジュールをrequire/importできない制約 | **解除**: Workflow DSLがローカルモジュールをimportできるようになれば、インライン複製自体が不要になり正本を直接importする形に変えられる。**破損**: プロンプト文言変更時にインライン複製側を追従させ忘れると乖離する（これを検知するのがsync testの目的そのもの） | `workflow-prompt-sync.test.js` / `sweep-prompt-sync.test.js`（npm test内） |
 | TRI/RISK・メタ改修判定ロジックの切り出し＋インライン複製＋sync test | `.claude/workflows/lib/router-risk.js` ⇔ `aidd-phase1-router.js`（issue #457） | 同上（Workflow DSL importの制約）。プロンプト（テンプレートリテラル）ではなく`const`配列・`function`宣言の複製のため、`extract-declaration.js`という別の抽出ユーティリティを使う | **解除**: 同上。**破損**: `classifyRoute`等の関数・定数配列を変更したのに`aidd-phase1-router.js`側のインライン複製を追従させ忘れると乖離する | `router-risk-sync.test.js`（npm test内） |
 | eval fixture manifestとaidd-phase2.js内スキーマ定義の同期 | `scripts/eval-fixtures/db-impl/manifest.json` ⇔ `aidd-phase2.js`内のスキーマ定義 | 同上（Workflow DSL importの制約） | **解除**: 同上。**破損**: スキーマ定義がドリフトすると、evalが実際のプロンプトと異なるスキーマでテストしてしまい気づかれない | `eval-fixture-manifest-schema-sync.test.js`（npm test内） |
-| 進捗・観測ログの自然言語指示依存 | `scripts/log-agent-progress.sh` / `scripts/log-loop-observability.sh`呼び出し | Workflow DSLがfilesystem API不可で、ワークフロー本体から機械的にログを書き込めない制約 | **解除**: 同上（importまたは直接fs書き込みが可能になれば、本体側から機械的に記録できる設計に変更可能）。**破損**: 元々「壊れる」ものではなく「そもそも書かれない」リスクが常態（自然言語指示依存のため） | 記録漏れの事後検知（`check-loop-observability-gap.sh` / `check-agent-progress-gap.sh`）はあるが、その実行自体が人起動であり第3層ルールとして上表に残っている（issue #411） |
+| 進捗・観測ログの自然言語指示依存 | `scripts/log-agent-progress.sh` / `scripts/log-loop-observability.sh`呼び出し | Workflow DSLがfilesystem API不可で、ワークフロー本体から機械的にログを書き込めない制約 | **解除**: 同上（importまたは直接fs書き込みが可能になれば、本体側から機械的に記録できる設計に変更可能）。**破損**: 元々「壊れる」ものではなく「そもそも書かれない」リスクが常態（自然言語指示依存のため） | 記録漏れの事後検知（`check-loop-observability-gap.sh` / `check-agent-progress-gap.sh`）があり、その実行はStop hook（`scripts/check-gap-check-state.sh`、issue #488）で機械トリガー化済み。ただしbefore/expectedのstateファイル記録（`scripts/record-gap-check-state.sh`）自体はオーケストレーターの自己申告のまま残る |
 
 **Claude Code更新時の確認手順**: (1) 上表の「smoke test」列にnpm test内のテストがある項目は
 `npm test`を実行して確認する。(2) smoke testが「無い」と明記されている項目（現状は
@@ -703,6 +725,8 @@ issue #419のような設定変更（effort/model）に対して「精度が落�
 | [`docs/agents/run-manifest.md`](./run-manifest.md) | AIDDフローのspecHash/baseCommit突合用Run Manifestのスキーマ |
 | `scripts/log-agent-progress.sh` / `scripts/show-agent-status.sh` | サブエージェント進捗の記録・一覧表示（issue #18） |
 | `scripts/check-agent-progress-gap.sh` | agent-progress記録漏れの機械検知（issue #339） |
+| `scripts/record-gap-check-state.sh` | gap check用before/expected件数の記録（issue #488。オーケストレーター専用） |
+| `scripts/check-gap-check-state.sh` | Stop hookによるgap checkの自動実行（issue #488） |
 | [`docs/agents/fault-injection-drill.md`](./fault-injection-drill.md) | `aidd-phase2.js`のdeny-by-defaultゲート実測訓練のランブック（issue #395） |
 | `scripts/aidd-fault-injection-setup.sh` / `scripts/aidd-fault-injection-teardown.sh` | fault injection訓練用の`.aidd/run-manifest.json`差し替え・復元（issue #395） |
 | `scripts/eval-workflow-prompts.sh` / `scripts/eval-fixtures/` | AIDDワークフロープロンプトのeval基盤（issue #391） |

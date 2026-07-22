@@ -232,6 +232,12 @@
             "command": "scripts/gate-effectiveness-monthly-check.sh",
             "timeout": 15,
             "statusMessage": "品質ゲート月次サマリを確認中..."
+          },
+          {
+            "type": "command",
+            "command": "scripts/check-gap-check-state.sh",
+            "timeout": 90,
+            "statusMessage": "AIDD gap check stateを確認中(issue #488)..."
           }
         ]
       }
