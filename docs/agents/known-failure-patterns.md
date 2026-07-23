@@ -44,7 +44,7 @@ Next.js API Route（`requireFacilityAccess`等）を経由せず直接呼び出�
 手書きする必要自体がなくなる。同種の既存関数（同じテーブルを横断取得するもの）が
 コードベースに既にないか先に探す。
 
-詳細: [`decisions.md`](./decisions.md#なぜ施設分離をrls--is_facility_member関数で実現したか)
+詳細: [`decisions/db-rls.md`](./decisions/db-rls.md#なぜ施設分離をrls--is_facility_member関数で実現したか)
 
 ### 新しい認可プリミティブ導入時、既存のSECURITY DEFINER関数が取り残される（issue #458）
 
@@ -103,6 +103,39 @@ globパターン（`*`等を含むパス）を渡していないか確認する�
 存在すると、それが `find` のオプションとして誤解釈されうる構造的リスクがあるため、Claude Codeの
 組み込み安全性チェックが「引用符なしglob」として毎回確認を要求する。これは`.claude/settings.json`
 の`allow`リストへの追加では回避できない（コマンドの書き方自体を変える必要がある）。
+
+### ワークフロースクリプトをnameで起動すると編集直後の変更が反映されないことがある
+
+**チェック内容:** `.claude/workflows/*.js` を編集した直後に動作確認する場合、
+`Workflow({ name: "<登録済み名>", args })` ではなく `Workflow({ scriptPath: "<実ファイルの
+絶対パス>", args })` で実ファイルを直接指定する。
+
+**なぜ再発したか:** issue #399の調査時、`name`指定（登録済みワークフロー名での起動）は、
+直前にスクリプトを編集して保存した直後であっても**古い（編集前の）スクリプト内容で実行される**
+ことが実測で確認された。`scriptPath`で明示的にファイルパスを指定した場合は、正しく編集後の
+内容が使われた。この挙動の差異が、過去の調査で「同じスクリプトの同じ変数のはずなのに挙動が
+違う」という一見矛盾した観測を一部説明していた可能性がある（過去の調査がどちらの呼び出し方を
+使ったかは記録が無く確認できないため断定はできない）。
+
+詳細: [`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#issue-399の根本原因確定と修正workflowスクリプトのargs文字列化バグ)
+
+### hookスクリプトのパス正規化漏れとbashの単語境界表現の落とし穴
+
+**チェック内容:** リポジトリパスへの正規表現照合を書く場合、(a) `tool_input.file_path` の
+ような絶対/相対混在パスは `os.path.realpath` 等で正規化してから照合する（macOSの `/var` →
+`/private/var` シンボリックリンクにより文字列としては一致しないことがある）、(b) bashの
+`[[ =~ ]]`（POSIX ERE）で単語境界を表現する場合は `\b` ではなく `[[:space:]]|$` 等の明示的な
+境界表現を使う（`\b` はPOSIX EREでは単語境界として解釈されず、パターンごと静かにマッチしなく
+なる）。
+
+**なぜ再発したか:** issue #444のPreToolUse hook実装時、`check-run-manifest-presence.sh` は
+このリポジトリ自身の名前「medical-inventory-vkumai」に含まれる"inventory"という単語が
+ドメインキーワードと単純一致し、リポジトリ内外を問わずあらゆる書き込みで常に誤検知する
+自己参照的なバグを起こした（`tool_input.file_path` の正規化漏れ）。`check-direct-ddl-execution.sh`
+は `\b` 使用によりコマンド境界判定が静かに失敗していた（`supabase db execute` が検知されない
+形でテスト失敗として顕在化）。いずれも「テストを書いて実際に動かす」ことで発見できたバグ。
+
+詳細: [`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#なぜissue-444のpretooluse-hookを警告のみdenyの二段構えにしたか)
 
 ## RLS/テナント分離層
 

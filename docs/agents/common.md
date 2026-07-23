@@ -27,13 +27,13 @@ any code. Heed deprecation notices.
   **auth / facility / tenant / organization / inventory / RLS / policy**
 
 この判定は人間の裁量で緩めない（機械判定）。迷ったら高リスク側に倒す。
-理由は [`decisions.md`](./decisions.md#なぜtririsk判定を機械判定にし人の裁量で緩めないことにしたか) を参照。
+理由は [`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#なぜtririsk判定を機械判定にし人の裁量で緩めないことにしたか) を参照。
 
 `aidd-phase1-router`を経由せず直接実装に入った場合の検知（issue #444）: 上記の高リスクパスへの
 Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、PreToolUse hook
 （`scripts/check-run-manifest-presence.sh`）がブロックせず警告のみ注入する。ブロックしない
 理由・鮮度判定を見送った理由は同スクリプトのコメント、経緯は
-[`decisions.md`](./decisions.md#なぜissue-444のpretooluse-hookを警告のみdenyの二段構えにしたか)を参照。
+[`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#なぜissue-444のpretooluse-hookを警告のみdenyの二段構えにしたか)を参照。
 
 ### 第5カテゴリ: パイプライン自体のメタ改修（issue #457）
 
@@ -57,7 +57,7 @@ Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、Pr
 一切発火せず、既存のTRI/RISK判定（プロダクトコード向け）はそのまま適用される。「メタ改修
 パスが先に判定される」ことと「既存の高リスクパス判定を緩めない」ことは独立した設計であり、
 どちらもこの優先順位によって両立している。設計判断の詳細は
-[`decisions.md`](./decisions.md#なぜメタ改修判定をキーワードマッチより先に評価することにしたかissue-457)を参照。
+[`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#なぜメタ改修判定をキーワードマッチより先に評価することにしたかissue-457)を参照。
 
 正本は`.claude/workflows/lib/router-risk.js`（`classifyRoute`）、`aidd-phase1-router.js`側の
 インライン複製との同期は`.claude/workflows/lib/__tests__/router-risk-sync.test.js`が検証する
@@ -82,7 +82,7 @@ Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、Pr
   （`db push`/`db reset`等の正規のmigration適用手段は対象外）
 - マイグレーション外で本番/リモートDBに存在するスキーマ変更（トリガー・関数等）を発見した場合は、
   差分をキャッチアップ用マイグレーションとして必ず記録してから作業を進める
-- 理由（過去のスキーマドリフト事例）は [`decisions.md`](./decisions.md#なぜdbスキーマ変更をmigrationファイル経由に限定し直接ddl実行を禁止したか) を参照
+- 理由（過去のスキーマドリフト事例）は [`decisions/db-rls.md`](./decisions/db-rls.md#なぜdbスキーマ変更をmigrationファイル経由に限定し直接ddl実行を禁止したか) を参照
 - **publicスキーマのテーブルを追加/削除するmigrationは、末尾で`SELECT refresh_schema_baseline_snapshot('<そのmigrationのタイムスタンプ>');`を呼ぶ**（issue #305のスキーマドリフト検知が使うbaselineスナップショットを更新するため）。
   呼ばないと、正規のPRレビュー済み変更であっても`table_added`/`table_removed`ドリフトとして恒久的に誤検知され続け、対応するGitHub Issueが自動クローズされなくなる
 
@@ -245,7 +245,7 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 
 | 回避策 | 場所 | 前提とするツール挙動 | 解除条件／破損条件 | smoke test |
 |---|---|---|---|---|
-| args `typeof === 'string'` → `JSON.parse`防御 | `.claude/workflows/aidd-phase1-router.js`（正本: `.claude/workflows/lib/resolve-workflow-args.js`） | Workflowツールがargsをobjectで渡してもstringで届く不具合（[`decisions.md`](./decisions.md#なぜaidd-phase1-routerjsでargsをjsonparseする防御コードを入れたか)） | **解除**: ツール側がargsを常にobjectで渡すよう修正されれば、この分岐に到達しなくなるだけで副作用なし（前方互換設計のため削除は任意）。**破損**: このガード自体が壊れることは想定しにくい（`typeof`判定のみのため） | `resolve-workflow-args.test.js`（npm test内） |
+| args `typeof === 'string'` → `JSON.parse`防御 | `.claude/workflows/aidd-phase1-router.js`（正本: `.claude/workflows/lib/resolve-workflow-args.js`） | Workflowツールがargsをobjectで渡してもstringで届く不具合（[`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#なぜaidd-phase1-routerjsでargsをjsonparseする防御コードを入れたか)） | **解除**: ツール側がargsを常にobjectで渡すよう修正されれば、この分岐に到達しなくなるだけで副作用なし（前方互換設計のため削除は任意）。**破損**: このガード自体が壊れることは想定しにくい（`typeof`判定のみのため） | `resolve-workflow-args.test.js`（npm test内） |
 | `--setting-sources ""` + `--agents`フラグでのagent定義注入 | `scripts/lib/build-eval-agent-json.mjs` | `--setting-sources ""`が`.claude/agents/*.md`探索も無効化する挙動 | **解除**: `--setting-sources`が`.claude/agents/`探索のみを無効化しないよう修正されれば不要。**破損**: `--agents`フラグのJSON構造・優先順位が変更されると`--agent implementer`解決自体が失敗し、evalの実エージェント呼び出しが全滅する（[`observability-internals.md`](./observability-internals.md#aiddワークフロープロンプトのevalissue-391)「AIDDワークフロープロンプトのeval」に既述のload-bearing箇所） | JSON出力形式は`build-eval-agent-json.test.mjs`（npm test内）で検証済み。**ただし実際に`claude -p --agents ... --agent <type>`でagent解決できるかどうかの専用smoke testは無い**（`claude -p`の実呼び出しが必要でCI化見送り済みのため、issue #391と同じ判断。`npm run eval:workflows db-impl`を手動実行した際に暗黙的に再検証されるのみ） |
 | プロンプト正本の切り出し＋インライン複製＋sync test | `.claude/workflows/lib/prompts/db-impl.js` ⇔ `aidd-phase2.js`、`.claude/workflows/lib/spec-check.js` / `manifest-check.js` ⇔ `aidd-phase2.js`、`.claude/workflows/lib/prompts/sweep.js` ⇔ `aidd-phase1.js` / `aidd-1-1-deep-task.js` | Workflow DSLがfilesystem API不可でローカルモジュールをrequire/importできない制約 | **解除**: Workflow DSLがローカルモジュールをimportできるようになれば、インライン複製自体が不要になり正本を直接importする形に変えられる。**破損**: プロンプト文言変更時にインライン複製側を追従させ忘れると乖離する（これを検知するのがsync testの目的そのもの） | `workflow-prompt-sync.test.js` / `sweep-prompt-sync.test.js`（npm test内） |
 | TRI/RISK・メタ改修判定ロジックの切り出し＋インライン複製＋sync test | `.claude/workflows/lib/router-risk.js` ⇔ `aidd-phase1-router.js`（issue #457） | 同上（Workflow DSL importの制約）。プロンプト（テンプレートリテラル）ではなく`const`配列・`function`宣言の複製のため、`extract-declaration.js`という別の抽出ユーティリティを使う | **解除**: 同上。**破損**: `classifyRoute`等の関数・定数配列を変更したのに`aidd-phase1-router.js`側のインライン複製を追従させ忘れると乖離する | `router-risk-sync.test.js`（npm test内） |
