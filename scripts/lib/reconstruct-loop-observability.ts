@@ -163,7 +163,7 @@ const MAX_REASON_LENGTH = 300
 // issue #462: Workflowツールが`agent()`呼び出しごとに書き出す`journal.jsonl`は、各行が
 // `{"type":"started"|"result","key":"v2:<promptとoptsのハッシュ>","agentId":"...","result"?:...}`
 // という形式で、`agentId`が同じディレクトリの`agent-<agentId>.jsonl`/`.meta.json`と一致する
-// ことを実機観測済み（docs/agents/common.md「サブエージェント骨格記録の機械強制」参照）。
+// ことを実機観測済み（docs/agents/observability-internals.md「サブエージェント骨格記録の機械強制」参照）。
 // `result`フィールドの形は必ずしも{status,detail,findings?}のStructuredOutput互換オブジェクトとは
 // 限らず、実データではagent()がプレーンな文字列（例: コミットハッシュ文字列）を返すケースも
 // 観測されている。そのためstatusが既知の値である場合のみ「構造化されたresult」とみなし、

@@ -218,4 +218,7 @@ Phase 5: 検証 [agent: reviewer × 並列 4観点]  ← aidd-phase2.js
 | `.claude/workflows/aidd-phase1.js` | Phase 1 軽量Sweepワークフロー実装（routerから呼ばれる） |
 | `.claude/workflows/aidd-phase2.js` | Phase 3-5 ワークフロー実装（args・完了後手順） |
 | `.claude/workflows/aidd-1-1-deep-task.js` | 深掘り調査ワークフロー（オンデマンド） |
+| `docs/agents/common.md` | 全AIエージェント共通の毎セッション必須ルール（TRI/RISK判定・DBスキーマ変更・ブランチ運用・引き継ぎフォーマット等） |
+| `docs/agents/observability-internals.md` | 観測・Eval基盤（loop-observability/agent-progress/journal.jsonl/OTel/eval）の実装詳細・既知の限界（common.mdから分離、issue #486） |
+| `docs/agents/tooling-decisions.md` | 公式機能・プラグインの導入可否判断記録（common.mdから分離、issue #486） |
 | `docs/ai-config-map.md` | このファイル（全体マップ） |

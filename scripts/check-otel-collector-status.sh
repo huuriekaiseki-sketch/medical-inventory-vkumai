@@ -27,7 +27,7 @@ if curl -s -o /dev/null --max-time 2 "${ENDPOINT}/v1/metrics" 2>/dev/null; then
   exit 0
 fi
 
-MSG="OTelテレメトリが有効（CLAUDE_CODE_ENABLE_TELEMETRY=1）ですが、送信先 ${ENDPOINT} に接続できませんでした。ローカルcollectorを起動し忘れている可能性があります（\`node scripts/otel-debug-collector.mjs\` 等）。起動しない場合、tokens/costのメトリクスは記録されずに失われます（docs/agents/common.md「OpenTelemetryと自作JSONLの役割分担」参照）。"
+MSG="OTelテレメトリが有効（CLAUDE_CODE_ENABLE_TELEMETRY=1）ですが、送信先 ${ENDPOINT} に接続できませんでした。ローカルcollectorを起動し忘れている可能性があります（\`node scripts/otel-debug-collector.mjs\` 等）。起動しない場合、tokens/costのメトリクスは記録されずに失われます（docs/agents/observability-internals.md「OpenTelemetryと自作JSONLの役割分担」参照）。"
 
 jq -n --arg msg "$MSG" '{
   systemMessage: $msg,
