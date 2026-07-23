@@ -7,8 +7,12 @@ export const meta = {
   ],
 }
 
-// args: { taskDescription?: string }
+// args: { taskDescription?: string, baseCommit?: string }
 // taskDescription: 追加・実装したい機能の説明（例: 「ローン返却機能の追加」）
+// baseCommit: 呼び出し側(Claude Code)が`git rev-parse HEAD`で取得したコミットSHAを渡す
+//   （`^[0-9a-f]{7,40}$`に一致する場合のみ採用）。渡された場合はcapture-base-commit
+//   エージェントの起動自体を省略する(issue #497)。未指定・不正な場合は従来どおり
+//   capture-base-commitエージェントを起動してフォールバックする（後方互換）。
 //
 // ── 完了後の手順（Claude が実行すること）──────────────────────────────
 // 1. 調査結果をもとに SPEC.md を生成する
@@ -32,6 +36,12 @@ export const meta = {
 // と同一パターン。issue #399の調査で本ファイルにもガードが無いことが判明した）。
 const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
 const taskDescription = parsedArgs?.taskDescription ?? '現在のコードベース全体の調査'
+
+// issue #497: 呼び出し側から渡されたbaseCommitが有効なら、`git rev-parse HEAD`だけのために
+// エージェントを1体起動する(capture-base-commit)のを省略する。正規表現は従来の
+// baseCommitRawバリデーションと同一のものを流用する。
+const BASE_COMMIT_PATTERN = /^[0-9a-f]{7,40}$/
+const providedBaseCommit = parsedArgs?.baseCommit?.trim().match(BASE_COMMIT_PATTERN)?.[0] ?? null
 
 // docs/agents/agent-result-schema.md 参照。調査系エージェントに「失敗」概念は無いため pass/blocked の2値
 const AGENT_RESULT_SCHEMA = {
@@ -57,19 +67,25 @@ log('4軸並列Sweep 開始（1ラウンド）')
 
 const sweepPrompt = `タスク: ${taskDescription}${STATUS_GUIDE}`
 
-const [uiResult, dataResult, dbResult, typesResult, baseCommitRaw] = await parallel([
+const sweepAgents = [
   () => agent(sweepPrompt, { label: 'sweep-ui',    agentType: 'sweep-ui',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA, effort: 'low' }),
   () => agent(sweepPrompt, { label: 'sweep-data',  agentType: 'sweep-data',  phase: 'Sweep', schema: AGENT_RESULT_SCHEMA, effort: 'low' }),
   () => agent(sweepPrompt, { label: 'sweep-db',    agentType: 'sweep-db',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA, effort: 'low' }),
   () => agent(sweepPrompt, { label: 'sweep-types', agentType: 'sweep-types', phase: 'Sweep', schema: AGENT_RESULT_SCHEMA, effort: 'low' }),
-  () => agent('Run `git rev-parse HEAD` in the repository root and return only the resulting commit SHA, with no other text.', { label: 'capture-base-commit', phase: 'Sweep', effort: 'low' }),
-])
+]
+// providedBaseCommitが無い(未指定・不正)場合のみ、フォールバックとしてcapture-base-commit
+// エージェントを追加起動する。
+if (!providedBaseCommit) {
+  sweepAgents.push(() => agent('Run `git rev-parse HEAD` in the repository root and return only the resulting commit SHA, with no other text.', { label: 'capture-base-commit', phase: 'Sweep', effort: 'low' }))
+}
+
+const [uiResult, dataResult, dbResult, typesResult, baseCommitRaw] = await parallel(sweepAgents)
 
 log('Sweep 完了')
 
 const results = [uiResult, dataResult, dbResult, typesResult]
 
-const baseCommit = baseCommitRaw?.trim().match(/^[0-9a-f]{7,40}$/)?.[0] ?? null
+const baseCommit = providedBaseCommit ?? (baseCommitRaw?.trim().match(BASE_COMMIT_PATTERN)?.[0] ?? null)
 if (!baseCommit) {
   log('警告: baseCommitの取得に失敗しました。Run Manifestのbase_commitは手動で埋めてください。')
 }
