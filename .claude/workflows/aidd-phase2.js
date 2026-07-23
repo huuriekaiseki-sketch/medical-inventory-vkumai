@@ -153,7 +153,10 @@ const specCheck = await agent(
 )
 
 countLoggable('reviewer')
-countProgressLoggable('reviewer')
+// issue #509: Spec Checkのプロンプトは「それ以外は何もしないでください」と明示しており、
+// log-agent-progress.sh呼び出し（Bash実行）と構造的に矛盾するため、agent-progress側の
+// 期待件数（countProgressLoggable）からは除外する。loop-observability側（countLoggable）は
+// 実測でSpec Checkが記録できていることを確認済みのため対象外にしない（issue #509参照）。
 log(`Spec Check完了: status=${specCheck?.status ?? 'なし'}, actualPath=${specCheck?.actualPath ?? 'なし'}`)
 
 // issue #399: Workflowツール側の非対称バグにより、最初のagent()呼び出し（Spec Check）だけが
