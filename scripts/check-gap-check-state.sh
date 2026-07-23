@@ -112,6 +112,12 @@ rm -f "$STATE_FILE"
 MSG=""
 if [ -n "$GAP_WARNINGS" ]; then
   MSG="AIDDフローの観測ログに記録漏れ（またはズレ）の可能性があります（Stop hookによる自動gap check、issue #488）。issue化するか原因を調査してください（docs/agents/common.md「loop-observabilityログの記録漏れ検知」参照）:${GAP_WARNINGS}"
+  # issue #523: 検知して終わりにせず、次回SessionStart時に確実に思い出せるようキューへ
+  # 登録する（scripts/check-recovery-queue.sh参照）。失敗してもこのhook自体の警告出力は
+  # 継続する（fail-open。キュー登録はベストエフォート）
+  bash scripts/queue-recovery-task.sh --type "gap-check-followup" \
+    --detail "$(jq -n --arg warnings "$GAP_WARNINGS" '{gapWarnings: $warnings}')" \
+    >/dev/null 2>&1 || true
 fi
 if [ -n "$EXEC_FAILURES" ]; then
   if [ -n "$MSG" ]; then

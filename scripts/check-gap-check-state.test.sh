@@ -74,8 +74,12 @@ EOF
 run_hook() {
   rm -f "$LOOP_CALLED" "$PROGRESS_CALLED"
   set +e
+  # RECOVERY_QUEUE_FILE: issue #523でcheck-gap-check-state.shがhasGap時に
+  # scripts/queue-recovery-task.shを呼ぶようになったため、実リポジトリの
+  # .aidd/recovery-queue.jsonlを汚さないよう一時ディレクトリへ隔離する
   OUT="$(GAP_CHECK_STATE_FILE="$STATE" GAP_CHECK_LOOP_CMD="$LOOP_CMD" \
     GAP_CHECK_PROGRESS_CMD="$PROGRESS_CMD" GAP_CHECK_NOW_EPOCH=2000000 \
+    RECOVERY_QUEUE_FILE="$WORK_DIR/recovery-queue.jsonl" \
     bash "$SCRIPT" < /dev/null 2>&1)"
   EXIT_CODE=$?
   set -e
@@ -125,6 +129,7 @@ assert_contains "$OUT" "記録漏れ" "記録漏れ警告が含まれる"
 assert_contains "$OUT" "loop-observability" "どのログのgapかが含まれる"
 assert_contains "$OUT" "hasGap" "gap check出力が引用されている"
 assert_eq "$([ -f "$STATE" ] && echo kept || echo removed)" "removed" "stateファイルがクリアされている"
+assert_contains "$(cat "$WORK_DIR/recovery-queue.jsonl" 2>/dev/null || true)" "gap-check-followup" "issue #523: gap警告がrecovery-queueへ登録される"
 
 echo "=== scenario 6: agent-progressのexpectedのみ記録 → loop checkは呼ばれない ==="
 jq -n '{beforeLoopObservability: 5, beforeAgentProgress: 19, recordedAt: 1999000, expectedAgentProgress: 4}' > "$STATE"
