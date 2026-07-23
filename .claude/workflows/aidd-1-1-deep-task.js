@@ -394,6 +394,11 @@ const proposals = await parallel(
 )
 
 const validProposals = proposals.filter(Boolean)
+// issue #521: agent()失敗(null)による間引きは、件数を明示しないと「3案生成」が
+// 静かに「1〜2案生成」に減っていることに気づけない（偽の完全性）。
+if (validProposals.length < proposals.length) {
+  log(`Judge Panel: 提案生成でagent()失敗が${proposals.length - validProposals.length}件あり、${validProposals.length}/${proposals.length}案で続行します`)
+}
 
 // 設計判断が実質同じ提案しかない場合は採点パネル（3案 x 3観点 = 9エージェント）を省略する。
 // 品質ゲート: .claude/workflows/lib/judge-panel.js の computeDivergence と同一ロジック
@@ -444,12 +449,19 @@ if (hasDivergence) {
         ))
       ).then(scores => {
         const validScores = scores.filter(Boolean)
+        if (validScores.length < scores.length) {
+          log(`Judge Panel: "${proposal.name}"の採点でagent()失敗が${scores.length - validScores.length}件あり、${validScores.length}/${scores.length}観点の平均で採点します`)
+        }
         const avgTotal = validScores.reduce((s, sc) => s + sc.total, 0) / (validScores.length || 1)
         return { proposal, scores: validScores, avgScore: avgTotal }
       })
     )
   )
-  validScored = scoredProposals.filter(Boolean).sort((a, b) => b.avgScore - a.avgScore)
+  const validScoredProposals = scoredProposals.filter(Boolean)
+  if (validScoredProposals.length < scoredProposals.length) {
+    log(`Judge Panel: 採点処理でagent()失敗が${scoredProposals.length - validScoredProposals.length}件あり、${validScoredProposals.length}/${scoredProposals.length}案で続行します`)
+  }
+  validScored = validScoredProposals.sort((a, b) => b.avgScore - a.avgScore)
   log(`Judge Panel: 設計判断の分岐を検出（重複率${Math.round(divergenceRatio * 100)}%）→ 採点パネルを実行`)
 } else {
   validScored = validProposals.map(proposal => ({ proposal, scores: [], avgScore: null }))

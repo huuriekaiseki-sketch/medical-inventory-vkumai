@@ -85,6 +85,33 @@ log('Sweep 完了')
 
 const results = [uiResult, dataResult, dbResult, typesResult]
 
+// 正本: .claude/workflows/lib/phase1-result-classification.js。Workflow DSLはrequire不可のため
+// インライン複製している。同期は phase1-result-classification-sync.test.js が検証する（issue #521）。
+function describeSweepResult(result) {
+  if (result === null) return '(実行失敗: エージェントが結果を返しませんでした。手動で再実行してください)'
+  return result.detail ?? '指摘なし'
+}
+
+function classifyPhase1Results(results) {
+  return {
+    findingCount: results.filter(r => r?.status === 'pass' && r?.detail !== '指摘なし').length,
+    blockedCount: results.filter(r => r?.status === 'blocked').length,
+    failedCount:  results.filter(r => r === null).length,
+  }
+}
+
+const { findingCount, blockedCount, failedCount } = classifyPhase1Results(results)
+
+// issue #521: 4体全てがagent()自体の失敗(null。致命的APIエラー等でstatus/detailを
+// 自己申告できなかったケース。agent自身が返すstatus:'blocked'とは別物)だった場合、
+// findingsを「指摘なし」で埋めた偽の正常完了を返さないよう明示的に中断する。
+if (failedCount === results.length) {
+  throw new Error('Sweep全4体(ui/data/db/types)がagent()の実行失敗(null)を返しました。findingCount: 0の偽の正常完了を返さないため中断します。手動で再実行してください。')
+}
+if (failedCount > 0) {
+  log(`警告: Sweep ${failedCount}件の軸でagent()自体が実行失敗しました(status/detailを自己申告できず)。該当軸のfindingsは「実行失敗」と表示されます`)
+}
+
 const baseCommit = providedBaseCommit ?? (baseCommitRaw?.trim().match(BASE_COMMIT_PATTERN)?.[0] ?? null)
 if (!baseCommit) {
   log('警告: baseCommitの取得に失敗しました。Run Manifestのbase_commitは手動で埋めてください。')
@@ -92,18 +119,21 @@ if (!baseCommit) {
 
 return {
   findings: {
-    ui:    uiResult?.detail    ?? '指摘なし',
-    data:  dataResult?.detail  ?? '指摘なし',
-    db:    dbResult?.detail    ?? '指摘なし',
-    types: typesResult?.detail ?? '指摘なし',
+    ui:    describeSweepResult(uiResult),
+    data:  describeSweepResult(dataResult),
+    db:    describeSweepResult(dbResult),
+    types: describeSweepResult(typesResult),
   },
   stats: {
     phase: 'phase1',
     agents: 4,
     rounds: 1,
     // findingCount: 完遂できた調査のうち、実際に指摘が見つかった本数(status/detailの2軸判定。docs/agents/agent-result-schema.md参照)
-    findingCount: results.filter(r => r?.status === 'pass' && r?.detail !== '指摘なし').length,
-    blockedCount: results.filter(r => r?.status === 'blocked').length,
+    findingCount,
+    blockedCount,
+    // failedCount: agent()自体が実行失敗しnullを返した軸の数(issue #521)。blockedCount
+    // (エージェント自身がstatus:'blocked'を自己申告した数)とは別カウント
+    failedCount,
     // issue #339: sweep-ui/data/db/typesの4体は全てdocs/agents/common.md「サブエージェント進捗の
     // 可視化」の進捗記録対象agentType（.claude/workflows/lib/agent-progress-expectation.js参照）。
     // capture-base-commitは対象外のため含めない。
