@@ -619,7 +619,10 @@ issue #419のような設定変更（effort/model）に対して「精度が落�
 - `--setting-sources ""` は `.claude/agents/*.md` のファイル探索によるカスタムagent型解決も同時に無効化してしまうため（`--agent implementer` が `not found` になる）、実際の `claude -p` 呼び出しでは `.claude/agents/<agentType>.md` のYAML frontmatterを除いた本文を `--agents` フラグで明示的に注入している（`scripts/lib/build-eval-agent-json.mjs`）。`--setting-sources ""` を弱めずにこの問題を回避するための組み合わせであり、削るとevalの実エージェント呼び出しが全滅する load-bearing な仕組みなので、harnessを触る際は要注意。
 - モデルは意図的に安価なモデルへ差し替えていない（実際のdb-impl実行時と同じsonnet）。安いモデルでevalすると「本番で実際に動くもの」と異なる挙動をテストすることになり、モックが実環境の挙動を隠す典型的な落とし穴に陥るため。
 - プロンプト本文のドリフト対策として、db-implプロンプトの正本を `.claude/workflows/lib/prompts/db-impl.js` に切り出し、`aidd-phase2.js` 側のインライン複製との一字一句の一致を `.claude/workflows/lib/__tests__/workflow-prompt-sync.test.js` が機械的に検証する（`npm test`に含まれる）。
-- **運用ルール（検知手段なし）**: `.claude/workflows/*.js` のプロンプト文言を変更したPRは、マージ前に `npm run eval:workflows <対応するfixtureセット>` を手動実行することが望ましい。CI化（PR時の自動実行）は実エージェント呼び出しの課金コストを理由に見送った。**この運用ルール自体、実行し忘れても気づく機械的な手段が無い**（下記「検知手段のないルールの棚卸し」参照）。将来案として、`.claude/workflows/*.js` が変更されたPRに対し、evalが最近実行された形跡（タイムスタンプファイル等）の有無だけを軽量にチェックするgit hookを検討したが、今回は見送った。
+- **運用ルール（義務化・検知機構あり、issue #496）**: `.claude/workflows/*.js` のプロンプト文言を変更したPRでは、マージ前に `npm run eval:workflows <対応するfixtureセット>`（sweep系のプロンプト変更は `scripts/eval-sweep-recall.sh <layer>`）を実行し、結果を引き継ぎメモの「検証済み」欄へ記載すること（未実施の場合はその旨と理由を明記する）。CI化（PR時の自動実行）は引き続き実エージェント呼び出しの課金コストを理由に見送っている。
+  - 両スクリプトは実行完了時（pass/fail問わず）に `docs/agents/eval-runs.jsonl`（git管理。`logs/`はgitignoreでbefore消失の前例があるため対象外にした。issue #429と同じ理由）へ日時・fixtureセット名・合否件数を1行追記する。呼び出し側の自己申告ではなくeval script自身が書くため、記録そのものの呼び忘れは起きない（issue #411原則: 起動トリガーは機械）
+  - `.github/workflows/eval-runs-freshness-check.yml`（`scripts/check-eval-runs-freshness.sh`、`agent-baseline-check.yml`と同型）が、PRに `.claude/workflows/*.js` の差分があるのに `docs/agents/eval-runs.jsonl` の更新が含まれていない場合に `::warning::` を出す（block ではなく warning のみ）
+  - **既知の限界**: 上記が保証するのは「evalスクリプトが最後まで実行されたこと」の痕跡のみであり、実行そのものを強制するものではない（実行し忘れて何もコミットしなければ警告が出るだけで、PRの作成・マージ自体は妨げない）。また記録内容の正しさ（本当にそのfixtureセットに対して実行したか、pass/fail件数が改ざんされていないか）までは検証しない
 
 ## 引き継ぎフォーマット
 
@@ -673,7 +676,6 @@ issue #419のような設定変更（effort/model）に対して「精度が落�
 | gap check stateの記録（`record-gap-check-state.sh` before/expectedの呼び出し） | ルートの`CLAUDE.md`「gap check state 記録ルール」 | gap check本体の実行はissue #488でStop hookに機械化済み。ただしこの記録呼び出し自体の呼び忘れ検知は無い（上記「AIDD stats書き出しのphase単位」行と同型。Workflow DSLがfilesystem API不可のため自己申告依存が残る） |
 | seed・スクリーンショットに実在施設名を使わない | 本ファイル「テスト環境・データ衛生ルール」 | per-edit層で部分検知（`.claude/security-patterns.json`の`possible_real_facility_name`、issue #440）。ただし`/plugin install security-guidance@claude-plugins-official`の実機有効性は未確認、かつスクリーンショット・issue添付・E2E失敗ログは検知対象外 |
 | `aidd-phase2.js`のSpec Check/Manifest Check関連プロンプトを変更した際のfault injection訓練の実施自体 | 本ファイル「fault injection訓練の実施タイミング（issue #395）」 | 訓練の手順・fixture・setup/teardownスクリプトは用意した（[`fault-injection-drill.md`](./fault-injection-drill.md)）が、「変更時に必ず訓練を実施すること」自体を機械的に強制する手段（例: 該当プロンプト変更を検知してブロックするpre-commit等）は無い。実施記録の記入漏れにも気づく仕組みが無い |
-| `.claude/workflows/*.js` 変更時の`npm run eval:workflows`手動実行 | 本ファイル「AIDDワークフロープロンプトのeval」 | CI化は実エージェント呼び出しの課金コストで見送り。実行し忘れに気づく手段は無い（issue #391） |
 
 ## fault injection訓練の実施タイミング（issue #395）
 

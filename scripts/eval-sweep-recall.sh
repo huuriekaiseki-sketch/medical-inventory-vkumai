@@ -13,6 +13,9 @@ set -euo pipefail
 # いずれか1つが両方含まれていればヒット(見落としなし)とする決定的判定。LLM judgeは
 # 使わない(判定器自体が非決定になると回帰テストの意味が薄れるため。issue本文の設計判断)。
 #
+# 実行が最後まで完了すると(hit/miss問わず)、$REPO_DIR/docs/agents/eval-runs.jsonl に
+# 実行痕跡(日時・layer名・合否件数)を1行追記する(issue #496。eval-workflow-prompts.shと同型)。
+#
 # 使い方: scripts/eval-sweep-recall.sh <layer>（例: sweep-ui）
 #
 # 環境変数（テスト容易性のため上書き可能。scripts/eval-workflow-prompts.shと同じパターン）:
@@ -191,6 +194,12 @@ fi
 echo ""
 echo "=== eval-sweep-recall: $LAYER ==="
 echo "recall: $HIT_COUNT / $TOTAL"
+
+EVAL_RUNS_FILE="$REPO_DIR/docs/agents/eval-runs.jsonl"
+mkdir -p "$(dirname "$EVAL_RUNS_FILE")"
+printf '{"timestamp":"%s","script":"eval-sweep-recall","fixtureSet":"%s","pass":%d,"total":%d}\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$LAYER" "$HIT_COUNT" "$TOTAL" >> "$EVAL_RUNS_FILE"
+
 if [ -n "$MISS_LINES" ]; then
   echo "$MISS_LINES"
   exit 1
