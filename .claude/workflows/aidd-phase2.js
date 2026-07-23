@@ -410,10 +410,27 @@ function classifyReviewRound(results, dimensions, attempt, maxRetries) {
   return { done: false, blocked: false, failingDimensions, blockedDimensions: [] }
 }
 
+// issue #490: Reviewリトライのたびに新規implementerへ指摘の文字列のみを渡していたため、
+// 前回attemptで何をどう修正したかが引き継がれず、各attemptがゼロから修正対象を再発見して
+// いた（同じ修正の繰り返し・矛盾する修正のリスク）。次のretryプロンプトに直近2attempt分の
+// 「指摘→修正報告」履歴を含めることで軽減する。
+// 正本: .claude/workflows/lib/review-retry-history.js（buildRetryHistorySection）。
+// Workflow DSLはrequire不可のためインライン複製している。
+const MAX_RETRY_HISTORY_ENTRIES = 2
+function buildRetryHistorySection(retryHistory) {
+  if (!Array.isArray(retryHistory) || retryHistory.length === 0) return ''
+  const recent = retryHistory.slice(-MAX_RETRY_HISTORY_ENTRIES)
+  const entries = recent
+    .map(({ attempt, findings, detail }) => `### attempt ${attempt}\n指摘:\n${findings}\n\n修正報告:\n${detail ?? '(報告なし)'}`)
+    .join('\n\n')
+  return `\n\n## 前回までの修正履歴\n${entries}`
+}
+
 const MAX_REVIEW_RETRIES = 3
 let reviewResults
 let reviewAttempt = 0
 let reviewRetryAgentCount = 0
+const retryHistory = []
 
 while (true) {
   reviewAttempt++
@@ -475,8 +492,10 @@ while (true) {
     .map(({ dim, result }) => `## ${dim.label}\n${result.detail}`)
     .join('\n\n')
 
-  await agent(
-    `まず ${specPath} を Read ツールで読んでください。\n以下はコードレビューで検出された指摘です。該当箇所を修正してください（修正のみ、レビューはしない）。\n\n${retryFindings}${guide(
+  const retryHistorySection = buildRetryHistorySection(retryHistory)
+
+  const retryResult = await agent(
+    `まず ${specPath} を Read ツールで読んでください。\n以下はコードレビューで検出された指摘です。該当箇所を修正してください（修正のみ、レビューはしない）。\n\n${retryFindings}${retryHistorySection}${guide(
       '指摘箇所をすべて修正できた',
       '修正を試みたが解決できない指摘が残る',
       '指摘内容から修正対象・該当ファイルが特定できない'
@@ -486,6 +505,7 @@ while (true) {
   countLoggable('implementer')
   countProgressLoggable('implementer')
   reviewRetryAgentCount++
+  retryHistory.push({ attempt: reviewAttempt, findings: retryFindings, detail: retryResult?.detail })
 }
 
 const implResults = [contractResult, dbResult, dataResult, apiResult, uiResult]
