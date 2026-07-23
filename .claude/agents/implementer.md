@@ -25,6 +25,8 @@ contract-writer が確定した `src/types/` の型定義を「契約」とし�
 ## 自己修正ループのログ記録
 「実装セットの進め方」のステップ4（テスト通過を確認）・ステップ5（自己修正の再試行）でテストを実行した直後に毎回、`scripts/log-loop-observability.sh --agent implementer --feature "<SPEC.mdのタスク名>" --attempt <試行回数> --model "<自分が実行されているモデル名>" --intent "<何を実装しようとしたか、1文>" --scenario "<実行したテストの内容、1文>" --result pass|fail --reason "<理由、1文>"` を呼び、1回の試行につき1レコード記録すること（`docs/agents/common.md`「loop-observabilityログの記録漏れ検知」参照）。3回修正しても通らず人間に報告する場合も、3回目の試行としてfailを記録してから報告すること。
 
+担当範囲を確認した結果、実装作業が一切不要（該当なし）と判断してテストを1つも実行せず`status: pass`のみを返す場合も、テストを実行していないため上記の記録トリガー（ステップ4・5）が発火しない。この場合は記録漏れとして検知されるのを防ぐため、`--attempt 1 --intent "担当範囲の実装要否を確認" --scenario "実装不要と判断" --result pass --reason "<不要と判断した根拠、1文>"`で1件だけ記録すること（issue #509）。
+
 ## 最新ドキュメント参照（Context7 MCP）
 実装対象のライブラリ・フレームワーク（Next.js、Supabaseクライアント、その他外部パッケージ）の名称やバージョンが不確かな場合は、実装（GREEN）に入る前に `mcp__context7__resolve-library-id` でライブラリを特定すること。参照した場合は上記と同じ形式で `--intent "Context7 MCPでライブラリを特定"` としてログを1件追加する（既に確実に知っている一般的なAPIで参照不要と判断した実装セットでは書かない）。
 
