@@ -249,6 +249,18 @@
             "command": "scripts/check-aidd-stats-recorded.sh",
             "timeout": 15,
             "statusMessage": "AIDD stats記録の有無を確認中(issue #495)..."
+          },
+          {
+            "type": "command",
+            "command": "scripts/check-aidd-phase-stats-recorded.sh",
+            "timeout": 15,
+            "statusMessage": "AIDD stats phase単位の記録漏れを確認中(issue #524)..."
+          },
+          {
+            "type": "command",
+            "command": "scripts/check-handoff-format.sh",
+            "timeout": 15,
+            "statusMessage": "PR引き継ぎフォーマットの有無を確認中(issue #524)..."
           }
         ]
       }

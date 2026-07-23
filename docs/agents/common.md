@@ -202,6 +202,10 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 - auth/facility/tenant/organization/inventory/RLS/policy に触れた変更は、「検証済み」の
   他テナントIDアクセス確認を省略しない（Issue #24再発防止。チェック観点は
   [`known-failure-patterns.md`](./known-failure-patterns.md) 参照）
+- PR本文経由での引き継ぎ（`gh pr create`/`gh pr edit`）は、Stop hook
+  （`scripts/check-handoff-format.sh`、issue #524）が「## 作業サマリ」「## 検証済み」の
+  2見出しの有無を機械検知し、無ければ警告する（PRにつき1回・warningのみ。セッション終了報告・
+  `docs/sessions/`経由の引き継ぎは検知対象外）
 
 ## 検知手段のないルールの棚卸し（issue #339）
 
@@ -214,12 +218,10 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 
 | ルール | 所在 | 備考 |
 |---|---|---|
-| 引き継ぎフォーマットの実施 | 本ファイル「引き継ぎフォーマット」 | 既存Stop hook（`ai-check-suggest.sh`等）の拡張候補（優先度3候補） |
 | ブランチ運用ルール（`origin/main`起点でのbranch作成） | 本ファイル「ブランチ運用ルール」 | 過去に古いローカル`main`起点でbranch作成し手戻りが発生した実績あり。着手前PR確認のうち「マージ済みPRが乗っている」ケースは`scripts/check-branch-pr-status.sh`（SessionStart hook）で検知済み。**`origin/main`起点確認自体もissue #499で部分検知済み**（`scripts/check-local-main-freshness.sh`。FETCH_HEAD鮮度・ローカルmainの遅れコミット数による近似判定、fetchはhook内で実行しないため取りこぼしうる）。「別issueの未マージPRが乗っている」ケース（マージ前の分岐）は引き続き未検知のまま |
 | サーキットブレーカー（`/goal`設定・テスト修正3回まで・フロー全体上限） | ルートの`CLAUDE.md` | issue #441で検知手段を調査したが、「`/goal`が設定されているか」を外部から機械的に問い合わせるAPI/hookは公式に存在しないと判明（実機確認済み）。条件テンプレート化・役割分担の明文化（Workflow内部retryとの切り分け）は完了したが、呼び忘れ自体の検知は依然できないままこの表に残る |
 | 停止①②以外で止まらず自律進行すること | ルートの`CLAUDE.md`「絶対ルール」 | |
-| AIDD stats書き出しのうち**phase単位**の呼び出し（`write_aidd_stats.sh` phase1/phase2等） | ルートの`CLAUDE.md` | **start呼び忘れはissue #495でStop hook検知済み**（`scripts/check-aidd-stats-recorded.sh`。Workflow実行の形跡があるのにstart記録が無ければ警告）。phase単位の呼び忘れ検知は未実装のままこの表に残る |
-| gap check stateの記録（`record-gap-check-state.sh` before/expectedの呼び出し） | ルートの`CLAUDE.md`「gap check state 記録ルール」 | gap check本体の実行はissue #488でStop hookに機械化済み。ただしこの記録呼び出し自体の呼び忘れ検知は無い（上記「AIDD stats書き出しのphase単位」行と同型。Workflow DSLがfilesystem API不可のため自己申告依存が残る） |
+| gap check stateの記録（`record-gap-check-state.sh` before/expectedの呼び出し） | ルートの`CLAUDE.md`「gap check state 記録ルール」 | gap check本体の実行はissue #488でStop hookに機械化済み。ただしこの記録呼び出し自体の呼び忘れ検知は無い（Workflow DSLがfilesystem API不可のため自己申告依存が残る。AIDD statsのphase単位呼び出しと同型の限界だったが、そちらはissue #524で検知済みになった） |
 | seed・スクリーンショットに実在施設名を使わない | 本ファイル「テスト環境・データ衛生ルール」 | per-edit層で部分検知（`.claude/security-patterns.json`の`possible_real_facility_name`、issue #440）。ただし`/plugin install security-guidance@claude-plugins-official`の実機有効性は未確認、かつスクリーンショット・issue添付・E2E失敗ログは検知対象外 |
 | `aidd-phase2.js`のSpec Check/Manifest Check関連プロンプトを変更した際のfault injection訓練の実施自体 | 本ファイル「fault injection訓練の実施タイミング（issue #395）」 | 訓練の手順・fixture・setup/teardownスクリプトは用意した（[`fault-injection-drill.md`](./fault-injection-drill.md)）が、「変更時に必ず訓練を実施すること」自体を機械的に強制する手段（例: 該当プロンプト変更を検知してブロックするpre-commit等）は無い。実施記録の記入漏れにも気づく仕組みが無い |
 
@@ -278,6 +280,8 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 | `scripts/record-gap-check-state.sh` | gap check用before/expected件数の記録（issue #488。オーケストレーター専用） |
 | `scripts/check-gap-check-state.sh` | Stop hookによるgap checkの自動実行（issue #488） |
 | `scripts/check-aidd-stats-recorded.sh` | Stop hookによるAIDD stats start呼び忘れの機械検知（issue #495） |
+| `scripts/check-aidd-phase-stats-recorded.sh` | Stop hookによるAIDD stats phase1/phase2呼び忘れの機械検知（issue #524） |
+| `scripts/check-handoff-format.sh` | Stop hookによるPR本文の引き継ぎフォーマット必須見出し欠如の機械検知（issue #524） |
 | [`docs/agents/fault-injection-drill.md`](./fault-injection-drill.md) | `aidd-phase2.js`のdeny-by-defaultゲート実測訓練のランブック（issue #395） |
 | `scripts/aidd-fault-injection-setup.sh` / `scripts/aidd-fault-injection-teardown.sh` | fault injection訓練用の`.aidd/run-manifest.json`差し替え・復元（issue #395） |
 | `scripts/eval-workflow-prompts.sh` / `scripts/eval-fixtures/` | AIDDワークフロープロンプトのeval基盤（issue #391） |

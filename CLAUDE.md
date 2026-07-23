@@ -40,8 +40,10 @@ stats JSON は標準入力ではなく**第4引数**で渡す（パイプ・リ�
 ```
 ※ start を呼び忘れた場合は phase1_start_at がフォールバックで使われる
 ※ start の呼び忘れは Stop hook（`scripts/check-aidd-stats-recorded.sh`、issue #495）が
-  Workflow実行の形跡と突き合わせて機械検知し警告する（セッションにつき1回・warningのみ。
-  phase単位の呼び忘れは検知対象外）
+  Workflow実行の形跡と突き合わせて機械検知し警告する（セッションにつき1回・warningのみ）
+※ phase1/phase2 の呼び忘れは Stop hook（`scripts/check-aidd-phase-stats-recorded.sh`、
+  issue #524）が、Workflow実行記録（wf_*.json）内のphase1/phase2形跡と突き合わせて機械検知し
+  警告する（セッションにつき1回・warningのみ。近似判定のため過検知を許容する設計）
 
 ## gap check state 記録ルール（issue #488）
 AIDDフロー実行時は、上記statsと合わせて以下も呼ぶ（gap check本体はStop hookが自動実行する。
