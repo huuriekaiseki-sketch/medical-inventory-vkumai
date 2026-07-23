@@ -1,0 +1,26 @@
+# WHY: issue #496。.claude/workflows/*.js（プロンプト正本のlib/prompts/配下を含む）を
+# 変更したPRで、docs/agents/eval-runs.jsonl（eval実行完了時にeval-workflow-prompts.sh /
+# eval-sweep-recall.shが自動追記する実行痕跡）の更新が抜けていないかを機械的に警告する
+# (.github/workflows/agent-baseline-check.ymlと同型)。まずはwarningのみで、マージを
+# ブロックしない。実evalそのものをCIで自動実行することはしない（実エージェント呼び出しの
+# 課金コストで見送り済みの判断は変えない。issue本文の注意点参照）。
+
+name: Eval Runs Freshness Check
+
+on:
+  pull_request:
+    paths:
+      - '.claude/workflows/**'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check eval-runs.jsonl freshness
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: bash scripts/check-eval-runs-freshness.sh "origin/$BASE_REF" HEAD

@@ -289,6 +289,28 @@ echo "=== scenario 9: タイムアウト時にプロセスグループごとkill
 RUN_AGENT_WITH_TIMEOUT_BLOCK="$(awk '/^run_agent_with_timeout\(\)/,/^}/' "$SCRIPT")"
 assert_contains "$RUN_AGENT_WITH_TIMEOUT_BLOCK" 'kill -- "-$pid"' "タイムアウト時にプロセスグループ全体をkillする実装になっている(単一PIDのkillに退行するとimplementerの子プロセスが停止せず残る)"
 
+echo "=== scenario 10: 実行完了時に \$REPO_DIR/docs/agents/eval-runs.jsonlへ実行痕跡を追記する(issue #496) ==="
+rm -f "$MOCK_CALL_LOG"
+rm -f "$DUMMY_REPO/docs/agents/eval-runs.jsonl"
+echo '{ "status": "pass" }' > "$MOCK_RESPONSE_FILE"
+run_eval
+assert_eq "$EXIT_CODE" "0" "全fixture合格でexit 0(前提の再確認)"
+EVAL_RUNS_LINE="$(tail -n 1 "$DUMMY_REPO/docs/agents/eval-runs.jsonl" 2>/dev/null || echo "")"
+assert_contains "$EVAL_RUNS_LINE" '"script":"eval-workflow-prompts"' "eval-runs.jsonlにscript名が記録される"
+assert_contains "$EVAL_RUNS_LINE" '"fixtureSet":"sample"' "eval-runs.jsonlにfixtureSet名が記録される"
+assert_contains "$EVAL_RUNS_LINE" '"pass":2,"total":2' "eval-runs.jsonlに合否件数が記録される"
+
+echo "=== scenario 11: 1件失敗(NG)でも実行完了時にeval-runs.jsonlへ追記される(pass/fail問わず記録) ==="
+rm -f "$MOCK_CALL_LOG"
+rm -f "$DUMMY_REPO/docs/agents/eval-runs.jsonl"
+echo '{ "status": "blocked" }' > "$FIXTURES_DIR/sample/case-b/expected.json"
+echo '{ "status": "pass" }' > "$MOCK_RESPONSE_FILE"
+run_eval
+assert_eq "$EXIT_CODE" "1" "1件不一致でexit 1(前提の再確認)"
+EVAL_RUNS_LINE="$(tail -n 1 "$DUMMY_REPO/docs/agents/eval-runs.jsonl" 2>/dev/null || echo "")"
+assert_contains "$EVAL_RUNS_LINE" '"pass":1,"total":2' "失敗ケースを含んでいてもeval-runs.jsonlへ追記される"
+echo '{ "status": "pass" }' > "$FIXTURES_DIR/sample/case-b/expected.json"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
