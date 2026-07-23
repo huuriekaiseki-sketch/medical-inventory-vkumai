@@ -97,4 +97,32 @@ describe('classifyReviewRound', () => {
     expect(result.done).toBe(false)
     expect(result.failingDimensions).toHaveLength(1)
   })
+
+  it('issue #525のPRレビューで発覚: nullがblockedにもfailedにも分類されず「全観点pass」と誤判定される抜け道を塞ぐ（1件がnull）', () => {
+    const result = classifyReviewRound(
+      [null, { status: 'pass', detail: '指摘なし' }],
+      DIMENSIONS, 1, 3
+    )
+    expect(result.done).toBe(true)
+    expect(result.blocked).toBe(true)
+    expect(result.blockedDimensions).toHaveLength(1)
+    expect(result.blockedDimensions[0].dim.key).toBe('correctness')
+  })
+
+  it('全観点がnull（agent()が全滅）でも「全観点pass」を装わずblockedで打ち切る', () => {
+    const result = classifyReviewRound([null, null], DIMENSIONS, 1, 3)
+    expect(result.done).toBe(true)
+    expect(result.blocked).toBe(true)
+    expect(result.blockedDimensions).toHaveLength(2)
+  })
+
+  it('未知のstatus値もdeny-by-defaultでblocked扱いになる', () => {
+    const result = classifyReviewRound(
+      [{ status: 'weird', detail: 'x' }, { status: 'pass', detail: '指摘なし' }],
+      DIMENSIONS, 1, 3
+    )
+    expect(result.done).toBe(true)
+    expect(result.blocked).toBe(true)
+    expect(result.blockedDimensions).toHaveLength(1)
+  })
 })

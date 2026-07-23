@@ -396,18 +396,39 @@ const reviewGuide = guide(
 // issue #314: blockedの観点はImplementerへの差し戻しでは解決しない（レビュー対象自体が
 // 見つからない等）ため、fail判定より先に見て即座に打ち切る。従来はblockedのみの回を
 // done=true,blocked=falseとして素通りしており、最終returnにblockedAtが付かず追跡できなかった。
-function classifyReviewRound(results, dimensions, attempt, maxRetries) {
+// issue #525のPRレビューで発覚: status==='blocked'のみを明示チェックしていたため、
+// null（agent()実行失敗）がblockedにもfailedにも分類されず「全観点pass」と誤判定される
+// 抜け道が残っていた。deny-by-defaultに統一する（正本: .claude/workflows/lib/review-retry.js。
+// 同期は review-retry-sync.test.js が検証する）。
+function classifyReviewRound(reviewResults, dimensions, attempt, maxRetries) {
   const blockedDimensions = dimensions
-    .map((dim, i) => ({ dim, result: results[i] }))
-    .filter(({ result }) => result?.status === 'blocked')
-  if (blockedDimensions.length > 0) return { done: true, blocked: true, failingDimensions: [], blockedDimensions }
+    .map((dim, i) => ({ dim, result: reviewResults[i] }))
+    .filter(({ result }) => result?.status !== 'pass' && result?.status !== 'fail')
+
+  if (blockedDimensions.length > 0) {
+    return { done: true, blocked: true, failingDimensions: [], blockedDimensions }
+  }
 
   const failingDimensions = dimensions
-    .map((dim, i) => ({ dim, result: results[i] }))
+    .map((dim, i) => ({ dim, result: reviewResults[i] }))
     .filter(({ result }) => result?.status === 'fail' && !isMinorOnlyFailure(result))
-  if (failingDimensions.length === 0) return { done: true, blocked: false, failingDimensions: [], blockedDimensions: [] }
-  if (attempt > maxRetries) return { done: true, blocked: true, failingDimensions, blockedDimensions: [] }
+
+  if (failingDimensions.length === 0) {
+    return { done: true, blocked: false, failingDimensions: [], blockedDimensions: [] }
+  }
+  if (attempt > maxRetries) {
+    return { done: true, blocked: true, failingDimensions, blockedDimensions: [] }
+  }
   return { done: false, blocked: false, failingDimensions, blockedDimensions: [] }
+}
+
+// issue #525のPRレビューで発覚: reviewResults[i]がnull（agent()実行失敗）の場合も
+// `?? '指摘なし'`で「指摘なし」に丸められ、偽の「レビュー完了・問題なし」に見えていた
+// （aidd-phase1.jsのdescribeSweepResultと同型の修正。正本は
+// .claude/workflows/lib/review-retry.js。同期は review-retry-sync.test.js が検証する）。
+function describeReviewResult(result) {
+  if (result === null) return '(実行失敗: エージェントが結果を返しませんでした。手動で再実行してください)'
+  return result.detail ?? '指摘なし'
 }
 
 // issue #490: Reviewリトライのたびに新規implementerへ指摘の文字列のみを渡していたため、
@@ -469,7 +490,7 @@ while (true) {
       integration: integrationResult,
       reviewFindings: REVIEW_DIMENSIONS.map((dim, i) => ({
         dimension: dim.label,
-        findings:  reviewResults[i]?.detail ?? '指摘なし',
+        findings:  describeReviewResult(reviewResults[i]),
       })),
       blocked: true,
       blockedAt: 'Review',
@@ -538,7 +559,7 @@ return {
   integration:  integrationResult,
   reviewFindings: REVIEW_DIMENSIONS.map((dim, i) => ({
     dimension: dim.label,
-    findings:  reviewResults[i]?.detail ?? '指摘なし',
+    findings:  describeReviewResult(reviewResults[i]),
   })),
   stats: {
     phase: 'phase2',
