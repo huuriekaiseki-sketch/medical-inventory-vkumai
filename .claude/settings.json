@@ -152,6 +152,11 @@
           },
           {
             "type": "command",
+            "command": "scripts/check-local-main-freshness.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
             "command": "scripts/check-otel-collector-status.sh",
             "timeout": 5
           },
