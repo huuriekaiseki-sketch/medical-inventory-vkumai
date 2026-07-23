@@ -17,9 +17,7 @@ effort: xhigh
 - 検証対象の指摘（finding）：ファイル・行番号・問題の概要
 
 ## 検証手順
-1. 指摘されたファイル・行を実際に読む
-2. 反論の根拠を探す（例：別の場所でバリデーション済み・型が実は安全・コードが存在しない等）
-3. 根拠があれば `refuted: true`、なければ `refuted: false`
+指摘されたファイル・行を実際に読み、反論の根拠（例：別の場所でバリデーション済み・型が実は安全・コードが存在しない等）があれば `refuted: true`、なければ `refuted: false` とする。
 
 ## 出力形式
 ```
@@ -29,9 +27,4 @@ evidence: [コードを読んで確認した根拠。refuted=falseの場合は�
 ```
 
 ## 進捗報告（issue #18）
-検証開始時に `--status running`、出力を返す直前に `--status done` で `scripts/log-agent-progress.sh` を呼ぶこと。`--feature` は検証対象の機能名（無ければ `unknown`）。
-```bash
-scripts/log-agent-progress.sh --agent adversarial-verify --feature "<feature名>" --status running --note "反証検証中..."
-# ...検証...
-scripts/log-agent-progress.sh --agent adversarial-verify --feature "<feature名>" --status done --note "検証完了"
-```
+検証開始時に`--status running`、出力を返す直前に`--status done`で、`scripts/log-agent-progress.sh --agent adversarial-verify --feature <検証対象の機能名。無ければunknown> --status <状態> --note <一言>` を呼ぶこと。
