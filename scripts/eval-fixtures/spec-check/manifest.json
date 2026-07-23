@@ -1,0 +1,15 @@
+{
+  "agentType": "reviewer",
+  "promptModule": ".claude/workflows/lib/prompts/spec-check.js",
+  "promptFn": "buildSpecCheckPrompt",
+  "model": "sonnet",
+  "jsonSchema": {
+    "type": "object",
+    "properties": {
+      "status": { "type": "string", "enum": ["pass", "blocked"] },
+      "detail": { "type": "string" },
+      "actualPath": { "type": "string" }
+    },
+    "required": ["status", "detail", "actualPath"]
+  }
+}
