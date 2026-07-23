@@ -13,7 +13,9 @@ export const meta = {
 }
 
 // args: { specPath: string }
-// specPath: 承認済みSPEC.mdのパス（例: "SPEC.md"。feature-specスキルはリポジトリルートに出力する）
+// specPath: 承認済みSPEC.mdのパス（feature-specスキルはリポジトリルートに出力する）。
+//   相対パス（例: "SPEC.md"）でも動作するが、issue #507のSpec Check誤blocked事例を踏まえ、
+//   絶対パスでの指定を推奨する
 //
 // ── 前提条件（呼び出し前に人間が確認すること）──────────────────────────
 // 1. SPEC.md Part 2 に以下が明記されていること
@@ -136,8 +138,13 @@ const SPEC_CHECK_SCHEMA = {
   required: ['status', 'detail', 'actualPath'],
 }
 
+// issue #507: 除外指示の具体例（旧「リポジトリルート直下の別のSPEC.md」）が、specPathが
+// 実際に'SPEC.md'の場合に対象ファイル自身と衝突し、エージェントが誤ってblockedを返す事例が
+// 実測された。具体的なファイル名の例示を排除し、${specPath}変数への相対表現のみで除外を
+// 指示する（正本: .claude/workflows/lib/prompts/spec-check.js。同期は
+// spec-check-prompt-sync.test.js が検証する）。
 const specCheck = await agent(
-  `Readツールで ${specPath} が存在し読み込めるか確認してください。指定されたパス以外のファイル（例: リポジトリルート直下の別のSPEC.md）が見つかっても、それは無視して絶対に読まないでください。それ以外は何もしないでください。\n\n完了報告のactualPathフィールドに、実際にReadツールへ渡した絶対パスを（今回指定された ${specPath} をそのまま解決したもので）必ず記載してください。${guide(
+  `Readツールで ${specPath} が存在し読み込めるか確認してください。今回読むべき対象は ${specPath} のみです。他の場所に同じファイル名の別ファイルが見つかったとしても、${specPath} 以外は絶対に読まないでください。それ以外は何もしないでください。\n\n完了報告のactualPathフィールドに、実際にReadツールへ渡した絶対パスを（今回指定された ${specPath} をそのまま解決したもので）必ず記載してください。${guide(
     `${specPath}が存在し読み込めた`,
     '（未使用: このエージェントはpass/blockedの2値のみ返す）',
     `${specPath}が存在しない、または読み込めない`
