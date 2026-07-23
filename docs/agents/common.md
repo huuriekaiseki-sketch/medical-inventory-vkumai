@@ -97,6 +97,10 @@ Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、Pr
     **「別issueの未マージPRが乗っている」ケース（マージ前の分岐）はこのhookの検知対象外**で、引き続き人手の確認に依存する。
 - **`git checkout -b <new-branch> main` の前に、必ず `git fetch origin main` してから最新の `origin/main` を起点にする**（`git checkout -b <new-branch> origin/main`、または直前に`git merge origin/main`でローカルmainを追従させる）。
   ローカルの`main`ブランチ参照は自動更新されない（`gh pr merge`はリモートを更新するだけで、ローカルの別ブランチにいる間はローカル`main`が古いまま）。古いローカル`main`から新しいブランチを切ると、直近でマージされたPRの変更が丸ごと欠落した状態で作業が進んでしまい、後から気づいて`origin/main`をマージし直す手戻りが発生する
+  - **このルールは、SessionStart hook（`scripts/check-local-main-freshness.sh`、issue #499）が部分的に機械検知する。**
+    FETCH_HEADの更新時刻が既定24時間（`LOCAL_MAIN_STALE_HOURS`で変更可）より古いか、`git rev-list --count main..origin/main`が1以上（ローカルmainがorigin/mainより遅れている）のいずれかに該当すると、セッション開始時に警告メッセージを出す（block不可・warningのみ、fetch自体はhook内で実行しないためネットワークアクセス無し・オフラインでも動作する）。
+    worktree環境では`.git`がファイルでありFETCH_HEADの実体がworktree固有パスにあるため、`git rev-parse --git-path FETCH_HEAD`で実パスを解決している（`.git/FETCH_HEAD`と決め打ちすると存在しないパスを見て誤判定する）。
+    **これは近似判定であり、実際にリモートで何が起きているかまでは見ていない**（前回fetch時点の情報を基準にするため、fetch直後に他者がpushした場合は検知できない）。
 
 ## loop-observabilityログの記録漏れ検知
 
@@ -669,7 +673,7 @@ issue #419のような設定変更（effort/model）に対して「精度が落�
 | ルール | 所在 | 備考 |
 |---|---|---|
 | 引き継ぎフォーマットの実施 | 本ファイル「引き継ぎフォーマット」 | 既存Stop hook（`ai-check-suggest.sh`等）の拡張候補（優先度3候補） |
-| ブランチ運用ルール（`origin/main`起点でのbranch作成） | 本ファイル「ブランチ運用ルール」 | 過去に古いローカル`main`起点でbranch作成し手戻りが発生した実績あり。着手前PR確認のうち「マージ済みPRが乗っている」ケースのみ`scripts/check-branch-pr-status.sh`（SessionStart hook）で検知済み。「別issueの未マージPRが乗っている」ケースと`origin/main`起点確認自体は未検知のまま |
+| ブランチ運用ルール（`origin/main`起点でのbranch作成） | 本ファイル「ブランチ運用ルール」 | 過去に古いローカル`main`起点でbranch作成し手戻りが発生した実績あり。着手前PR確認のうち「マージ済みPRが乗っている」ケースは`scripts/check-branch-pr-status.sh`（SessionStart hook）で検知済み。**`origin/main`起点確認自体もissue #499で部分検知済み**（`scripts/check-local-main-freshness.sh`。FETCH_HEAD鮮度・ローカルmainの遅れコミット数による近似判定、fetchはhook内で実行しないため取りこぼしうる）。「別issueの未マージPRが乗っている」ケース（マージ前の分岐）は引き続き未検知のまま |
 | サーキットブレーカー（`/goal`設定・テスト修正3回まで・フロー全体上限） | ルートの`CLAUDE.md` | issue #441で検知手段を調査したが、「`/goal`が設定されているか」を外部から機械的に問い合わせるAPI/hookは公式に存在しないと判明（実機確認済み）。条件テンプレート化・役割分担の明文化（Workflow内部retryとの切り分け）は完了したが、呼び忘れ自体の検知は依然できないままこの表に残る |
 | 停止①②以外で止まらず自律進行すること | ルートの`CLAUDE.md`「絶対ルール」 | |
 | AIDD stats書き出しのうち**phase単位**の呼び出し（`write_aidd_stats.sh` phase1/phase2等） | ルートの`CLAUDE.md` | **start呼び忘れはissue #495でStop hook検知済み**（`scripts/check-aidd-stats-recorded.sh`。Workflow実行の形跡があるのにstart記録が無ければ警告）。phase単位の呼び忘れ検知は未実装のままこの表に残る |
