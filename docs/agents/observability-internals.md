@@ -73,8 +73,8 @@ loop-observabilityと同じ構造的限界を持つ：**エージェントへの
 | 層 | 内容 | 記録手段 | 保証レベル |
 |---|---|---|---|
 | ① 骨格 | agent_id・agent_type・開始/終了・timestamp | `scripts/log-subagent-hook-skeleton.sh`（`SubagentStart`/`SubagentStop` hook） | 機械強制（呼び忘れ得ない） |
-| ② feature/attempt | どの機能・何回目の試行か | `scripts/log-agent-progress.sh` / `scripts/log-loop-observability.sh`（自然言語指示） | ベストエフォート（label規約化は未着手、issue #423ステップ3） |
-| ③ 自由記述intent/scenario | 何をしようとしていたかの説明 | 同上 | ベストエフォート（欠落許容） |
+| ② feature/attempt | どの機能・何回目の試行か | `aidd-phase2.js`の`withIntent()`がプロンプト先頭に`INTENT: <label> feature=<feature>`規約行を埋め込み、`scripts/log-subagent-hook-skeleton.sh`が`agent_transcript_path`をgrepして`intent`フィールドに復元（issue #423ステップ3実装済み、issue #480でmain最新に合わせて再実装） / 従来の`log-agent-progress.sh` / `log-loop-observability.sh`（自然言語指示）も併存 | コード埋め込み＋hook抽出（labelはコードが決定的に付与するため`agent()`呼び出し自体が漏れなければ欠落しない。ただしtranscriptのテキスト抽出はベストエフォート） |
+| ③ 自由記述intent/scenario | 何をしようとしていたかの説明 | `log-agent-progress.sh` / `log-loop-observability.sh`の自己申告 | ベストエフォート（欠落許容） |
 
 `logs/subagent-skeleton.jsonl`に、通常のAgent tool経由・Workflowの`agent()`呼び出し経由の
 両方のサブエージェント起動が、`{timestamp, hookEvent, sessionId, agentId, agentType,
@@ -91,9 +91,17 @@ agentTranscriptPath?, lastAssistantMessage?}`形式で自動記録される。�
   他の作業（別のAgent tool呼び出し等）が走っていると、そのイベントも同じファイルに混在する。
   特定のフロー実行に絞り込みたい場合は、`agentTranscriptPath`が
   `subagents/workflows/wf_<runId>/`配下かどうかで判別する
-- ②feature/attemptを「モデルの善意の報告」から「コードが決定的に埋め込む構造化データ」に
-  変えるlabel規約化（issue #423ステップ3、例: `agent()`呼び出しの`label`に
-  `implementer:${feature}:attempt${n}`規約を導入する）は未着手のまま残っている
+- ②feature/attemptのlabel規約化（issue #423ステップ3）は`.claude/workflows/aidd-phase2.js`
+  のみ実装済み。`agent()`の`opts.label`自体はhookペイロードに含まれないため、`withIntent()`
+  ヘルパーがプロンプト本文の先頭に`INTENT: <label> feature=<feature>`規約行を文字列連結で
+  埋め込み（既存プロンプト本文の中身は変更しないため`workflow-prompt-sync.test.js`等の
+  各種sync testには影響しない）、`scripts/log-subagent-hook-skeleton.sh`が`SubagentStop`
+  ペイロードの`agent_transcript_path`が指すtranscriptファイルをテキストとしてgrepし、規約行を
+  `intent`フィールドとしてベストエフォートで復元する（transcriptの正確なJSONスキーマは
+  未確認のため、厳密なパースはせずテキスト一致のみに依存する割り切った実装）。
+  `feature`は呼び出し元が`args.feature`を渡さない限り`unknown`になる（`write_aidd_stats.sh`
+  と同じフォールバック規約）。`aidd-phase1.js` / `aidd-1-1-deep-task.js`等の他ワークフローは
+  未対応のまま残っている
 - 既存の`log-agent-progress.sh` / `log-loop-observability.sh` / gap check群は削除しておらず、
   新方式と併存させている（新方式が安定稼働することを確認してから、廃止を別issueで検討する）
 
