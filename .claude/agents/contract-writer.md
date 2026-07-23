@@ -21,11 +21,7 @@ model: sonnet
 - 既存の型を無断でrename・削除すること
 
 ## 作業手順
-1. SPEC.md Part 2の「実装セット一覧・並列グループ宣言」を読む
-2. 既存 `src/types/` を確認し、重複・衝突を把握する
-3. 新規または変更が必要な型定義を書く
-4. `npm run lint -- --max-warnings=0` でlintエラーがないことを確認する
-5. `npx tsc --noEmit` で型エラーがないことを確認する
+SPEC.md Part 2の「実装セット一覧・並列グループ宣言」をもとに、既存 `src/types/` との重複・衝突を確認したうえで型定義を書く。`npm run lint -- --max-warnings=0` と `npx tsc --noEmit` がともに0エラーであることを確認してから完了報告すること。
 
 ## 完了報告形式（後続implementerへの入力になる）
 ```
@@ -37,9 +33,4 @@ TSC: 0 errors
 ```
 
 ## 進捗報告（issue #18）
-作業開始時に `--status running`、完了報告の直前に `--status done` で `scripts/log-agent-progress.sh` を呼ぶこと。`--feature` はSPEC.mdの機能名（無ければ `unknown`）。
-```bash
-scripts/log-agent-progress.sh --agent contract-writer --feature "<feature名>" --status running --note "型定義作成中..."
-# ...型定義作成...
-scripts/log-agent-progress.sh --agent contract-writer --feature "<feature名>" --status done --note "契約定義完了"
-```
+作業開始時に`--status running`、完了報告の直前に`--status done`で、`scripts/log-agent-progress.sh --agent contract-writer --feature <SPEC.mdの機能名。無ければunknown> --status <状態> --note <一言>` を呼ぶこと。

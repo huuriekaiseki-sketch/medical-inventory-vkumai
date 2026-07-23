@@ -37,9 +37,4 @@ model: sonnet
 **重要**: この2択以外の形式で返さないこと。前置き文・まとめ・補足説明は不要。
 
 ## 進捗報告（issue #18）
-評価開始時に `--status running`、出力を返す直前に `--status done` で `scripts/log-agent-progress.sh` を呼ぶこと。`--feature` は評価対象の機能名（無ければ `unknown`）。
-```bash
-scripts/log-agent-progress.sh --agent completeness-critic --feature "<feature名>" --status running --note "網羅性評価中..."
-# ...評価...
-scripts/log-agent-progress.sh --agent completeness-critic --feature "<feature名>" --status done --note "評価完了"
-```
+評価開始時に`--status running`、出力を返す直前に`--status done`で、`scripts/log-agent-progress.sh --agent completeness-critic --feature <評価対象の機能名。無ければunknown> --status <状態> --note <一言>` を呼ぶこと。

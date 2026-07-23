@@ -58,9 +58,4 @@ scripts/log-loop-observability.sh \
 - `--agent` は必ず `judge-panel` を使う（`human` は使わない）。
 
 ## 進捗報告（issue #18）
-評価開始時に `--status running`、出力を返す直前に `--status done` で `scripts/log-agent-progress.sh` を呼ぶこと。`--feature` は評価対象の機能名（無ければ `unknown`）。
-```bash
-scripts/log-agent-progress.sh --agent judge-panel --feature "<feature名>" --status running --note "評価中..."
-# ...評価...
-scripts/log-agent-progress.sh --agent judge-panel --feature "<feature名>" --status done --note "評価完了"
-```
+評価開始時に`--status running`、出力を返す直前に`--status done`で、`scripts/log-agent-progress.sh --agent judge-panel --feature <評価対象の機能名。無ければunknown> --status <状態> --note <一言>` を呼ぶこと。
