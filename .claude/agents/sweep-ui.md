@@ -34,9 +34,4 @@ effort: low
 - 問題がなければ「指摘なし」と返す
 
 ## 進捗報告（issue #18）
-調査開始時と終了時に `scripts/log-agent-progress.sh` を呼ぶこと。`--feature` は呼び出し元から与えられた機能名（無ければ `unknown`）。
-```bash
-scripts/log-agent-progress.sh --agent sweep-ui --feature "<feature名>" --status running --note "UI層調査中..."
-# ...調査...
-scripts/log-agent-progress.sh --agent sweep-ui --feature "<feature名>" --status done --note "UI層調査完了"
-```
+調査開始時に`--status running`、終了時に`--status done`で、`scripts/log-agent-progress.sh --agent sweep-ui --feature <呼び出し元から与えられた機能名。無ければunknown> --status <状態> --note <一言>` を呼ぶこと。

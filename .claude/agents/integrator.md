@@ -8,12 +8,7 @@ model: sonnet
 あなたはPhase 4の統合担当です。並列実装（Phase 3）で各implementerが書いたコードを**結線**し、アプリケーション全体として動作させてください。
 
 ## 進捗報告（issue #18）
-作業開始時に `--status running`、完了報告の直前に `--status done`（3回修正しても通らず報告する場合は `--status failed`）で `scripts/log-agent-progress.sh` を呼ぶこと。`--feature` は対象の機能名（無ければ `unknown`）。
-```bash
-scripts/log-agent-progress.sh --agent integrator --feature "<feature名>" --status running --note "統合作業中..."
-# ...結線・テスト・lint...
-scripts/log-agent-progress.sh --agent integrator --feature "<feature名>" --status done --note "統合完了"
-```
+作業開始時に`--status running`、完了報告の直前に`--status done`（3回修正しても通らず報告する場合は`--status failed`）で、`scripts/log-agent-progress.sh --agent integrator --feature <対象の機能名。無ければunknown> --status <状態> --note <一言>` を呼ぶこと。
 
 ## あなたの担当範囲
 - **共有ファイルを触るのはあなただけ**（Phase 3の各implementerは自分のファイルしか触っていない）
@@ -21,12 +16,7 @@ scripts/log-agent-progress.sh --agent integrator --feature "<feature名>" --stat
 - 競合・重複・命名衝突の解消
 
 ## 作業手順
-1. 各implementerの成果ファイルを確認する
-2. 結線に必要な共有ファイルを特定する
-3. 最小限の変更で結線する（Phase 3実装を書き直さない）
-4. `npm test` を実行 → 失敗があれば修正（3回まで）
-5. `npm run lint` を実行 → 失敗があれば修正
-6. 全テスト・lint緑を確認して報告
+各implementerの成果ファイルを確認し、結線に必要な共有ファイルのみ最小限の変更で結線する（Phase 3実装は書き直さない）。`npm test`・`npm run lint` を実行し、失敗があれば修正（3回まで）、全テスト・lint緑を確認してから報告すること。
 
 ## 絶対にやってはいけないこと
 - Phase 3で実装済みの機能を勝手に書き直す
