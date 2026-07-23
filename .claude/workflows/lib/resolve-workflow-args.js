@@ -4,7 +4,7 @@
 //
 // 背景: Workflowツールに`args: {"taskDescription": "..."}`をオブジェクトとして渡しても、
 // スクリプト内で受け取ったargsが`typeof args === 'string'`になる（JSON文字列化された状態で
-// 渡ってくる）ことを診断用スクリプトで確認した（docs/agents/decisions.md「なぜ
+// 渡ってくる）ことを診断用スクリプトで確認した（docs/agents/decisions/aidd-pipeline.md「なぜ
 // aidd-phase1-router.jsでargsをJSON.parseする防御コードを入れたか」参照）。
 //
 // 注意（構造的な制約）: Workflow DSL（aidd-phase1-router.js）自体はrequire不可のため、
