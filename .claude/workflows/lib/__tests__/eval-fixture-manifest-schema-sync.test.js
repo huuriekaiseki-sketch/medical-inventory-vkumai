@@ -6,6 +6,7 @@ import path from 'node:path'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const WORKFLOW_FILE = path.resolve(__dirname, '../../aidd-phase2.js')
 const MANIFEST_FILE = path.resolve(__dirname, '../../../../scripts/eval-fixtures/db-impl/manifest.json')
+const SPEC_CHECK_MANIFEST_FILE = path.resolve(__dirname, '../../../../scripts/eval-fixtures/spec-check/manifest.json')
 
 // aidd-phase2.js内のAGENT_RESULT_SCHEMAは、テンプレートリテラル(バッククォート)ではなく
 // 通常のJSオブジェクトリテラルのため、extract-template-literal.jsのextractTemplateLiteralContaining
@@ -50,6 +51,19 @@ describe('eval fixture manifest.jsonのjsonSchemaとAGENT_RESULT_SCHEMAの同期
     const schemaObject = new Function(`return (${schemaSource})`)()
 
     const manifest = JSON.parse(readFileSync(MANIFEST_FILE, 'utf-8'))
+
+    expect(manifest.jsonSchema).toEqual(schemaObject)
+  })
+
+  // issue #507: Spec Check用のfixture追加時に、同型の未検証ドリフトを繰り返さないための
+  // 横展開（db-implのみ検証されSpec Check側は未検証だった）。
+  it('scripts/eval-fixtures/spec-check/manifest.jsonのjsonSchemaがaidd-phase2.jsのSPEC_CHECK_SCHEMAと構造的に一致する', () => {
+    const workflowSource = readFileSync(WORKFLOW_FILE, 'utf-8')
+    const schemaSource = extractObjectLiteralSource(workflowSource, 'const SPEC_CHECK_SCHEMA = ')
+    // eslint-disable-next-line no-new-func
+    const schemaObject = new Function(`return (${schemaSource})`)()
+
+    const manifest = JSON.parse(readFileSync(SPEC_CHECK_MANIFEST_FILE, 'utf-8'))
 
     expect(manifest.jsonSchema).toEqual(schemaObject)
   })

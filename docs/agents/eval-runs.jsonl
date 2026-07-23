@@ -3,3 +3,5 @@
 {"timestamp":"2026-07-23T03:13:53Z","script":"eval-sweep-recall","fixtureSet":"sweep-ui","pass":1,"total":1}
 {"timestamp":"2026-07-23T03:14:21Z","script":"eval-workflow-prompts","fixtureSet":"db-impl","pass":4,"total":4}
 {"timestamp":"2026-07-23T03:37:40Z","script":"eval-workflow-prompts","fixtureSet":"db-impl","pass":4,"total":4}
+{"timestamp":"2026-07-23T10:55:19Z","script":"eval-workflow-prompts","fixtureSet":"spec-check","pass":0,"total":1}
+{"timestamp":"2026-07-23T10:56:35Z","script":"eval-workflow-prompts","fixtureSet":"spec-check","pass":1,"total":1}
