@@ -220,5 +220,8 @@ Phase 5: 検証 [agent: reviewer × 並列 4観点]  ← aidd-phase2.js
 | `.claude/workflows/aidd-1-1-deep-task.js` | 深掘り調査ワークフロー（オンデマンド） |
 | `docs/agents/common.md` | 全AIエージェント共通の毎セッション必須ルール（TRI/RISK判定・DBスキーマ変更・ブランチ運用・引き継ぎフォーマット等） |
 | `docs/agents/observability-internals.md` | 観測・Eval基盤（loop-observability/agent-progress/journal.jsonl/OTel/eval）の実装詳細・既知の限界（common.mdから分離、issue #486） |
-| `docs/agents/tooling-decisions.md` | 公式機能・プラグインの導入可否判断記録（common.mdから分離、issue #486） |
+| `docs/agents/tooling-decisions.md` | 公式機能・プラグインの導入可否判断記録（common.mdから分離issue #486。issue #491でdecisions.mdの該当エントリも統合） |
+| `docs/agents/decisions.md` | 設計判断の目次+横断原則（分野別ファイルへのリンク、issue #491で分割） |
+| `docs/agents/decisions/db-rls.md` | 設計判断: DB・RLS・データ衛生（decisions.mdから分離、issue #491） |
+| `docs/agents/decisions/aidd-pipeline.md` | 設計判断: Workflow DSL・TRI/RISKルーター・品質ゲート・hook（decisions.mdから分離、issue #491） |
 | `docs/ai-config-map.md` | このファイル（全体マップ） |

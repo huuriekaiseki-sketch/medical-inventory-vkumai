@@ -115,7 +115,7 @@ function classifyRisk(taskDescription, changedFiles = []) {
 // ないため、このフォールバックはほぼ確実に踏まれ続ける。誤判定時のコストが大きい
 // （実測: 77エージェント・約346万トークン）ため、「changedFilesが空 かつ キーワードのみ
 // 一致」の場合は自動でdeepルートへ振り分けず、confirmルートとして人間の確認に委ねる
-// （decisions.md「なぜchangedFiles空時のキーワード一致フォールバックを人間確認に変えたか」
+// （decisions/aidd-pipeline.md「なぜchangedFiles空時のキーワード一致フォールバックを人間確認に変えたか」
 // 参照）。changedFilesが1件以上ある場合（パスベース判定が効く場合）はこの分岐を通らず、
 // 従来通りmatchedPathsのみでisHighRiskが決まる（issue #456の修正は変更しない）。
 // 戻り値: { route: 'meta'|'confirm'|'deep'|'light', isHighRisk, isMetaChange, matchedKeywords, matchedPaths }
