@@ -15,6 +15,11 @@ set -euo pipefail
 # 各fixtureは本体リポジトリを汚さないよう、一時ディレクトリへのlocal clone上で実行する
 # （fixtureによっては実際にsupabase/migrations/へファイルを書こうとするため）。
 #
+# 実行が最後まで完了すると(pass/fail問わず)、$REPO_DIR/docs/agents/eval-runs.jsonl に
+# 実行痕跡(日時・fixtureセット名・合否件数)を1行追記する(issue #496)。呼び忘れ検知が
+# 効かなかったこと自体への対策のため、eval scriptが自分で書く(呼び出し側の自己申告に
+# 依存しない)。
+#
 # サーキットブレーカー・hooks非継承・セッション非永続化は、verify-claims.shが2026-07-14に
 # 経験したStop hook再帰暴走と同型の事故を未然に防ぐため、初回コミットから組み込んでいる。
 #
@@ -222,6 +227,15 @@ fi
 echo ""
 echo "=== eval-workflow-prompts: $FIXTURE_SET ==="
 echo "$PASS_COUNT / $TOTAL 件 合格"
+
+# issue #496: 実行完了の痕跡をgit管理下のJSONLへ残す。実行有無の機械検知
+# (scripts/check-eval-runs-freshness.sh)がこのファイルの更新有無を見るため、
+# pass/fail問わず(=ループが最後まで到達した場合は常に)1行追記する。
+EVAL_RUNS_FILE="$REPO_DIR/docs/agents/eval-runs.jsonl"
+mkdir -p "$(dirname "$EVAL_RUNS_FILE")"
+printf '{"timestamp":"%s","script":"eval-workflow-prompts","fixtureSet":"%s","pass":%d,"total":%d}\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FIXTURE_SET" "$PASS_COUNT" "$TOTAL" >> "$EVAL_RUNS_FILE"
+
 if [ -n "$FAIL_LINES" ]; then
   echo "$FAIL_LINES"
   exit 1
