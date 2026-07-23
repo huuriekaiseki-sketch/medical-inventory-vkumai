@@ -195,7 +195,7 @@ const draftSpec = await agent(
 - pass: 仕様書ドラフトを生成できた
 - fail: 生成されたが調査結果を反映していない等明らかに不完全
 - blocked: Sweep結果が空でドラフト生成に着手できなかった`,
-  { label: 'draft-spec', phase: 'Draft Spec', model: 'claude-sonnet-4-6', effort: 'medium', schema: AGENT_RESULT_SCHEMA_PFB }
+  { label: 'draft-spec', phase: 'Draft Spec', model: 'sonnet', effort: 'medium', schema: AGENT_RESULT_SCHEMA_PFB }
 )
 
 // 品質ゲート: deny-by-default（.claude/workflows/lib/quality-gate.js shouldBlockと同一発想）。
@@ -250,7 +250,7 @@ const FINDERS = [
 const findResults = await parallel(
   FINDERS.map(f => () => agent(
     `${f.prompt}、以下の仕様書ドラフトの問題点を列挙せよ。\n\n${draftSpec?.detail}`,
-    { label: `find:${f.lens}`, phase: 'Find', schema: FINDING_SCHEMA, model: 'claude-haiku-4-5-20251001', effort: 'low' }
+    { label: `find:${f.lens}`, phase: 'Find', schema: FINDING_SCHEMA, model: 'haiku', effort: 'low' }
   ))
 )
 
@@ -289,7 +289,7 @@ if (autoSurvivedMinor.length > 0) {
 const verdicts = await parallel(
   toVerify.map((f, i) => () => agent(
     `次の仕様指摘を反証しようとせよ。仕様書のどこかで既に対処されているか、問題が成立しない理由があれば refuted=true にせよ。不確かなら refuted=false にせよ（疑わしいものは生存させる）。\n\nタイトル: ${f.title}\n説明: ${f.description}\n\n仕様書ドラフト:\n${draftSpec?.detail}`,
-    { label: `verify:${i}`, phase: 'Adversarial Verify', schema: VERDICT_SCHEMA, model: 'claude-opus-4-8', effort: 'medium' }
+    { label: `verify:${i}`, phase: 'Adversarial Verify', schema: VERDICT_SCHEMA, model: 'opus', effort: 'medium' }
   ))
 )
 
@@ -347,7 +347,7 @@ const CRITIC_SCHEMA = {
 
 const criticResult2 = await agent(
   `以下の仕様書ドラフトと生存した指摘リストを見て、まだ検証されていない領域・抜け漏れ・未回答の設計判断を指摘せよ。\n\n## 仕様書ドラフト\n${draftSpec?.detail}\n\n## 生存した指摘\n${survived.map(f => `- [${f.severity}] ${f.title}: ${f.description}`).join('\n')}`,
-  { label: 'completeness-critic-2', phase: 'Completeness Critic', schema: CRITIC_SCHEMA, model: 'claude-sonnet-4-6', effort: 'medium' }
+  { label: 'completeness-critic-2', phase: 'Completeness Critic', schema: CRITIC_SCHEMA, model: 'sonnet', effort: 'medium' }
 )
 
 const gaps = criticResult2?.gaps ?? []
@@ -389,7 +389,7 @@ const PROPOSERS = [
 const proposals = await parallel(
   PROPOSERS.map(p => () => agent(
     `${p.prompt}\n\n## 仕様書ドラフト\n${draftSpec?.detail}\n\n## 生存した問題点\n${survived.map(f => `- [${f.severity}] ${f.title}`).join('\n')}\n\n## ギャップ\n${gaps.map(g => `- ${g.area}: ${g.description}`).join('\n')}`,
-    { label: `propose:${p.stance}`, phase: 'Judge Panel', schema: PROPOSAL_SCHEMA, model: 'claude-sonnet-4-6', effort: 'medium' }
+    { label: `propose:${p.stance}`, phase: 'Judge Panel', schema: PROPOSAL_SCHEMA, model: 'sonnet', effort: 'medium' }
   ))
 )
 
@@ -440,7 +440,7 @@ if (hasDivergence) {
       parallel(
         ['correctness', 'security', 'ux'].map(lens => () => agent(
           `次の設計案を「${lens}」の視点で採点せよ（各項目0-100、totalは加重平均）。\n\n## 案名: ${proposal.name}\n${proposal.description}\n\n主要判断:\n${proposal.keyDecisions.join('\n')}\n\nトレードオフ: ${proposal.tradeoffs}`,
-          { label: `score:${pi}:${lens}`, phase: 'Judge Panel', schema: SCORE_SCHEMA, model: 'claude-haiku-4-5-20251001', effort: 'low' }
+          { label: `score:${pi}:${lens}`, phase: 'Judge Panel', schema: SCORE_SCHEMA, model: 'haiku', effort: 'low' }
         ))
       ).then(scores => {
         const validScores = scores.filter(Boolean)
@@ -465,7 +465,7 @@ phase('Synthesize')
 
 const synthesis = await agent(
   `以下の全検証結果を統合して、仕様書ドラフトへの具体的な修正提案を出力せよ。\n\n## 元の仕様書ドラフト\n${draftSpec?.detail}\n\n## 生存した問題点 (${survived.length}件)\n${survived.map(f => `- [${f.severity}][${f.category}] ${f.title}: ${f.description}`).join('\n')}\n\n## ギャップ (${gaps.length}件)\n${gaps.map(g => `- [${g.area}] ${g.description} → 提案: ${g.suggestion}`).join('\n')}\n\n## Judge Panel結果\n### 採用推奨案: ${winner?.proposal?.name} (スコア: ${Math.round(winner?.avgScore ?? 0)})\n${winner?.proposal?.description}\n主要判断: ${winner?.proposal?.keyDecisions?.join(' / ')}\n\n### 他案のグラフト候補\n${runnerUps.map(r => `- ${r.proposal?.name}: ${r.proposal?.keyDecisions?.join(' / ')}`).join('\n')}\n\n## 出力形式\n1. **必須修正** (critical/important の問題点)\n2. **推奨修正** (minor・ギャップ)\n3. **設計判断** (採用推奨アプローチとその理由)\n4. **未解決事項** (人間が判断すべきポイント)\n\n## status/detail\n上記の統合提案本文は detail に格納し、status も返すこと。\n- pass: 統合提案を生成できた\n- fail: 生成されたが必須修正等のセクションが欠落するなど明らかに不完全\n- blocked: survived/gaps/winnerのいずれかが揃わず統合に着手できなかった`,
-  { label: 'synthesize', phase: 'Synthesize', model: 'claude-opus-4-8', effort: 'high', schema: AGENT_RESULT_SCHEMA_PFB }
+  { label: 'synthesize', phase: 'Synthesize', model: 'opus', effort: 'high', schema: AGENT_RESULT_SCHEMA_PFB }
 )
 
 return {

@@ -874,3 +874,57 @@ security-guidance@claude-plugins-official`）は対話的操作が必要で、�
 実行できていない。`enabledPlugins`の設定・パターンファイルの作成までをこのPRで行い、
 実際に機能する状態になっているかの確認は次回以降のセッションで人間が`/plugin install`を
 実行してから行う必要がある。
+
+## issue #494（ワークフロー内ハードコードのモデルID陳腐化対策）の棚卸し・実機確認結果
+
+issue #494は「`aidd-1-1-deep-task.js`にフルIDでハードコードされたモデル名が提供終了時に
+無警告で壊れる」という懸念から、(1) ハードコード箇所の棚卸し、(2) Workflow `agent()`の
+`opts.model`がティア名エイリアス（sonnet/opus/haiku）を受け付けるかの実機確認、
+(3) 受け付ける場合はエイリアスへ移行、を行った。
+
+**棚卸し結果（`grep -rn "claude-" .claude/workflows/ .claude/agents/`）:**
+フルIDのハードコードは `.claude/workflows/aidd-1-1-deep-task.js` の7箇所のみ
+（`.claude/agents/*.md`のfrontmatterは元々`model: sonnet`等のティア名のみで問題なし）。
+内訳: `claude-sonnet-4-6`（draft-spec・completeness-critic-2・propose、3箇所）、
+`claude-haiku-4-5-20251001`（find・score、2箇所）、`claude-opus-4-8`（verify・synthesize、
+2箇所）。このうち`claude-sonnet-4-6`は現行の最新Sonnet世代（`claude-sonnet-5`）より
+古い世代IDであり、実際に陳腐化が進行していたことを確認した（`claude-opus-4-8`・
+`claude-haiku-4-5-20251001`は本チェック時点でまだ現行世代と一致していた）。
+
+**実機確認（使い捨てWorkflowプローブ、2回に分けて実行）:** `agent()`の`opts.model`に
+`'sonnet'`・`'claude-sonnet-5'`・`'claude-sonnet-4-6'`を指定した3並列呼び出し、および
+`'opus'`・`'haiku'`を指定した2並列呼び出しを行い、いずれもエラーなく応答を得られることを
+確認した。ティア名エイリアス（sonnet/opus/haiku）はフルIDと同様に`opts.model`で受け付けられる。
+
+**対応:** `.claude/workflows/aidd-1-1-deep-task.js`の7箇所すべてをフルIDからティア名
+エイリアスへ移行した（`docs/ai-config-map.md`内の対応する記述も追従して更新）。エイリアスは
+その時点の「そのティアの現行モデル」に自動で解決されるため、今後個別のフルIDが提供終了に
+なっても無警告で壊れる心配がなくなる。
+
+**この変更が実質的な配分変更を伴う点の明記:** `claude-opus-4-8`→`opus`、
+`claude-haiku-4-5-20251001`→`haiku`は移行前後で解決先モデルが変わらない（IDの
+書き方を変えただけ）。一方`claude-sonnet-4-6`→`sonnet`は、エイリアスが現行世代
+（本チェック時点でSonnet 5系）に解決されるため、実質的にモデル世代が上がる（draft-spec・
+completeness-critic-2・proposeの3エージェントが対象）。これは意図的な副作用であり
+「配分方針の再設計」ではなく「陳腐化した固定世代を現行世代へ追従させる」という位置づけ。
+
+**eval before/afterを実施しなかった理由（issue注意点の未消化事項）:** issue本文は
+「配分の変更を行う場合は`scripts/eval-sweep-recall.sh`4層＋`npm run eval:workflows db-impl`
+でbefore/afterを取る」ことを求めていたが、両evalのfixtureが検証するagentType
+（sweep-ui/data/db/types、implementer）は、今回変更した7エージェント（draft-spec・find・
+verify・completeness-critic-2・propose・score・synthesize）のいずれとも一致しない
+（既存evalは`aidd-phase1.js`・`aidd-phase2.js`側の一部エージェントのみを対象にしており、
+`aidd-1-1-deep-task.js`固有のフェーズ用fixtureはまだ存在しない）。そのため、既存evalの
+before/after比較はこの変更の品質影響を測定する手段として機能しない。
+issue #496の運用ルールに従い`npm test`・`scripts/eval-sweep-recall.sh sweep-ui`・
+`npm run eval:workflows db-impl`は実行し全て green（`docs/agents/eval-runs.jsonl`に記録）
+だが、これは「ワークフローファイル全体が壊れていないことの一般的なスモークテスト」であり、
+このモデル世代交代自体の精度・コストへの影響を測定するものではない。draft-spec/find/verify/
+completeness-critic-2/propose/score/synthesize向けのeval fixture新設は本issueのスコープ外
+としており、精度影響を厳密に測定したい場合は別issueで着手が必要（未着手のまま残る既知の
+限界）。
+
+**baselineスナップショット:** `.claude/workflows/aidd-1-1-deep-task.js`の`model:`行を変更した
+ため、`scripts/check-agent-baseline-freshness.sh`（issue #429）のCI警告対象に該当する。
+同一PRで`scripts/snapshot-agent-baseline.sh`を実行し`docs/agents/baselines/2026-07-23.json`
+を追加した。

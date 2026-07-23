@@ -1,0 +1,20 @@
+{
+  "generatedAt": "2026-07-23T03:31:53Z",
+  "note": "rounds/findingCountはWorkflow戻り値にのみ存在し現状永続化されていないため、Workflow完了直後にオーケストレーターがこのファイルへ手動で追記すること(issue #429)。",
+  "subagentSkeletonByType": [
+    {
+      "agentType": "(unknown)",
+      "runs": 13,
+      "avgDurationMs": null,
+      "totalDurationMs": null
+    },
+    {
+      "agentType": "workflow-subagent",
+      "runs": 5,
+      "avgDurationMs": 2200,
+      "totalDurationMs": 11000
+    }
+  ],
+  "loopObservabilityByAgent": [],
+  "otelDebugCollectorPresent": false
+}
