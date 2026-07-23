@@ -304,8 +304,16 @@ security/ux/performance5軸の再発見）の指摘であり、Sweepフェーズ
   filesystem API不可のため、フロー完了後にオーケストレーター（Claude Code）が
   `scripts/log-find-av-precision.sh --feature "<feature名>" '<findAvPrecisionのJSON>'`を
   呼んで`logs/find-av-precision.jsonl`へ永続化する必要がある。これは人/エージェント起動の
-  第3層ルールであり、呼び忘れを機械的に検知する手段は無い（issue #411原則に照らし、
-  今回は機械検知までは実装していない）
+  第3層ルールであり、呼び忘れを機械的に検知する手段は無かった
+- **issue #522で判明した実態**: 品質ゲートの許容誤判定率（precision/recall閾値）を数値で
+  定義しようとbaselineを集計したところ、`logs/find-av-precision.jsonl`（gitignore対象）への
+  記録が実際には一度も残っていないことが判明した（呼び忘れが常態化していた）。**呼び忘れは
+  Stop hook（`scripts/check-find-av-precision-recorded.sh`、issue #522）が機械検知するように
+  なった**（Workflowの実行記録`wf_*.json`内の`findAvPrecision.verifiedCount`と、ログの最新
+  timestampを突き合わせる。セッションにつき1回・warningのみ）。ただし記録データ自体は
+  `logs/`配下でgitignore対象のため、warning-only運用だけでは長期的な蓄積は保証されない
+  （`docs/agents/eval-runs.jsonl`のように意図的にgit管理下へ移す設計変更は未実施のまま）。
+  数値での閾値確定はこのデータが十分に蓄積されてから別issueで行う方針とした
 - `npm run find-av-precision-summary`（実体は`scripts/summarize-find-av-precision.sh`）で
   feature別・lens別の生存率を集計できる
 - **限界**: AV自体もLLM判定でありground truthではない（AVが正しい指摘を誤って棄却する

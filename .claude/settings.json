@@ -261,6 +261,12 @@
             "command": "scripts/check-handoff-format.sh",
             "timeout": 15,
             "statusMessage": "PR引き継ぎフォーマットの有無を確認中(issue #524)..."
+          },
+          {
+            "type": "command",
+            "command": "scripts/check-find-av-precision-recorded.sh",
+            "timeout": 15,
+            "statusMessage": "find-av-precisionログ記録の有無を確認中(issue #522)..."
           }
         ]
       }
