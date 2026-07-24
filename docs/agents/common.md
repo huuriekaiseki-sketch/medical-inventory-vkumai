@@ -101,6 +101,9 @@ Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、Pr
     FETCH_HEADの更新時刻が既定24時間（`LOCAL_MAIN_STALE_HOURS`で変更可）より古いか、`git rev-list --count main..origin/main`が1以上（ローカルmainがorigin/mainより遅れている）のいずれかに該当すると、セッション開始時に警告メッセージを出す（block不可・warningのみ、fetch自体はhook内で実行しないためネットワークアクセス無し・オフラインでも動作する）。
     worktree環境では`.git`がファイルでありFETCH_HEADの実体がworktree固有パスにあるため、`git rev-parse --git-path FETCH_HEAD`で実パスを解決している（`.git/FETCH_HEAD`と決め打ちすると存在しないパスを見て誤判定する）。
     **これは近似判定であり、実際にリモートで何が起きているかまでは見ていない**（前回fetch時点の情報を基準にするため、fetch直後に他者がpushした場合は検知できない）。
+- **新しいworktreeを手動で作る場合は`git worktree add`を直接叩かず`scripts/create-worktree.sh <branch-name> [base-branch]`を使う**（issue発生源: supabase-env-config-325893セッション）。
+  `git worktree`はgit管理外ファイル（`.env.local`・`.env.test`等、`.gitignore`対象）を新規worktreeへ引き継がないため、素の`git worktree add`だけで作ると`NEXT_PUBLIC_SUPABASE_URL`等が欠落しRuntime Errorになる。このスクリプトは`git fetch origin main`→`origin/main`起点でのbranch作成（上記ルール）と`.env.local`/`.env.test`の自動コピーをまとめて行う。
+  **既知の限界**: Claude Code本体のEnterWorktreeツール経由でworktreeを作った場合はこのスクリプトを経由しないため、同じ欠落が起きうる（ツール内部の挙動でありこのリポジトリ側からは制御できない）。その場合は引き続き手動で`.env.local`/`.env.test`をコピーする必要がある
 
 ## loop-observabilityログの記録漏れ検知
 
@@ -274,6 +277,7 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 | `src/components/` | UI コンポーネント |
 | `src/lib/supabase/` | Supabase クライアント・データ取得層 |
 | `supabase/migrations/` | DBマイグレーション |
+| `scripts/create-worktree.sh` | worktree作成 + `.env.local`/`.env.test`自動コピー（「ブランチ運用ルール」参照） |
 | [`docs/agents/run-manifest.md`](./run-manifest.md) | AIDDフローのspecHash/baseCommit突合用Run Manifestのスキーマ |
 | `scripts/log-agent-progress.sh` / `scripts/show-agent-status.sh` | サブエージェント進捗の記録・一覧表示（issue #18） |
 | `scripts/check-agent-progress-gap.sh` | agent-progress記録漏れの機械検知（issue #339） |
