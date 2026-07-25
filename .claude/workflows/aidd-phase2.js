@@ -7,6 +7,7 @@ export const meta = {
     { title: 'Manifest Check', detail: 'Run Manifestのspecハッシュ突合（レビュー後のSPEC.md改変を検知）' },
     { title: 'Contract + DB', detail: 'contract-writer（型定義）とdb-impl（migrations）を並列実行' },
     { title: 'Implement',     detail: 'data-impl / api-impl / ui-impl を並列実行' },
+    { title: 'Coverage Check', detail: '5ロール全員が担当外と判断し実ファイル変更が無かった場合のみ、汎用implementerで実装漏れを埋める（issue #508）' },
     { title: 'Integrate',     detail: '統合ゲート：マイグレーション確認・結線・テスト・lint' },
     { title: 'Review',        detail: '4観点並列reviewer（読み取り専用）' },
   ],
@@ -359,6 +360,80 @@ if (shouldBlock([dataResult, apiResult, uiResult])) {
 }
 logMinorOnlyPassThrough('Implement', [dataResult, apiResult, uiResult])
 
+// ─── Phase B.5: Coverage Check（issue #508）───────────────────────────
+// 背景: issue #493の実行（wf_b3c491ac-c45）で、SPECの変更対象がscripts/lib/等、
+// 既存5ロール（contract-writer/db-impl/data-impl/api-impl/ui-impl）のどのパスにも
+// 該当しない場合、全員が「担当範囲外」と判断してpass（無実装）を返し、誰もSPEC本文の
+// 実コード変更を実装しないという抜け漏れが実測された。当時はintegratorが結線作業の
+// 延長として非公式に代行実装したが、integrator自身がこれを「既存5ロール分類に収まらない
+// 変更対象では同じ抜け漏れが再発しうる」重要な申し送り事項として報告している。
+// 対策: 各エージェントの自己申告（detail文字列）はNLP的に信頼できないため使わず、
+// 「baseCommit以降にリポジトリへの実ファイル変更が1件でもあったか」という機械的事実
+// （git status / git diff）だけで判定する。1件も無ければ、5ロールのパス制限に縛られない
+// 汎用implementerを追加起動しSPEC全体を直接実装させる。baseCommitが不明な場合は判定
+// 不能として何もせず従来通りIntegrateへ進む（false positiveでIntegrateを阻害しない）。
+phase('Coverage Check')
+
+const COVERAGE_CHECK_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['pass', 'blocked'] },
+    detail: { type: 'string' },
+    hasChanges: { type: 'boolean' },
+  },
+  required: ['status', 'detail'],
+}
+
+const coverageCheck = await agent(
+  withIntent('coverage-check', `まず .aidd/run-manifest.json をReadツールで読み、baseCommitフィールドを確認してください。\n\nbaseCommitが取得できない場合: status: blocked、detailに「baseCommit不明のため判定不可」と書いて終了してください（これは異常事態ではなく、単に本チェックをスキップする合図です）。\n\nbaseCommitが取得できた場合: Bashツールで \`git status --porcelain\` と \`git diff --name-only ${'${baseCommit}'}\`（baseCommitは実際の値に置き換える）の両方を実行し、直前のContract + DB / Implementフェーズが起動してからリポジトリに1件でもファイル変更（新規・変更・削除）があったか確認してください。\n\n1件でも変更があれば status: pass、hasChanges: true、detailに変更ファイル数を書いてください。\n1件も変更が無ければ status: pass、hasChanges: false、detailに「変更ファイルなし」と書いてください。これはエラーではなく、SPEC.mdの実装対象が既存5ロールのどの担当パスにも該当しなかった場合に起こり得る正常系です。${guide(
+    '判定できた（hasChangesの値に関わらずpass）',
+    '（未使用: このエージェントはpass/blockedの2値のみ返す）',
+    'baseCommitが不明で判定できない'
+  )}`),
+  { label: 'coverage-check', phase: 'Coverage Check', agentType: 'reviewer', schema: COVERAGE_CHECK_SCHEMA }
+)
+
+countLoggable('reviewer')
+countProgressLoggable('reviewer')
+log(`Coverage Check完了: status=${coverageCheck?.status ?? 'なし'}, hasChanges=${coverageCheck?.hasChanges ?? '不明'}`)
+
+let groupImplResult = null
+const needsGroupImplementer = coverageCheck?.status === 'pass' && coverageCheck?.hasChanges === false
+
+if (needsGroupImplementer) {
+  log('品質ゲート: 5ロール全員が担当範囲外と判断し実ファイル変更が無かったため、汎用implementerを追加起動します（issue #508）')
+
+  groupImplResult = await agent(
+    withIntent('group-implementer', `まず ${specPath} を Read ツールで読んでください。\n直前のContract + DB / Implementフェーズ（contract-writer/db-impl/data-impl/api-impl/ui-impl）は全員「担当範囲外」と判断し、実際のファイル変更を1件も行いませんでした。これはこのSPECの実装対象が既存5ロールのいずれの担当パス（src/types/・supabase/migrations/・src/lib/supabase/・src/lib/*/repository.ts・src/app/**/route.ts・src/app/(pages)/・src/components/）にも該当しないことを意味します。\nPart 2（実装計画）に記載されている変更を、上記5ロールのパス制限に縛られず直接実装してください。\n\n## 各ロールの完了報告（参考。いずれも「担当外」の判断根拠）\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${guide(
+      'Part 2記載の変更を実装できた',
+      '実装を試みたが不完全・矛盾がある',
+      'SPEC.mdが見つからない、またはPart 2から実装対象を安全に特定できない'
+    )}`),
+    { label: 'group-implementer', phase: 'Coverage Check', agentType: 'implementer', schema: AGENT_RESULT_SCHEMA }
+  )
+  countLoggable('implementer')
+  countProgressLoggable('implementer')
+  log('汎用implementer完了')
+
+  if (shouldBlock([groupImplResult])) {
+    log('品質ゲート: 汎用implementerでfail/blockedを検知したため中断（統合ゲートへは進みません）')
+    return {
+      done: false,
+      contractResult,
+      dbResult,
+      dataResult,
+      apiResult,
+      uiResult,
+      coverageCheck,
+      groupImplResult,
+      blocked: true,
+      blockedAt: 'Coverage Check',
+      stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Coverage Check', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
+    }
+  }
+  logMinorOnlyPassThrough('Coverage Check', [groupImplResult])
+}
+
 // ─── Phase C: 統合ゲート ──────────────────────────────────────────────
 // issue #316: 手順7のchangedFiles上書き（「他フィールドは変更しないこと」）は
 // .claude/workflows/lib/manifest-check.js の applyChangedFiles にテスト可能な形で
@@ -366,7 +441,7 @@ logMinorOnlyPassThrough('Implement', [dataResult, apiResult, uiResult])
 phase('Integrate')
 
 const integrationResult = await agent(
-  withIntent('integrator', `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用なら\`supabase db push --local\`で適用する）。\`supabase db push\`は\`--local\`を付けないとデフォルトでリモート（本番）データベースが対象になるため、\`--local\`を必ず明示すること。\`--linked\`・\`--db-url\`等でリモート・本番Supabaseに適用することは絶対にしないこと。ローカル以外への適用が必要だと判断した場合は、何も実行せずstatus: blockedで報告して止まること。\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. npx tsc --noEmit を実行 → 型エラーがあれば修正（3回まで。issue #46のDONE基準に型検査を含める）\n6. 全テスト・lint・tsc緑を確認して報告\n7. .aidd/run-manifest.json をReadツールで読み、manifest.baseCommitを取得する（無ければこのステップはスキップしてよい）。取得できた場合、Bashツールで \`git diff --name-only \${baseCommit}\`（baseCommitはmanifestの値に置き換える）を実行し、変更されたファイル一覧を取得する。取得できたら .aidd/run-manifest.json の changedFiles フィールドをその一覧で上書きし、Writeツールで保存する（docs/agents/run-manifest.md 参照。他フィールドは変更しないこと）。\n\n## 各完了報告\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${guide(
+  withIntent('integrator', `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用なら\`supabase db push --local\`で適用する）。\`supabase db push\`は\`--local\`を付けないとデフォルトでリモート（本番）データベースが対象になるため、\`--local\`を必ず明示すること。\`--linked\`・\`--db-url\`等でリモート・本番Supabaseに適用することは絶対にしないこと。ローカル以外への適用が必要だと判断した場合は、何も実行せずstatus: blockedで報告して止まること。\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. npx tsc --noEmit を実行 → 型エラーがあれば修正（3回まで。issue #46のDONE基準に型検査を含める）\n6. 全テスト・lint・tsc緑を確認して報告\n7. .aidd/run-manifest.json をReadツールで読み、manifest.baseCommitを取得する（無ければこのステップはスキップしてよい）。取得できた場合、Bashツールで \`git diff --name-only \${baseCommit}\`（baseCommitはmanifestの値に置き換える）を実行し、変更されたファイル一覧を取得する。取得できたら .aidd/run-manifest.json の changedFiles フィールドをその一覧で上書きし、Writeツールで保存する（docs/agents/run-manifest.md 参照。他フィールドは変更しないこと）。\n\n## 各完了報告\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${groupImplResult ? `\n### group-implementer（5ロール全員が担当外だったため追加起動）\n${groupImplResult.detail}` : ''}${guide(
     'npm test・npm run lint・npx tsc --noEmitが最終的に全て緑で統合完了',
     '3回の修正試行後もtest/lint/tscのいずれかが赤のまま',
     'SPEC.mdが見つからない、またはいずれかのimplエージェントの完了報告に「仕様書が見つからない」「作業を開始できない」旨の記述がある。または、マイグレーションの適用先がローカルSupabase以外（リモート・本番）である必要があると判断した'
@@ -388,6 +463,8 @@ if (shouldBlock([integrationResult])) {
     dataResult,
     apiResult,
     uiResult,
+    coverageCheck,
+    groupImplResult,
     integration: integrationResult,
     blocked: true,
     blockedAt: 'Integrate',
@@ -514,6 +591,8 @@ while (true) {
       dataResult,
       apiResult,
       uiResult,
+      coverageCheck,
+      groupImplResult,
       integration: integrationResult,
       reviewFindings: REVIEW_DIMENSIONS.map((dim, i) => ({
         dimension: dim.label,
@@ -556,7 +635,7 @@ while (true) {
   retryHistory.push({ attempt: reviewAttempt, findings: retryFindings, detail: retryResult?.detail })
 }
 
-const implResults = [contractResult, dbResult, dataResult, apiResult, uiResult]
+const implResults = [contractResult, dbResult, dataResult, apiResult, uiResult, ...(groupImplResult ? [groupImplResult] : [])]
 
 // DONE判定: .claude/workflows/lib/phase2-done.js の computeDone と同一ロジック
 // （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
@@ -583,6 +662,8 @@ return {
   dataResult,
   apiResult,
   uiResult,
+  coverageCheck,
+  groupImplResult,
   integration:  integrationResult,
   reviewFindings: REVIEW_DIMENSIONS.map((dim, i) => ({
     dimension: dim.label,
@@ -591,10 +672,11 @@ return {
   stats: {
     phase: 'phase2',
     done,
-    implAgents: 5,
+    implAgents: implResults.length,
+    groupImplementerTriggered: Boolean(groupImplResult),
     reviewAgents: REVIEW_DIMENSIONS.length,
     reviewRetries: reviewRetryAgentCount,
-    totalAgents: 1 + 5 + 1 + REVIEW_DIMENSIONS.length + reviewRetryAgentCount,
+    totalAgents: 1 + 5 + 1 + (groupImplResult ? 1 : 0) + 1 + REVIEW_DIMENSIONS.length + reviewRetryAgentCount,
     implSuccessCount: implResults.filter(r => r?.status === 'pass').length,
     implBlockedCount: implResults.filter(r => r?.status === 'blocked').length,
     expectedLoopObservabilityRecords: loggableAgentCount,
