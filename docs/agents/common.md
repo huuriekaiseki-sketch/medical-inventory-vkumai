@@ -275,6 +275,7 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 | [`docs/agents/recovery-queue.md`](./recovery-queue.md) | 検知後の自動復旧閉ループの設計・スコープ・既知の未対応（issue #523） |
 | `scripts/queue-recovery-task.sh` | 検知hookから呼ばれ`.aidd/recovery-queue.jsonl`へ復旧タスクを登録する（issue #523） |
 | `scripts/check-recovery-queue.sh` | SessionStart hookによる未対応の復旧タスクのcontext注入（issue #523） |
+| `scripts/check-workflow-interruption.sh` | SessionStart hookによるWorkflow中断検知(`wf_*.json`のstatus/staleness判定)とrecovery-queueへの登録（issue #534） |
 | [`docs/agents/fault-injection-drill.md`](./fault-injection-drill.md) | `aidd-phase2.js`のdeny-by-defaultゲート実測訓練のランブック（issue #395） |
 | `scripts/aidd-fault-injection-setup.sh` / `scripts/aidd-fault-injection-teardown.sh` | fault injection訓練用の`.aidd/run-manifest.json`差し替え・復元（issue #395） |
 | `scripts/eval-workflow-prompts.sh` / `scripts/eval-fixtures/` | AIDDワークフロープロンプトのeval基盤（issue #391） |
