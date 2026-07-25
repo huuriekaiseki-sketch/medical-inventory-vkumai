@@ -8,7 +8,7 @@
 - ドメイン用語（facility・price等が何であるか）は [`domain.md`](./domain.md) を参照
 - 各ルールが「なぜ」その設計になったかは [`decisions.md`](./decisions.md) を参照
 - 過去に実際に再発した実装ミスのチェックリストは [`known-failure-patterns.md`](./known-failure-patterns.md) を参照（レビュー・Sweep系エージェントは必読）
-- 検知手段のないルール（自然言語のみで強制力の無いルール）の一覧は [「検知手段のないルールの棚卸し（issue #339）」](#検知手段のないルールの棚卸しissue-339) を参照
+- 検知手段のないルール（自然言語のみで強制力の無いルール）の一覧は [`undetectable-rules-inventory.md`](./undetectable-rules-inventory.md) を参照
 
 ## Next.js バージョンに関する注意
 
@@ -199,19 +199,9 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 
 新しい運用ルールを書く前は必ず[`decisions.md`の該当原則](./decisions.md#なぜ新しい運用ルールに検知手段を先に決める原則を導入したかissue-339)を先に読むこと。
 特に、新しい検知・検証メカニズム自体を追加する際は「その起動トリガーは機械（hook/CI/cron/npm test）
-か人か」を先に確認すること（issue #411）。人起動なら第3層ルールの削減ではなく追加になるだけで、
-下記棚卸し表に行が1つ増えて終わる。
-以下は2026-07-14時点で「破られても機械的に気づく手段がない」ルールの一覧（第3層）。
-検知手段を実装したら、このルールの説明に検知手段へのリンクを追記してこの表から外すこと。
-
-| ルール | 所在 | 備考 |
-|---|---|---|
-| ブランチ運用ルール（`origin/main`起点でのbranch作成） | 本ファイル「ブランチ運用ルール」 | 過去に古いローカル`main`起点でbranch作成し手戻りが発生した実績あり。着手前PR確認のうち「マージ済みPRが乗っている」ケースは`scripts/check-branch-pr-status.sh`（SessionStart hook）で検知済み。**`origin/main`起点確認自体もissue #499で部分検知済み**（`scripts/check-local-main-freshness.sh`。FETCH_HEAD鮮度・ローカルmainの遅れコミット数による近似判定、fetchはhook内で実行しないため取りこぼしうる）。「別issueの未マージPRが乗っている」ケース（マージ前の分岐）は引き続き未検知のまま |
-| サーキットブレーカー（`/goal`設定・テスト修正3回まで・フロー全体上限） | ルートの`CLAUDE.md` | issue #441で検知手段を調査したが、「`/goal`が設定されているか」を外部から機械的に問い合わせるAPI/hookは公式に存在しないと判明（実機確認済み）。条件テンプレート化・役割分担の明文化（Workflow内部retryとの切り分け）は完了したが、呼び忘れ自体の検知は依然できないままこの表に残る |
-| 停止①②以外で止まらず自律進行すること | ルートの`CLAUDE.md`「絶対ルール」 | |
-| gap check stateの記録（`record-gap-check-state.sh` before/expectedの呼び出し） | ルートの`CLAUDE.md`「gap check state 記録ルール」 | gap check本体の実行はissue #488でStop hookに機械化済み。ただしこの記録呼び出し自体の呼び忘れ検知は無い（Workflow DSLがfilesystem API不可のため自己申告依存が残る。AIDD statsのphase単位呼び出しと同型の限界だったが、そちらはissue #524で検知済みになった） |
-| seed・スクリーンショットに実在施設名を使わない | 本ファイル「テスト環境・データ衛生ルール」 | per-edit層で部分検知（`.claude/security-patterns.json`の`possible_real_facility_name`、issue #440）。ただし`/plugin install security-guidance@claude-plugins-official`の実機有効性は未確認、かつスクリーンショット・issue添付・E2E失敗ログは検知対象外 |
-| `aidd-phase2.js`のSpec Check/Manifest Check関連プロンプトを変更した際のfault injection訓練の実施自体 | 本ファイル「fault injection訓練の実施タイミング（issue #395）」 | 訓練の手順・fixture・setup/teardownスクリプトは用意した（[`fault-injection-drill.md`](./fault-injection-drill.md)）が、「変更時に必ず訓練を実施すること」自体を機械的に強制する手段（例: 該当プロンプト変更を検知してブロックするpre-commit等）は無い。実施記録の記入漏れにも気づく仕組みが無い |
+か人か」を先に確認すること（issue #411）。「破られても機械的に気づく手段がない」ルール（第3層）の
+一覧は [`undetectable-rules-inventory.md`](./undetectable-rules-inventory.md) を参照（issue #542で
+参照頻度の低い棚卸し表として本ファイルから分離）。
 
 ## fault injection訓練の実施タイミング（issue #395）
 
@@ -227,28 +217,10 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 
 ## ツール制約回避のload-bearing workaround棚卸し（issue #413）
 
-2026-07-16のmentor設計レビューで、AIDDフレームワークの相当部分がツール（Workflow DSL /
-`claude -p`）の制約・不具合への回避策でできていることが確認された。各回避策はdecisions.md等に
-「なぜ」が記録されガードも付いているが、**Claude Code側の更新で回避策の前提が壊れると、検知網
-自体が静かに全滅しうる**（回避策 = 検知網の土台、というメタ構造のため）。ツール本体を更新した
-とき、またはeval/ワークフロー実行が理由不明に失敗し始めたときは、まずこの表を確認すること。
-
-| 回避策 | 場所 | 前提とするツール挙動 | 解除条件／破損条件 | smoke test |
-|---|---|---|---|---|
-| args `typeof === 'string'` → `JSON.parse`防御 | `.claude/workflows/aidd-phase1-router.js`（正本: `.claude/workflows/lib/resolve-workflow-args.js`） | Workflowツールがargsをobjectで渡してもstringで届く不具合（[`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#なぜaidd-phase1-routerjsでargsをjsonparseする防御コードを入れたか)） | **解除**: ツール側がargsを常にobjectで渡すよう修正されれば、この分岐に到達しなくなるだけで副作用なし（前方互換設計のため削除は任意）。**破損**: このガード自体が壊れることは想定しにくい（`typeof`判定のみのため） | `resolve-workflow-args.test.js`（npm test内） |
-| `--setting-sources ""` + `--agents`フラグでのagent定義注入 | `scripts/lib/build-eval-agent-json.mjs` | `--setting-sources ""`が`.claude/agents/*.md`探索も無効化する挙動 | **解除**: `--setting-sources`が`.claude/agents/`探索のみを無効化しないよう修正されれば不要。**破損**: `--agents`フラグのJSON構造・優先順位が変更されると`--agent implementer`解決自体が失敗し、evalの実エージェント呼び出しが全滅する（[`observability-internals.md`](./observability-internals.md#aiddワークフロープロンプトのevalissue-391)「AIDDワークフロープロンプトのeval」に既述のload-bearing箇所） | JSON出力形式は`build-eval-agent-json.test.mjs`（npm test内）で検証済み。**ただし実際に`claude -p --agents ... --agent <type>`でagent解決できるかどうかの専用smoke testは無い**（`claude -p`の実呼び出しが必要でCI化見送り済みのため、issue #391と同じ判断。`npm run eval:workflows db-impl`を手動実行した際に暗黙的に再検証されるのみ） |
-| プロンプト正本の切り出し＋インライン複製＋sync test | `.claude/workflows/lib/prompts/db-impl.js` ⇔ `aidd-phase2.js`、`.claude/workflows/lib/spec-check.js` / `manifest-check.js` ⇔ `aidd-phase2.js`、`.claude/workflows/lib/prompts/sweep.js` ⇔ `aidd-phase1.js` / `aidd-1-1-deep-task.js` | Workflow DSLがfilesystem API不可でローカルモジュールをrequire/importできない制約 | **解除**: Workflow DSLがローカルモジュールをimportできるようになれば、インライン複製自体が不要になり正本を直接importする形に変えられる。**破損**: プロンプト文言変更時にインライン複製側を追従させ忘れると乖離する（これを検知するのがsync testの目的そのもの） | `workflow-prompt-sync.test.js` / `sweep-prompt-sync.test.js`（npm test内） |
-| TRI/RISK・メタ改修判定ロジックの切り出し＋インライン複製＋sync test | `.claude/workflows/lib/router-risk.js` ⇔ `aidd-phase1-router.js`（issue #457） | 同上（Workflow DSL importの制約）。プロンプト（テンプレートリテラル）ではなく`const`配列・`function`宣言の複製のため、`extract-declaration.js`という別の抽出ユーティリティを使う | **解除**: 同上。**破損**: `classifyRoute`等の関数・定数配列を変更したのに`aidd-phase1-router.js`側のインライン複製を追従させ忘れると乖離する | `router-risk-sync.test.js`（npm test内） |
-| eval fixture manifestとaidd-phase2.js内スキーマ定義の同期 | `scripts/eval-fixtures/db-impl/manifest.json` ⇔ `aidd-phase2.js`内のスキーマ定義 | 同上（Workflow DSL importの制約） | **解除**: 同上。**破損**: スキーマ定義がドリフトすると、evalが実際のプロンプトと異なるスキーマでテストしてしまい気づかれない | `eval-fixture-manifest-schema-sync.test.js`（npm test内） |
-| 進捗・観測ログの自然言語指示依存 | `scripts/log-agent-progress.sh` / `scripts/log-loop-observability.sh`呼び出し | Workflow DSLがfilesystem API不可で、ワークフロー本体から機械的にログを書き込めない制約 | **解除**: 同上（importまたは直接fs書き込みが可能になれば、本体側から機械的に記録できる設計に変更可能）。**破損**: 元々「壊れる」ものではなく「そもそも書かれない」リスクが常態（自然言語指示依存のため） | 記録漏れの事後検知（`check-loop-observability-gap.sh` / `check-agent-progress-gap.sh`）があり、その実行はStop hook（`scripts/check-gap-check-state.sh`、issue #488）で機械トリガー化済み。ただしbefore/expectedのstateファイル記録（`scripts/record-gap-check-state.sh`）自体はオーケストレーターの自己申告のまま残る |
-
-**Claude Code更新時の確認手順**: (1) 上表の「smoke test」列にnpm test内のテストがある項目は
-`npm test`を実行して確認する。(2) smoke testが「無い」と明記されている項目（現状は
-`--setting-sources`+`--agents`の組み合わせのみ）は`npm run eval:workflows db-impl`を一度手動実行し、
-4ケース中`case-1`〜`case-4`がエージェント呼び出し自体（`NG: エージェント実行が失敗しました`
-以外の結果）に到達しているかを確認する。(3) 新しいload-bearing workaroundを追加した場合は、
-この表に行を追加すること（issue #411の原則どおり、smoke testを機械トリガーに載せられないなら
-その旨をこの表に明記し、prose追加だけで済ませない）。
+AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p`）の制約・不具合への回避策で
+できている。ツール本体を更新したとき、またはeval/ワークフロー実行が理由不明に失敗し始めた
+ときは、[`load-bearing-workarounds.md`](./load-bearing-workarounds.md) を参照すること
+（issue #542で参照頻度の低い棚卸し表として本ファイルから分離）。
 
 ## 重要ファイルへのパス
 
