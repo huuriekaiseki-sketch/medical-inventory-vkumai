@@ -161,39 +161,12 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 ## 引き継ぎフォーマット
 
 「できました」で終わる完了報告は禁止。作業完了時（PR本文・セッション終了報告・
-`docs/sessions/` への記録のいずれか）は、以下のフォーマットで引き継ぎメモを残す。
-確認範囲がAIごとにブレる問題・後任AIがスコープ外を「重大な見落とし」と誤認する問題を防ぐ。
-
-```
-## 作業サマリ
-- 変更した目的:
-- 変更した範囲:
-- 触っていない範囲:
-
-## 検証済み
-- 実行したコマンド:（`npm run ai:check` の実行有無を含む）
-- 確認した画面:
-- 確認したDB/RLS:
-- 他テナントのIDでアクセスし、弾かれることを確認したか:（RLS/facility境界に触れた場合は必須）
-
-## 既知の未対応
-- 今回あえて対応しなかったこと:
-- 理由:
-- 次に触るなら見る場所:
-
-## 後任AIへの注意
-- この実装で壊してはいけない前提:
-- 似ているが別物の用語:
-- 勝手にリファクタしない場所:
-```
-
-- auth/facility/tenant/organization/inventory/RLS/policy に触れた変更は、「検証済み」の
-  他テナントIDアクセス確認を省略しない（Issue #24再発防止。チェック観点は
-  [`known-failure-patterns.md`](./known-failure-patterns.md) 参照）
-- PR本文経由での引き継ぎ（`gh pr create`/`gh pr edit`）は、Stop hook
-  （`scripts/check-handoff-format.sh`、issue #524）が「## 作業サマリ」「## 検証済み」の
-  2見出しの有無を機械検知し、無ければ警告する（PRにつき1回・warningのみ。セッション終了報告・
-  `docs/sessions/`経由の引き継ぎは検知対象外）
+`docs/sessions/` への記録のいずれか）は、`handoff-format`スキル（[`../../.claude/skills/handoff-format/SKILL.md`](../../.claude/skills/handoff-format/SKILL.md)）のフォーマットで
+引き継ぎメモを残す（issue #542。タスク完了時のみ必要なため常時ロードから外しスキル化した）。
+PR本文経由での引き継ぎ（`gh pr create`/`gh pr edit`）は、Stop hook
+（`scripts/check-handoff-format.sh`、issue #524）が「## 作業サマリ」「## 検証済み」の
+2見出しの有無を機械検知し、無ければ警告する（PRにつき1回・warningのみ。セッション終了報告・
+`docs/sessions/`経由の引き継ぎは検知対象外）。
 
 ## 検知手段のないルールの棚卸し（issue #339）
 
