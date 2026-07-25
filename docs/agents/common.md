@@ -65,13 +65,7 @@ Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、Pr
 
 ## テスト環境・データ衛生ルール
 
-- **E2E/BSGはテスト専用Supabaseのみに接続する。** 接続情報は `.env.test` に置く（`.env.test.example` 参照）。
-  `NODE_ENV=test` のため `.env.local`（本番）は読み込まれず、さらに `e2e/env-guard.ts` が
-  許可ホスト以外（＝本番URL・本番service role実行）を**即失敗**させる
-- **認証ファイル（`e2e/.auth/user.json`）の漏洩チェックはCI側で行う**（`.github/workflows/e2e.yml`）。
-  BSG（ローカルゲート）ではチェックしない方針
-- **seed・スクリーンショット・E2E失敗ログ・issue添付に実在施設名・実データを入れない。**
-  施設名・ユーザー名・在庫品目などはすべてダミー（例: `テスト施設A`、`e2e-test-user@example.com`）を使う
+`e2e/`配下のファイルをRead/Editする際にのみ [`.claude/rules/e2e-test-hygiene.md`](../../.claude/rules/e2e-test-hygiene.md) が自動ロードされる（issue #445）。
 
 ## DBスキーマ変更ルール
 
@@ -150,7 +144,7 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 - agents設定変更時のbaselineスナップショット機械強制（issue #429）
 - Find→Adversarial Verify precision記録（issue #432）
 - Sweep recallベンチマーク（issue #431）
-- AIDDワークフロープロンプトのeval（issue #391）— **運用ルール（義務化、issue #496）だけは下記に残す**: `.claude/workflows/*.js` のプロンプト文言を変更したPRでは、マージ前に `npm run eval:workflows <対応するfixtureセット>`（sweep系のプロンプト変更は `scripts/eval-sweep-recall.sh <layer>`）を実行し、結果を引き継ぎメモの「検証済み」欄へ記載すること（未実施の場合はその旨と理由を明記する）。実行完了時に `docs/agents/eval-runs.jsonl` へ自動記録され、未更新のPRは `.github/workflows/eval-runs-freshness-check.yml` が警告する。
+- AIDDワークフロープロンプトのeval（issue #391）— 運用ルール（義務化、issue #496）は`.claude/workflows/`配下のファイルをRead/Editする際に [`.claude/rules/workflow-eval-requirement.md`](../../.claude/rules/workflow-eval-requirement.md) として自動ロードされる（issue #445）
 
 ## ツール・機能導入可否の判断記録への参照
 
