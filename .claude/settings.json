@@ -177,6 +177,11 @@
           },
           {
             "type": "command",
+            "command": "scripts/check-workflow-interruption.sh",
+            "timeout": 15
+          },
+          {
+            "type": "command",
             "command": "scripts/check-recovery-queue.sh",
             "timeout": 10
           }
