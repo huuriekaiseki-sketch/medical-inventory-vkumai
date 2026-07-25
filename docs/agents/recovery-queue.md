@@ -22,36 +22,41 @@
 
 - `gap-check-followup`: `scripts/check-gap-check-state.sh` がgap警告を出したときに登録される。
   対応する記録漏れの原因調査・issue化が復旧内容
+- `workflow-interrupted`: `scripts/check-workflow-interruption.sh`（SessionStart hook）が
+  登録する。Workflow中断からの`resumeFromRunId`再開（[`workflow-resume-runbook.md`](./workflow-resume-runbook.md)）
+  が復旧内容。詳細は下記「Workflow中断→resumeFromRunId再開（issue #534で実装）」参照
 
-## 未実装のtype（Workflow中断→resumeFromRunId再開）
+## Workflow中断→resumeFromRunId再開（issue #534で実装）
 
-issue #523の起票時点では「復旧手順が既に明文化されている2種」として、Workflow中断からの
-`resumeFromRunId`再開（[`workflow-resume-runbook.md`](./workflow-resume-runbook.md)）も
-第一弾の対象に含める想定だった。しかし実装検討の結果、**このPRでは見送った**。
+issue #523の起票時点では「復旧手順が既に明文化されている2種」として本typeも第一弾の対象に
+含める想定だったが、「Workflowが中断された」ことを機械的に検知する信頼できる手段が当時
+無かったため見送っていた（経緯は本ファイルのgit履歴参照）。issue #534で実際にWorkflow実行を
+中断させる実機観測を行い、以下の事実を確認した上で実装した。
 
-理由: 「Workflowが中断された」ことを機械的に検知する信頼できる手段が無いため。
-Workflowツールは実行ごとに `<transcript配置ディレクトリ>/<session_id>/workflows/wf_*.json`
-という実行記録ファイルを生成し（issue #524調査で判明）、少なくとも正常完了時は`status`フィールドに
-`"completed"`が入ることを実機で確認した。しかし、
+**実機観測で確認できた事実（2026-07-25）:**
+- TaskStopで明示的にWorkflow実行を中断すると、`<transcript配置ディレクトリ>/<session_id>/
+  workflows/wf_*.json` の`status`フィールドは確実に`"killed"`になる（`result: null`、
+  `error: "Error: Workflow aborted..."`も併記される）
+- 正常完了時は`status: "completed"`。両者は明確に区別できる
 
-- 中断時にこのファイルが「存在するが`status`が`"completed"`でない」状態になるのか、
-  それとも「そもそもファイルが存在しない」状態になるのか、実際に中断を起こして検証していない
-- 仮に前者だとしても、同一worktreeで複数セッションが並行してWorkflowを実行しているケース
-  （他ワーカーが正当に実行中のもの）と、本当に中断されたケースを、ファイルの中身だけから
-  確実に区別できるかが未検証
+**判定ロジック（`scripts/check-workflow-interruption.sh`）:**
+1. `status === "killed"` は実機確認済みの確実な信号として即座に対象とする
+2. `status !== "completed"` かつファイルの更新時刻が閾値（既定1時間、
+   `WORKFLOW_INTERRUPTION_STALE_HOURS`で変更可）より古い場合も対象とする
+   （`check-local-main-freshness.sh`等と同型の「厳密ではないが安全側」staleness近似）
+3. 既に登録済みの`runId`は`.aidd/.workflow-interruption-seen`で重複登録を防ぐ
 
-を、実際に確認しないまま「検知できる」と主張してshipすることは避けた
-（このリポジトリの一貫した方針：不確かな検知能力を実装済みと詐称しない）。
+**未検証のまま残る既知の限界:** 本来ターゲットにしたい失敗モード（セッション自体がクラッシュ・
+タイムアウト等で異常終了しWorkflowが取り残されるケース）は、TaskStop経由の`abort()`コード
+パスを通らない可能性が高く、`"killed"`が書き込まれないまま放置される懸念が残る。セッションを
+実際にクラッシュさせて検証することは安全に行えないため未検証のまま。上記判定ロジック2.の
+staleness近似がこのケースの安全網になる想定だが、これも実機未検証（このリポジトリの一貫した
+方針どおり不確かな検知能力を実装済みと詐称しない）。
 
-## 今後この機能を拡張する場合
-
-1. まず実際にWorkflow実行を中断させ、`wf_*.json`の実際の状態（存在有無・statusフィールドの値）を
-   実機観測する
-2. 観測結果をもとに、誤検知（正当に実行中のものを中断扱いする）を避けられる判定条件を設計する
-3. `scripts/queue-recovery-task.sh --type workflow-interrupted` を呼ぶ新しいhook
-   （SessionStart推奨。前セッションの残骸を見つけるため）を追加する
-4. 復旧内容の`detail`には、対象の`runId`と`docs/agents/workflow-resume-runbook.md`への
-   参照を含める
+**fault injection実測（issue #534、2026-07-25）:** 実際にWorkflowを起動しTaskStopで中断させ、
+`check-workflow-interruption.sh`実行→`.aidd/recovery-queue.jsonl`への登録→
+`check-recovery-queue.sh`によるsystemMessage表示、まで一巡することを確認した。同時に、
+正常完了した2件のWorkflow実行が誤って対象にならないことも確認した。
 
 ## 安全上の制約
 
