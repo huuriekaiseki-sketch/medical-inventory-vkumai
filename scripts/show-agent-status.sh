@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_FILE="logs/agent-progress.jsonl"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+
+LOG_FILE="$(resolve_log_dir)/agent-progress.jsonl"
 STALE_SECONDS=180
 NOW_EPOCH=""
 

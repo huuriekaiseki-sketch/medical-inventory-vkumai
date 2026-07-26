@@ -12,7 +12,10 @@ set -euo pipefail
 # 使い方（fourth-argument経由でJSONを渡す。パイプ・stdinは使わない）:
 #   scripts/log-find-av-precision.sh --feature "<feature名>" '<findAvPrecisionのJSON>'
 
-LOG_FILE="logs/find-av-precision.jsonl"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+
+LOG_FILE="$(resolve_log_dir)/find-av-precision.jsonl"
 FEATURE=""
 
 usage() {

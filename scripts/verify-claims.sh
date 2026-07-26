@@ -31,7 +31,10 @@ set -euo pipefail
 # 同時に生きている検証プロセス数を機械的に頭打ちにすることで被害を抑える。
 # 設計: docs/superpowers/specs/2026-07-14-verification-subagent-design.md の「サーキットブレーカー」節
 
-REPO_DIR="${VERIFY_CLAIMS_REPO_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+
+REPO_DIR="${VERIFY_CLAIMS_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 cd "$REPO_DIR"
 
 STATE_DIR="${VERIFY_CLAIMS_STATE_DIR:-.claude/.verify-state}"
@@ -40,7 +43,7 @@ TIMEOUT_SECONDS="${VERIFY_CLAIMS_TIMEOUT_SECONDS:-60}"
 MODEL="${VERIFY_CLAIMS_MODEL:-claude-haiku-4-5-20251001}"
 LOCK_DIR="${VERIFY_CLAIMS_LOCK_DIR:-.claude/.verify-lock}"
 MAX_CONCURRENT="${VERIFY_CLAIMS_MAX_CONCURRENT:-4}"
-OBS_LOG_FILE="${VERIFY_CLAIMS_OBSERVABILITY_LOG:-logs/verify-claims-observability.jsonl}"
+OBS_LOG_FILE="${VERIFY_CLAIMS_OBSERVABILITY_LOG:-$(resolve_log_dir)/verify-claims-observability.jsonl}"
 
 mkdir -p "$STATE_DIR" "$LOCK_DIR"
 

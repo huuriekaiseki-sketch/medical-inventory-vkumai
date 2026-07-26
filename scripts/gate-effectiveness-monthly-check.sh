@@ -12,9 +12,11 @@ set -euo pipefail
 # logs/loop-observability.jsonlに記録されないため、この集計には現れない
 # （scripts/log-loop-observability.shの--resultはpass|failのみ受け付ける。issue #412コメント参照）。
 
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+cd "$SCRIPT_DIR/.."
 
-LOG_FILE="logs/loop-observability.jsonl"
+LOG_FILE="$(resolve_log_dir)/loop-observability.jsonl"
 if [ ! -f "$LOG_FILE" ]; then
   echo '{"systemMessage": ""}'
   exit 0
