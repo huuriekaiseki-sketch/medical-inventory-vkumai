@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/server'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { requireAdmin } from '@/lib/admin-auth'
 import { asEnum } from '@/lib/mapping'
 import type { AdminUser } from '@/types/admin'
@@ -11,7 +11,7 @@ export async function GET() {
 
   const admin = createAdminSupabase()
   const { data, error } = await admin.auth.admin.listUsers()
-  if (error) return apiError(error.message)
+  if (error) return apiError(toClientErrorMessage(error, 'ユーザー一覧の取得に失敗しました'))
 
   const userIds = data.users.map(u => u.id)
 
@@ -21,7 +21,7 @@ export async function GET() {
     .select('user_id, facility_id, role')
     .in('user_id', userIds)
 
-  if (facilityError) return apiError(facilityError.message)
+  if (facilityError) return apiError(toClientErrorMessage(facilityError, 'ユーザー一覧の取得に失敗しました'))
 
   // Group by user_id in memory
   const facilityMap = new Map<string, { id: string; role: 'admin' | 'staff' }[]>()
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminSupabase()
   const { error } = await admin.auth.admin.inviteUserByEmail(email)
-  if (error) return apiError(error.message)
+  if (error) return apiError(toClientErrorMessage(error, '招待メールの送信に失敗しました'))
 
   return NextResponse.json({ message: `${email} に招待メールを送信しました` })
 }
@@ -77,7 +77,7 @@ export async function DELETE(request: NextRequest) {
 
   const admin = createAdminSupabase()
   const { error } = await admin.auth.admin.deleteUser(userId)
-  if (error) return apiError(error.message)
+  if (error) return apiError(toClientErrorMessage(error, 'ユーザーの削除に失敗しました'))
 
   return NextResponse.json({ message: 'ユーザーを削除しました' })
 }

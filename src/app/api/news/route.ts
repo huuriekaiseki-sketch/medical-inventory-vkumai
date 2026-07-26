@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listNewsFeed } from '@/lib/news/repository'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 
 const DEFAULT_LIMIT = 20
 const DEFAULT_OFFSET = 0
@@ -53,6 +53,6 @@ export async function GET(request: NextRequest) {
     const items = await listNewsFeed(db, { facilityId: grantedFacilityId, limit, offset })
     return NextResponse.json({ items })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : 'ニュースの取得に失敗しました')
+    return apiError(toClientErrorMessage(error, 'ニュースの取得に失敗しました'))
   }
 }

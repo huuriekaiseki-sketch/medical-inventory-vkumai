@@ -5,7 +5,7 @@ import { listUserFacilities } from '@/lib/user-facilities/repository'
 import { getFacilityOrderSummary } from '@/lib/dashboard/facility-summary'
 import { getLoanOutstandingCount } from '@/lib/dashboard/loan-outstanding'
 import { listRecentPriceHistories } from '@/lib/price-histories/repository'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import type { DashboardData, DashboardFacilitySummary, LoanOutstandingSummary } from '@/types/dashboard'
 
 export async function GET() {
@@ -69,6 +69,6 @@ export async function GET() {
 
     return NextResponse.json(data)
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : 'ダッシュボードの取得に失敗しました')
+    return apiError(toClientErrorMessage(error, 'ダッシュボードの取得に失敗しました'))
   }
 }

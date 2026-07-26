@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listFacilities, createFacility } from '@/lib/facilities/repository'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import type { FacilityInput } from '@/types/facility'
 
 export async function GET() {
@@ -18,7 +18,7 @@ export async function GET() {
     const isAdmin = await resolveIsAdmin(db, user)
     return NextResponse.json({ facilities, isAdmin })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '施設の取得に失敗しました')
+    return apiError(toClientErrorMessage(error, '施設の取得に失敗しました'))
   }
 }
 
@@ -46,6 +46,6 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message.includes('既に使用されています')) {
       return apiError('施設名が重複しています', 409)
     }
-    return apiError(error instanceof Error ? error.message : '施設の作成に失敗しました')
+    return apiError(toClientErrorMessage(error, '施設の作成に失敗しました'))
   }
 }

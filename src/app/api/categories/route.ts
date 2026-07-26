@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listCategories, createCategory } from '@/lib/categories/repository'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import type { CategoryInput } from '@/types/category'
 
 export async function GET() {
@@ -13,7 +13,7 @@ export async function GET() {
     const categories = await listCategories(db)
     return NextResponse.json({ categories })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : 'カテゴリの取得に失敗しました')
+    return apiError(toClientErrorMessage(error, 'カテゴリの取得に失敗しました'))
   }
 }
 
@@ -41,6 +41,6 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message.includes('既に使用されています')) {
       return apiError('カテゴリ名が重複しています', 409)
     }
-    return apiError(error instanceof Error ? error.message : 'カテゴリの作成に失敗しました')
+    return apiError(toClientErrorMessage(error, 'カテゴリの作成に失敗しました'))
   }
 }

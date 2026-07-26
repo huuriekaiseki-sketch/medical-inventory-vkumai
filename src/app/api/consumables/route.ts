@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listConsumablesByFacility, createConsumable } from '@/lib/consumables/repository'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import type { ConsumableInput } from '@/types/order'
 
 export async function GET(request: NextRequest) {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const consumables = await listConsumablesByFacility(db, facilityId!)
     return NextResponse.json({ consumables })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '消耗品の取得に失敗しました')
+    return apiError(toClientErrorMessage(error, '消耗品の取得に失敗しました'))
   }
 }
 
@@ -54,6 +54,6 @@ export async function POST(request: NextRequest) {
     })
     return NextResponse.json({ consumable }, { status: 201 })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '消耗品の作成に失敗しました')
+    return apiError(toClientErrorMessage(error, '消耗品の作成に失敗しました'))
   }
 }

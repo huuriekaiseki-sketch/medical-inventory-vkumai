@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asOptionalString, asNumber, asEnum } from '@/lib/mapping'
 import { jstDayStart, jstDayEnd } from '@/lib/jst-date-range'
 import { KEYWORD_SCAN_LIMIT, type OrderRepositoryFilter } from '@/lib/orders/list-filter'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import type { LoanReturn, LoanReturnInput, LoanReturnItem } from '@/types/order'
 
 const STATUSES = ['draft', 'returned'] as const
@@ -117,7 +118,7 @@ export async function createLoanReturn(db: SupabaseClient, facilityId: string, i
       .eq('facility_id', facilityId)
       .maybeSingle()
     if (loanOrderError) throw new Error(loanOrderError.message)
-    if (!loanOrder) throw new Error(LOAN_ORDER_NOT_FOUND_ERROR)
+    if (!loanOrder) throw new ClientVisibleError(LOAN_ORDER_NOT_FOUND_ERROR)
   }
 
   const { data: ret, error: retError } = await db
@@ -126,7 +127,7 @@ export async function createLoanReturn(db: SupabaseClient, facilityId: string, i
     .select(LOAN_RETURN_COLUMNS)
     .single()
   if (retError) throw new Error(retError.message)
-  if (!ret) throw new Error('loan_returns の作成に失敗しました')
+  if (!ret) throw new ClientVisibleError('loan_returns の作成に失敗しました')
 
   const r = ret as LoanReturnRow
   const itemRows = input.items.map(item => ({

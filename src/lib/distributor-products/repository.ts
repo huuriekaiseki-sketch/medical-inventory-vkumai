@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asNumber, asNullableNumber } from '@/lib/mapping'
 import { buildIlikeValue } from '@/lib/search/like-pattern'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import type { DistributorProduct, DistributorProductInput, DistributorProductListFilter } from '@/types/distributorProduct'
 
 const DISTRIBUTOR_PRODUCT_COLUMNS =
@@ -84,7 +85,7 @@ export async function createDistributorProduct(db: SupabaseClient, input: Distri
     .select(DISTRIBUTOR_PRODUCT_COLUMNS)
     .single()
   if (error) {
-    if (error.code === '23503') throw new Error(`製品ID "${input.productId}" は存在しません`)
+    if (error.code === '23503') throw new ClientVisibleError(`製品ID "${input.productId}" は存在しません`)
     throw new Error(error.message)
   }
   return mapDistributorProduct(data)
@@ -106,8 +107,8 @@ export async function updateDistributorProduct(db: SupabaseClient, id: string, i
     .select(DISTRIBUTOR_PRODUCT_COLUMNS)
     .single()
   if (error) {
-    if (error.code === 'PGRST116') throw new Error(`代理店商品ID "${id}" は存在しません`)
-    if (error.code === '23503') throw new Error(`製品ID "${input.productId}" は存在しません`)
+    if (error.code === 'PGRST116') throw new ClientVisibleError(`代理店商品ID "${id}" は存在しません`)
+    if (error.code === '23503') throw new ClientVisibleError(`製品ID "${input.productId}" は存在しません`)
     throw new Error(error.message)
   }
   return mapDistributorProduct(data)
@@ -120,5 +121,5 @@ export async function deleteDistributorProduct(db: SupabaseClient, id: string): 
     .eq('id', id)
     .select('id')
   if (error) throw new Error(error.message)
-  if (data.length === 0) throw new Error(`代理店商品ID "${id}" は存在しません`)
+  if (data.length === 0) throw new ClientVisibleError(`代理店商品ID "${id}" は存在しません`)
 }

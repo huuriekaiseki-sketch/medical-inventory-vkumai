@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString } from '@/lib/mapping'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import type { Facility, FacilityInput } from '@/types/facility'
 
 const FACILITY_COLUMNS = 'id, name, created_at, updated_at'
@@ -49,7 +50,7 @@ export async function createFacility(db: SupabaseClient, input: FacilityInput): 
     .select(FACILITY_COLUMNS)
     .single()
   if (error) {
-    if (error.code === '23505') throw new Error(`施設名 "${input.name}" は既に使用されています`)
+    if (error.code === '23505') throw new ClientVisibleError(`施設名 "${input.name}" は既に使用されています`)
     throw new Error(error.message)
   }
   return mapFacility(data)
@@ -63,8 +64,8 @@ export async function updateFacility(db: SupabaseClient, id: string, input: Faci
     .select(FACILITY_COLUMNS)
     .single()
   if (error) {
-    if (error.code === 'PGRST116') throw new Error(`施設ID "${id}" は存在しません`)
-    if (error.code === '23505') throw new Error(`施設名 "${input.name}" は既に使用されています`)
+    if (error.code === 'PGRST116') throw new ClientVisibleError(`施設ID "${id}" は存在しません`)
+    if (error.code === '23505') throw new ClientVisibleError(`施設名 "${input.name}" は既に使用されています`)
     throw new Error(error.message)
   }
   return mapFacility(data)
@@ -77,5 +78,5 @@ export async function deleteFacility(db: SupabaseClient, id: string): Promise<vo
     .eq('id', id)
     .select('id')
   if (error) throw new Error(error.message)
-  if (data.length === 0) throw new Error(`施設ID "${id}" は存在しません`)
+  if (data.length === 0) throw new ClientVisibleError(`施設ID "${id}" は存在しません`)
 }

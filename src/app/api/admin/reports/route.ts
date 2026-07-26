@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { isValidDateString } from '@/lib/jst-date-range'
 import { fetchOrderAmountReport } from '@/lib/reports/repository'
 import type {
@@ -68,6 +68,6 @@ export async function GET(
     if (message.includes('permission denied')) {
       return reportsApiError('権限がありません', 403)
     }
-    return reportsApiError(message || '発注金額レポートの取得に失敗しました')
+    return reportsApiError(toClientErrorMessage(error, '発注金額レポートの取得に失敗しました'))
   }
 }

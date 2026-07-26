@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { deleteCompatibility } from '@/lib/compatibilities/repository'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import type { RouteContext } from '@/types/route'
 
 // WHY: idはDB上uuid型のため、不正形式のまま渡すとPostgres側の生のパースエラーが
@@ -35,6 +35,6 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '互換品の削除に失敗しました')
+    return apiError(toClientErrorMessage(error, '互換品の削除に失敗しました'))
   }
 }
