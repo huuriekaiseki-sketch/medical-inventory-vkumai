@@ -26,7 +26,10 @@ set -euo pipefail
 # grepし、規約行を抽出できた場合のみベストエフォートでintentフィールドに追記する
 # （②feature/attempt層。抽出できなくてもhook自体は失敗させない＝欠落は許容する）。
 
-LOG_FILE="${SUBAGENT_HOOK_SKELETON_LOG_FILE:-logs/subagent-skeleton.jsonl}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+
+LOG_FILE="${SUBAGENT_HOOK_SKELETON_LOG_FILE:-$(resolve_log_dir)/subagent-skeleton.jsonl}"
 
 PAYLOAD="$(cat)"
 

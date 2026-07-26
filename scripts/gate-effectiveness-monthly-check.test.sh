@@ -43,9 +43,10 @@ assert_file_exists() {
 
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
-mkdir -p "$SANDBOX/scripts" "$SANDBOX/logs" "$SANDBOX/.claude"
+mkdir -p "$SANDBOX/scripts/lib" "$SANDBOX/logs" "$SANDBOX/.claude"
 cp "$SCRIPT_DIR/gate-effectiveness-monthly-check.sh" "$SANDBOX/scripts/"
 cp "$SCRIPT_DIR/summarize-loop-observability.sh" "$SANDBOX/scripts/"
+cp "$SCRIPT_DIR/lib/resolve-log-dir.sh" "$SANDBOX/scripts/lib/"
 
 STATE_FILE="$SANDBOX/.claude/.gate-effectiveness-state/last-summary-at"
 LOG_FILE="$SANDBOX/logs/loop-observability.jsonl"
