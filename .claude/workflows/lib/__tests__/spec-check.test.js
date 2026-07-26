@@ -34,4 +34,31 @@ describe('isSpecCheckPathMismatch', () => {
     const specCheck = { status: 'pass', detail: 'ok' }
     expect(isSpecCheckPathMismatch(specCheck, 'SPEC.md')).toBe(false)
   })
+
+  it('ファイル名の部分一致(DRAFT-SPEC.md)をendsWithだけで誤って一致扱いしない（issue #548）', () => {
+    const specCheck = {
+      status: 'pass',
+      detail: 'ok',
+      actualPath: '/repo/docs/specs/DRAFT-SPEC.md',
+    }
+    expect(isSpecCheckPathMismatch(specCheck, 'SPEC.md')).toBe(true)
+  })
+
+  it('サブディレクトリのspecPathに対してもファイル名の部分一致を弾く（issue #548）', () => {
+    const specCheck = {
+      status: 'pass',
+      detail: 'ok',
+      actualPath: '/repo/docs/specs/NOT-docs/specs/SPEC.md',
+    }
+    expect(isSpecCheckPathMismatch(specCheck, 'docs/specs/SPEC.md')).toBe(true)
+  })
+
+  it('specPathとactualPathが完全一致（絶対パス運用の推奨形）であればfalse', () => {
+    const specCheck = {
+      status: 'pass',
+      detail: 'ok',
+      actualPath: '/repo/docs/specs/issue-999-example.md',
+    }
+    expect(isSpecCheckPathMismatch(specCheck, '/repo/docs/specs/issue-999-example.md')).toBe(false)
+  })
 })
