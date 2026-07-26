@@ -36,26 +36,43 @@ function makeLoanOrderLookupTable(result: { data: unknown; error: unknown }) {
   return builder
 }
 
+// WHY: createLoanReturn は header+items を単一トランザクションのRPC
+//      (create_loan_return_atomic)経由でinsertする(architecture review 2026-07-26 issue #2、
+//      orphan header混入防止)。RPC呼び出しをモックするヘルパー(case-orders/loan-ordersの
+//      repository.test.tsと同じ規約)
+function makeMockRpcDb(rpcResult: { data: unknown; error: unknown }): { db: SupabaseClient; rpc: ReturnType<typeof vi.fn> } {
+  const rpc = vi.fn().mockResolvedValue(rpcResult)
+  const db = { rpc } as unknown as SupabaseClient
+  return { db, rpc }
+}
+
+function makeMockRpcDbWithLoanOrderLookup(
+  rpcResult: { data: unknown; error: unknown },
+  loanOrderLookupResult: { data: unknown; error: unknown }
+): { db: SupabaseClient; rpc: ReturnType<typeof vi.fn>; loanOrders: ReturnType<typeof makeLoanOrderLookupTable> } {
+  const rpc = vi.fn().mockResolvedValue(rpcResult)
+  const loanOrders = makeLoanOrderLookupTable(loanOrderLookupResult)
+  const db = {
+    rpc,
+    from: vi.fn((table: string) => {
+      if (table === 'loan_orders') return loanOrders
+    }),
+  } as unknown as SupabaseClient
+  return { db, rpc, loanOrders }
+}
+
 describe('createLoanReturn', () => {
-  const mockReturn = {
+  const mockRpcResult = {
     id: 'lr-1', facility_id: 'f-1', return_datetime: '2026-06-24T15:00:00Z',
     status: 'draft', created_at: '2026-06-24T00:00:00Z', updated_at: '2026-06-24T00:00:00Z',
+    loan_order_id: null,
+    items: [
+      { id: 'i-1', loan_return_id: 'lr-1', jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1, created_at: '2026-06-24T00:00:00Z' },
+    ],
   }
-  const mockItems = [
-    { id: 'i-1', loan_return_id: 'lr-1', jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1, created_at: '2026-06-24T00:00:00Z' },
-  ]
 
   it('ヘッダーと明細を作成してLoanReturnを返す', async () => {
-    const db = {
-      from: vi.fn((table: string) => {
-        if (table === 'loan_returns') {
-          return { insert: vi.fn(() => ({ select: vi.fn(() => ({ single: vi.fn().mockResolvedValue({ data: mockReturn, error: null }) })) })) }
-        }
-        if (table === 'loan_return_items') {
-          return { insert: vi.fn(() => ({ select: vi.fn().mockResolvedValue({ data: mockItems, error: null }) })) }
-        }
-      }),
-    } as unknown as SupabaseClient
+    const { db } = makeMockRpcDb({ data: mockRpcResult, error: null })
 
     const result = await createLoanReturn(db, 'f-1', {
       returnDatetime: '2026-06-24T15:00:00Z',
@@ -66,43 +83,57 @@ describe('createLoanReturn', () => {
     expect(result.items[0].jan).toBe('490001')
   })
 
-  it('loanOrderIdを指定すると loan_returns の insert に loan_order_id として渡る（未返却誤判定バグの修正）', async () => {
-    const insertLoanReturns = vi.fn(() => ({ select: vi.fn(() => ({ single: vi.fn().mockResolvedValue({ data: { ...mockReturn, loan_order_id: 'lo-1' }, error: null }) })) }))
-    const loanOrders = makeLoanOrderLookupTable({ data: { id: 'lo-1' }, error: null })
-    const db = {
-      from: vi.fn((table: string) => {
-        if (table === 'loan_orders') return loanOrders
-        if (table === 'loan_returns') {
-          return { insert: insertLoanReturns }
-        }
-        if (table === 'loan_return_items') {
-          return { insert: vi.fn(() => ({ select: vi.fn().mockResolvedValue({ data: mockItems, error: null }) })) }
-        }
-      }),
-    } as unknown as SupabaseClient
+  it('header+itemsを単一のRPC呼び出しで作成する(2回INSERTによるorphan header混入を防ぐ)', async () => {
+    const { db, rpc } = makeMockRpcDb({ data: mockRpcResult, error: null })
+
+    await createLoanReturn(db, 'f-1', {
+      returnDatetime: '2026-06-24T15:00:00Z',
+      items: [{ jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1 }],
+    })
+
+    expect(rpc).toHaveBeenCalledWith('create_loan_return_atomic', expect.objectContaining({
+      p_header: expect.objectContaining({ facility_id: 'f-1', return_datetime: '2026-06-24T15:00:00Z' }),
+      p_items: [{ jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1 }],
+    }))
+  })
+
+  it('RPCがエラーを返した場合は例外を投げる(headerのみ孤児で残ることはない)', async () => {
+    const { db } = makeMockRpcDb({ data: null, error: { message: 'insert failed' } })
+
+    await expect(
+      createLoanReturn(db, 'f-1', {
+        returnDatetime: '2026-06-24T15:00:00Z',
+        items: [{ jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1 }],
+      })
+    ).rejects.toThrow('insert failed')
+  })
+
+  it('loanOrderIdを指定すると RPC の p_header.loan_order_id として渡る（未返却誤判定バグの修正）', async () => {
+    const { db, rpc, loanOrders } = makeMockRpcDbWithLoanOrderLookup(
+      { data: { ...mockRpcResult, loan_order_id: 'lo-1' }, error: null },
+      { data: { id: 'lo-1' }, error: null }
+    )
 
     const result = await createLoanReturn(db, 'f-1', {
       returnDatetime: '2026-06-24T15:00:00Z',
       items: [{ jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1 }],
     }, 'lo-1')
 
-    // WHY: 他施設のloan_orderへの紐付けを防ぐため、insert前にfacilityId込みで存在確認する
-    //      （issue #20 レビュー指摘: critical テナント境界チェック）
+    // WHY: 他施設のloan_orderへの紐付けを防ぐため、RPC呼び出し前にfacilityId込みで存在確認する
+    //      （issue #20 レビュー指摘: critical テナント境界チェック。RPC側では再検証しない）
     expect(loanOrders.eq).toHaveBeenCalledWith('id', 'lo-1')
     expect(loanOrders.eq).toHaveBeenCalledWith('facility_id', 'f-1')
-    expect(insertLoanReturns).toHaveBeenCalledWith(expect.objectContaining({ loan_order_id: 'lo-1' }))
+    expect(rpc).toHaveBeenCalledWith('create_loan_return_atomic', expect.objectContaining({
+      p_header: expect.objectContaining({ loan_order_id: 'lo-1' }),
+    }))
     expect(result.loanOrderId).toBe('lo-1')
   })
 
-  it('loanOrderIdが自施設に存在しない場合（他施設のIDを指定した場合を含む）はエラーを投げてinsertしない', async () => {
-    const insertLoanReturns = vi.fn()
-    const loanOrders = makeLoanOrderLookupTable({ data: null, error: null })
-    const db = {
-      from: vi.fn((table: string) => {
-        if (table === 'loan_orders') return loanOrders
-        if (table === 'loan_returns') return { insert: insertLoanReturns }
-      }),
-    } as unknown as SupabaseClient
+  it('loanOrderIdが自施設に存在しない場合（他施設のIDを指定した場合を含む）はエラーを投げてRPCを呼ばない', async () => {
+    const { db, rpc } = makeMockRpcDbWithLoanOrderLookup(
+      { data: mockRpcResult, error: null },
+      { data: null, error: null }
+    )
 
     await expect(
       createLoanReturn(db, 'f-1', {
@@ -110,41 +141,24 @@ describe('createLoanReturn', () => {
         items: [{ jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1 }],
       }, 'other-facility-lo')
     ).rejects.toThrow(LOAN_ORDER_NOT_FOUND_ERROR)
-    expect(insertLoanReturns).not.toHaveBeenCalled()
+    expect(rpc).not.toHaveBeenCalled()
   })
 
-  it('loanOrderIdを指定しない場合は loan_order_id: null で insert される（既存呼び出し元互換）', async () => {
-    const insertLoanReturns = vi.fn(() => ({ select: vi.fn(() => ({ single: vi.fn().mockResolvedValue({ data: mockReturn, error: null }) })) }))
-    const db = {
-      from: vi.fn((table: string) => {
-        if (table === 'loan_returns') {
-          return { insert: insertLoanReturns }
-        }
-        if (table === 'loan_return_items') {
-          return { insert: vi.fn(() => ({ select: vi.fn().mockResolvedValue({ data: mockItems, error: null }) })) }
-        }
-      }),
-    } as unknown as SupabaseClient
+  it('loanOrderIdを指定しない場合は p_header.loan_order_id: null でRPCが呼ばれる（既存呼び出し元互換）', async () => {
+    const { db, rpc } = makeMockRpcDb({ data: mockRpcResult, error: null })
 
     await createLoanReturn(db, 'f-1', {
       returnDatetime: '2026-06-24T15:00:00Z',
       items: [{ jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1 }],
     })
 
-    expect(insertLoanReturns).toHaveBeenCalledWith(expect.objectContaining({ loan_order_id: null }))
+    expect(rpc).toHaveBeenCalledWith('create_loan_return_atomic', expect.objectContaining({
+      p_header: expect.objectContaining({ loan_order_id: null }),
+    }))
   })
 
   it('DBのstatusが想定外の値の場合はdraftにフォールバックする', async () => {
-    const db = {
-      from: vi.fn((table: string) => {
-        if (table === 'loan_returns') {
-          return { insert: vi.fn(() => ({ select: vi.fn(() => ({ single: vi.fn().mockResolvedValue({ data: { ...mockReturn, status: 'invalid' }, error: null }) })) })) }
-        }
-        if (table === 'loan_return_items') {
-          return { insert: vi.fn(() => ({ select: vi.fn().mockResolvedValue({ data: mockItems, error: null }) })) }
-        }
-      }),
-    } as unknown as SupabaseClient
+    const { db } = makeMockRpcDb({ data: { ...mockRpcResult, status: 'invalid' }, error: null })
 
     const result = await createLoanReturn(db, 'f-1', {
       returnDatetime: '2026-06-24T15:00:00Z',

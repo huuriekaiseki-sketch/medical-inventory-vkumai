@@ -121,35 +121,31 @@ export async function createLoanReturn(db: SupabaseClient, facilityId: string, i
     if (!loanOrder) throw new ClientVisibleError(LOAN_ORDER_NOT_FOUND_ERROR)
   }
 
-  const { data: ret, error: retError } = await db
-    .from('loan_returns')
-    .insert({ facility_id: facilityId, return_datetime: input.returnDatetime, loan_order_id: loanOrderId ?? null })
-    .select(LOAN_RETURN_COLUMNS)
-    .single()
-  if (retError) throw new Error(retError.message)
-  if (!ret) throw new ClientVisibleError('loan_returns の作成に失敗しました')
+  // WHY: header/itemsを別々にINSERTすると、items失敗時にheaderだけが孤児レコードとして
+  //      残るリスクがある(architecture review 2026-07-26 issue #2)。既存のatomic RPC
+  //      (supabase/migrations/20260629000002_loan_return_atomic_rpc.sql)で単一トランザクションに
+  //      統一する。loanOrderIdのテナント境界検証は上記で完了済みのため、RPC側では再検証しない
+  const { data, error } = await db.rpc('create_loan_return_atomic', {
+    p_header: { facility_id: facilityId, return_datetime: input.returnDatetime, loan_order_id: loanOrderId ?? null },
+    p_items: input.items.map(item => ({
+      jan: item.jan,
+      lot: item.lot ?? null,
+      ubd: item.ubd ?? null,
+      quantity: item.quantity,
+    })),
+  })
+  if (error) throw new Error(error.message)
+  if (!data) throw new ClientVisibleError('loan_returns の作成に失敗しました')
 
-  const r = ret as LoanReturnRow
-  const itemRows = input.items.map(item => ({
-    loan_return_id: r.id,
-    jan: item.jan,
-    lot: item.lot ?? null,
-    ubd: item.ubd ?? null,
-    quantity: item.quantity,
-  }))
-
-  const { data: items, error: itemsError } = await db
-    .from('loan_return_items')
-    .insert(itemRows)
-    .select(LOAN_RETURN_ITEM_COLUMNS)
-  if (itemsError) throw new Error(itemsError.message)
+  const r = data as LoanReturnRow & { items?: unknown }
+  const itemRows = Array.isArray(r.items) ? (r.items as LoanReturnItemRow[]) : []
 
   return {
     id: asString(r.id),
     facilityId: asString(r.facility_id),
     returnDatetime: asString(r.return_datetime),
     status: asEnum(r.status, STATUSES, 'draft'),
-    items: (items as LoanReturnItemRow[]).map(mapItem),
+    items: itemRows.map(mapItem),
     createdAt: asString(r.created_at),
     updatedAt: asString(r.updated_at),
     loanOrderId: asOptionalString(r.loan_order_id),
