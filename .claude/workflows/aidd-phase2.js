@@ -182,11 +182,18 @@ log(`Spec Check完了: status=${specCheck?.status ?? 'なし'}, actualPath=${spe
 // 根本原因はWorkflowツール側にある可能性が高く本スクリプトでは修正できないため、当面の防御として
 // 「実際にReadした絶対パス」を自己申告させ、指定specPathとの文字列一致をここで機械検証する。
 // 判定ロジックの正本・テストは .claude/workflows/lib/spec-check.js の isSpecCheckPathMismatch。
-// Workflow DSLはrequire不可のためインライン複製している（プロンプト文言を変更した場合は
+// Workflow DSLはrequire不可のためインライン複製している（判定ロジックを変更した場合は
 // spec-check.js側も手動で追従させること。自動では同期されない）。
-const specCheckPathMismatch = specCheck?.status === 'pass'
-  && typeof specCheck?.actualPath === 'string'
-  && !specCheck.actualPath.endsWith(specPath)
+// issue #548: 単純なendsWithだと'DRAFT-SPEC.md'.endsWith('SPEC.md')のようなファイル名の部分
+// 一致まで「一致」と誤判定するため、一致箇所の直前がパス区切り('/')であることまで確認する。
+let specCheckPathMismatch = false
+if (specCheck?.status === 'pass' && typeof specCheck?.actualPath === 'string') {
+  const actualPath = specCheck.actualPath
+  if (actualPath !== specPath) {
+    specCheckPathMismatch = !actualPath.endsWith(specPath)
+      || actualPath.charAt(actualPath.length - specPath.length - 1) !== '/'
+  }
+}
 
 if (specCheckPathMismatch) {
   log(`品質ゲート: Spec Checkが指定specPath(${specPath})ではなく別ファイル(${specCheck.actualPath})を読んだため中断（issue #399）`)
