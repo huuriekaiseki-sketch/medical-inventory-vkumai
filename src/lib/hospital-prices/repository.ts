@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asNumber, asNullableNumber } from '@/lib/mapping'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import type { HospitalPrice, HospitalPriceInput } from '@/types/hospitalPrice'
 
 const HOSPITAL_PRICE_COLUMNS =
@@ -71,8 +72,8 @@ export async function createHospitalPrice(db: SupabaseClient, input: HospitalPri
     .select(HOSPITAL_PRICE_COLUMNS)
     .single()
   if (error) {
-    if (error.code === '23505') throw new Error('この代理店商品と施設の組み合わせは既に登録されています')
-    if (error.code === '23503') throw new Error('代理店商品または施設が存在しません')
+    if (error.code === '23505') throw new ClientVisibleError('この代理店商品と施設の組み合わせは既に登録されています')
+    if (error.code === '23503') throw new ClientVisibleError('代理店商品または施設が存在しません')
     throw new Error(error.message)
   }
   return mapHospitalPrice(data)
@@ -91,9 +92,9 @@ export async function updateHospitalPrice(db: SupabaseClient, id: string, input:
     .select(HOSPITAL_PRICE_COLUMNS)
     .single()
   if (error) {
-    if (error.code === 'PGRST116') throw new Error(`病院別価格ID "${id}" は存在しません`)
-    if (error.code === '23505') throw new Error('この代理店商品と施設の組み合わせは既に登録されています')
-    if (error.code === '23503') throw new Error('代理店商品または施設が存在しません')
+    if (error.code === 'PGRST116') throw new ClientVisibleError(`病院別価格ID "${id}" は存在しません`)
+    if (error.code === '23505') throw new ClientVisibleError('この代理店商品と施設の組み合わせは既に登録されています')
+    if (error.code === '23503') throw new ClientVisibleError('代理店商品または施設が存在しません')
     throw new Error(error.message)
   }
   return mapHospitalPrice(data)
@@ -106,5 +107,5 @@ export async function deleteHospitalPrice(db: SupabaseClient, id: string): Promi
     .eq('id', id)
     .select('id')
   if (error) throw new Error(error.message)
-  if (data.length === 0) throw new Error(`病院別価格ID "${id}" は存在しません`)
+  if (data.length === 0) throw new ClientVisibleError(`病院別価格ID "${id}" は存在しません`)
 }

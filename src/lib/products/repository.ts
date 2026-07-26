@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asNullableString, asString } from '@/lib/mapping'
 import { buildIlikeValue } from '@/lib/search/like-pattern'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import type { Product, ProductInput, ProductListFilter } from '@/types/product'
 
 const PRODUCT_COLUMNS = 'id, jan, ref, name, maker, created_at, updated_at'
@@ -68,7 +69,7 @@ export async function createProduct(db: SupabaseClient, input: ProductInput): Pr
     .select(PRODUCT_COLUMNS)
     .single()
   if (error) {
-    if (error.code === '23505') throw new Error('JAN または REF が既に使用されています')
+    if (error.code === '23505') throw new ClientVisibleError('JAN または REF が既に使用されています')
     throw new Error(error.message)
   }
   return mapProduct(data)
@@ -82,8 +83,8 @@ export async function updateProduct(db: SupabaseClient, id: string, input: Produ
     .select(PRODUCT_COLUMNS)
     .single()
   if (error) {
-    if (error.code === 'PGRST116') throw new Error(`製品ID "${id}" は存在しません`)
-    if (error.code === '23505') throw new Error('JAN または REF が既に使用されています')
+    if (error.code === 'PGRST116') throw new ClientVisibleError(`製品ID "${id}" は存在しません`)
+    if (error.code === '23505') throw new ClientVisibleError('JAN または REF が既に使用されています')
     throw new Error(error.message)
   }
   return mapProduct(data)
@@ -96,5 +97,5 @@ export async function deleteProduct(db: SupabaseClient, id: string): Promise<voi
     .eq('id', id)
     .select('id')
   if (error) throw new Error(error.message)
-  if (data.length === 0) throw new Error(`製品ID "${id}" は存在しません`)
+  if (data.length === 0) throw new ClientVisibleError(`製品ID "${id}" は存在しません`)
 }

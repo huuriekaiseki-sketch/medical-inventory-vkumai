@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listLoanReturns, createLoanReturn, LOAN_ORDER_NOT_FOUND_ERROR } from '@/lib/loan-returns/repository'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parsePagination } from '@/lib/api-pagination'
 import type { LoanReturnInput } from '@/types/order'
 
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const returns = await listLoanReturns(db, facilityId!, limit, offset)
     return NextResponse.json({ returns })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '返却一覧の取得に失敗しました')
+    return apiError(toClientErrorMessage(error, '返却一覧の取得に失敗しました'))
   }
 }
 
@@ -68,6 +68,6 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message === LOAN_ORDER_NOT_FOUND_ERROR) {
       return apiError(LOAN_ORDER_NOT_FOUND_ERROR, 400)
     }
-    return apiError(error instanceof Error ? error.message : '返却に失敗しました')
+    return apiError(toClientErrorMessage(error, '返却に失敗しました'))
   }
 }

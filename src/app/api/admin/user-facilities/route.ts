@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/server'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { requireAdmin } from '@/lib/admin-auth'
 
 export async function POST(request: NextRequest) {
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       { onConflict: 'user_id,facility_id' }
     )
 
-  if (error) return apiError(error.message)
+  if (error) return apiError(toClientErrorMessage(error, '施設の割り当てに失敗しました'))
 
   return NextResponse.json({ message: '施設を割り当てました' })
 }
@@ -54,7 +54,7 @@ export async function DELETE(request: NextRequest) {
     .delete()
     .eq('user_id', userId)
     .eq('facility_id', facilityId)
-  if (error) return apiError(error.message)
+  if (error) return apiError(toClientErrorMessage(error, '施設の割り当て解除に失敗しました'))
 
   return NextResponse.json({ message: '施設の割り当てを解除しました' })
 }

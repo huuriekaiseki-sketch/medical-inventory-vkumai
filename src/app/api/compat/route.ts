@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listCompatibilities, createCompatibility, listProductsInCategory, categoryExists } from '@/lib/compatibilities/repository'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import type { ProductCompatibilityInput } from '@/types/compatibility'
 
 // WHY: category_id/product_id_1/product_id_2 はDB上uuid型のためAPI層で形式チェックしておくと
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const compatibilities = await listCompatibilities(db, { categoryId, keyword })
     return NextResponse.json({ compatibilities })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '互換品の取得に失敗しました')
+    return apiError(toClientErrorMessage(error, '互換品の取得に失敗しました'))
   }
 }
 
@@ -114,6 +114,6 @@ export async function POST(request: NextRequest) {
       throw error
     }
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '互換品の登録に失敗しました')
+    return apiError(toClientErrorMessage(error, '互換品の登録に失敗しました'))
   }
 }

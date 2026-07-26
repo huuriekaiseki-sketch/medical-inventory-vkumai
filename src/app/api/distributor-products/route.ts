@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listDistributorProducts, createDistributorProduct } from '@/lib/distributor-products/repository'
-import { apiError, sanitizeDbError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parseKeyword } from '@/lib/api-keyword-query'
 import type {
   DistributorProductInput,
@@ -47,7 +47,7 @@ export async function GET(
     const items = await listDistributorProducts(db, query)
     return NextResponse.json({ items } satisfies DistributorProductsApiResponse)
   } catch (error) {
-    return distributorProductsApiError(sanitizeDbError(error, '販売店商品の取得に失敗しました'))
+    return distributorProductsApiError(toClientErrorMessage(error, '販売店商品の取得に失敗しました'))
   }
 }
 
@@ -75,6 +75,6 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message.includes('存在しません')) {
       return apiError(error.message, 404)
     }
-    return apiError(error instanceof Error ? error.message : 'ディーラー商品の作成に失敗しました')
+    return apiError(toClientErrorMessage(error, 'ディーラー商品の作成に失敗しました'))
   }
 }

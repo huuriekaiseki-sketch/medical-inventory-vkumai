@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { listProductsInCategory } from '@/lib/compatibilities/repository'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 
 // WHY: category_id はDB上uuid型のためAPI層で形式チェックしておくと不正値による
 // 無駄なクエリ発行を防げる（SPEC Part2 Set D参照）
@@ -22,6 +22,6 @@ export async function GET(request: NextRequest) {
     const products = await listProductsInCategory(db, categoryId)
     return NextResponse.json({ products })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '製品候補の取得に失敗しました')
+    return apiError(toClientErrorMessage(error, '製品候補の取得に失敗しました'))
   }
 }
