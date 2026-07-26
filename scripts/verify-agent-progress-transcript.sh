@@ -11,9 +11,10 @@ usage() {
 }
 
 ARGS=()
+LOG_FILE_GIVEN=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --log-file) ARGS+=(--log-file "$2"); shift 2 ;;
+    --log-file) ARGS+=(--log-file "$2"); LOG_FILE_GIVEN=1; shift 2 ;;
     --project-dir) ARGS+=(--project-dir "$2"); shift 2 ;;
     --json) ARGS+=(--json); shift ;;
     -h|--help) usage ;;
@@ -22,5 +23,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+
+# issue #546: --log-fileが明示されなかった場合は、TS側のcwd相対デフォルト
+# （'logs/agent-progress.jsonl'）に頼らず、worktree横断で共有されるlogs/を渡す。
+if [[ "$LOG_FILE_GIVEN" -eq 0 ]]; then
+  ARGS=(--log-file "$(resolve_log_dir)/agent-progress.jsonl" "${ARGS[@]}")
+fi
 
 npx -y tsx "$SCRIPT_DIR/lib/verify-agent-progress-transcript.ts" "${ARGS[@]}"

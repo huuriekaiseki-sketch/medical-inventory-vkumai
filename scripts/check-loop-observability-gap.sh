@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_FILE="logs/loop-observability.jsonl"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+
+LOG_FILE="$(resolve_log_dir)/loop-observability.jsonl"
 BEFORE_COUNT=""
 EXPECTED_COUNT=""
 
@@ -32,6 +35,5 @@ else
 fi
 
 ACTUAL_COUNT=$(( AFTER_COUNT - BEFORE_COUNT ))
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 npx -y tsx "$SCRIPT_DIR/../.claude/workflows/lib/loop-observability-gap.js" --actual "$ACTUAL_COUNT" --expected "$EXPECTED_COUNT"

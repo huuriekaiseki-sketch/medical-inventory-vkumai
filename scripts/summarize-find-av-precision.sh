@@ -5,7 +5,10 @@ set -euo pipefail
 # lens別・feature別に集計する。Find指摘のAdversarial Verify生存率であり、Sweep指摘の
 # precisionではない点に注意（.claude/workflows/lib/find-av-precision.jsのコメント参照）。
 
-LOG_FILE="logs/find-av-precision.jsonl"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+
+LOG_FILE="$(resolve_log_dir)/find-av-precision.jsonl"
 OUT=""
 
 usage() {
