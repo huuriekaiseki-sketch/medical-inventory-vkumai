@@ -55,6 +55,7 @@ e2e/.auth/*.json
 /.claude/.ai-check-suggest-state/
 /.claude/.verify-state/
 /.claude/.gate-effectiveness-state/
+/.claude/.doc-suggest-state/
 
 # AIDD Run Manifest（フロー実行ごとに生成される一時状態。スキーマはdocs/agents/run-manifest.md参照）
 /.aidd/
