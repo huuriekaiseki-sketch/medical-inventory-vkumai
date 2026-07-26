@@ -360,3 +360,50 @@ export async function seedOrdersRlsIdorFixtures(): Promise<SeedOrdersRlsIdorFixt
 export async function cleanupOrdersRlsIdorFixtures(fixtures: SeedOrdersRlsIdorFixtures): Promise<void> {
   await cleanupFacilitiesAndUsers(fixtures.userA, fixtures.userB, fixtures.facilityA, fixtures.facilityB)
 }
+
+export interface SeedLoanReturnsRlsIdorFixtures {
+  facilityA: { id: string; name: string }
+  facilityB: { id: string; name: string }
+  userA: SeededUser
+  userB: SeededUser
+  loanReturnA: { id: string }
+}
+
+/**
+ * 施設A・施設B、ユーザーA（施設Aのみ）・ユーザーB（施設Bのみ）、
+ * 施設Aに紐づく loan_returns 1件を作成する（loan_orders/case_orders/
+ * consumable_ordersと同様の横展開。facility_member_or_admin RLSポリシーの
+ * テーブル単体検証がloan_returnsだけ欠落していたため追加）。
+ */
+export async function seedLoanReturnsRlsIdorFixtures(): Promise<SeedLoanReturnsRlsIdorFixtures> {
+  const serviceClient = createServiceRoleClient()
+  const runId = randomUUID()
+
+  const facilityA = await createFacility(serviceClient, `テスト施設A-${runId}`)
+  const facilityB = await createFacility(serviceClient, `テスト施設B-${runId}`)
+
+  const userA = await createSeededUser(serviceClient, 'rls-idor-loan-return-user-a', facilityA.id)
+  const userB = await createSeededUser(serviceClient, 'rls-idor-loan-return-user-b', facilityB.id)
+
+  // シード用の1件は service role client（RLSをバイパスする）で直接作成する。
+  const { data: loanReturn, error: loanReturnError } = await serviceClient
+    .from('loan_returns')
+    .insert({ facility_id: facilityA.id, return_datetime: new Date().toISOString() })
+    .select('id')
+    .single()
+  if (loanReturnError || !loanReturn) {
+    throw new Error(`[seed-rls-idor] loan_returns シード作成失敗: ${loanReturnError?.message}`)
+  }
+
+  return {
+    facilityA,
+    facilityB,
+    userA,
+    userB,
+    loanReturnA: { id: loanReturn.id as string },
+  }
+}
+
+export async function cleanupLoanReturnsRlsIdorFixtures(fixtures: SeedLoanReturnsRlsIdorFixtures): Promise<void> {
+  await cleanupFacilitiesAndUsers(fixtures.userA, fixtures.userB, fixtures.facilityA, fixtures.facilityB)
+}
