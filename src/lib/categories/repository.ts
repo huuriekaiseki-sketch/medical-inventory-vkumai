@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asNullableString } from '@/lib/mapping'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import type { Category, CategoryInput } from '@/types/category'
 
 const CATEGORY_COLUMNS = 'id, name, description, created_at, updated_at'
@@ -51,7 +52,7 @@ export async function createCategory(db: SupabaseClient, input: CategoryInput): 
     .select(CATEGORY_COLUMNS)
     .single()
   if (error) {
-    if (error.code === '23505') throw new Error('カテゴリ名が既に使用されています')
+    if (error.code === '23505') throw new ClientVisibleError('カテゴリ名が既に使用されています')
     throw new Error(error.message)
   }
   return mapCategory(data)
@@ -65,8 +66,8 @@ export async function updateCategory(db: SupabaseClient, id: string, input: Cate
     .select(CATEGORY_COLUMNS)
     .single()
   if (error) {
-    if (error.code === 'PGRST116') throw new Error(`カテゴリID "${id}" は存在しません`)
-    if (error.code === '23505') throw new Error('カテゴリ名が既に使用されています')
+    if (error.code === 'PGRST116') throw new ClientVisibleError(`カテゴリID "${id}" は存在しません`)
+    if (error.code === '23505') throw new ClientVisibleError('カテゴリ名が既に使用されています')
     throw new Error(error.message)
   }
   return mapCategory(data)
@@ -78,7 +79,7 @@ export async function deleteCategory(db: SupabaseClient, id: string): Promise<vo
     .select('id', { count: 'exact', head: true })
     .eq('category_id', id)
   if (countError) throw new Error(countError.message)
-  if ((count ?? 0) > 0) throw new Error('使用中のため削除できません')
+  if ((count ?? 0) > 0) throw new ClientVisibleError('使用中のため削除できません')
 
   const { data, error } = await db
     .from('categories')
@@ -86,5 +87,5 @@ export async function deleteCategory(db: SupabaseClient, id: string): Promise<vo
     .eq('id', id)
     .select('id')
   if (error) throw new Error(error.message)
-  if (data.length === 0) throw new Error(`カテゴリID "${id}" は存在しません`)
+  if (data.length === 0) throw new ClientVisibleError(`カテゴリID "${id}" は存在しません`)
 }

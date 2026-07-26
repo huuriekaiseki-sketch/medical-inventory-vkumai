@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listProducts, createProduct } from '@/lib/products/repository'
-import { apiError, sanitizeDbError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parseKeyword } from '@/lib/api-keyword-query'
 import type { ProductInput, ProductsApiErrorResponse, ProductsApiQuery, ProductsApiResponse } from '@/types/product'
 
@@ -31,7 +31,7 @@ export async function GET(
     const products = await listProducts(db, query)
     return NextResponse.json({ products } satisfies ProductsApiResponse)
   } catch (error) {
-    return productsApiError(sanitizeDbError(error, '製品の取得に失敗しました'))
+    return productsApiError(toClientErrorMessage(error, '製品の取得に失敗しました'))
   }
 }
 
@@ -63,6 +63,6 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message.includes('既に使用されています')) {
       return apiError('JAN または REF が重複しています', 409)
     }
-    return apiError(error instanceof Error ? error.message : '製品の作成に失敗しました')
+    return apiError(toClientErrorMessage(error, '製品の作成に失敗しました'))
   }
 }

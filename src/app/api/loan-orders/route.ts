@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listLoanOrders, createLoanOrder } from '@/lib/loan-orders/repository'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parsePagination } from '@/lib/api-pagination'
 import type { LoanOrderInput } from '@/types/order'
 
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const orders = await listLoanOrders(db, facilityId!, limit, offset)
     return NextResponse.json({ orders })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '短貸発注一覧の取得に失敗しました')
+    return apiError(toClientErrorMessage(error, '短貸発注一覧の取得に失敗しました'))
   }
 }
 
@@ -61,6 +61,6 @@ export async function POST(request: NextRequest) {
     const order = await createLoanOrder(db, body.facilityId, input)
     return NextResponse.json({ order }, { status: 201 })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '発注に失敗しました')
+    return apiError(toClientErrorMessage(error, '発注に失敗しました'))
   }
 }

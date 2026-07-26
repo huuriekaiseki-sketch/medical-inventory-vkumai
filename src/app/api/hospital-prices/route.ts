@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listHospitalPrices, createHospitalPrice } from '@/lib/hospital-prices/repository'
-import { apiError } from '@/lib/api-error'
+import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import type { HospitalPriceInput } from '@/types/hospitalPrice'
 
 export async function GET(request: NextRequest) {
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     const prices = await listHospitalPrices(db, grantedFacilityId)
     return NextResponse.json({ prices })
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : '価格の取得に失敗しました')
+    return apiError(toClientErrorMessage(error, '価格の取得に失敗しました'))
   }
 }
 
@@ -61,8 +61,7 @@ export async function POST(request: NextRequest) {
       if (error.message.includes('存在しません')) {
         return apiError(error.message, 422)
       }
-      return apiError(error.message)
     }
-    return apiError('価格の作成に失敗しました')
+    return apiError(toClientErrorMessage(error, '価格の作成に失敗しました'))
   }
 }

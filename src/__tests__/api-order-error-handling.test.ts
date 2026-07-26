@@ -40,7 +40,22 @@ describe('consumable-orders エラーハンドリング', () => {
     expect(res.status).toBe(500)
     const body = await res.json()
     expect(typeof body.error).toBe('string')
-    expect(body.error).toBe('DB エラー')
+  })
+
+  // WHY: 生のリポジトリ/DBエラーはClientVisibleErrorでない限りクライアントへ漏らさず
+  //      fallbackメッセージのみ返す(architecture review 2026-07-26 issue #3の回帰テスト)
+  it('ClientVisibleErrorでない例外はメッセージを漏らさずfallbackを返す', async () => {
+    vi.mocked(createConsumableOrder).mockRejectedValue(new Error('relation "consumable_orders" does not exist'))
+    const res = await consumableOrderPOST(
+      makeRequest('/api/consumable-orders', {
+        facilityId: 'f1',
+        items: [{ name: 'A', quantity: 1 }],
+      })
+    )
+    expect(res.status).toBe(500)
+    const body = await res.json()
+    expect(body.error).toBe('発注に失敗しました')
+    expect(body.error).not.toContain('consumable_orders')
   })
 })
 
