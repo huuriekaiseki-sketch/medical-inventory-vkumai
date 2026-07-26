@@ -13,15 +13,22 @@
 1つでもあれば他施設のデータが見えてしまう。RLSをDB層に置くことで、どのAPIルート・どのクエリ
 経路を通っても機械的に遮断される。
 
-## なぜ管理者判定をDB role（user_facilities.role）ベースにしたか
+## なぜ管理者判定をDB role（user_facilities.role）ベースにし、ADMIN_EMAILSは初回ブートストラップ専用に限定したか
 
-**結論: 管理者判定は環境変数ではなくDBの`user_facilities.role`に一本化する。**
+**結論: 管理者判定はDBの`user_facilities.role`を正とする。`ADMIN_EMAILS`環境変数は、DBにadminが1件も存在しない場合（＝初回デプロイ直後でまだ誰も管理者を割り当てられない状態）のみのブートストラップ用フォールバックとして残す。DBに1件でもadminが存在すれば、`ADMIN_EMAILS`は他の誰に対しても一切参照されない。**
 
 当初 `ADMIN_EMAILS` 環境変数によるフォールバックがあったが、`requireAdmin()` の判定を
 DBの `user_facilities.role = 'admin'` ベースに一本化した（`docs/specs/admin-role-migration.sql`）。
 
 環境変数ベースだと、デプロイ環境ごとに設定がずれる／環境変数の変更履歴がgit管理されない
 という問題があった。DBに判定根拠を置くことで、管理者の追加・削除がSQLとして履歴に残る。
+
+ただし新規デプロイ直後はDBにadminが1件も存在せず、誰もUIから管理者を割り当てられない
+「鶏と卵」問題が残る。issue #24対応（`src/lib/admin-status.ts`、`get_admin_status` RPC）で
+この初回ブートストラップ専用の用途に限定して`ADMIN_EMAILS`を復活させた。DBに1件でも
+adminが存在する場合は`db_has_admin`判定により`ADMIN_EMAILS`のチェック自体を行わないため、
+「一本化」の原則（判定根拠はDBが正）自体は崩していない。この設計は
+`src/lib/__tests__/admin-status.test.ts`のテストケースで固定されている。
 
 ## なぜprice_historiesはdistributor_product側の施設チェックを素通りさせるか
 
