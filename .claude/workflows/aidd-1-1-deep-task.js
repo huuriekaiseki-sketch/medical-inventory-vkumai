@@ -305,6 +305,7 @@ log(`Adversarial Verify完了: critical/important ${toVerify.length}件検証 �
 function computeFindAvPrecision(dedupedFindings, toVerify, verdicts, autoSurvivedMinor) {
   const survivedFromVerify = toVerify.filter((_, i) => !verdicts[i]?.refuted)
   const survived = [...survivedFromVerify, ...autoSurvivedMinor]
+
   const byLens = {}
   toVerify.forEach((f, i) => {
     const lens = f?.lens ?? 'unknown'
@@ -312,6 +313,7 @@ function computeFindAvPrecision(dedupedFindings, toVerify, verdicts, autoSurvive
     byLens[lens].verified++
     if (!verdicts[i]?.refuted) byLens[lens].survived++
   })
+
   return {
     findCount: dedupedFindings.length,
     verifiedCount: toVerify.length,
