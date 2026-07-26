@@ -251,7 +251,9 @@ baseline鮮度チェック・fault injection四半期訓練・eval:workflows未�
 という目的は達成できる。この判断により、issue原案の「棚卸し表から最大4行削減」という見込みは
 実質1行（fault injection訓練の放置検知）に縮小したが、残りの3項目（gap check 2件・
 eval:workflows未実行検知）は本issueとは別に、それぞれの前提（実行記録の仕組み等）を
-別途整備してから再検討することとした（gap check 2件はissue #488でその後実装済み）。
+別途整備してから再検討することとした。3項目とも実装済み: gap check 2件はissue #488、
+eval:workflows未実行検知は`scripts/check-eval-runs-freshness.sh`＋CI（issue #496、
+`.github/workflows/eval-runs-freshness-check.yml`）で対応した。
 
 ## autoMode(hard_deny)は個人設定のみ有効・設定し忘れ検知はSessionStart hookで（issue #439）
 

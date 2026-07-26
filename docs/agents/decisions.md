@@ -81,4 +81,6 @@ common.mdの分量は増え続けており、prose追加1件ごとに他ルー�
 と本原則の明文化だけでも、ルール増殖の歯止めになる。個別の検知手段のうち、agent-progress記録漏れ
 検知は`scripts/check-agent-progress-gap.sh`（loop-observabilityのgap検知と同じ「期待件数 vs
 実測件数」パターンを再利用）として実装済み。残る2件（router非経由でのTRI/RISK対象変更検知、
-引き継ぎフォーマット実施検知）は優先度順に別途実装する（未着手、issue #339）。
+引き継ぎフォーマット実施検知）も実装済み: 前者は`scripts/check-run-manifest-presence.sh`
+（issue #444）、後者は`scripts/check-handoff-format.sh`（issue #524、PR本文経由の引き継ぎのみ
+対象。セッション終了報告・`docs/sessions/`経由は引き続き未検知）。

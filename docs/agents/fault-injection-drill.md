@@ -117,4 +117,7 @@ Issue作成後、この実施記録欄に対応Issue番号を記入する。
 
 ## 次回実施予定日
 
-2026-10-16（四半期後の目安。手動で書き換える。リマインド機構は無い）
+2026-10-16（四半期後の目安。日付自体は手動で書き換える。ただし期限超過の検知は
+`scripts/check-fault-injection-drill-staleness.sh`がSessionStart hookとして機械化済み
+（issue #443・`.claude/settings.json`のSessionStart配列に配線）で、期限を過ぎてもこのファイルが
+更新されなければ警告が出る）
