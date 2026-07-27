@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES, subagentSkeletonAdapter, agentProgressAdapter } from './canonical-event'
+import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES, subagentSkeletonAdapter, agentProgressAdapter, loopObservabilityAdapter } from './canonical-event'
 
 describe('KNOWN_AGENT_TYPES', () => {
   it('12種類のagentTypeを含む', () => {
@@ -134,5 +134,39 @@ describe('agentProgressAdapter', () => {
 
     const events = agentProgressAdapter(logFile).load()
     expect(events[0].agentType).toBe('reviewer')
+  })
+})
+
+describe('loopObservabilityAdapter', () => {
+  it('1行=1イベントとして正規化する(result->status, reason->detail)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'loop-obs-test-'))
+    const logFile = join(dir, 'loop-observability.jsonl')
+    writeFileSync(
+      logFile,
+      line({
+        timestamp: '2026-07-27T00:00:00Z',
+        agent: 'implementer',
+        feature: 'f1',
+        intent: 'テスト実装',
+        scenario: '正常系',
+        result: 'pass',
+        reason: '全テスト成功',
+      }) + '\n',
+      'utf-8',
+    )
+
+    const events = loopObservabilityAdapter(logFile).load()
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      agentType: 'implementer',
+      feature: 'f1',
+      endTimestamp: '2026-07-27T00:00:00Z',
+      status: 'pass',
+      detail: '全テスト成功',
+      intent: 'テスト実装',
+      scenario: '正常系',
+      agentId: null,
+      source: 'loop-observability',
+    })
   })
 })

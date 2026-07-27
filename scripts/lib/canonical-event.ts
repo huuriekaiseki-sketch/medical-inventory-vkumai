@@ -174,3 +174,50 @@ export function agentProgressAdapter(logFile: string): EventAdapter {
     },
   }
 }
+
+interface LoopObservabilityLine {
+  timestamp: string
+  agent: string
+  feature: string
+  intent: string
+  scenario: string
+  result: string
+  reason: string
+}
+
+export function loadAllLoopObservabilityRecords(logFile: string): LoopObservabilityLine[] {
+  let content: string
+  try {
+    content = readFileSync(logFile, 'utf-8')
+  } catch {
+    return []
+  }
+  return content
+    .split('\n')
+    .filter(Boolean)
+    .map((raw) => JSON.parse(raw) as LoopObservabilityLine)
+}
+
+export function loopObservabilityAdapter(logFile: string): EventAdapter {
+  return {
+    source: 'loop-observability',
+    load(): CanonicalEvent[] {
+      return loadAllLoopObservabilityRecords(logFile).map((record, lineIndex) => {
+        const agentType = extractAgentType(record.agent)
+        return {
+          eventId: buildEventId('loop-observability', agentType, record.timestamp, lineIndex),
+          agentId: null,
+          agentType,
+          feature: record.feature,
+          startTimestamp: null,
+          endTimestamp: record.timestamp,
+          status: record.result as EventStatus,
+          detail: record.reason,
+          intent: record.intent,
+          scenario: record.scenario,
+          source: 'loop-observability',
+        }
+      })
+    },
+  }
+}
