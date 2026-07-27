@@ -230,4 +230,39 @@ describe('journalAdapter', () => {
     const events = journalAdapter(projectDir).load()
     expect(events).toHaveLength(2)
   })
+
+  it('journal.jsonlが無い場合はtranscriptのStructuredOutput結果(status/detail)にフォールバックする', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'journal-adapter-fallback-test-'))
+    const wfDir = join(projectDir, 'wf_1')
+    mkdirSync(wfDir)
+    writeFileSync(
+      join(wfDir, 'agent-a1.jsonl'),
+      [
+        line({ type: 'user', message: { role: 'user', content: 'p' }, timestamp: '2026-07-27T00:00:00.000Z' }),
+        line({
+          type: 'assistant',
+          message: {
+            model: 'claude-sonnet-5',
+            content: [{ type: 'tool_use', name: 'StructuredOutput', input: { status: 'pass', detail: 'transcript由来のdetail' } }],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          },
+          timestamp: '2026-07-27T00:00:01.000Z',
+        }),
+      ].join('\n'),
+      'utf-8',
+    )
+    writeFileSync(join(wfDir, 'agent-a1.meta.json'), JSON.stringify({ agentType: 'implementer' }), 'utf-8')
+    // journal.jsonlを意図的に作成しない(フォールバック経路を通す)
+
+    const events = journalAdapter(projectDir).load()
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      agentId: 'a1',
+      agentType: 'implementer',
+      status: 'pass',
+      detail: 'transcript由来のdetail',
+      endTimestamp: '2026-07-27T00:00:01.000Z',
+      source: 'journal',
+    })
+  })
 })
