@@ -83,4 +83,25 @@ describe('subagentSkeletonAdapter', () => {
     const events = subagentSkeletonAdapter('/tmp/does-not-exist-xyz.jsonl').load()
     expect(events).toEqual([])
   })
+
+  it('必須フィールド欠落の行（例: agentId欠落）はスキップされる', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'skeleton-test-invalid-'))
+    const logFile = join(dir, 'subagent-skeleton-invalid.jsonl')
+    writeFileSync(
+      logFile,
+      [
+        line({ timestamp: '2026-07-27T00:00:00Z', hookEvent: 'SubagentStart', agentId: 'valid-a1' }),
+        // agentIdが欠落した無効な行
+        line({ timestamp: '2026-07-27T00:00:01Z', hookEvent: 'SubagentStop' }),
+        line({ timestamp: '2026-07-27T00:00:02Z', hookEvent: 'SubagentStop', agentId: 'valid-a2' }),
+      ].join('\n') + '\n',
+      'utf-8',
+    )
+
+    const events = subagentSkeletonAdapter(logFile).load()
+    // 最初と3番目の行だけが有効で、2番目はスキップされる
+    expect(events).toHaveLength(2)
+    expect(events[0]).toMatchObject({ agentId: 'valid-a1' })
+    expect(events[1]).toMatchObject({ agentId: 'valid-a2' })
+  })
 })

@@ -72,11 +72,26 @@ interface SkeletonLine {
 }
 
 function parseSkeletonLine(raw: string): SkeletonLine | null {
+  let parsed: unknown
   try {
-    return JSON.parse(raw) as SkeletonLine
+    parsed = JSON.parse(raw)
   } catch {
+    // JSONパースに失敗した行は無言でスキップする（ログファイルに混在する非JSON行を許容）
     return null
   }
+  // オブジェクトでない、またはnullの場合はスキップ
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const candidate = parsed as Record<string, unknown>
+  // 必須フィールド（timestamp, hookEvent, agentId）の型検証
+  // これらが欠落していたり型が異なる場合は、このレコードは無効なため無言でスキップ
+  if (
+    typeof candidate.timestamp !== 'string' ||
+    typeof candidate.hookEvent !== 'string' ||
+    typeof candidate.agentId !== 'string'
+  ) {
+    return null
+  }
+  return candidate as unknown as SkeletonLine
 }
 
 export function subagentSkeletonAdapter(logFile: string): EventAdapter {
