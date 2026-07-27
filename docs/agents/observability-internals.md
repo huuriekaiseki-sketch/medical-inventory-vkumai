@@ -60,6 +60,15 @@ loop-observabilityと同じ構造的限界を持つ：**エージェントへの
     （hooks非継承・セッション非永続化・同時実行数上限）を初回コミットから組み込んだ上でのみ
     着手する。issue本文に理由を明記済み。
 
+## canonical event moduleへの統合（issue #569）
+
+上記4つのログ（agent-progress/loop-observability/subagent-skeleton/journal）は`scripts/lib/canonical-event.ts`
+が読み取り専用Adapterとして正規化する。設計・突合アルゴリズム・実機検証結果（hookのagent_idと
+journal.jsonlのagentIdが同一空間であることを確認済み）は
+[`docs/superpowers/specs/2026-07-27-canonical-event-module-design.md`](../superpowers/specs/2026-07-27-canonical-event-module-design.md)参照。
+`verify-agent-progress-transcript.ts`は本モジュール経由の薄いラッパーに統合済み。既存gap check
+bashスクリプト（`check-loop-observability-gap.sh`等）・ログ書き込み側は無改修のまま。
+
 ## サブエージェント骨格記録の機械強制（issue #423）
 
 上記の`agent-progress.jsonl` / `loop-observability.jsonl`は、いずれもエージェントへの
