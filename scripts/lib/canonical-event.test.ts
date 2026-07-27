@@ -364,3 +364,80 @@ describe('correlateEvents (Stage 1: agentId厳密一致)', () => {
     expect(result).toHaveLength(2)
   })
 })
+
+describe('correlateEvents (Stage 2: agentType+時刻窓フォールバック)', () => {
+  const anchor: CanonicalEvent = {
+    eventId: 'anchor1', agentId: 'a1', agentType: 'sweep-ui', feature: null,
+    startTimestamp: null, endTimestamp: '2026-07-27T00:00:10.000Z', status: 'pass', detail: 'anchor detail',
+    intent: null, scenario: null, source: 'journal',
+  }
+
+  it('agentIdを持たないagent-progress(done)を同一agentType・時刻窓内のアンカーへ対応付ける', () => {
+    const self: CanonicalEvent = {
+      eventId: 'self1', agentId: null, agentType: 'sweep-ui', feature: 'f1',
+      startTimestamp: null, endTimestamp: '2026-07-27T00:00:12.000Z', status: 'done', detail: 'self detail',
+      intent: null, scenario: null, source: 'agent-progress',
+    }
+
+    const result = correlateEvents([anchor, self])
+    expect(result).toHaveLength(1)
+    expect(result[0].events).toHaveLength(2)
+  })
+
+  it('agent-progressのrunning/waiting/startingは常に単独になる(突合対象外)', () => {
+    const self: CanonicalEvent = {
+      eventId: 'self1', agentId: null, agentType: 'sweep-ui', feature: 'f1',
+      startTimestamp: null, endTimestamp: '2026-07-27T00:00:12.000Z', status: 'running', detail: 'self detail',
+      intent: null, scenario: null, source: 'agent-progress',
+    }
+
+    const result = correlateEvents([anchor, self])
+    expect(result).toHaveLength(2)
+    const selfExec = result.find((r) => r.agentId === 'self1')
+    expect(selfExec?.events).toHaveLength(1)
+  })
+
+  it('許容誤差を超えるアンカーとは対応付けない', () => {
+    const self: CanonicalEvent = {
+      eventId: 'self1', agentId: null, agentType: 'sweep-ui', feature: 'f1',
+      startTimestamp: null, endTimestamp: '2026-07-27T02:00:00.000Z', status: 'done', detail: 'd',
+      intent: null, scenario: null, source: 'agent-progress',
+    }
+
+    const result = correlateEvents([anchor, self])
+    expect(result).toHaveLength(2)
+  })
+
+  it('同じアンカーにagent-progressとloop-observabilityの両方が対応付いても競合しない', () => {
+    const selfProgress: CanonicalEvent = {
+      eventId: 'self1', agentId: null, agentType: 'sweep-ui', feature: 'f1',
+      startTimestamp: null, endTimestamp: '2026-07-27T00:00:11.000Z', status: 'done', detail: 'd1',
+      intent: null, scenario: null, source: 'agent-progress',
+    }
+    const selfLoop: CanonicalEvent = {
+      eventId: 'self2', agentId: null, agentType: 'sweep-ui', feature: 'f1',
+      startTimestamp: null, endTimestamp: '2026-07-27T00:00:11.500Z', status: 'pass', detail: 'd2',
+      intent: 'i', scenario: 's', source: 'loop-observability',
+    }
+
+    const result = correlateEvents([anchor, selfProgress, selfLoop])
+    expect(result).toHaveLength(1)
+    expect(result[0].events).toHaveLength(3)
+  })
+
+  it('同一agentTypeが複数ある場合、それぞれ最も近いアンカーに1件ずつ割り当てる(使い回さない)', () => {
+    const anchor2: CanonicalEvent = { ...anchor, agentId: 'a2', endTimestamp: '2026-07-27T00:10:10.000Z' }
+    const self1: CanonicalEvent = {
+      eventId: 'self1', agentId: null, agentType: 'sweep-ui', feature: 'f1',
+      startTimestamp: null, endTimestamp: '2026-07-27T00:00:12.000Z', status: 'done', detail: 'd',
+      intent: null, scenario: null, source: 'agent-progress',
+    }
+    const self2: CanonicalEvent = { ...self1, eventId: 'self2', endTimestamp: '2026-07-27T00:10:12.000Z' }
+
+    const result = correlateEvents([anchor, anchor2, self1, self2])
+    expect(result).toHaveLength(2)
+    expect(result.every((r) => r.events.length === 2)).toBe(true)
+    const assignedAgentIds = result.map((r) => r.agentId).sort()
+    expect(assignedAgentIds).toEqual(['a1', 'a2'])
+  })
+})
