@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { loadJournalResults, pairAgentFiles, parseAgentTranscriptLines } from './reconstruct-loop-observability'
 
 export type EventSource = 'subagent-skeleton' | 'journal' | 'agent-progress' | 'loop-observability'
 export type EventStatus = 'pass' | 'fail' | 'blocked' | 'done' | 'failed' | 'running' | 'starting' | 'waiting'
@@ -218,6 +220,81 @@ export function loopObservabilityAdapter(logFile: string): EventAdapter {
           source: 'loop-observability',
         }
       })
+    },
+  }
+}
+
+// 既存verify-agent-progress-transcript.tsのfindWorkflowDirsと同一ロジック。
+// wf_*という名前のディレクトリを再帰的に探索する。
+function findWorkflowDirs(projectDir: string): string[] {
+  const results: string[] = []
+  function walk(dir: string) {
+    let entries: string[]
+    try {
+      entries = readdirSync(dir)
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const fullPath = join(dir, entry)
+      let stat
+      try {
+        stat = statSync(fullPath)
+      } catch {
+        continue
+      }
+      if (!stat.isDirectory()) continue
+      if (entry.startsWith('wf_')) {
+        results.push(fullPath)
+        continue
+      }
+      walk(fullPath)
+    }
+  }
+  walk(projectDir)
+  return results
+}
+
+export function journalAdapter(projectDir: string): EventAdapter {
+  return {
+    source: 'journal',
+    load(): CanonicalEvent[] {
+      const events: CanonicalEvent[] = []
+      let lineIndex = 0
+      for (const wfDir of findWorkflowDirs(projectDir)) {
+        const filenames = readdirSync(wfDir)
+        const pairs = pairAgentFiles(filenames)
+        const journalResults = loadJournalResults(wfDir, filenames)
+        for (const { agentId, jsonlFile, metaFile } of pairs) {
+          let agentType = 'unknown'
+          try {
+            const meta = JSON.parse(readFileSync(join(wfDir, metaFile), 'utf-8')) as { agentType?: string }
+            agentType = meta.agentType ?? 'unknown'
+          } catch {
+            continue
+          }
+          const lines = readFileSync(join(wfDir, jsonlFile), 'utf-8').split('\n').filter(Boolean)
+          const summary = parseAgentTranscriptLines(lines)
+          const journalResult = journalResults.get(agentId)
+          const status = journalResult ? journalResult.status : summary.status
+          const detail = journalResult ? journalResult.detail : summary.detail
+
+          events.push({
+            eventId: buildEventId('journal', agentType, summary.endTimestamp ?? 'unknown', lineIndex++),
+            agentId,
+            agentType,
+            feature: null,
+            startTimestamp: summary.startTimestamp,
+            endTimestamp: summary.endTimestamp,
+            status,
+            detail,
+            intent: null,
+            scenario: null,
+            source: 'journal',
+          })
+        }
+      }
+      return events
     },
   }
 }

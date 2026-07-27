@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES, subagentSkeletonAdapter, agentProgressAdapter, loopObservabilityAdapter } from './canonical-event'
+import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES, subagentSkeletonAdapter, agentProgressAdapter, loopObservabilityAdapter, journalAdapter } from './canonical-event'
 
 describe('KNOWN_AGENT_TYPES', () => {
   it('12種類のagentTypeを含む', () => {
@@ -168,5 +168,66 @@ describe('loopObservabilityAdapter', () => {
       agentId: null,
       source: 'loop-observability',
     })
+  })
+})
+
+describe('journalAdapter', () => {
+  it('journal.jsonlの構造化resultがある場合はそちらのstatus/detailを優先する', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'journal-adapter-test-'))
+    const wfDir = join(projectDir, 'wf_1')
+    mkdirSync(wfDir)
+    writeFileSync(
+      join(wfDir, 'agent-a1.jsonl'),
+      [
+        line({ type: 'user', message: { role: 'user', content: 'p' }, timestamp: '2026-07-27T00:00:00.000Z' }),
+        line({
+          type: 'assistant',
+          message: {
+            model: 'claude-sonnet-5',
+            content: [{ type: 'tool_use', name: 'StructuredOutput', input: { status: 'fail', detail: 'transcript側(上書きされるはず)' } }],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          },
+          timestamp: '2026-07-27T00:00:01.000Z',
+        }),
+      ].join('\n'),
+      'utf-8',
+    )
+    writeFileSync(join(wfDir, 'agent-a1.meta.json'), JSON.stringify({ agentType: 'implementer' }), 'utf-8')
+    writeFileSync(
+      join(wfDir, 'journal.jsonl'),
+      [
+        line({ type: 'started', key: 'v2:xxx', agentId: 'a1' }),
+        line({ type: 'result', key: 'v2:xxx', agentId: 'a1', result: { status: 'pass', detail: 'journal側のdetail' } }),
+      ].join('\n'),
+      'utf-8',
+    )
+
+    const events = journalAdapter(projectDir).load()
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      agentId: 'a1',
+      agentType: 'implementer',
+      status: 'pass',
+      detail: 'journal側のdetail',
+      endTimestamp: '2026-07-27T00:00:01.000Z',
+      source: 'journal',
+    })
+  })
+
+  it('複数のwf_*ディレクトリを横断して読む', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'journal-adapter-multi-test-'))
+    for (const [wfName, agentId] of [['wf_1', 'a1'], ['wf_2', 'a2']] as const) {
+      const wfDir = join(projectDir, wfName)
+      mkdirSync(wfDir)
+      writeFileSync(
+        join(wfDir, `agent-${agentId}.jsonl`),
+        line({ type: 'user', message: { role: 'user', content: 'p' }, timestamp: '2026-07-27T00:00:00.000Z' }),
+        'utf-8',
+      )
+      writeFileSync(join(wfDir, `agent-${agentId}.meta.json`), JSON.stringify({ agentType: 'reviewer' }), 'utf-8')
+    }
+
+    const events = journalAdapter(projectDir).load()
+    expect(events).toHaveLength(2)
   })
 })
