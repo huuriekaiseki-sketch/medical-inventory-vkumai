@@ -172,7 +172,60 @@ describe('loopObservabilityAdapter', () => {
 })
 
 describe('loadAllEvents', () => {
-  it('指定した4ソースのイベントをすべて結合する', () => {
+  it('指定した4ソース全てのイベントを結合する（全ソース同時指定）', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'load-all-test-all-sources-'))
+    const subagentSkeletonLogFile = join(dir, 'subagent-skeleton.jsonl')
+    const agentProgressLogFile = join(dir, 'agent-progress.jsonl')
+    const loopObservabilityLogFile = join(dir, 'loop-observability.jsonl')
+
+    // subagent-skeleton: Start/Stop各1行
+    writeFileSync(
+      subagentSkeletonLogFile,
+      [
+        line({ timestamp: '2026-07-27T00:00:00Z', hookEvent: 'SubagentStart', agentId: 'a1', agentType: 'workflow-subagent' }),
+        line({ timestamp: '2026-07-27T00:00:01Z', hookEvent: 'SubagentStop', agentId: 'a1', agentType: 'workflow-subagent' }),
+      ].join('\n') + '\n',
+      'utf-8',
+    )
+
+    // agent-progress: 1行
+    writeFileSync(agentProgressLogFile, line({ timestamp: '2026-07-27T00:00:02Z', agent: 'implementer', feature: 'f1', status: 'done', note: 'n' }) + '\n', 'utf-8')
+
+    // loop-observability: 1行
+    writeFileSync(loopObservabilityLogFile, line({ timestamp: '2026-07-27T00:00:03Z', agent: 'implementer', feature: 'f1', intent: 'i', scenario: 's', result: 'pass', reason: 'r' }) + '\n', 'utf-8')
+
+    // journal: wf_*ディレクトリ配下にagent-*.jsonl+.meta.jsonのペア
+    const projectDir = mkdtempSync(join(tmpdir(), 'journal-all-test-'))
+    const wfDir = join(projectDir, 'wf_1')
+    mkdirSync(wfDir)
+    writeFileSync(
+      join(wfDir, 'agent-j1.jsonl'),
+      [
+        line({ type: 'user', message: { role: 'user', content: 'p' }, timestamp: '2026-07-27T00:00:04.000Z' }),
+        line({
+          type: 'assistant',
+          message: {
+            model: 'claude-sonnet-5',
+            content: [{ type: 'tool_use', name: 'StructuredOutput', input: { status: 'pass', detail: 'ok' } }],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          },
+          timestamp: '2026-07-27T00:00:05.000Z',
+        }),
+      ].join('\n'),
+      'utf-8',
+    )
+    writeFileSync(join(wfDir, 'agent-j1.meta.json'), JSON.stringify({ agentType: 'reviewer' }), 'utf-8')
+
+    const events = loadAllEvents({ subagentSkeletonLogFile, agentProgressLogFile, loopObservabilityLogFile, projectDir })
+    expect(events.length).toBeGreaterThanOrEqual(4)
+    const sources = events.map((e) => e.source)
+    expect(sources).toContain('subagent-skeleton')
+    expect(sources).toContain('agent-progress')
+    expect(sources).toContain('loop-observability')
+    expect(sources).toContain('journal')
+  })
+
+  it('指定した2ソースのイベントをすべて結合する', () => {
     const dir = mkdtempSync(join(tmpdir(), 'load-all-test-'))
     const agentProgressLogFile = join(dir, 'agent-progress.jsonl')
     const loopObservabilityLogFile = join(dir, 'loop-observability.jsonl')
