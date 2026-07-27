@@ -293,7 +293,7 @@ const JOURNAL_FILENAME = 'journal.jsonl'
 // journal.jsonlはWorkflowツール経由の`agent()`呼び出しでのみ生成される（通常のAgent tool
 // 直接起動には存在しない）。存在しない場合は空のMapを返し、呼び出し側は自動的に
 // transcriptパース方式（従来どおりの`parseAgentTranscriptLines`の結果）にフォールバックする。
-// issue #493: verify-agent-progress-transcript.tsのloadTranscriptsからも同一ロジックを
+// issue #493: canonical-event.tsのjournalAdapterからも同一ロジックを
 // 再利用するためexportする（インライン複製を避ける。同一プロセスの通常importで足りる）。
 export function loadJournalResults(wfDirPath: string, filenames: string[]): Map<string, JournalStructuredResult> {
   if (!filenames.includes(JOURNAL_FILENAME)) return new Map()
