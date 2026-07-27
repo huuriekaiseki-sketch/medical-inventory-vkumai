@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES, subagentSkeletonAdapter, agentProgressAdapter, loopObservabilityAdapter, journalAdapter, loadAllEvents } from './canonical-event'
+import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES, subagentSkeletonAdapter, agentProgressAdapter, loopObservabilityAdapter, journalAdapter, loadAllEvents, correlateEvents } from './canonical-event'
+import type { CanonicalEvent } from './canonical-event'
 
 describe('KNOWN_AGENT_TYPES', () => {
   it('12種類のagentTypeを含む', () => {
@@ -336,5 +337,30 @@ describe('journalAdapter', () => {
       endTimestamp: '2026-07-27T00:00:01.000Z',
       source: 'journal',
     })
+  })
+})
+
+describe('correlateEvents (Stage 1: agentId厳密一致)', () => {
+  it('同一agentIdを持つsubagent-skeletonとjournalのイベントを1つのCorrelatedExecutionにまとめる', () => {
+    const events: CanonicalEvent[] = [
+      { eventId: 'e1', agentId: 'a1', agentType: 'workflow-subagent', feature: null, startTimestamp: '2026-07-27T00:00:00Z', endTimestamp: null, status: null, detail: null, intent: null, scenario: null, source: 'subagent-skeleton' },
+      { eventId: 'e2', agentId: 'a1', agentType: 'workflow-subagent', feature: null, startTimestamp: null, endTimestamp: '2026-07-27T00:00:02Z', status: null, detail: 'ok', intent: null, scenario: null, source: 'subagent-skeleton' },
+      { eventId: 'e3', agentId: 'a1', agentType: 'implementer', feature: null, startTimestamp: null, endTimestamp: '2026-07-27T00:00:02.000Z', status: 'pass', detail: 'journal detail', intent: null, scenario: null, source: 'journal' },
+    ]
+
+    const result = correlateEvents(events)
+    expect(result).toHaveLength(1)
+    expect(result[0].agentId).toBe('a1')
+    expect(result[0].events).toHaveLength(3)
+  })
+
+  it('agentIdが異なれば別々のCorrelatedExecutionになる', () => {
+    const events: CanonicalEvent[] = [
+      { eventId: 'e1', agentId: 'a1', agentType: 'implementer', feature: null, startTimestamp: null, endTimestamp: '2026-07-27T00:00:00Z', status: 'pass', detail: null, intent: null, scenario: null, source: 'journal' },
+      { eventId: 'e2', agentId: 'a2', agentType: 'reviewer', feature: null, startTimestamp: null, endTimestamp: '2026-07-27T00:00:00Z', status: 'pass', detail: null, intent: null, scenario: null, source: 'journal' },
+    ]
+
+    const result = correlateEvents(events)
+    expect(result).toHaveLength(2)
   })
 })

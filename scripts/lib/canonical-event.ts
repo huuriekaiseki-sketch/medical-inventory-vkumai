@@ -314,3 +314,38 @@ export function loadAllEvents(opts: LoadAllEventsOptions = {}): CanonicalEvent[]
   if (opts.projectDir) events.push(...journalAdapter(opts.projectDir).load())
   return events
 }
+
+export interface CorrelatedExecution {
+  agentId: string
+  events: CanonicalEvent[]
+}
+
+const DEFAULT_TOLERANCE_MS = 30 * 60 * 1000
+
+export function correlateEvents(events: CanonicalEvent[], toleranceMs = DEFAULT_TOLERANCE_MS): CorrelatedExecution[] {
+  // Stage 1: agentIdを持つイベント(subagent-skeleton/journal)を厳密一致でグループ化する。
+  // 両者は同一agentId空間であることを実機検証済み(2026-07-27、docs/superpowers/specs/
+  // 2026-07-27-canonical-event-module-design.md参照)。
+  const executions = new Map<string, CorrelatedExecution>()
+  const selfReportEvents: CanonicalEvent[] = []
+
+  for (const event of events) {
+    if (event.agentId !== null) {
+      const existing = executions.get(event.agentId)
+      if (existing) {
+        existing.events.push(event)
+      } else {
+        executions.set(event.agentId, { agentId: event.agentId, events: [event] })
+      }
+    } else {
+      selfReportEvents.push(event)
+    }
+  }
+
+  // Stage 2は次のタスクで実装する。ここでは自己申告イベントを一旦すべて単独のCorrelatedExecutionにする。
+  for (const event of selfReportEvents) {
+    executions.set(event.eventId, { agentId: event.eventId, events: [event] })
+  }
+
+  return [...executions.values()]
+}
