@@ -363,6 +363,28 @@ describe('correlateEvents (Stage 1: agentId厳密一致)', () => {
     const result = correlateEvents(events)
     expect(result).toHaveLength(2)
   })
+
+  it('同一agentId内でskeletonの生agentType(例:workflow-subagent)とjournalのagentType(例:implementer)が食い違う場合、journal側の値をアンカー代表値として採用する', () => {
+    const events: CanonicalEvent[] = [
+      { eventId: 'e1', agentId: 'a1', agentType: 'workflow-subagent', feature: null, startTimestamp: '2026-07-27T00:00:00Z', endTimestamp: null, status: null, detail: null, intent: null, scenario: null, source: 'subagent-skeleton' },
+      { eventId: 'e2', agentId: 'a1', agentType: 'workflow-subagent', feature: null, startTimestamp: null, endTimestamp: '2026-07-27T00:00:02Z', status: null, detail: 'skeleton detail', intent: null, scenario: null, source: 'subagent-skeleton' },
+      { eventId: 'e3', agentId: 'a1', agentType: 'implementer', feature: null, startTimestamp: null, endTimestamp: '2026-07-27T00:00:02.000Z', status: 'pass', detail: 'journal detail', intent: null, scenario: null, source: 'journal' },
+    ]
+    // agentType='implementer'(journal由来)で時刻窓内の自己申告を追加し、Stage2でこのアンカーに
+    // マッチすることを見て、代表agentTypeがjournal側('implementer')であることを間接的に検証する。
+    // (仮にskeleton側の'workflow-subagent'が採用されていればagentType不一致でマッチしない)
+    const self: CanonicalEvent = {
+      eventId: 'self1', agentId: null, agentType: 'implementer', feature: 'f1',
+      startTimestamp: null, endTimestamp: '2026-07-27T00:00:05.000Z', status: 'done', detail: 'self detail',
+      intent: null, scenario: null, source: 'agent-progress',
+    }
+
+    const result = correlateEvents([...events, self])
+    expect(result).toHaveLength(1)
+    expect(result[0].agentId).toBe('a1')
+    expect(result[0].events).toHaveLength(4)
+    expect(result[0].events.some((e) => e.eventId === 'self1')).toBe(true)
+  })
 })
 
 describe('correlateEvents (Stage 2: agentType+時刻窓フォールバック)', () => {
@@ -439,5 +461,56 @@ describe('correlateEvents (Stage 2: agentType+時刻窓フォールバック)', 
     expect(result.every((r) => r.events.length === 2)).toBe(true)
     const assignedAgentIds = result.map((r) => r.agentId).sort()
     expect(assignedAgentIds).toEqual(['a1', 'a2'])
+  })
+
+  it('agentTypeが異なるアンカーとは対応付けない(自己申告は未突合のまま単独になる)', () => {
+    const self: CanonicalEvent = {
+      eventId: 'self1', agentId: null, agentType: 'sweep-db', feature: 'f1',
+      startTimestamp: null, endTimestamp: '2026-07-27T00:00:11.000Z', status: 'done', detail: 'd',
+      intent: null, scenario: null, source: 'agent-progress',
+    }
+
+    const result = correlateEvents([anchor, self])
+    expect(result).toHaveLength(2)
+    const selfExec = result.find((r) => r.agentId === 'self1')
+    expect(selfExec?.events).toHaveLength(1)
+    expect(selfExec?.events[0].eventId).toBe('self1')
+  })
+
+  it('既知agentTypeに復元できない(agentTypeがnullの)自己申告は突合対象にならず単独になる', () => {
+    const self: CanonicalEvent = {
+      eventId: 'self1', agentId: null, agentType: null, feature: 'f1',
+      startTimestamp: null, endTimestamp: '2026-07-27T00:00:11.000Z', status: 'done', detail: 'd',
+      intent: null, scenario: null, source: 'agent-progress',
+    }
+
+    const result = correlateEvents([anchor, self])
+    expect(result).toHaveLength(2)
+    const selfExec = result.find((r) => r.agentId === 'self1')
+    expect(selfExec?.events).toHaveLength(1)
+  })
+
+  it('journalを持たないskeleton-onlyのアンカーはStage2の割当候補から除外され、自己申告は他の正しいjournalアンカーにマッチするか未突合になる', () => {
+    // journalが存在しない(通常のAgent tool経由等の)skeleton-onlyのグループ。statusは常にnull。
+    const skeletonOnly: CanonicalEvent = {
+      eventId: 'skeleton1', agentId: 'a-skeleton-only', agentType: 'sweep-ui', feature: null,
+      startTimestamp: null, endTimestamp: '2026-07-27T00:00:11.000Z', status: null, detail: 'skeleton only',
+      intent: null, scenario: null, source: 'subagent-skeleton',
+    }
+    // skeletonOnlyの方がself(time=00:00:12)に近い(diff=1s) が journalを持たないため候補から除外され、
+    // 正しいjournalアンカー(diff=2s)にマッチするべき。
+    const self: CanonicalEvent = {
+      eventId: 'self1', agentId: null, agentType: 'sweep-ui', feature: 'f1',
+      startTimestamp: null, endTimestamp: '2026-07-27T00:00:12.000Z', status: 'done', detail: 'self detail',
+      intent: null, scenario: null, source: 'agent-progress',
+    }
+
+    const result = correlateEvents([anchor, skeletonOnly, self])
+    expect(result).toHaveLength(2)
+    const anchorExec = result.find((r) => r.agentId === 'a1')
+    expect(anchorExec?.events).toHaveLength(2)
+    expect(anchorExec?.events.some((e) => e.eventId === 'self1')).toBe(true)
+    const skeletonOnlyExec = result.find((r) => r.agentId === 'a-skeleton-only')
+    expect(skeletonOnlyExec?.events).toHaveLength(1)
   })
 })

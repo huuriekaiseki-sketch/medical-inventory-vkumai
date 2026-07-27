@@ -47,9 +47,8 @@ loop-observabilityと同じ構造的限界を持つ：**エージェントへの
   パース処理を再利用）のstatus/detailを機械比較し、食い違う行のみ検出する。LLM呼び出し不要。
   - agent-progress.jsonlはagentId/workflow実行IDを保持しないため、`--agent`名から既知
     agentType一覧への前方一致でagentTypeを復元し、同じagentType内で最も時刻が近い
-    transcriptに貪欲に対応付けるベストエフォート方式（`scripts/lib/
-    verify-agent-progress-transcript.ts`の`matchRecords`）。1:1のID突合ではないため、
-    高並行実行下では誤対応の可能性が残る。
+    transcriptに貪欲に対応付けるベストエフォート方式（`scripts/lib/canonical-event.ts`の
+    `correlateEvents`）。1:1のID突合ではないため、高並行実行下では誤対応の可能性が残る。
   - statusの食い違い（自己申告doneなのにtranscriptがfail等）は確定的な指摘として
     `mismatches` に、detailの低一致（文字bigramのJaccard類似度が閾値未満）は
     「要目視確認」の弱いシグナルとして `lowOverlapDetails` に分けて出力する
@@ -130,10 +129,10 @@ agentTranscriptPath?, lastAssistantMessage?}`形式で自動記録される。�
   `reconstructWorkflowDir`が`loadJournalResults`（`export`済み）でjournal.jsonlの構造化result
   （statusが`pass|fail|blocked`のもの）を優先し、無ければ従来のtranscriptパース結果へ
   フォールバックする
-- **verify側の組み込み（issue #493で実装済み）**: `verify-agent-progress-transcript.ts`の
-  `loadTranscripts`も同じ`loadJournalResults`を再利用し、`TranscriptRecord`の`status`/`detail`
-  をjournal.jsonl優先で取得する（`endTimestamp`はjournal.jsonlにタイムスタンプが無いため
-  引き続きtranscript側から取得し、`matchRecords`の時刻近接突合ロジックには影響しない）
+- **verify側の組み込み（issue #493で実装済み、issue #569でcanonical-event.tsへ再統合済み）**:
+  `canonical-event.ts`の`journalAdapter`が同じ`loadJournalResults`を再利用し、`CanonicalEvent`の
+  `status`/`detail`をjournal.jsonl優先で取得する（`endTimestamp`はjournal.jsonlにタイムスタンプが
+  無いため引き続きtranscript側から取得し、`correlateEvents`の時刻近接突合ロジックには影響しない）
 
 ## OpenTelemetryと自作JSONLの役割分担（issue #417）
 

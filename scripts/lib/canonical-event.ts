@@ -358,19 +358,31 @@ export function correlateEvents(events: CanonicalEvent[], toleranceMs = DEFAULT_
   }
 
   // アンカー(agentId確定済みグループ)のagentType/endTimestamp代表値を算出する。
+  // WHY: loadAllEventsはsubagent-skeletonをjournalより先に積むため、両方存在する場合に
+  //      単純な.findだとskeleton側(生のhookペイロード値、例:'workflow-subagent')を誤って拾って
+  //      しまう(buildReportで既に修正済みの「journal優先」バグと同種)。meta.json由来の正確な
+  //      agentType/endTimestampを持つjournalを優先し、無ければskeletonへフォールバックする。
+  //
+  // また、Stage 2のアンカー候補としては「journalを含むagentIdグループのみ」を対象にする。
+  // subagent-skeletonのみ(journal無し)のグループはstatusが常にnullで、buildReport側では
+  // 結局unmatchedSelf扱いになるため、Stage2でこれを「使用済み」にしてしまうと、本来別の
+  // journalアンカーにマッチできたはずの自己申告イベントを誤って奪ってしまう構造的リスクがある。
   interface AnchorInfo {
     agentId: string
     agentType: string | null
     endTimestamp: string | null
   }
-  const anchorInfos: AnchorInfo[] = [...executions.entries()].map(([agentId, exec]) => {
-    const withEndTs = exec.events.find((e) => e.endTimestamp !== null)
-    return {
-      agentId,
-      agentType: withEndTs?.agentType ?? exec.events[0]?.agentType ?? null,
-      endTimestamp: withEndTs?.endTimestamp ?? null,
-    }
-  })
+  const anchorInfos: AnchorInfo[] = [...executions.entries()]
+    .filter(([, exec]) => exec.events.some((e) => e.source === 'journal'))
+    .map(([agentId, exec]) => {
+      const journalEvent = exec.events.find((e) => e.source === 'journal')
+      const skeletonWithEndTs = exec.events.find((e) => e.endTimestamp !== null)
+      return {
+        agentId,
+        agentType: journalEvent?.agentType ?? skeletonWithEndTs?.agentType ?? exec.events[0]?.agentType ?? null,
+        endTimestamp: journalEvent?.endTimestamp ?? skeletonWithEndTs?.endTimestamp ?? null,
+      }
+    })
 
   // Stage 2: ソースごとに独立した排他プールで、agentType一致・時刻窓内の最近傍アンカーへ貪欲割当する。
   // 排他制御を「ソース×agentType」単位にスコープすることで、agent-progressとloop-observabilityの
