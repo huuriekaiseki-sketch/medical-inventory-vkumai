@@ -78,7 +78,13 @@ export function buildReport(correlated: CorrelatedExecution[]): VerificationRepo
     if (!selfEvent) continue
     totalSelfReports += 1
 
-    const anchorEvent = exec.events.find((e) => e.source === 'journal' || e.source === 'subagent-skeleton')
+    // WHY: journalはstatus/detailを持つがsubagent-skeletonはstatusが常にnull。
+    //      同一execにsubagent-skeletonがjournalより先に積まれている場合(loadAllEventsの
+    //      呼び出し順に依存)、単純な.findだとstatus=nullのsubagent-skeleton側を誤って
+    //      拾いunmatchedSelfへ落ちてしまう(検証すべき食い違いを見逃すfalse negative)ため、
+    //      journalを優先し無ければsubagent-skeletonへフォールバックする。
+    const anchorEvent =
+      exec.events.find((e) => e.source === 'journal') ?? exec.events.find((e) => e.source === 'subagent-skeleton')
     if (!anchorEvent || anchorEvent.status === null) {
       unmatchedSelf.push(selfEvent)
       continue

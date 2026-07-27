@@ -82,6 +82,33 @@ describe('buildReport', () => {
     expect(report.mismatches).toHaveLength(0)
   })
 
+  it('同一execにsubagent-skeleton(status:null)とjournal(status有り)が両方ある場合はjournal側を優先してanchorに使う', () => {
+    const skeletonAnchor: CanonicalEvent = {
+      eventId: 'sk1', agentId: 'a3', agentType: 'implementer', feature: null,
+      startTimestamp: '2026-07-15T05:00:00.000Z', endTimestamp: null, status: null,
+      detail: null, intent: null, scenario: null, source: 'subagent-skeleton',
+    }
+    const journalAnchor: CanonicalEvent = {
+      eventId: 'j3', agentId: 'a3', agentType: 'implementer', feature: null,
+      startTimestamp: null, endTimestamp: '2026-07-15T05:00:10.000Z', status: 'pass',
+      detail: '実装完了', intent: null, scenario: null, source: 'journal',
+    }
+    const self3: CanonicalEvent = {
+      eventId: 's3', agentId: null, agentType: 'implementer', feature: 'f1',
+      startTimestamp: null, endTimestamp: '2026-07-15T05:00:12.000Z', status: 'done',
+      detail: '実装完了', intent: null, scenario: null, source: 'agent-progress',
+    }
+
+    // loadAllEventsの呼び出し順(subagentSkeletonAdapter→...→journalAdapter)を再現するため、
+    // subagent-skeletonをjournalより先の順序で渡す。
+    const correlated = correlateEvents([skeletonAnchor, journalAnchor, self3])
+    const report = buildReport(correlated)
+
+    expect(report.unmatchedSelf).toHaveLength(0)
+    expect(report.matchedCount).toBe(1)
+    expect(report.mismatches).toHaveLength(0)
+  })
+
   it('running/waiting/startingの中間状態はtotalSelfReportsに含めない', () => {
     const self: CanonicalEvent = {
       eventId: 's1', agentId: null, agentType: 'implementer', feature: 'f1',
