@@ -298,3 +298,19 @@ export function journalAdapter(projectDir: string): EventAdapter {
     },
   }
 }
+
+export interface LoadAllEventsOptions {
+  subagentSkeletonLogFile?: string
+  agentProgressLogFile?: string
+  loopObservabilityLogFile?: string
+  projectDir?: string
+}
+
+export function loadAllEvents(opts: LoadAllEventsOptions = {}): CanonicalEvent[] {
+  const events: CanonicalEvent[] = []
+  if (opts.subagentSkeletonLogFile) events.push(...subagentSkeletonAdapter(opts.subagentSkeletonLogFile).load())
+  if (opts.agentProgressLogFile) events.push(...agentProgressAdapter(opts.agentProgressLogFile).load())
+  if (opts.loopObservabilityLogFile) events.push(...loopObservabilityAdapter(opts.loopObservabilityLogFile).load())
+  if (opts.projectDir) events.push(...journalAdapter(opts.projectDir).load())
+  return events
+}

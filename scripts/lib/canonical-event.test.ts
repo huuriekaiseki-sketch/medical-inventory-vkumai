@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES, subagentSkeletonAdapter, agentProgressAdapter, loopObservabilityAdapter, journalAdapter } from './canonical-event'
+import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES, subagentSkeletonAdapter, agentProgressAdapter, loopObservabilityAdapter, journalAdapter, loadAllEvents } from './canonical-event'
 
 describe('KNOWN_AGENT_TYPES', () => {
   it('12種類のagentTypeを含む', () => {
@@ -168,6 +168,25 @@ describe('loopObservabilityAdapter', () => {
       agentId: null,
       source: 'loop-observability',
     })
+  })
+})
+
+describe('loadAllEvents', () => {
+  it('指定した4ソースのイベントをすべて結合する', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'load-all-test-'))
+    const agentProgressLogFile = join(dir, 'agent-progress.jsonl')
+    const loopObservabilityLogFile = join(dir, 'loop-observability.jsonl')
+    writeFileSync(agentProgressLogFile, line({ timestamp: '2026-07-27T00:00:00Z', agent: 'implementer', feature: 'f1', status: 'done', note: 'n' }) + '\n', 'utf-8')
+    writeFileSync(loopObservabilityLogFile, line({ timestamp: '2026-07-27T00:00:01Z', agent: 'implementer', feature: 'f1', intent: 'i', scenario: 's', result: 'pass', reason: 'r' }) + '\n', 'utf-8')
+
+    const events = loadAllEvents({ agentProgressLogFile, loopObservabilityLogFile })
+    expect(events).toHaveLength(2)
+    expect(events.map((e) => e.source).sort()).toEqual(['agent-progress', 'loop-observability'])
+  })
+
+  it('パスを指定しなかったソースは含めない', () => {
+    const events = loadAllEvents({})
+    expect(events).toEqual([])
   })
 })
 
