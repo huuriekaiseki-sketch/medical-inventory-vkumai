@@ -129,3 +129,48 @@ export function subagentSkeletonAdapter(logFile: string): EventAdapter {
     },
   }
 }
+
+interface AgentProgressLine {
+  timestamp: string
+  agent: string
+  feature: string
+  status: string
+  note: string
+}
+
+export function loadAllAgentProgressRecords(logFile: string): AgentProgressLine[] {
+  let content: string
+  try {
+    content = readFileSync(logFile, 'utf-8')
+  } catch {
+    return []
+  }
+  return content
+    .split('\n')
+    .filter(Boolean)
+    .map((raw) => JSON.parse(raw) as AgentProgressLine)
+}
+
+export function agentProgressAdapter(logFile: string): EventAdapter {
+  return {
+    source: 'agent-progress',
+    load(): CanonicalEvent[] {
+      return loadAllAgentProgressRecords(logFile).map((record, lineIndex) => {
+        const agentType = extractAgentType(record.agent)
+        return {
+          eventId: buildEventId('agent-progress', agentType, record.timestamp, lineIndex),
+          agentId: null,
+          agentType,
+          feature: record.feature,
+          startTimestamp: null,
+          endTimestamp: record.timestamp,
+          status: record.status as EventStatus,
+          detail: record.note,
+          intent: null,
+          scenario: null,
+          source: 'agent-progress',
+        }
+      })
+    },
+  }
+}

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES, subagentSkeletonAdapter } from './canonical-event'
+import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES, subagentSkeletonAdapter, agentProgressAdapter } from './canonical-event'
 
 describe('KNOWN_AGENT_TYPES', () => {
   it('12種類のagentTypeを含む', () => {
@@ -103,5 +103,36 @@ describe('subagentSkeletonAdapter', () => {
     expect(events).toHaveLength(2)
     expect(events[0]).toMatchObject({ agentId: 'valid-a1' })
     expect(events[1]).toMatchObject({ agentId: 'valid-a2' })
+  })
+})
+
+describe('agentProgressAdapter', () => {
+  it('全ステータス(starting/running/waiting/done/failed)を落とさずに出力する', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agent-progress-test-'))
+    const logFile = join(dir, 'agent-progress.jsonl')
+    writeFileSync(
+      logFile,
+      [
+        line({ timestamp: '2026-07-27T00:00:00Z', agent: 'implementer', feature: 'f1', status: 'starting', note: 'n1' }),
+        line({ timestamp: '2026-07-27T00:01:00Z', agent: 'implementer', feature: 'f1', status: 'running', note: 'n2' }),
+        line({ timestamp: '2026-07-27T00:02:00Z', agent: 'implementer', feature: 'f1', status: 'done', note: 'n3' }),
+      ].join('\n') + '\n',
+      'utf-8',
+    )
+
+    const events = agentProgressAdapter(logFile).load()
+    expect(events).toHaveLength(3)
+    expect(events.map((e) => e.status)).toEqual(['starting', 'running', 'done'])
+    expect(events[0].agentType).toBe('implementer')
+    expect(events[2]).toMatchObject({ feature: 'f1', endTimestamp: '2026-07-27T00:02:00Z', detail: 'n3', agentId: null, source: 'agent-progress' })
+  })
+
+  it('役割サフィックス付きagent(reviewer-correctness)からagentTypeを復元する', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agent-progress-test-suffix-'))
+    const logFile = join(dir, 'agent-progress.jsonl')
+    writeFileSync(logFile, line({ timestamp: '2026-07-27T00:00:00Z', agent: 'reviewer-correctness', feature: 'f1', status: 'done', note: 'n' }) + '\n', 'utf-8')
+
+    const events = agentProgressAdapter(logFile).load()
+    expect(events[0].agentType).toBe('reviewer')
   })
 })
