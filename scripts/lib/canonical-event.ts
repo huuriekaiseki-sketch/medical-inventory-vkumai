@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 export type EventSource = 'subagent-skeleton' | 'journal' | 'agent-progress' | 'loop-observability'
 export type EventStatus = 'pass' | 'fail' | 'blocked' | 'done' | 'failed' | 'running' | 'starting' | 'waiting'
 
@@ -53,4 +55,62 @@ export function buildEventId(
   lineIndex: number,
 ): string {
   return `${source}:${agentType ?? 'unknown'}:${timestamp}:${lineIndex}`
+}
+
+export interface EventAdapter {
+  source: EventSource
+  load(): CanonicalEvent[]
+}
+
+interface SkeletonLine {
+  timestamp: string
+  hookEvent: string
+  agentId: string
+  agentType?: string
+  lastAssistantMessage?: string
+  intent?: string
+}
+
+function parseSkeletonLine(raw: string): SkeletonLine | null {
+  try {
+    return JSON.parse(raw) as SkeletonLine
+  } catch {
+    return null
+  }
+}
+
+export function subagentSkeletonAdapter(logFile: string): EventAdapter {
+  return {
+    source: 'subagent-skeleton',
+    load(): CanonicalEvent[] {
+      let content: string
+      try {
+        content = readFileSync(logFile, 'utf-8')
+      } catch {
+        return []
+      }
+      const lines = content.split('\n').filter(Boolean)
+      const events: CanonicalEvent[] = []
+      lines.forEach((raw, lineIndex) => {
+        const parsed = parseSkeletonLine(raw)
+        if (!parsed) return
+        const isStart = parsed.hookEvent === 'SubagentStart'
+        const agentType = parsed.agentType ?? null
+        events.push({
+          eventId: buildEventId('subagent-skeleton', agentType, parsed.timestamp, lineIndex),
+          agentId: parsed.agentId,
+          agentType,
+          feature: null,
+          startTimestamp: isStart ? parsed.timestamp : null,
+          endTimestamp: isStart ? null : parsed.timestamp,
+          status: null,
+          detail: parsed.lastAssistantMessage ?? null,
+          intent: parsed.intent ?? null,
+          scenario: null,
+          source: 'subagent-skeleton',
+        })
+      })
+      return events
+    },
+  }
 }

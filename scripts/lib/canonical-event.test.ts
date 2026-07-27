@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES } from './canonical-event'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES, subagentSkeletonAdapter } from './canonical-event'
 
 describe('KNOWN_AGENT_TYPES', () => {
   it('12種類のagentTypeを含む', () => {
@@ -44,5 +47,40 @@ describe('buildEventId', () => {
     const a = buildEventId('agent-progress', 'implementer', '2026-07-27T00:00:00Z', 0)
     const b = buildEventId('agent-progress', 'implementer', '2026-07-27T00:00:00Z', 1)
     expect(a).not.toBe(b)
+  })
+})
+
+function line(obj: unknown): string {
+  return JSON.stringify(obj)
+}
+
+describe('subagentSkeletonAdapter', () => {
+  it('Start行はstartTimestamp、Stop行はendTimestampに割り当てる', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'skeleton-test-'))
+    const logFile = join(dir, 'subagent-skeleton.jsonl')
+    writeFileSync(
+      logFile,
+      [
+        line({ timestamp: '2026-07-27T00:00:00Z', hookEvent: 'SubagentStart', agentId: 'a1', agentType: 'workflow-subagent' }),
+        line({
+          timestamp: '2026-07-27T00:00:02Z',
+          hookEvent: 'SubagentStop',
+          agentId: 'a1',
+          agentType: 'workflow-subagent',
+          lastAssistantMessage: 'ok',
+        }),
+      ].join('\n') + '\n',
+      'utf-8',
+    )
+
+    const events = subagentSkeletonAdapter(logFile).load()
+    expect(events).toHaveLength(2)
+    expect(events[0]).toMatchObject({ agentId: 'a1', startTimestamp: '2026-07-27T00:00:00Z', endTimestamp: null, source: 'subagent-skeleton' })
+    expect(events[1]).toMatchObject({ agentId: 'a1', startTimestamp: null, endTimestamp: '2026-07-27T00:00:02Z', detail: 'ok' })
+  })
+
+  it('ファイルが存在しない場合は空配列を返す', () => {
+    const events = subagentSkeletonAdapter('/tmp/does-not-exist-xyz.jsonl').load()
+    expect(events).toEqual([])
   })
 })
