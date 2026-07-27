@@ -322,13 +322,28 @@ export interface CorrelatedExecution {
 
 const DEFAULT_TOLERANCE_MS = 30 * 60 * 1000
 
+function toEpochMs(timestamp: string): number | null {
+  const ms = Date.parse(timestamp)
+  return Number.isNaN(ms) ? null : ms
+}
+
+const TERMINAL_AGENT_PROGRESS_STATUSES = new Set(['done', 'failed'])
+
+// agent-progressの中間状態(starting/running/waiting)は突合対象にしない。
+// 既存loadSelfReports(verify-agent-progress-transcript.ts)がdone/failedのみを検証対象として
+// きたのを踏襲する意図的な仕様(docs/superpowers/specs/2026-07-27-canonical-event-module-design.md参照)。
+function isMatchTarget(event: CanonicalEvent): boolean {
+  if (event.source === 'agent-progress') return TERMINAL_AGENT_PROGRESS_STATUSES.has(event.status ?? '')
+  return true
+}
+
 export function correlateEvents(events: CanonicalEvent[], toleranceMs = DEFAULT_TOLERANCE_MS): CorrelatedExecution[] {
-  // Stage 1: agentIdを持つイベント(subagent-skeleton/journal)を厳密一致でグループ化する。
-  // 両者は同一agentId空間であることを実機検証済み(2026-07-27、docs/superpowers/specs/
-  // 2026-07-27-canonical-event-module-design.md参照)。
   const executions = new Map<string, CorrelatedExecution>()
   const selfReportEvents: CanonicalEvent[] = []
 
+  // Stage 1: agentIdを持つイベント(subagent-skeleton/journal)を厳密一致でグループ化する。
+  // 両者は同一agentId空間であることを実機検証済み(2026-07-27、docs/superpowers/specs/
+  // 2026-07-27-canonical-event-module-design.md参照)。
   for (const event of events) {
     if (event.agentId !== null) {
       const existing = executions.get(event.agentId)
@@ -342,8 +357,68 @@ export function correlateEvents(events: CanonicalEvent[], toleranceMs = DEFAULT_
     }
   }
 
-  // Stage 2は次のタスクで実装する。ここでは自己申告イベントを一旦すべて単独のCorrelatedExecutionにする。
+  // アンカー(agentId確定済みグループ)のagentType/endTimestamp代表値を算出する。
+  interface AnchorInfo {
+    agentId: string
+    agentType: string | null
+    endTimestamp: string | null
+  }
+  const anchorInfos: AnchorInfo[] = [...executions.entries()].map(([agentId, exec]) => {
+    const withEndTs = exec.events.find((e) => e.endTimestamp !== null)
+    return {
+      agentId,
+      agentType: withEndTs?.agentType ?? exec.events[0]?.agentType ?? null,
+      endTimestamp: withEndTs?.endTimestamp ?? null,
+    }
+  })
+
+  // Stage 2: ソースごとに独立した排他プールで、agentType一致・時刻窓内の最近傍アンカーへ貪欲割当する。
+  // 排他制御を「ソース×agentType」単位にスコープすることで、agent-progressとloop-observabilityの
+  // 両方が同じアンカーに対応付くこと自体は許容する(別ソースなので競合しない)。
+  const bySource = new Map<EventSource, CanonicalEvent[]>()
   for (const event of selfReportEvents) {
+    if (!isMatchTarget(event)) continue
+    const bucket = bySource.get(event.source) ?? []
+    bucket.push(event)
+    bySource.set(event.source, bucket)
+  }
+
+  const matchedEventIds = new Set<string>()
+
+  for (const candidates of bySource.values()) {
+    const usedAgentIds = new Set<string>()
+    const sorted = [...candidates].sort((a, b) => (a.endTimestamp ?? '').localeCompare(b.endTimestamp ?? ''))
+
+    for (const candidate of sorted) {
+      if (candidate.agentType === null || candidate.endTimestamp === null) continue
+      const candidateEpoch = toEpochMs(candidate.endTimestamp)
+      if (candidateEpoch === null) continue
+
+      let bestAgentId: string | null = null
+      let bestDiff = Infinity
+      for (const anchor of anchorInfos) {
+        if (usedAgentIds.has(anchor.agentId)) continue
+        if (anchor.agentType !== candidate.agentType || anchor.endTimestamp === null) continue
+        const anchorEpoch = toEpochMs(anchor.endTimestamp)
+        if (anchorEpoch === null) continue
+        const diff = Math.abs(anchorEpoch - candidateEpoch)
+        if (diff <= toleranceMs && diff < bestDiff) {
+          bestDiff = diff
+          bestAgentId = anchor.agentId
+        }
+      }
+
+      if (bestAgentId !== null) {
+        usedAgentIds.add(bestAgentId)
+        executions.get(bestAgentId)!.events.push(candidate)
+        matchedEventIds.add(candidate.eventId)
+      }
+    }
+  }
+
+  // 突合対象外(中間状態)、または対応するアンカーが見つからなかった自己申告は単独扱いにする。
+  for (const event of selfReportEvents) {
+    if (matchedEventIds.has(event.eventId)) continue
     executions.set(event.eventId, { agentId: event.eventId, events: [event] })
   }
 
