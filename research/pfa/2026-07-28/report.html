@@ -1,0 +1,2249 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="2025年7月28日から2026年7月28日までのPFA・カテーテルアブレーション関連医療機器情報を、臨床・製品・根拠・導入の4軸で整理した個人学習用レポート。">
+  <title>PFA Intelligence Field Note — 2026-07-28</title>
+  <style>
+    :root {
+      --paper: #f4f6f3;
+      --paper-deep: #e7eeea;
+      --surface: rgba(255, 255, 255, 0.84);
+      --surface-solid: #fbfcfa;
+      --ink: #0c2632;
+      --ink-soft: #314b54;
+      --muted: #63777c;
+      --line: rgba(12, 38, 50, 0.16);
+      --line-strong: rgba(12, 38, 50, 0.38);
+      --teal: #087c77;
+      --teal-dark: #075753;
+      --teal-pale: #d7eeea;
+      --cyan: #91d6cd;
+      --amber: #b85d27;
+      --amber-pale: #f4e4d7;
+      --red: #9e443b;
+      --red-pale: #f4dedb;
+      --navy: #102e3d;
+      --display: "Yu Mincho", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Times New Roman", serif;
+      --body: "Avenir Next", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+      --mono: "SFMono-Regular", "Menlo", "Consolas", monospace;
+      --shadow: 0 20px 50px rgba(17, 48, 58, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 76px;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: var(--body);
+      font-size: 16px;
+      line-height: 1.78;
+      background:
+        linear-gradient(rgba(8, 124, 119, 0.034) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(8, 124, 119, 0.034) 1px, transparent 1px),
+        radial-gradient(circle at 85% 7%, rgba(145, 214, 205, 0.24), transparent 27rem),
+        var(--paper);
+      background-size: 28px 28px, 28px 28px, auto, auto;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: var(--teal-dark);
+      text-decoration-color: rgba(8, 124, 119, 0.4);
+      text-underline-offset: 0.18em;
+    }
+
+    a:hover {
+      color: var(--teal);
+      text-decoration-color: currentColor;
+    }
+
+    :focus-visible {
+      outline: 3px solid var(--cyan);
+      outline-offset: 3px;
+    }
+
+    .page-shell {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .masthead {
+      position: relative;
+      overflow: hidden;
+      min-height: 640px;
+      padding: 28px 0 80px;
+      color: #f1f7f5;
+      background:
+        radial-gradient(circle at 82% 24%, rgba(42, 190, 178, 0.25), transparent 24rem),
+        linear-gradient(135deg, #0b2531 0%, #103846 56%, #0a615e 125%);
+    }
+
+    .masthead::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0.16;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+      background-size: 34px 34px;
+      pointer-events: none;
+    }
+
+    .masthead::after {
+      content: "FIELD NOTE  /  01";
+      position: absolute;
+      right: -66px;
+      top: 224px;
+      padding: 8px 26px;
+      color: rgba(235, 247, 244, 0.54);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.28em;
+      border-top: 1px solid rgba(255,255,255,0.28);
+      transform: rotate(90deg);
+    }
+
+    .masthead-inner {
+      position: relative;
+      z-index: 1;
+    }
+
+    .brandline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.22);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 18px;
+      color: var(--cyan);
+    }
+
+    .edition {
+      color: rgba(241, 247, 245, 0.68);
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+      gap: clamp(48px, 8vw, 116px);
+      align-items: end;
+      padding-top: 96px;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 0 0 22px;
+      color: var(--cyan);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 38px;
+      height: 1px;
+      background: currentColor;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin-top: 0;
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: 800px;
+      margin-bottom: 26px;
+      font-family: var(--display);
+      font-size: clamp(46px, 7.2vw, 92px);
+      font-weight: 600;
+      letter-spacing: -0.055em;
+      line-height: 1.03;
+    }
+
+    .hero-deck {
+      max-width: 680px;
+      margin: 0;
+      color: rgba(241, 247, 245, 0.8);
+      font-family: var(--display);
+      font-size: clamp(18px, 2.1vw, 24px);
+      line-height: 1.65;
+    }
+
+    .hero-stats {
+      margin: 0;
+      border-top: 1px solid rgba(255,255,255,0.32);
+    }
+
+    .hero-stats > div {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: baseline;
+      padding: 17px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.18);
+    }
+
+    .hero-stats dt {
+      color: rgba(241, 247, 245, 0.62);
+      font-size: 12px;
+      letter-spacing: 0.09em;
+    }
+
+    .hero-stats dd {
+      margin: 0;
+      color: #fff;
+      font-family: var(--display);
+      font-size: 22px;
+      font-weight: 600;
+    }
+
+    .hero-stats .large dd {
+      color: var(--cyan);
+      font-size: 42px;
+      line-height: 1;
+    }
+
+    .toc {
+      position: sticky;
+      z-index: 20;
+      top: 0;
+      background: rgba(244, 246, 243, 0.9);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .toc-inner {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 12px 0;
+      scrollbar-width: none;
+    }
+
+    .toc-inner::-webkit-scrollbar {
+      display: none;
+    }
+
+    .toc a {
+      flex: 0 0 auto;
+      padding: 7px 12px;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-decoration: none;
+      border: 1px solid transparent;
+    }
+
+    .toc a:hover {
+      color: var(--teal-dark);
+      border-color: var(--line);
+      background: rgba(255,255,255,0.7);
+    }
+
+    main {
+      padding: 84px 0 100px;
+    }
+
+    section {
+      margin-top: 108px;
+    }
+
+    section:first-child {
+      margin-top: 0;
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr);
+      gap: 28px;
+      align-items: start;
+      margin-bottom: 38px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--line-strong);
+    }
+
+    .section-index {
+      padding-top: 7px;
+      color: var(--teal);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+    }
+
+    .section-head h2 {
+      margin-bottom: 10px;
+      font-family: var(--display);
+      font-size: clamp(30px, 4.4vw, 50px);
+      font-weight: 600;
+      letter-spacing: -0.035em;
+      line-height: 1.2;
+    }
+
+    .section-head p {
+      max-width: 740px;
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .trend-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 16px;
+    }
+
+    .trend-card {
+      position: relative;
+      min-height: 280px;
+      padding: 26px;
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .trend-card:nth-child(1),
+    .trend-card:nth-child(4) {
+      grid-column: span 7;
+    }
+
+    .trend-card:nth-child(2),
+    .trend-card:nth-child(3) {
+      grid-column: span 5;
+    }
+
+    .trend-card::after {
+      content: attr(data-number);
+      position: absolute;
+      right: -7px;
+      bottom: -36px;
+      color: rgba(8, 124, 119, 0.075);
+      font-family: var(--display);
+      font-size: 150px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .trend-kicker {
+      margin: 0 0 28px;
+      color: var(--teal);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .trend-card h3 {
+      max-width: 520px;
+      margin-bottom: 18px;
+      font-family: var(--display);
+      font-size: 26px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+
+    .trend-card p:last-child {
+      position: relative;
+      z-index: 1;
+      max-width: 600px;
+      margin-bottom: 0;
+      color: var(--ink-soft);
+    }
+
+    .top-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .top-card {
+      display: grid;
+      grid-template-columns: 108px minmax(0, 1fr);
+      gap: 28px;
+      padding: 30px;
+      background: var(--surface-solid);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .top-card:first-child {
+      grid-column: 1 / -1;
+      grid-template-columns: 150px minmax(0, 1fr);
+      padding: clamp(30px, 5vw, 54px);
+      background:
+        linear-gradient(110deg, rgba(215, 238, 234, 0.72), transparent 55%),
+        var(--surface-solid);
+      border-top: 4px solid var(--teal);
+    }
+
+    .score-orbit {
+      --score: 0;
+      display: grid;
+      width: 104px;
+      aspect-ratio: 1;
+      place-items: center;
+      border-radius: 50%;
+      background: conic-gradient(var(--teal) calc(var(--score) * 1%), var(--paper-deep) 0);
+      box-shadow: inset 0 0 0 1px rgba(8,124,119,0.14);
+    }
+
+    .top-card:first-child .score-orbit {
+      width: 142px;
+    }
+
+    .score-orbit-inner {
+      display: grid;
+      width: calc(100% - 13px);
+      aspect-ratio: 1;
+      place-items: center;
+      text-align: center;
+      background: var(--surface-solid);
+      border-radius: 50%;
+    }
+
+    .score-number {
+      display: block;
+      font-family: var(--display);
+      font-size: 34px;
+      font-weight: 700;
+      line-height: 0.9;
+    }
+
+    .top-card:first-child .score-number {
+      font-size: 47px;
+    }
+
+    .score-unit {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.1em;
+    }
+
+    .rank-label {
+      margin: 0 0 10px;
+      color: var(--teal);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+    }
+
+    .top-card h3 {
+      margin-bottom: 13px;
+      font-family: var(--display);
+      font-size: clamp(23px, 3vw, 34px);
+      font-weight: 600;
+      line-height: 1.38;
+    }
+
+    .top-card-summary {
+      margin: 0 0 18px;
+      color: var(--ink-soft);
+    }
+
+    .selection-reason {
+      margin: 18px 0;
+      padding: 16px 18px;
+      color: var(--ink-soft);
+      background: rgba(215, 238, 234, 0.52);
+      border-left: 3px solid var(--teal);
+    }
+
+    .axis-list {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin: 22px 0 18px;
+    }
+
+    .axis {
+      padding: 10px 11px;
+      background: var(--paper);
+      border-top: 2px solid var(--teal);
+    }
+
+    .axis span {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .axis strong {
+      font-family: var(--display);
+      font-size: 21px;
+      line-height: 1.25;
+    }
+
+    .source-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .source-link::after {
+      content: "↗";
+      font-family: var(--mono);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    table {
+      width: 100%;
+      min-width: 1080px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 18px 16px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      color: #e9f4f2;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: var(--navy);
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    tbody tr:hover {
+      background: rgba(215, 238, 234, 0.46);
+    }
+
+    .rank-cell {
+      width: 58px;
+      color: var(--teal);
+      font-family: var(--display);
+      font-size: 27px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .date-cell {
+      width: 108px;
+      font-family: var(--mono);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .story-cell {
+      min-width: 290px;
+    }
+
+    .story-title {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--ink);
+      font-family: var(--display);
+      font-size: 17px;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    .story-note {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .type-cell {
+      width: 150px;
+      color: var(--ink-soft);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .table-score {
+      width: 82px;
+      font-family: var(--display);
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .score-breakdown {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 400;
+      white-space: nowrap;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      min-width: 220px;
+    }
+
+    .tag {
+      display: inline-flex;
+      padding: 3px 7px;
+      color: var(--teal-dark);
+      font-family: var(--mono);
+      font-size: 9px;
+      line-height: 1.35;
+      background: var(--teal-pale);
+      border: 1px solid rgba(8,124,119,0.16);
+    }
+
+    .feature {
+      position: relative;
+      overflow: hidden;
+      color: #edf6f4;
+      background:
+        radial-gradient(circle at 88% 8%, rgba(51, 187, 175, 0.2), transparent 22rem),
+        #102f3c;
+      box-shadow: 0 30px 80px rgba(10, 37, 49, 0.2);
+    }
+
+    .feature::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.11;
+      background:
+        repeating-linear-gradient(0deg, transparent 0 33px, rgba(255,255,255,0.18) 34px),
+        repeating-linear-gradient(90deg, transparent 0 33px, rgba(255,255,255,0.18) 34px);
+    }
+
+    .feature-hero,
+    .feature-body {
+      position: relative;
+      z-index: 1;
+    }
+
+    .feature-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+      gap: 60px;
+      padding: clamp(34px, 6vw, 72px);
+      border-bottom: 1px solid rgba(255,255,255,0.18);
+    }
+
+    .feature-label {
+      margin: 0 0 24px;
+      color: var(--cyan);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .feature h2 {
+      margin-bottom: 26px;
+      font-family: var(--display);
+      font-size: clamp(34px, 5vw, 58px);
+      font-weight: 600;
+      letter-spacing: -0.04em;
+      line-height: 1.22;
+    }
+
+    .feature-lede {
+      margin: 0;
+      color: rgba(237,246,244,0.76);
+      font-family: var(--display);
+      font-size: 19px;
+      line-height: 1.75;
+    }
+
+    .signal-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-content: start;
+      gap: 10px;
+    }
+
+    .signal {
+      min-height: 138px;
+      padding: 20px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.16);
+    }
+
+    .signal strong {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--cyan);
+      font-family: var(--display);
+      font-size: 31px;
+      line-height: 1.05;
+    }
+
+    .signal span {
+      color: rgba(237,246,244,0.68);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    .feature-body {
+      display: grid;
+      grid-template-columns: 210px minmax(0, 1fr);
+      gap: 44px;
+      padding: clamp(34px, 6vw, 72px);
+    }
+
+    .feature-side {
+      align-self: start;
+    }
+
+    .feature-side nav {
+      position: sticky;
+      top: 86px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .feature-side a {
+      padding: 8px 10px;
+      color: rgba(237,246,244,0.62);
+      font-family: var(--mono);
+      font-size: 10px;
+      text-decoration: none;
+      border-left: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .feature-side a:hover {
+      color: var(--cyan);
+      border-left-color: var(--cyan);
+    }
+
+    .article-section {
+      margin: 0 0 56px;
+      padding-bottom: 44px;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+    }
+
+    .article-section:last-child {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+
+    .article-section h3 {
+      margin-bottom: 22px;
+      color: var(--cyan);
+      font-family: var(--display);
+      font-size: 28px;
+      font-weight: 600;
+    }
+
+    .article-section ul {
+      display: grid;
+      gap: 13px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .article-section li {
+      position: relative;
+      padding-left: 22px;
+      color: rgba(237,246,244,0.79);
+    }
+
+    .article-section li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.78em;
+      width: 8px;
+      height: 1px;
+      background: var(--cyan);
+    }
+
+    .interpretation-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .lens {
+      padding: 24px;
+      background: rgba(255,255,255,0.065);
+      border-top: 3px solid var(--cyan);
+    }
+
+    .lens:nth-child(2) {
+      border-top-color: #e6c379;
+    }
+
+    .lens:nth-child(3) {
+      border-top-color: #dd8c72;
+    }
+
+    .lens h4 {
+      margin-bottom: 17px;
+      font-family: var(--display);
+      font-size: 21px;
+      font-weight: 600;
+    }
+
+    .lens ul {
+      gap: 11px;
+    }
+
+    .lens li {
+      font-size: 13px;
+      line-height: 1.72;
+    }
+
+    .evidence-split {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .evidence-panel {
+      padding: 24px;
+      color: var(--ink);
+      background: var(--surface-solid);
+    }
+
+    .evidence-panel.claim {
+      background: #e9efed;
+    }
+
+    .evidence-panel.fact {
+      background: var(--teal-pale);
+    }
+
+    .evidence-panel.unknown {
+      background: var(--amber-pale);
+    }
+
+    .evidence-panel h4 {
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+
+    .evidence-panel ul {
+      gap: 10px;
+    }
+
+    .evidence-panel li {
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .evidence-panel li::before {
+      background: currentColor;
+    }
+
+    .knowledge-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .knowledge-card {
+      padding: clamp(26px, 4vw, 42px);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .knowledge-card.known {
+      border-top: 4px solid var(--teal);
+    }
+
+    .knowledge-card.unknown {
+      border-top: 4px solid var(--amber);
+    }
+
+    .knowledge-card h3 {
+      margin-bottom: 24px;
+      font-family: var(--display);
+      font-size: 27px;
+      font-weight: 600;
+    }
+
+    .knowledge-card ul,
+    .market-grid ul,
+    .method-card ul {
+      display: grid;
+      gap: 13px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .knowledge-card li,
+    .market-grid li,
+    .method-card li {
+      position: relative;
+      padding-left: 20px;
+      color: var(--ink-soft);
+    }
+
+    .knowledge-card li::before,
+    .market-grid li::before,
+    .method-card li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.78em;
+      width: 7px;
+      height: 1px;
+      background: var(--teal);
+    }
+
+    .knowledge-card.unknown li::before {
+      background: var(--amber);
+    }
+
+    .market-section {
+      margin-top: 18px;
+      padding: clamp(30px, 5vw, 52px);
+      color: #edf6f4;
+      background: var(--navy);
+    }
+
+    .market-section h3 {
+      margin-bottom: 30px;
+      font-family: var(--display);
+      font-size: clamp(27px, 3.7vw, 38px);
+      font-weight: 600;
+    }
+
+    .market-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .market-grid article {
+      padding: 22px;
+      background: rgba(255,255,255,0.06);
+      border-top: 2px solid var(--cyan);
+    }
+
+    .market-grid h4 {
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+
+    .market-grid li {
+      padding-left: 15px;
+      color: rgba(237,246,244,0.7);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .market-grid li::before {
+      background: var(--cyan);
+    }
+
+    .method-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .method-card {
+      min-height: 260px;
+      padding: 28px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+    }
+
+    .method-number {
+      display: block;
+      margin-bottom: 36px;
+      color: var(--teal);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .method-card h3 {
+      margin-bottom: 15px;
+      font-family: var(--display);
+      font-size: 22px;
+      font-weight: 600;
+    }
+
+    .method-card p,
+    .method-card li {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .formula {
+      margin-top: 18px;
+      padding: 18px;
+      overflow-x: auto;
+      color: #eaf4f2;
+      font-family: var(--mono);
+      font-size: 12px;
+      white-space: nowrap;
+      background: var(--navy);
+    }
+
+    .score-table {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-top: 18px;
+      border: 1px solid var(--line);
+    }
+
+    .score-table div {
+      padding: 18px;
+      background: rgba(255,255,255,0.58);
+      border-right: 1px solid var(--line);
+    }
+
+    .score-table div:last-child {
+      border-right: 0;
+    }
+
+    .score-table strong {
+      display: block;
+      color: var(--teal-dark);
+      font-family: var(--display);
+      font-size: 27px;
+    }
+
+    .score-table span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .source-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .source-group {
+      background: rgba(255,255,255,0.72);
+      border: 1px solid var(--line);
+    }
+
+    .source-group summary {
+      display: grid;
+      grid-template-columns: 52px minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      padding: 20px 22px;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .source-group summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .source-rank {
+      color: var(--teal);
+      font-family: var(--display);
+      font-size: 25px;
+      font-weight: 700;
+    }
+
+    .source-title {
+      font-family: var(--display);
+      font-size: 17px;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    .source-toggle {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .source-group[open] .source-toggle::after {
+      content: "CLOSE";
+    }
+
+    .source-group:not([open]) .source-toggle::after {
+      content: "OPEN";
+    }
+
+    .source-body {
+      display: grid;
+      gap: 12px;
+      padding: 0 22px 22px 90px;
+      border-top: 1px solid var(--line);
+    }
+
+    .source-entry {
+      display: grid;
+      grid-template-columns: 82px minmax(0, 1fr);
+      gap: 14px;
+      padding-top: 16px;
+    }
+
+    .source-status {
+      align-self: start;
+      padding: 3px 7px;
+      color: var(--teal-dark);
+      font-family: var(--mono);
+      font-size: 9px;
+      text-align: center;
+      background: var(--teal-pale);
+      border: 1px solid rgba(8,124,119,0.18);
+    }
+
+    .source-status.abstract,
+    .source-status.snippet {
+      color: #7b431d;
+      background: var(--amber-pale);
+      border-color: rgba(184,93,39,0.2);
+    }
+
+    .source-entry a {
+      overflow-wrap: anywhere;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.5;
+    }
+
+    .source-entry small {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .disclaimer {
+      margin-top: 76px;
+      padding: 30px;
+      color: var(--ink-soft);
+      background: var(--amber-pale);
+      border-left: 4px solid var(--amber);
+    }
+
+    .disclaimer strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--ink);
+    }
+
+    footer {
+      padding: 34px 0 54px;
+      color: rgba(237,246,244,0.63);
+      background: var(--navy);
+    }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+    }
+
+    .footer-mark {
+      color: var(--cyan);
+    }
+
+    @media (max-width: 960px) {
+      .hero-grid,
+      .feature-hero {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-grid {
+        padding-top: 72px;
+      }
+
+      .hero-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .hero-stats > div {
+        display: block;
+        padding-right: 15px;
+      }
+
+      .hero-stats dt {
+        margin-bottom: 7px;
+      }
+
+      .feature-body {
+        grid-template-columns: 1fr;
+      }
+
+      .feature-side {
+        display: none;
+      }
+
+      .interpretation-grid,
+      .evidence-split {
+        grid-template-columns: 1fr;
+      }
+
+      .market-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .page-shell {
+        width: min(100% - 26px, 1180px);
+      }
+
+      .masthead {
+        min-height: 0;
+        padding-bottom: 54px;
+      }
+
+      .brandline {
+        align-items: flex-start;
+        font-size: 9px;
+      }
+
+      .edition {
+        max-width: 140px;
+        text-align: right;
+      }
+
+      .hero-grid {
+        gap: 46px;
+        padding-top: 64px;
+      }
+
+      h1 {
+        font-size: clamp(43px, 15vw, 68px);
+      }
+
+      .hero-deck {
+        font-size: 17px;
+      }
+
+      .hero-stats {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-stats > div {
+        display: grid;
+      }
+
+      main {
+        padding-top: 58px;
+      }
+
+      section {
+        margin-top: 82px;
+      }
+
+      .section-head {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      .trend-card,
+      .trend-card:nth-child(n) {
+        grid-column: 1 / -1;
+        min-height: 0;
+      }
+
+      .top-grid,
+      .knowledge-grid,
+      .method-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .top-card,
+      .top-card:first-child {
+        grid-column: auto;
+        grid-template-columns: 1fr;
+      }
+
+      .score-orbit,
+      .top-card:first-child .score-orbit {
+        width: 100px;
+      }
+
+      .axis-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .feature-hero,
+      .feature-body {
+        padding: 30px 22px;
+      }
+
+      .signal-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .market-grid,
+      .score-table {
+        grid-template-columns: 1fr;
+      }
+
+      .score-table div {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .score-table div:last-child {
+        border-bottom: 0;
+      }
+
+      .source-group summary {
+        grid-template-columns: 38px minmax(0, 1fr);
+      }
+
+      .source-toggle {
+        display: none;
+      }
+
+      .source-body {
+        padding-left: 22px;
+      }
+
+      .source-entry {
+        grid-template-columns: 1fr;
+        gap: 7px;
+      }
+
+      .source-status {
+        justify-self: start;
+      }
+
+      .footer-inner {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .masthead-inner > * {
+        animation: rise 700ms ease both;
+      }
+
+      .hero-grid {
+        animation-delay: 120ms;
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .toc,
+      .feature-side {
+        display: none;
+      }
+
+      .masthead {
+        min-height: auto;
+        color: var(--ink);
+        background: #fff;
+        border-bottom: 3px solid var(--teal);
+      }
+
+      .brandline,
+      .hero-deck,
+      .hero-stats dt {
+        color: var(--ink-soft);
+      }
+
+      .hero-stats dd,
+      .hero-stats .large dd {
+        color: var(--ink);
+      }
+
+      .feature {
+        color: var(--ink);
+        background: #fff;
+        border: 2px solid var(--ink);
+      }
+
+      .feature-lede,
+      .article-section li {
+        color: var(--ink-soft);
+      }
+
+      .feature-body {
+        grid-template-columns: 1fr;
+      }
+
+      a {
+        color: inherit;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="masthead">
+    <div class="page-shell masthead-inner">
+      <div class="brandline">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 76 36" aria-hidden="true">
+            <path d="M1 20h13l5-12 8 25 8-17 6 9 6-14 7 9h21" fill="none" stroke="currentColor" stroke-width="3"/>
+          </svg>
+          <span>PFA Intelligence</span>
+        </div>
+        <div class="edition">Personal knowledge dossier / 2026.07.28</div>
+      </div>
+
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">Catheter ablation field intelligence</p>
+          <h1>PFAの現在地を、<br>臨床と製品の間で読む。</h1>
+          <p class="hero-deck">直近12か月の海外情報を、臨床インパクト・新規性・根拠・代理店／市場の4軸で選別。ニュースの速さではなく、あとで使える知識密度を優先した初回実証版。</p>
+        </div>
+
+        <dl class="hero-stats" aria-label="レポート概要">
+          <div class="large">
+            <dt>採用候補</dt>
+            <dd>10</dd>
+          </div>
+          <div>
+            <dt>対象期間</dt>
+            <dd>12 months</dd>
+          </div>
+          <div>
+            <dt>最高スコア</dt>
+            <dd>97 / 100</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="ページ内ナビゲーション">
+    <div class="page-shell toc-inner">
+      <a href="#trends">重要トレンド</a>
+      <a href="#top-three">上位3件</a>
+      <a href="#candidates">候補一覧</a>
+      <a href="#featured">詳細記事</a>
+      <a href="#known-unknowns">分かっていること</a>
+      <a href="#methodology">調査方法</a>
+      <a href="#sources">出典</a>
+    </div>
+  </nav>
+
+  <main class="page-shell">
+    <section id="trends">
+      <div class="section-head">
+        <span class="section-index">01 / SIGNALS</span>
+        <div>
+          <h2>今回の重要トレンド</h2>
+          <p>個別ニュースを横に並べると、PFAが「新しいエネルギー」から、治療順序・製品差・安全管理・病変戦略を問う段階へ移ったことが見える。</p>
+        </div>
+      </div>
+
+      <div class="trend-grid">
+        <article class="trend-card" data-number="1">
+          <p class="trend-kicker">Treatment pathway</p>
+          <h3>比較軸が「PFA対熱源」から「いつPFAを選ぶか」へ移った。</h3>
+          <p>AVANT GUARDは、未治療の持続性AFでPFAを初回治療に置く戦略を薬物先行と比較した。PFA-SHAMは、再発とQOLの改善が偽手技を超えるかを検証した。装置性能だけでなく、治療経路そのものが研究対象になっている。</p>
+        </article>
+
+        <article class="trend-card" data-number="2">
+          <p class="trend-kicker">Platform differentiation</p>
+          <h3>「PFAなら同じ」ではない。</h3>
+          <p>Voltのballoon-in-basket＋EnSite X、VARIPULSE Pro＋CARTO 3、Sphere-9のRF/PFA切替など、競争軸は波形、形状、マッピング、カテーテル交換、適応領域へ分解され始めた。</p>
+        </article>
+
+        <article class="trend-card" data-number="3">
+          <p class="trend-kicker">Safety migration</p>
+          <h3>安全性は改善ではなく、構成が変わる。</h3>
+          <p>食道・横隔神経・肺静脈への熱損傷が減る一方、溶血、腎障害、冠攣縮、CIED相互作用が前面に出る。血管アクセスや左房内操作のリスクも残る。</p>
+        </article>
+
+        <article class="trend-card" data-number="4">
+          <p class="trend-kicker">Evidence maturity</p>
+          <h3>単群の成功率から、戦略と製品を直接比較する時代へ。</h3>
+          <p>PVI＋PWIの観察研究メタ解析は一律の追加病変を支持せず、PERSIGMAはVARIPULSE ProとFARAPULSEの直接比較を開始した。今後の価値は「何％成功したか」だけでなく、誰に、何を、どの監視で比較したかで決まる。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="top-three">
+      <div class="section-head">
+        <span class="section-index">02 / PRIORITY</span>
+        <div>
+          <h2>上位3件</h2>
+          <p>単なる点数順ではなく、「なぜ今読む価値があるか」を明文化した。4軸は各5点で、臨床40%、新規性25%、根拠20%、代理店／市場15%に換算している。</p>
+        </div>
+      </div>
+
+      <div class="top-grid">
+        <article class="top-card">
+          <div class="score-orbit" style="--score:97">
+            <div class="score-orbit-inner">
+              <div>
+                <span class="score-number">97</span>
+                <span class="score-unit">SCORE / 100</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p class="rank-label">RANK 01 · 2026-04-25</p>
+            <h3>持続性AFの初回治療でPFAが抗不整脈薬を上回る：AVANT GUARD</h3>
+            <p class="top-card-summary">未治療の持続性AF 310例をPFAまたは抗不整脈薬へ無作為化。12か月の複合治療成功は56%対30%だったが、神経学的イベント6件による試験中断とワークフロー変更も重要な結果である。</p>
+            <div class="selection-reason">PFAが既存アブレーションより速いか、熱損傷を減らすかではなく、持続性AFで「薬を先に試す」という治療順序そのものを無作為化比較した点が最重要である。連続モニタリングを用いた12か月成績は強いが、神経学的イベントによる中断と手順変更まで含めて読むことで、実際の導入条件が見える。</div>
+            <div class="axis-list" aria-label="AVANT GUARDの4軸評価">
+              <div class="axis"><span>臨床インパクト</span><strong>5 / 5</strong></div>
+              <div class="axis"><span>新規性・トレンド</span><strong>5 / 5</strong></div>
+              <div class="axis"><span>根拠の信頼性</span><strong>5 / 5</strong></div>
+              <div class="axis"><span>代理店・市場</span><strong>4 / 5</strong></div>
+            </div>
+            <a class="source-link" href="https://www.nejm.org/doi/abs/10.1056/NEJMoa2600929" target="_blank" rel="noopener noreferrer">NEJM抄録を確認</a>
+          </div>
+        </article>
+
+        <article class="top-card">
+          <div class="score-orbit" style="--score:96">
+            <div class="score-orbit-inner">
+              <div>
+                <span class="score-number">96</span>
+                <span class="score-unit">SCORE / 100</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p class="rank-label">RANK 02 · 2025-12-19</p>
+            <h3>Abbott Volt PFA Systemが米FDA承認、1年成績も査読論文化</h3>
+            <p class="top-card-summary">発作性AFと持続1年未満の持続性AFを適応に含む米国承認。VOLT-AF IDE治療320例では主要有効性が発作性81.1%、持続性63.3%、主要安全性イベント1.9%だった。</p>
+            <div class="selection-reason">FDAの承認範囲を一次資料で確認でき、同じ期間内に12か月成績が査読論文化されたため、新製品ニュースと臨床エビデンスが最もきれいにつながる事例である。EnSite X統合と単一カテーテルの設計は導入議論に直結するが、他社方式との比較がない単群IDEである点は残る。</div>
+            <div class="axis-list" aria-label="Voltの4軸評価">
+              <div class="axis"><span>臨床インパクト</span><strong>5 / 5</strong></div>
+              <div class="axis"><span>新規性・トレンド</span><strong>5 / 5</strong></div>
+              <div class="axis"><span>根拠の信頼性</span><strong>4 / 5</strong></div>
+              <div class="axis"><span>代理店・市場</span><strong>5 / 5</strong></div>
+            </div>
+            <a class="source-link" href="https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfpma/pma.cfm?id=P250022" target="_blank" rel="noopener noreferrer">FDA PMAを確認</a>
+          </div>
+        </article>
+
+        <article class="top-card">
+          <div class="score-orbit" style="--score:94">
+            <div class="score-orbit-inner">
+              <div>
+                <span class="score-number">94</span>
+                <span class="score-unit">SCORE / 100</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p class="rank-label">RANK 03 · 2026-05-26</p>
+            <h3>PFAはプラセボ効果を超えるか：PFA-SHAMが再発・QOLを二重に検証</h3>
+            <p class="top-card-summary">高度に症候性のAF 60例をPFAと偽手技へ無作為化。6か月の再発は6.7%対83.3%、AFEQT改善は43.9点対11.3点だった。</p>
+            <div class="selection-reason">sham対照と連続リズムモニタリングにより、アブレーションの効果を期待・観察バイアスから切り離し、再発とQOLの両方で示した稀少な研究である。患者説明に強い一方、60例・6か月・高度症候性患者・単一形状のPFAという適用範囲を守って読む必要がある。</div>
+            <div class="axis-list" aria-label="PFA-SHAMの4軸評価">
+              <div class="axis"><span>臨床インパクト</span><strong>5 / 5</strong></div>
+              <div class="axis"><span>新規性・トレンド</span><strong>5 / 5</strong></div>
+              <div class="axis"><span>根拠の信頼性</span><strong>5 / 5</strong></div>
+              <div class="axis"><span>代理店・市場</span><strong>3 / 5</strong></div>
+            </div>
+            <a class="source-link" href="https://pubmed.ncbi.nlm.nih.gov/42186803/" target="_blank" rel="noopener noreferrer">PubMed抄録を確認</a>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="candidates">
+      <div class="section-head">
+        <span class="section-index">03 / INDEX</span>
+        <div>
+          <h2>候補一覧</h2>
+          <p>同じ研究・製品発表は1件に統合。日付は各クラスターの主要な公表日で、点数の内訳は「臨床／新規性／根拠／代理店」の順。</p>
+        </div>
+      </div>
+
+      <div class="table-wrap" role="region" aria-label="PFA候補一覧。横スクロールできます" tabindex="0">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Date</th>
+              <th>Story</th>
+              <th>Information type</th>
+              <th>Score</th>
+              <th>Tags</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-item-id="2026-04-25-boston-scientific-avant-guard" data-rank="1" data-score="97">
+              <td class="rank-cell">01</td>
+              <td class="date-cell">2026-04-25</td>
+              <td class="story-cell">
+                <a class="story-title" href="https://www.nejm.org/doi/abs/10.1056/NEJMoa2600929" target="_blank" rel="noopener noreferrer">持続性AFの初回治療でPFAが抗不整脈薬を上回る：AVANT GUARD</a>
+                <span class="story-note">治療順序を変え得るRCT。神経学的イベントと試験中断も要確認。</span>
+              </td>
+              <td class="type-cell">randomized-clinical-trial</td>
+              <td class="table-score">97<span class="score-breakdown">5 / 5 / 5 / 4</span></td>
+              <td><div class="tags"><span class="tag">PFA</span><span class="tag">persistent-AF</span><span class="tag">first-line</span><span class="tag">randomized-trial</span><span class="tag">FARAPULSE</span><span class="tag">Boston-Scientific</span><span class="tag">continuous-monitoring</span><span class="tag">safety-workflow</span></div></td>
+            </tr>
+            <tr data-item-id="2025-12-19-abbott-volt-fda" data-rank="2" data-score="96">
+              <td class="rank-cell">02</td>
+              <td class="date-cell">2025-12-19</td>
+              <td class="story-cell">
+                <a class="story-title" href="https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfpma/pma.cfm?id=P250022" target="_blank" rel="noopener noreferrer">Abbott Volt PFA Systemが米FDA承認、1年成績も査読論文化</a>
+                <span class="story-note">規制一次資料＋単群IDE。EnSite X統合とballoon-in-basket設計。</span>
+              </td>
+              <td class="type-cell">regulatory-and-clinical-evidence</td>
+              <td class="table-score">96<span class="score-breakdown">5 / 5 / 4 / 5</span></td>
+              <td><div class="tags"><span class="tag">PFA</span><span class="tag">FDA</span><span class="tag">PMA</span><span class="tag">Abbott</span><span class="tag">Volt</span><span class="tag">EnSite-X</span><span class="tag">balloon-in-basket</span><span class="tag">persistent-AF</span><span class="tag">product-launch</span></div></td>
+            </tr>
+            <tr data-item-id="2026-05-26-pfa-sham" data-rank="3" data-score="94">
+              <td class="rank-cell">03</td>
+              <td class="date-cell">2026-05-26</td>
+              <td class="story-cell">
+                <a class="story-title" href="https://pubmed.ncbi.nlm.nih.gov/42186803/" target="_blank" rel="noopener noreferrer">PFAはプラセボ効果を超えるか：PFA-SHAMが再発・QOLを二重に検証</a>
+                <span class="story-note">偽手技対照＋植込み型モニター。客観結果と患者報告結果を同時評価。</span>
+              </td>
+              <td class="type-cell">randomized-clinical-trial</td>
+              <td class="table-score">94<span class="score-breakdown">5 / 5 / 5 / 3</span></td>
+              <td><div class="tags"><span class="tag">PFA</span><span class="tag">sham-controlled</span><span class="tag">randomized-trial</span><span class="tag">quality-of-life</span><span class="tag">AFEQT</span><span class="tag">continuous-monitoring</span><span class="tag">patient-perspective</span></div></td>
+            </tr>
+            <tr data-item-id="2026-02-12-hrs-ehra-scientific-statement" data-rank="4" data-score="92">
+              <td class="rank-cell">04</td>
+              <td class="date-cell">2026-02-12</td>
+              <td class="story-cell">
+                <a class="story-title" href="https://www.heartrhythmjournal.com/article/S1547-5271%2826%2900124-4/fulltext" target="_blank" rel="noopener noreferrer">PFA導入を「波形・溶血・冠攣縮」まで具体化した2026 HRS/EHRA声明</a>
+                <span class="story-note">PFAをシステム別に捉える実務声明。正式ガイドラインではない。</span>
+              </td>
+              <td class="type-cell">scientific-statement</td>
+              <td class="table-score">92<span class="score-breakdown">5 / 4 / 5 / 4</span></td>
+              <td><div class="tags"><span class="tag">PFA</span><span class="tag">HRS</span><span class="tag">EHRA</span><span class="tag">scientific-statement</span><span class="tag">hemolysis</span><span class="tag">coronary-spasm</span><span class="tag">workflow</span><span class="tag">technical-disclosure</span></div></td>
+            </tr>
+            <tr data-item-id="2026-04-07-jnj-varipulse-pro-europe" data-rank="5" data-score="88">
+              <td class="rank-cell">05</td>
+              <td class="date-cell">2026-04-07</td>
+              <td class="story-cell">
+                <a class="story-title" href="https://www.jnj.com/media-center/press-releases/johnson-johnson-advances-pulsed-field-ablation-portfolio-with-the-launch-of-varipulse-pro-in-europe" target="_blank" rel="noopener noreferrer">VARIPULSE Proが欧州投入：高速化の製品訴求に12か月実臨床データが続く</a>
+                <span class="story-note">Proの製品訴求と、従来プラットフォームを含む中間市販後データは分けて解釈。</span>
+              </td>
+              <td class="type-cell">product-launch-and-postmarket-evidence</td>
+              <td class="table-score">88<span class="score-breakdown">4 / 5 / 4 / 5</span></td>
+              <td><div class="tags"><span class="tag">PFA</span><span class="tag">Johnson-and-Johnson</span><span class="tag">Biosense-Webster</span><span class="tag">VARIPULSE-Pro</span><span class="tag">CARTO-3</span><span class="tag">CE-Mark</span><span class="tag">Europe</span><span class="tag">postmarket</span></div></td>
+            </tr>
+            <tr data-item-id="2026-06-29-disrupt-af-safety" data-rank="6" data-score="80">
+              <td class="rank-cell">06</td>
+              <td class="date-cell">2026-06-29</td>
+              <td class="story-cell">
+                <a class="story-title" href="https://www.jacc.org/doi/10.1016/j.jacep.2026.04.032" target="_blank" rel="noopener noreferrer">米国実臨床1576例で見るpentaspline PFAの初期安全性：DISRUPT-AF</a>
+                <span class="story-note">3か月の前向き安全性。熱アブレーションとの無作為比較ではない。</span>
+              </td>
+              <td class="type-cell">postmarket-clinical-study</td>
+              <td class="table-score">80<span class="score-breakdown">4 / 4 / 4 / 4</span></td>
+              <td><div class="tags"><span class="tag">PFA</span><span class="tag">FARAPULSE</span><span class="tag">real-world</span><span class="tag">safety</span><span class="tag">learning-curve</span><span class="tag">vascular-access</span><span class="tag">stroke</span><span class="tag">registry</span></div></td>
+            </tr>
+            <tr data-item-id="2026-04-29-pvi-pwi-meta-analysis" data-rank="7" data-score="80">
+              <td class="rank-cell">07</td>
+              <td class="date-cell">2026-04-29</td>
+              <td class="story-cell">
+                <a class="story-title" href="https://www.nature.com/articles/s41598-026-50715-8" target="_blank" rel="noopener noreferrer">持続性AFでPWIを足せばよいのか：PFA 1983例のメタ解析は上乗せ効果を支持せず</a>
+                <span class="story-note">比較は観察コホートのみ。全研究がFARAWAVEを使用。</span>
+              </td>
+              <td class="type-cell">systematic-review</td>
+              <td class="table-score">80<span class="score-breakdown">4 / 4 / 4 / 4</span></td>
+              <td><div class="tags"><span class="tag">PFA</span><span class="tag">persistent-AF</span><span class="tag">PVI</span><span class="tag">PWI</span><span class="tag">posterior-wall</span><span class="tag">meta-analysis</span><span class="tag">workflow</span><span class="tag">FARAWAVE</span></div></td>
+            </tr>
+            <tr data-item-id="2026-07-09-pfa-complication-profile" data-rank="8" data-score="76">
+              <td class="rank-cell">08</td>
+              <td class="date-cell">2026-07-09</td>
+              <td class="story-cell">
+                <a class="story-title" href="https://pubmed.ncbi.nlm.nih.gov/42419514/" target="_blank" rel="noopener noreferrer">PFA時代の合併症像は「消えた」のではなく「変わった」</a>
+                <span class="story-note">ナラティブレビュー。冠攣縮・溶血と従来型合併症の併存を整理。</span>
+              </td>
+              <td class="type-cell">clinical-review</td>
+              <td class="table-score">76<span class="score-breakdown">4 / 4 / 3 / 4</span></td>
+              <td><div class="tags"><span class="tag">PFA</span><span class="tag">safety</span><span class="tag">complications</span><span class="tag">hemolysis</span><span class="tag">coronary-spasm</span><span class="tag">renal-injury</span><span class="tag">risk-communication</span></div></td>
+            </tr>
+            <tr data-item-id="2026-04-26-medtronic-sphere9-clear-vt" data-rank="9" data-score="73">
+              <td class="rank-cell">09</td>
+              <td class="date-cell">2026-04-26</td>
+              <td class="story-cell">
+                <a class="story-title" href="https://pubmed.ncbi.nlm.nih.gov/42043359/" target="_blank" rel="noopener noreferrer">PFAの射程が心房から心室へ：Sphere-9によるVT/PVCアブレーション初期成績</a>
+                <span class="story-note">59例・短期の研究段階。CIED近傍のPFAに新しい注意信号。</span>
+              </td>
+              <td class="type-cell">device-indication-expansion</td>
+              <td class="table-score">73<span class="score-breakdown">3 / 5 / 3 / 4</span></td>
+              <td><div class="tags"><span class="tag">PFA</span><span class="tag">RF</span><span class="tag">Medtronic</span><span class="tag">Sphere-9</span><span class="tag">Affera</span><span class="tag">ventricular-tachycardia</span><span class="tag">PVC</span><span class="tag">CIED</span><span class="tag">investigational</span></div></td>
+            </tr>
+            <tr data-item-id="2026-04-24-jnj-persigma" data-rank="10" data-score="72">
+              <td class="rank-cell">10</td>
+              <td class="date-cell">2026-04-24</td>
+              <td class="story-cell">
+                <a class="story-title" href="https://www.jnj.com/media-center/press-releases/johnson-johnson-launches-landmark-head-to-head-pulsed-field-ablation-trial-in-persistent-atrial-fibrillation" target="_blank" rel="noopener noreferrer">PFAは「対熱源」から「PFA対PFA」へ：PERSIGMA直接比較試験が始動</a>
+                <span class="story-note">最大466例の計画。現時点は結果のない試験開始情報。</span>
+              </td>
+              <td class="type-cell">clinical-trial-launch</td>
+              <td class="table-score">72<span class="score-breakdown">3 / 5 / 2 / 5</span></td>
+              <td><div class="tags"><span class="tag">PFA</span><span class="tag">head-to-head</span><span class="tag">randomized-trial</span><span class="tag">PERSIGMA</span><span class="tag">VARIPULSE-Pro</span><span class="tag">FARAPULSE</span><span class="tag">persistent-AF</span><span class="tag">market-competition</span></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="featured" class="feature">
+      <div class="feature-hero">
+        <div>
+          <p class="feature-label">Featured analysis / Rank 01</p>
+          <h2>「薬を先に」の前提をPFAが揺らす——AVANT GUARDを臨床・患者・導入支援で読む</h2>
+          <p class="feature-lede">AVANT GUARDの本当の意味は、PFAの手技速度ではなく、未治療の持続性AFに対してアブレーションを最初から選ぶ戦略が、抗不整脈薬を先行する戦略より12か月の複合治療失敗を減らしたことにある。ただし、統合PFA群の主要安全性イベント5.1%と、神経学的イベント6件を受けた試験中断・手順変更は、有効性と同じ重さで読む必要がある。</p>
+        </div>
+        <div class="signal-grid" aria-label="AVANT GUARD主要数値">
+          <div class="signal"><strong>310</strong><span>未治療の持続性AFを2対1で無作為化</span></div>
+          <div class="signal"><strong>56% / 30%</strong><span>PFA / 抗不整脈薬の12か月複合治療成功</span></div>
+          <div class="signal"><strong>HR 0.46</strong><span>複合治療失敗、95%CI 0.33–0.65</span></div>
+          <div class="signal"><strong>5.1%</strong><span>統合PFA群の主要安全性イベント</span></div>
+        </div>
+      </div>
+
+      <div class="feature-body">
+        <aside class="feature-side" aria-label="詳細記事内ナビゲーション">
+          <nav>
+            <a href="#article-background">背景</a>
+            <a href="#article-event">何が起きたか</a>
+            <a href="#article-evidence">エビデンス</a>
+            <a href="#article-lenses">3つの視点</a>
+            <a href="#article-separation">主張と事実</a>
+            <a href="#article-unknowns">未確定事項</a>
+            <a href="#article-takeaways">追跡項目</a>
+          </nav>
+        </aside>
+
+        <article>
+          <div id="article-background" class="article-section">
+            <h3>背景</h3>
+            <ul>
+              <li>持続性AFは発作性AFより基質が複雑で再発が多く、従来は抗不整脈薬を試した後にカテーテルアブレーションへ進む流れが一般的だった。</li>
+              <li>PFAは非熱的な不可逆的エレクトロポレーションを利用するが、AVANT GUARDが検証したのはエネルギー源の物理的優位性ではなく、FARAWAVEによるPVI＋後壁アブレーションを初回治療に置く戦略である。</li>
+              <li>全患者へLUX-Dx植込み型心電図モニターを用いたため、症状申告だけでは見逃す無症候性再発も評価に含まれた。</li>
+            </ul>
+          </div>
+
+          <div id="article-event" class="article-section">
+            <h3>何が起きたか</h3>
+            <ul>
+              <li>未治療の持続性AF患者310例が、PFA 207例と抗不整脈薬103例へ2対1で無作為化された。さらに100例がPFAの主要安全性解析だけに追加された。</li>
+              <li>主要有効性は、急性期の成功と、90日以降12か月までの不整脈再発、再アブレーション、抗不整脈薬使用、電気的除細動などを組み合わせた複合評価だった。</li>
+              <li>複合治療成功のKaplan–Meier推定値はPFA 56%、抗不整脈薬30%。複合治療失敗のハザード比は0.46（95%CI 0.33–0.65、P&lt;0.001）だった。</li>
+              <li>試験中に神経学的イベント6件が確認され、登録は一時中断された。独立レビュー後、CHA2DS2-VASc 4点以上を除外し、左房血栓スクリーニングを強化して再開した。</li>
+            </ul>
+          </div>
+
+          <div id="article-evidence" class="article-section">
+            <h3>エビデンスの読み方</h3>
+            <ul>
+              <li>強みは、国際多施設RCT、未治療の持続性AF、全例の連続リズムモニタリング、12か月追跡という設計にある。</li>
+              <li>症候性心房性頻脈性不整脈30秒以上の再発はPFA 2%、薬物3%で近かった一方、無症候性1時間以上の再発はPFA 30%、薬物46%だった。主要結果は症候性再発だけでなく、無症候性再発や治療追加を含む複合評価として解釈すべきである。</li>
+              <li>統合PFA群の主要安全性イベントは5.1%。これは抗不整脈薬群との安全性優越性比較ではなく、事前設定した性能目標との比較だった。</li>
+              <li>Boston Scientificが試験へ資金提供しており、結果はFARAWAVE、PVI＋後壁アブレーション、LUX-Dx監視を組み合わせた戦略のエビデンスである。</li>
+            </ul>
+          </div>
+
+          <div id="article-lenses" class="article-section">
+            <h3>3つの視点で読む</h3>
+            <div class="interpretation-grid">
+              <div class="lens">
+                <h4>臨床</h4>
+                <ul>
+                  <li>選択された持続性AF患者では、薬物不成功を待たずPFAへ進むことで、治療変更・再介入を含む失敗を減らせる可能性がある。</li>
+                  <li>症候性再発単独の差は小さい。56%対30%は複合評価の中身を分けて説明する。</li>
+                  <li>患者選択、抗凝固、左房血栓除外、周術期監視までが治療成績の一部である。</li>
+                  <li>他社PFAやPVI単独へ一般化しない。</li>
+                </ul>
+              </div>
+              <div class="lens">
+                <h4>患者</h4>
+                <ul>
+                  <li>選択は、薬の不成功を経験してから手技へ進む時間と、初回から侵襲的治療を受けるリスクの比較になる。</li>
+                  <li>PFA群でも複合成功は56%。「一度で治る」とは説明できない。</li>
+                  <li>神経学的イベントと患者選択変更は、脳梗塞リスクを個別に話す材料になる。</li>
+                </ul>
+              </div>
+              <div class="lens">
+                <h4>代理店・導入支援</h4>
+                <ul>
+                  <li>価値提案は通電時間ではなく、患者選択から連続モニタリングまでの治療パスへ移る。</li>
+                  <li>first-lineという語だけでなく、対象・適応・安全性評価方法を明示する。</li>
+                  <li>医師、麻酔、看護、検査、抗凝固、デバイスフォローを含むチーム教育が必要。</li>
+                  <li>競合比較は波形、形状、病変セット、統合、監視強度まで分解する。</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="article-separation" class="article-section">
+            <h3>メーカー主張・確認済み事実・未確定事項</h3>
+            <div class="evidence-split">
+              <div class="evidence-panel claim">
+                <h4>メーカーの主張</h4>
+                <ul>
+                  <li>Boston Scientificは、FARAPULSEによる初回治療が抗不整脈薬より優れた有効性を示し、主要評価項目を達成したと説明している。</li>
+                </ul>
+              </div>
+              <div class="evidence-panel fact">
+                <h4>確認済み事実</h4>
+                <ul>
+                  <li>310例を207対103で無作為化し、別に安全性PFA 100例を追加。</li>
+                  <li>全例に植込み型モニター、PFA群はPVI＋後壁アブレーション。</li>
+                  <li>複合成功56%対30%、失敗HR 0.46。</li>
+                  <li>統合PFA群の主要安全性イベント5.1%。</li>
+                  <li>神経学的イベント6件後に選択・スクリーニングを変更。</li>
+                </ul>
+              </div>
+              <div class="evidence-panel unknown">
+                <h4>未確定・制約</h4>
+                <ul>
+                  <li>複合評価の定義は群で完全に同じではない。</li>
+                  <li>安全性は薬物群との直接優越性比較ではない。</li>
+                  <li>企業資金提供で、first-line適応は発表時点でFDA未承認。</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="article-unknowns" class="article-section">
+            <h3>まだ分からないこと</h3>
+            <ul>
+              <li>12か月を超えた長期耐久性、再アブレーション時の病変評価、QOL・入院・医療資源への長期効果。</li>
+              <li>変更後ワークフローが神経学的リスクをどこまで下げるか。</li>
+              <li>CHA2DS2-VASc 4点以上の高リスク患者への適用可能性。</li>
+              <li>他PFAプラットフォーム、PVI単独、異なる後壁戦略での再現性。</li>
+              <li>薬物先行と比べた総費用、待機時間、ラボ稼働率、患者選好を含む実装価値。</li>
+            </ul>
+          </div>
+
+          <div id="article-takeaways" class="article-section">
+            <h3>次に追うべきもの</h3>
+            <ul>
+              <li>first-line適応の各地域での規制変更と、ガイドライン・コンセンサスへの反映。</li>
+              <li>神経学的イベントの詳細と、左房血栓スクリーニング・抗凝固・エア管理の再現性。</li>
+              <li>FARAWAVE以外を含むPFA同士の直接比較と、持続性AFでの病変セット比較。</li>
+              <li>症例当たり手技時間だけでなく、再治療率、薬物継続、モニター負担、チーム教育を含む施設価値。</li>
+            </ul>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="known-unknowns">
+      <div class="section-head">
+        <span class="section-index">04 / BOUNDARY</span>
+        <div>
+          <h2>分かっていること／まだ分からないこと</h2>
+          <p>導入判断では、強い信号と推測の境界線を保つ。ここを曖昧にすると、製品ニュースがそのまま臨床的優越性へ変換されてしまう。</p>
+        </div>
+      </div>
+
+      <div class="knowledge-grid">
+        <article class="knowledge-card known">
+          <h3>臨床的に分かっていること</h3>
+          <ul>
+            <li>AVANT GUARDでは、選択された未治療の持続性AFで、FARAWAVE PFAを初回治療に置く戦略が抗不整脈薬先行より12か月の複合治療失敗を減らした。</li>
+            <li>PFA-SHAMでは、高度に症候性の60例において、PFAが偽手技より再発・AF burden・QOL・心理的苦痛を6か月で改善した。</li>
+            <li>Voltは米国で発作性AFと持続1年未満の持続性AFに正式承認され、単群IDEの1年成績が査読論文化された。</li>
+            <li>DISRUPT-AFのpentaspline PFA 1576例では、3か月の重大な手技・機器関連有害事象が0.7%だった。</li>
+            <li>観察研究メタ解析では、FARAWAVEによるPVIへ一律にPWIを追加しても再発低下を示さず、手技時間が延びた。</li>
+          </ul>
+        </article>
+
+        <article class="knowledge-card unknown">
+          <h3>まだ分からないこと</h3>
+          <ul>
+            <li>異なるPFAカテーテル、波形、極性、アプリケーション数の間で、安全性・耐久性・患者アウトカムにどの程度の差があるか。</li>
+            <li>冠攣縮、溶血、急性腎障害、遅発性悪性不整脈など、稀だが重い事象のプラットフォーム別発生率。</li>
+            <li>持続性AFで誰にPWIや他の基質修飾を追加すべきか。現状のメタ解析はRCTではなく、単一プラットフォームに限定される。</li>
+            <li>Sphere-9のVT/PVC用途の長期有効性と、CIED・冠動脈近傍での安全域。</li>
+            <li>VARIPULSE Pro対FARAPULSEなど、PFA同士の直接比較結果。PERSIGMAは開始段階である。</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="market-section">
+        <h3>代理店・導入現場から見た意味</h3>
+        <div class="market-grid">
+          <article>
+            <h4>Endpoint literacy</h4>
+            <ul><li>急性PVI、複合成功、記録再発、AF burden、再手技を同じ「成功率」にまとめない。</li></ul>
+          </article>
+          <article>
+            <h4>System specificity</h4>
+            <ul><li>PFAという総称ではなく、形状・波形・マッピング・病変セット・鎮静条件を分けて比較する。</li></ul>
+          </article>
+          <article>
+            <h4>Workflow as product</h4>
+            <ul><li>装置だけでなく、血栓評価、抗凝固、アクセス、監視、緊急対応、教育を導入単位にする。</li></ul>
+          </article>
+          <article>
+            <h4>Regulatory discipline</h4>
+            <ul><li>米FDA、欧州CE、研究用途、企業発表を区別し、日本での承認・適応と誤読させない。</li></ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="methodology">
+      <div class="section-head">
+        <span class="section-index">05 / METHOD</span>
+        <div>
+          <h2>調査方法</h2>
+          <p>網羅的システマティックレビューではなく、個人学習用の価値探索。再現できるよう、期間・統合単位・採点式・アクセス状態を残した。</p>
+        </div>
+      </div>
+
+      <div class="method-grid">
+        <article class="method-card">
+          <span class="method-number">STEP 01</span>
+          <h3>探索と優先順位</h3>
+          <p>企業発表、規制当局、ClinicalTrials.gov、査読論文、専門学会・専門ニュースを分けて検索。規制一次資料と査読済み原著を優先した。</p>
+        </article>
+        <article class="method-card">
+          <span class="method-number">STEP 02</span>
+          <h3>重複統合</h3>
+          <p>同じ製品承認、研究、学会発表は1クラスターへ統合。一次資料をprimary、照合先をsupportingとして保持した。</p>
+        </article>
+        <article class="method-card">
+          <span class="method-number">STEP 03</span>
+          <h3>主張の分離</h3>
+          <ul>
+            <li>メーカーが述べたこと</li>
+            <li>規制・研究で確認できたこと</li>
+            <li>未確定・一般化できないこと</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="formula" aria-label="採点式">TOTAL = clinicalImpact × 8 + noveltyTrend × 5 + evidenceReliability × 4 + distributorMarket × 3</div>
+      <div class="score-table" aria-label="採点の重み">
+        <div><strong>40%</strong><span>臨床インパクト</span></div>
+        <div><strong>25%</strong><span>新規性・製品トレンド</span></div>
+        <div><strong>20%</strong><span>根拠の信頼性</span></div>
+        <div><strong>15%</strong><span>代理店・市場への意味</span></div>
+      </div>
+
+      <div class="disclaimer">
+        <strong>範囲と免責</strong>
+        本レポートは2025-07-28〜2026-07-28に公開された情報を対象とする個人学習用の情報整理であり、診療判断、製品選択、承認適応外使用を指示するものではありません。抄録または検索スニペットまでしか確認できない出典は、その状態を明示しています。各地域の最新添付文書、承認状況、施設手順を別途確認してください。
+      </div>
+    </section>
+
+    <section id="sources">
+      <div class="section-head">
+        <span class="section-index">06 / SOURCES</span>
+        <div>
+          <h2>出典</h2>
+          <p>full＝本文確認、abstract＝抄録確認、snippet＝検索結果または限定表示まで。リンク先の更新・アクセス制限により状態が変わる場合がある。</p>
+        </div>
+      </div>
+
+      <div class="source-list">
+        <details class="source-group" open>
+          <summary>
+            <span class="source-rank">01</span>
+            <span class="source-title">AVANT GUARD — 初回PFA対抗不整脈薬</span>
+            <span class="source-toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="source-body">
+            <div class="source-entry">
+              <span class="source-status abstract">PRIMARY · ABSTRACT</span>
+              <div><a href="https://www.nejm.org/doi/abs/10.1056/NEJMoa2600929" target="_blank" rel="noopener noreferrer">Pulsed Field Ablation as Initial Therapy for Persistent Atrial Fibrillation</a><small>New England Journal of Medicine</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://www.acc.org/latest-in-cardiology/journal-scans/2026/05/04/11/24/avant-guard" target="_blank" rel="noopener noreferrer">AVANT-GUARD: Pulsed Field Ablation as First-Line Therapy For Patients With Persistent AFib</a><small>American College of Cardiology</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://www.bostonscientific.com/content/dam/bostonscientific/ep/farapulse/avant-guard-data-summary.pdf" target="_blank" rel="noopener noreferrer">AVANT GUARD IDE clinical trial data summary</a><small>Boston Scientific</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status snippet">SUPPORT · SNIPPET</span>
+              <div><a href="https://clinicaltrials.gov/study/NCT06096337" target="_blank" rel="noopener noreferrer">NCT06096337</a><small>ClinicalTrials.gov</small></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="source-group">
+          <summary>
+            <span class="source-rank">02</span>
+            <span class="source-title">Abbott Volt — FDA承認とVOLT-AF IDE</span>
+            <span class="source-toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="source-body">
+            <div class="source-entry">
+              <span class="source-status">PRIMARY · FULL</span>
+              <div><a href="https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfpma/pma.cfm?id=P250022" target="_blank" rel="noopener noreferrer">Premarket Approval P250022: Volt PFA System</a><small>U.S. Food and Drug Administration</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://www.accessdata.fda.gov/cdrh_docs/pdf25/P250022A.pdf" target="_blank" rel="noopener noreferrer">FDA approval letter for Volt PFA System</a><small>U.S. Food and Drug Administration</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status abstract">SUPPORT · ABSTRACT</span>
+              <div><a href="https://www.jacc.org/doi/10.1016/j.jacep.2026.01.006" target="_blank" rel="noopener noreferrer">Balloon-in-Basket Pulsed Field Ablation for Pulmonary Vein Isolation: 1-Year Outcomes</a><small>JACC: Clinical Electrophysiology</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://abbott.mediaroom.com/2025-12-22-Abbotts-Volt-TM-Pulsed-Field-Ablation-System-Receives-FDA-Approval-to-Treat-Patients-with-Atrial-Fibrillation" target="_blank" rel="noopener noreferrer">Abbott's Volt PFA System Receives FDA Approval</a><small>Abbott</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://www.cardiovascular.abbott/us/en/electrophysiology-clinical-evidence/volt-clinical-evidence.html" target="_blank" rel="noopener noreferrer">Volt PFA System Clinical Evidence</a><small>Abbott</small></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="source-group">
+          <summary>
+            <span class="source-rank">03</span>
+            <span class="source-title">PFA-SHAM — PFA対偽手技</span>
+            <span class="source-toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="source-body">
+            <div class="source-entry">
+              <span class="source-status abstract">PRIMARY · ABSTRACT</span>
+              <div><a href="https://pubmed.ncbi.nlm.nih.gov/42186803/" target="_blank" rel="noopener noreferrer">Pulsed Field Ablation Versus Sham to Treat Atrial Fibrillation</a><small>PubMed / Circulation</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC12675130/" target="_blank" rel="noopener noreferrer">PFA-SHAM trial protocol</a><small>Heart Rhythm O2 / PubMed Central</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status snippet">SUPPORT · SNIPPET</span>
+              <div><a href="https://clinicaltrials.gov/study/NCT05717725" target="_blank" rel="noopener noreferrer">NCT05717725</a><small>ClinicalTrials.gov</small></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="source-group">
+          <summary>
+            <span class="source-rank">04</span>
+            <span class="source-title">2026 HRS/EHRA科学的声明</span>
+            <span class="source-toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="source-body">
+            <div class="source-entry">
+              <span class="source-status">PRIMARY · FULL</span>
+              <div><a href="https://www.heartrhythmjournal.com/article/S1547-5271%2826%2900124-4/fulltext" target="_blank" rel="noopener noreferrer">2026 HRS/EHRA scientific statement on pulsed field ablation for cardiac arrhythmias</a><small>Heart Rhythm</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://www.hrsonline.org/news/hrs-releases-scientific-statement-pfa-for-cardiac-arrhythmias/" target="_blank" rel="noopener noreferrer">HRS release on the PFA scientific statement</a><small>Heart Rhythm Society</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status abstract">SUPPORT · ABSTRACT</span>
+              <div><a href="https://pubmed.ncbi.nlm.nih.gov/41690439/" target="_blank" rel="noopener noreferrer">PubMed record</a><small>PubMed</small></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="source-group">
+          <summary>
+            <span class="source-rank">05</span>
+            <span class="source-title">VARIPULSE Pro欧州投入とVARIPURE</span>
+            <span class="source-toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="source-body">
+            <div class="source-entry">
+              <span class="source-status">PRIMARY · FULL</span>
+              <div><a href="https://www.jnj.com/media-center/press-releases/johnson-johnson-advances-pulsed-field-ablation-portfolio-with-the-launch-of-varipulse-pro-in-europe" target="_blank" rel="noopener noreferrer">Johnson &amp; Johnson Advances PFA Portfolio with VARIPULSE Pro in Europe</a><small>Johnson &amp; Johnson</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://academic.oup.com/europace/article/28/6/euag082/8651352" target="_blank" rel="noopener noreferrer">12-month VARIPURE results</a><small>EP Europace</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://www.jnj.com/media-center/press-releases/johnson-johnson-highlights-favorable-12-month-interim-results-for-the-varipulse-platform-at-ehra-2026" target="_blank" rel="noopener noreferrer">J&amp;J VARIPURE 12-month interim results release</a><small>Johnson &amp; Johnson</small></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="source-group">
+          <summary>
+            <span class="source-rank">06</span>
+            <span class="source-title">DISRUPT-AF — 米国実臨床の初期安全性</span>
+            <span class="source-toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="source-body">
+            <div class="source-entry">
+              <span class="source-status">PRIMARY · FULL</span>
+              <div><a href="https://www.jacc.org/doi/10.1016/j.jacep.2026.04.032" target="_blank" rel="noopener noreferrer">Early Safety Profile Using Pulsed Field Ablation: DISRUPT-AF</a><small>JACC: Clinical Electrophysiology</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status abstract">SUPPORT · ABSTRACT</span>
+              <div><a href="https://pubmed.ncbi.nlm.nih.gov/42360264/" target="_blank" rel="noopener noreferrer">PubMed record</a><small>PubMed</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status snippet">SUPPORT · SNIPPET</span>
+              <div><a href="https://clinicaltrials.gov/study/NCT06335082" target="_blank" rel="noopener noreferrer">NCT06335082</a><small>ClinicalTrials.gov</small></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="source-group">
+          <summary>
+            <span class="source-rank">07</span>
+            <span class="source-title">PVI＋PWI対PVI — 観察研究メタ解析</span>
+            <span class="source-toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="source-body">
+            <div class="source-entry">
+              <span class="source-status">PRIMARY · FULL</span>
+              <div><a href="https://www.nature.com/articles/s41598-026-50715-8" target="_blank" rel="noopener noreferrer">Pulsed field ablation for persistent AF: PVI with or without PWI</a><small>Scientific Reports</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC13319224/" target="_blank" rel="noopener noreferrer">PubMed Central full text</a><small>PubMed Central</small></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="source-group">
+          <summary>
+            <span class="source-rank">08</span>
+            <span class="source-title">PFA時代の合併症プロファイル</span>
+            <span class="source-toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="source-body">
+            <div class="source-entry">
+              <span class="source-status abstract">PRIMARY · ABSTRACT</span>
+              <div><a href="https://pubmed.ncbi.nlm.nih.gov/42419514/" target="_blank" rel="noopener noreferrer">Evolution of the complication profile of AF ablation in the pulsed field era</a><small>PubMed / Journal of Cardiology</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://www.heartrhythmjournal.com/article/S1547-5271%2826%2900124-4/fulltext" target="_blank" rel="noopener noreferrer">2026 HRS/EHRA scientific statement</a><small>Heart Rhythm</small></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="source-group">
+          <summary>
+            <span class="source-rank">09</span>
+            <span class="source-title">Sphere-9 — CLEAR-VT初期成績</span>
+            <span class="source-toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="source-body">
+            <div class="source-entry">
+              <span class="source-status abstract">PRIMARY · ABSTRACT</span>
+              <div><a href="https://pubmed.ncbi.nlm.nih.gov/42043359/" target="_blank" rel="noopener noreferrer">Early U.S. Experience With Ventricular Arrhythmia Ablation Using a Dual-Energy Lattice-Tip Catheter</a><small>PubMed / JACC: Clinical Electrophysiology</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://www.acc.org/latest-in-cardiology/journal-scans/2026/04/27/14/03/clear-vt-registry" target="_blank" rel="noopener noreferrer">CLEAR-VT Registry summary</a><small>American College of Cardiology</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://www.medtronic.com/en-us/e/healthcare-professionals/cardiac-ablation/sphere-9-vt-ablation-catheter-clinical-evidence.html" target="_blank" rel="noopener noreferrer">Sphere-9 VT Ablation Catheter Clinical Evidence</a><small>Medtronic</small></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="source-group">
+          <summary>
+            <span class="source-rank">10</span>
+            <span class="source-title">PERSIGMA — PFA対PFA直接比較試験</span>
+            <span class="source-toggle" aria-hidden="true"></span>
+          </summary>
+          <div class="source-body">
+            <div class="source-entry">
+              <span class="source-status">PRIMARY · FULL</span>
+              <div><a href="https://www.jnj.com/media-center/press-releases/johnson-johnson-launches-landmark-head-to-head-pulsed-field-ablation-trial-in-persistent-atrial-fibrillation" target="_blank" rel="noopener noreferrer">Johnson &amp; Johnson Launches PERSIGMA Head-to-Head PFA Trial</a><small>Johnson &amp; Johnson</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status snippet">SUPPORT · SNIPPET</span>
+              <div><a href="https://clinicaltrials.gov/study/NCT07523750" target="_blank" rel="noopener noreferrer">NCT07523750</a><small>ClinicalTrials.gov</small></div>
+            </div>
+            <div class="source-entry">
+              <span class="source-status">SUPPORT · FULL</span>
+              <div><a href="https://www.medtechdive.com/news/jj-starts-head-to-head-pfa-trial-against-boston-scientific-device/818515/" target="_blank" rel="noopener noreferrer">J&amp;J starts head-to-head PFA trial against Boston Scientific device</a><small>MedTech Dive</small></div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="page-shell footer-inner">
+      <span class="footer-mark">PFA INTELLIGENCE / FIELD NOTE 01</span>
+      <span>Coverage: 2025-07-28 — 2026-07-28</span>
+      <span>Generated: 2026-07-28 · Personal learning use</span>
+    </div>
+  </footer>
+</body>
+</html>
