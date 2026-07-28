@@ -1,0 +1,813 @@
+{
+  "metadata": {
+    "generatedAt": "2026-07-28",
+    "coverageStart": "2025-07-28",
+    "coverageEnd": "2026-07-28",
+    "focus": "PFAを主軸とするカテーテルアブレーション関連医療機器情報",
+    "scoringWeights": {
+      "clinicalImpact": 40,
+      "noveltyTrend": 25,
+      "evidenceReliability": 20,
+      "distributorMarket": 15
+    },
+    "scoringFormula": "clinicalImpact*8 + noveltyTrend*5 + evidenceReliability*4 + distributorMarket*3",
+    "editorialPolicy": [
+      "メーカーの主張、規制上確認できる事実、研究結果を分離する",
+      "異なる対象集団、評価項目、追跡期間の数値を直接比較しない",
+      "全文を確認できない出典はabstract、snippet、blockedとして明示する"
+    ]
+  },
+  "items": [
+    {
+      "id": "2026-04-25-boston-scientific-avant-guard",
+      "rank": 1,
+      "titleJa": "持続性AFの初回治療でPFAが抗不整脈薬を上回る：AVANT GUARD",
+      "titleOriginal": "Pulsed Field Ablation as Initial Therapy for Persistent Atrial Fibrillation",
+      "summaryJa": "未治療の持続性心房細動患者310例を2対1でPFAまたは抗不整脈薬へ無作為化したAVANT GUARDでは、12か月の複合治療成功率がPFA 56%、薬物30%だった。薬物治療を先行させる従来の順序を見直し得る一方、試験は神経学的イベント6件を受け一時中断しており、有効性だけでなく患者選択と周術期ワークフローを読む必要がある。",
+      "publishedAt": "2026-04-25",
+      "companies": [
+        "Boston Scientific"
+      ],
+      "products": [
+        "FARAPULSE",
+        "FARAWAVE",
+        "LUX-Dx"
+      ],
+      "conditions": [
+        "Persistent atrial fibrillation"
+      ],
+      "regions": [
+        "Global"
+      ],
+      "informationType": "randomized-clinical-trial",
+      "evidenceType": "randomized-controlled-ide-trial",
+      "primarySource": {
+        "title": "Pulsed Field Ablation as Initial Therapy for Persistent Atrial Fibrillation",
+        "publisher": "New England Journal of Medicine",
+        "url": "https://www.nejm.org/doi/abs/10.1056/NEJMoa2600929",
+        "accessStatus": "abstract"
+      },
+      "supportingSources": [
+        {
+          "title": "AVANT-GUARD: Pulsed Field Ablation as First-Line Therapy For Patients With Persistent AFib",
+          "publisher": "American College of Cardiology",
+          "url": "https://www.acc.org/latest-in-cardiology/journal-scans/2026/05/04/11/24/avant-guard",
+          "accessStatus": "full"
+        },
+        {
+          "title": "AVANT GUARD IDE clinical trial data summary",
+          "publisher": "Boston Scientific",
+          "url": "https://www.bostonscientific.com/content/dam/bostonscientific/ep/farapulse/avant-guard-data-summary.pdf",
+          "accessStatus": "full"
+        },
+        {
+          "title": "Study Details: NCT06096337",
+          "publisher": "ClinicalTrials.gov",
+          "url": "https://clinicaltrials.gov/study/NCT06096337",
+          "accessStatus": "snippet"
+        }
+      ],
+      "manufacturerClaims": [
+        "Boston Scientificは、FARAPULSEによる初回治療が抗不整脈薬より優れた有効性を示し、主要評価項目を達成したと説明している。"
+      ],
+      "verifiedFacts": [
+        "未治療の持続性AF患者310例がPFA 207例、抗不整脈薬103例へ2対1で無作為化され、別に100例がPFAの安全性解析へ組み入れられた。",
+        "全例に植込み型心電図モニターを使用し、PFA群ではPVIと後壁アブレーションが実施された。",
+        "12か月の複合治療成功率はPFA 56%（95%CI 48–63）、抗不整脈薬30%（95%CI 21–40）で、複合治療失敗のハザード比は0.46（95%CI 0.33–0.65、P<0.001）だった。",
+        "統合PFA群の主要安全性イベントは5.1%だった。",
+        "神経学的イベント6件を受け試験は一時中断し、その後、CHA2DS2-VASc 4点以上の除外と左房血栓スクリーニング強化を行って再開した。"
+      ],
+      "uncertainties": [
+        "主要有効性評価項目は群ごとに短期成功の定義が異なる複合評価であり、単純な不整脈再発率だけの比較ではない。",
+        "主要安全性は抗不整脈薬群との優越性比較ではなく、統合PFA群を事前設定した性能目標と比較している。",
+        "Boston Scientificが資金提供しており、FARAWAVEを持続性AFの初回治療に用いる適応は、同社資料上この発表時点でFDA承認されていない。"
+      ],
+      "scores": {
+        "clinicalImpact": 5,
+        "noveltyTrend": 5,
+        "evidenceReliability": 5,
+        "distributorMarket": 4,
+        "total": 97
+      },
+      "scoreRationale": "持続性AFの治療順序を直接検証した国際RCTで、連続モニタリングと査読論文を伴うため臨床・新規性・根拠を最高点とした。導入市場への影響は大きいが、対象適応と安全性ワークフローに制約が残るため代理店点は4。",
+      "selectionReasonJa": "",
+      "featured": false,
+      "tags": [
+        "PFA",
+        "persistent-AF",
+        "first-line",
+        "randomized-trial",
+        "FARAPULSE",
+        "Boston-Scientific",
+        "continuous-monitoring",
+        "safety-workflow"
+      ],
+      "detailedArticle": null
+    },
+    {
+      "id": "2025-12-19-abbott-volt-fda",
+      "rank": 2,
+      "titleJa": "Abbott Volt PFA Systemが米FDA承認、1年成績も査読論文化",
+      "titleOriginal": "FDA approval for the Volt PFA System / Balloon-in-Basket Pulsed Field Ablation for Pulmonary Vein Isolation",
+      "summaryJa": "FDAは2025年12月19日、AbbottのVolt PFA Systemを薬剤抵抗性の症候性・再発性の発作性AFおよび持続性AF（持続1年未満）に承認した。EnSite Xと統合するballoon-in-basket型で、VOLT-AF IDEの治療320例では12か月の主要有効性が発作性81.1%、持続性63.3%、主要安全性イベント1.9%だった。",
+      "publishedAt": "2025-12-19",
+      "companies": [
+        "Abbott"
+      ],
+      "products": [
+        "Volt PFA System",
+        "Volt PFA Catheter, Sensor Enabled",
+        "Current PFA Generator",
+        "EnSite X EP System"
+      ],
+      "conditions": [
+        "Paroxysmal atrial fibrillation",
+        "Persistent atrial fibrillation"
+      ],
+      "regions": [
+        "United States"
+      ],
+      "informationType": "regulatory-and-clinical-evidence",
+      "evidenceType": "fda-pma-and-prospective-single-arm-ide-study",
+      "primarySource": {
+        "title": "Premarket Approval P250022: Volt PFA System",
+        "publisher": "U.S. Food and Drug Administration",
+        "url": "https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfpma/pma.cfm?id=P250022",
+        "accessStatus": "full"
+      },
+      "supportingSources": [
+        {
+          "title": "FDA approval letter for Volt PFA System",
+          "publisher": "U.S. Food and Drug Administration",
+          "url": "https://www.accessdata.fda.gov/cdrh_docs/pdf25/P250022A.pdf",
+          "accessStatus": "full"
+        },
+        {
+          "title": "Balloon-in-Basket Pulsed Field Ablation for Pulmonary Vein Isolation: 1-Year Outcomes of the VOLT-AF IDE Study",
+          "publisher": "JACC: Clinical Electrophysiology",
+          "url": "https://www.jacc.org/doi/10.1016/j.jacep.2026.01.006",
+          "accessStatus": "abstract"
+        },
+        {
+          "title": "Abbott's Volt Pulsed Field Ablation System Receives FDA Approval",
+          "publisher": "Abbott",
+          "url": "https://abbott.mediaroom.com/2025-12-22-Abbotts-Volt-TM-Pulsed-Field-Ablation-System-Receives-FDA-Approval-to-Treat-Patients-with-Atrial-Fibrillation",
+          "accessStatus": "full"
+        },
+        {
+          "title": "Volt PFA System Clinical Evidence",
+          "publisher": "Abbott",
+          "url": "https://www.cardiovascular.abbott/us/en/electrophysiology-clinical-evidence/volt-clinical-evidence.html",
+          "accessStatus": "full"
+        }
+      ],
+      "manufacturerClaims": [
+        "Abbottは、同一カテーテルでマッピング、ペーシング、アブレーションを行い、EnSite Xとの統合でカテーテル交換を減らせると説明している。",
+        "Abbottは、少ないアプリケーション、鎮静選択の柔軟性、低フルオロ・低溶血につながる設計上の利点を訴求している。"
+      ],
+      "verifiedFacts": [
+        "FDAのPMA P250022は2025年12月19日に承認され、発作性AFと持続1年未満の持続性AFの双方が適応に含まれた。",
+        "FDA承認書はVoltカテーテルがEnSite X EP Systemと互換であることを明記している。",
+        "VOLT-AF IDEは392例を登録し、320例（発作性165例、持続性155例）が治療を受けた前向き多施設単群試験だった。",
+        "主要有効性は発作性81.1%（95%CI 74.3–86.3）、持続性63.3%（95%CI 55.1–70.4）で、記録された不整脈再発からの自由率はそれぞれ84.2%と67.8%だった。",
+        "主要安全性イベントは1.9%で、再治療19例では肺静脈の78.5%が隔離を維持していた。"
+      ],
+      "uncertainties": [
+        "VOLT-AF IDEは無作為比較試験ではなく、他社PFA、RF、cryoとの優劣は判断できない。",
+        "試験はAbbottが資金提供し、著者に同社従業員・関係者が含まれる。",
+        "IDE試験はPVIのみの評価であり、後壁など肺静脈外への適用成績を示すものではない。",
+        "FDAの承認条件として最大150例の前向き多施設・非無作為観察型市販後調査が求められ、2026年7月時点のFDA一覧ではプロトコル準備中と表示されている。"
+      ],
+      "scores": {
+        "clinicalImpact": 5,
+        "noveltyTrend": 5,
+        "evidenceReliability": 4,
+        "distributorMarket": 5,
+        "total": 96
+      },
+      "scoreRationale": "米国での正式承認、発作性・持続性双方の適応、マッピング統合型の新規設計が臨床と市場の両面に直結する。規制情報は一次資料で強い一方、臨床成績は単群IDEのため根拠点を4とした。",
+      "selectionReasonJa": "",
+      "featured": false,
+      "tags": [
+        "PFA",
+        "FDA",
+        "PMA",
+        "Abbott",
+        "Volt",
+        "EnSite-X",
+        "balloon-in-basket",
+        "persistent-AF",
+        "product-launch"
+      ],
+      "detailedArticle": null
+    },
+    {
+      "id": "2026-05-26-pfa-sham",
+      "rank": 3,
+      "titleJa": "PFAはプラセボ効果を超えるか：PFA-SHAMが再発・QOLを二重に検証",
+      "titleOriginal": "Pulsed Field Ablation Versus Sham to Treat Atrial Fibrillation: The PFA-SHAM Randomized Clinical Trial",
+      "summaryJa": "高度に症候性のAF患者60例をPFAと偽手技へ無作為化し、植込み型モニターで追跡したPFA-SHAMでは、6か月の心房性不整脈再発がPFA 6.7%、sham 83.3%だった。AFEQTもPFAで43.9点、shamで11.3点改善し、客観的なリズム抑制と主観的な生活の質の双方で偽手技を上回った。",
+      "publishedAt": "2026-05-26",
+      "companies": [
+        "Boston Scientific",
+        "Biotronik"
+      ],
+      "products": [
+        "Pentaspline PFA catheter",
+        "Implantable cardiac monitor"
+      ],
+      "conditions": [
+        "Paroxysmal atrial fibrillation",
+        "Persistent atrial fibrillation"
+      ],
+      "regions": [
+        "Czech Republic"
+      ],
+      "informationType": "randomized-clinical-trial",
+      "evidenceType": "prospective-sham-controlled-single-blind-randomized-trial",
+      "primarySource": {
+        "title": "Pulsed Field Ablation Versus Sham to Treat Atrial Fibrillation: The PFA-SHAM Randomized Clinical Trial",
+        "publisher": "PubMed / Circulation",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/42186803/",
+        "accessStatus": "abstract"
+      },
+      "supportingSources": [
+        {
+          "title": "Pulsed field ablation vs sham ablation to treat atrial fibrillation: trial protocol",
+          "publisher": "Heart Rhythm O2 / PubMed Central",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12675130/",
+          "accessStatus": "full"
+        },
+        {
+          "title": "Study Details: NCT05717725",
+          "publisher": "ClinicalTrials.gov",
+          "url": "https://clinicaltrials.gov/study/NCT05717725",
+          "accessStatus": "snippet"
+        }
+      ],
+      "manufacturerClaims": [],
+      "verifiedFacts": [
+        "AFEQT 50点未満の高度に症候性のAF患者60例をPFAとshamへ1対1で割り付けた、前向き・単盲検・sham対照試験で、評価項目は盲検判定された。",
+        "全例に植込み型心電図モニターを留置し、6か月の再発はPFA 2/30例（6.7%）、sham 25/30例（83.3%）だった。",
+        "AFEQTのベースラインからの改善はPFA 43.9±18.1点、sham 11.3±27.9点で、群間差の中央値は32.6点（95%ベイズ信用区間20.2–44.9）だった。",
+        "6か月のAF burden中央値はPFA 0、sham 0.43で、心理的苦痛の指標もPFA群でより改善した。"
+      ],
+      "uncertainties": [
+        "症例数60例、追跡6か月であり、安全性や長期耐久性を評価する規模ではない。",
+        "AFEQT 50点未満の高度に症候性の患者を選択しており、軽症・無症候の患者へ一般化できない。",
+        "pentaspline PFAカテーテルを用いた試験であり、PFAというエネルギー全体や全プラットフォームの同等効果を証明したものではない。"
+      ],
+      "scores": {
+        "clinicalImpact": 5,
+        "noveltyTrend": 5,
+        "evidenceReliability": 5,
+        "distributorMarket": 3,
+        "total": 94
+      },
+      "scoreRationale": "偽手技対照、連続モニタリング、QOLと再発の共主要評価という稀少な設計で臨床的疑問に強く答えるため3軸を最高点とした。小規模で製品選定・導入市場への直接性は限定的なため代理店点は3。",
+      "selectionReasonJa": "",
+      "featured": false,
+      "tags": [
+        "PFA",
+        "sham-controlled",
+        "randomized-trial",
+        "quality-of-life",
+        "AFEQT",
+        "continuous-monitoring",
+        "patient-perspective"
+      ],
+      "detailedArticle": null
+    },
+    {
+      "id": "2026-02-12-hrs-ehra-scientific-statement",
+      "rank": 4,
+      "titleJa": "PFA導入を「波形・溶血・冠攣縮」まで具体化した2026 HRS/EHRA声明",
+      "titleOriginal": "2026 HRS/EHRA scientific statement on pulsed field ablation for cardiac arrhythmias",
+      "summaryJa": "HRSとEHRAの科学的声明は、PFAを単一技術として扱わず、カテーテル形状、波形、極性、投与回数によって安全性とワークフローが異なると整理した。溶血、急性腎障害、冠攣縮、遅発性冠イベント、CIEDとの相互作用を実装上の論点とし、メーカーに最低限の技術情報開示を求めている。",
+      "publishedAt": "2026-02-12",
+      "companies": [],
+      "products": [],
+      "conditions": [
+        "Atrial fibrillation",
+        "Cardiac arrhythmias"
+      ],
+      "regions": [
+        "Global"
+      ],
+      "informationType": "scientific-statement",
+      "evidenceType": "multisociety-scientific-statement",
+      "primarySource": {
+        "title": "2026 HRS/EHRA scientific statement on pulsed field ablation for cardiac arrhythmias",
+        "publisher": "Heart Rhythm",
+        "url": "https://www.heartrhythmjournal.com/article/S1547-5271%2826%2900124-4/fulltext",
+        "accessStatus": "full"
+      },
+      "supportingSources": [
+        {
+          "title": "HRS Releases Scientific Statement on Pulsed Field Ablation for Cardiac Arrhythmias",
+          "publisher": "Heart Rhythm Society",
+          "url": "https://www.hrsonline.org/news/hrs-releases-scientific-statement-pfa-for-cardiac-arrhythmias/",
+          "accessStatus": "full"
+        },
+        {
+          "title": "PubMed record: 2026 HRS/EHRA scientific statement",
+          "publisher": "PubMed",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/41690439/",
+          "accessStatus": "abstract"
+        }
+      ],
+      "manufacturerClaims": [],
+      "verifiedFacts": [
+        "声明はHRS主導、EHRA共同で作成され、商業的支援なしとHRSが明記している。",
+        "PFAシステム間にはカテーテル設計、波形、極性などの実質的差があり、科学的比較のためメーカーへ最低限の技術情報開示を求めている。",
+        "安全上の論点として溶血、腎障害、冠攣縮、遅発性冠イベント・悪性不整脈、機器相互作用を扱っている。",
+        "冠動脈近傍ではPFAよりRFを選ぶこと、PFAを使う場合のニトログリセリン、STモニタリング、緊急冠動脈造影へのアクセスなどを実務的に提案している。"
+      ],
+      "uncertainties": [
+        "科学的声明であり、正式な診療ガイドラインではない。",
+        "急速に更新される複数プラットフォームのエビデンスを扱うため、個々の推奨の根拠強度と適用範囲は均一ではない。",
+        "企業ごとの非公開波形が残る限り、システム間の安全性・有効性を完全には比較できない。"
+      ],
+      "scores": {
+        "clinicalImpact": 5,
+        "noveltyTrend": 4,
+        "evidenceReliability": 5,
+        "distributorMarket": 4,
+        "total": 92
+      },
+      "scoreRationale": "新規製品単体ではなく、PFA全体の導入・教育・安全管理を横断する非商業的な専門家声明で、臨床と評価基準への影響が大きい。正式ガイドラインではないため、新規性と代理店点は4。",
+      "selectionReasonJa": "",
+      "featured": false,
+      "tags": [
+        "PFA",
+        "HRS",
+        "EHRA",
+        "scientific-statement",
+        "hemolysis",
+        "coronary-spasm",
+        "workflow",
+        "technical-disclosure"
+      ],
+      "detailedArticle": null
+    },
+    {
+      "id": "2026-04-07-jnj-varipulse-pro-europe",
+      "rank": 5,
+      "titleJa": "VARIPULSE Proが欧州投入：高速化の製品訴求に12か月実臨床データが続く",
+      "titleOriginal": "Johnson & Johnson Advances Pulsed Field Ablation Portfolio with the Launch of VARIPULSE Pro in Europe",
+      "summaryJa": "Johnson & Johnsonは2026年4月、CEマーク取得後にVARIPULSE Proを欧州投入した。新パルスシーケンスとCARTO 3統合を訴求し、同月の査読済みVARIPURE中間解析では、1023例中442例が12か月訪問を完了した時点で、心房性不整脈再発からの自由率は全体84.2%、発作性90.5%、持続性75.3%と推定された。",
+      "publishedAt": "2026-04-07",
+      "companies": [
+        "Johnson & Johnson",
+        "Biosense Webster"
+      ],
+      "products": [
+        "VARIPULSE Pro",
+        "VARIPULSE",
+        "TRUPULSE Generator",
+        "CARTO 3 System"
+      ],
+      "conditions": [
+        "Paroxysmal atrial fibrillation",
+        "Persistent atrial fibrillation"
+      ],
+      "regions": [
+        "Europe"
+      ],
+      "informationType": "product-launch-and-postmarket-evidence",
+      "evidenceType": "ce-mark-launch-and-prospective-single-arm-postmarket-interim-study",
+      "primarySource": {
+        "title": "Johnson & Johnson Advances Pulsed Field Ablation Portfolio with the Launch of VARIPULSE Pro in Europe",
+        "publisher": "Johnson & Johnson",
+        "url": "https://www.jnj.com/media-center/press-releases/johnson-johnson-advances-pulsed-field-ablation-portfolio-with-the-launch-of-varipulse-pro-in-europe",
+        "accessStatus": "full"
+      },
+      "supportingSources": [
+        {
+          "title": "Effectiveness of AF pulsed field ablation with a variable-loop circular catheter: 12-month VARIPURE results",
+          "publisher": "EP Europace",
+          "url": "https://academic.oup.com/europace/article/28/6/euag082/8651352",
+          "accessStatus": "full"
+        },
+        {
+          "title": "Johnson & Johnson Highlights Favorable 12-Month Interim Results for the VARIPULSE Platform at EHRA 2026",
+          "publisher": "Johnson & Johnson",
+          "url": "https://www.jnj.com/media-center/press-releases/johnson-johnson-highlights-favorable-12-month-interim-results-for-the-varipulse-platform-at-ehra-2026",
+          "accessStatus": "full"
+        }
+      ],
+      "manufacturerClaims": [
+        "Johnson & Johnsonは、新パルスシーケンスが従来シーケンスより5倍速く、低い温度プロファイルで同等の病変を形成すると説明している。",
+        "CARTO 3の組織近接指標、マッピング、ICEとの統合が位置決めと一貫した通電を支援すると訴求している。"
+      ],
+      "verifiedFacts": [
+        "J&Jは2026年4月7日、CEマーク取得後のVARIPULSE Pro欧州投入を発表した。",
+        "VARIPUREは前向き・多施設・単群・非無作為の市販後観察研究で、22欧州施設、74術者、初回アブレーション1023例を登録した。",
+        "2026年2月17日のデータ抽出時点で442/1023例が12か月訪問を完了し、Kaplan–Meier推定の不整脈再発からの自由率は全体84.2%、発作性90.5%、持続性75.3%だった。",
+        "査読論文は、全コホートの12か月データが未完了の中間解析であることを明記している。"
+      ],
+      "uncertainties": [
+        "VARIPUREの成績は従来VARIPULSEを含むvariable-loopプラットフォームの中間データであり、新しいProシーケンス単独の12か月比較成績ではない。",
+        "単群観察研究で、他社PFAや熱アブレーションとの直接比較はない。",
+        "5倍速い、低温度、同等病変という表現は主に前臨床・企業資料に基づく製品訴求で、患者アウトカムの優越性を示さない。"
+      ],
+      "scores": {
+        "clinicalImpact": 4,
+        "noveltyTrend": 5,
+        "evidenceReliability": 4,
+        "distributorMarket": 5,
+        "total": 88
+      },
+      "scoreRationale": "欧州の新製品投入、CARTO統合、査読済み市販後データが一つの流れになっており製品・市場トレンドとして強い。臨床データは中間・単群でPro固有ではないため、臨床点と根拠点は4。",
+      "selectionReasonJa": "",
+      "featured": false,
+      "tags": [
+        "PFA",
+        "Johnson-and-Johnson",
+        "Biosense-Webster",
+        "VARIPULSE-Pro",
+        "CARTO-3",
+        "CE-Mark",
+        "Europe",
+        "postmarket"
+      ],
+      "detailedArticle": null
+    },
+    {
+      "id": "2026-06-29-disrupt-af-safety",
+      "rank": 6,
+      "titleJa": "米国実臨床1576例で見るpentaspline PFAの初期安全性：DISRUPT-AF",
+      "titleOriginal": "Early Safety Profile Using Pulsed Field Ablation: Prospective Multicenter DISRUPT-AF Study",
+      "summaryJa": "米国20施設・77術者の初回AFアブレーション1576例を前向きに追ったDISRUPT-AFでは、3か月までの手技・機器関連有害事象が1.6%、重大事象が0.7%だった。食道障害、持続性横隔神経障害、肺静脈狭窄、急性腎障害は報告されなかったが、脳卒中0.3%や血管アクセス合併症は残った。",
+      "publishedAt": "2026-06-29",
+      "companies": [
+        "Boston Scientific"
+      ],
+      "products": [
+        "FARAPULSE",
+        "Pentaspline PFA catheter"
+      ],
+      "conditions": [
+        "Paroxysmal atrial fibrillation",
+        "Persistent atrial fibrillation",
+        "Long-standing persistent atrial fibrillation"
+      ],
+      "regions": [
+        "United States"
+      ],
+      "informationType": "postmarket-clinical-study",
+      "evidenceType": "prospective-multicenter-nonrandomized-registry",
+      "primarySource": {
+        "title": "Early Safety Profile Using Pulsed Field Ablation: Prospective Multicenter DISRUPT-AF Study",
+        "publisher": "JACC: Clinical Electrophysiology",
+        "url": "https://www.jacc.org/doi/10.1016/j.jacep.2026.04.032",
+        "accessStatus": "full"
+      },
+      "supportingSources": [
+        {
+          "title": "PubMed record: Early Safety Profile Using Pulsed Field Ablation",
+          "publisher": "PubMed",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42360264/",
+          "accessStatus": "abstract"
+        },
+        {
+          "title": "Study Details: NCT06335082",
+          "publisher": "ClinicalTrials.gov",
+          "url": "https://clinicaltrials.gov/study/NCT06335082",
+          "accessStatus": "snippet"
+        }
+      ],
+      "manufacturerClaims": [],
+      "verifiedFacts": [
+        "初回AFアブレーション1576例を20施設、77術者で前向きに登録し、1か月・3か月の安全性を評価した。",
+        "3か月までの全有害事象は2.2%、手技・機器関連は1.6%、重大な手技・機器関連事象は0.7%だった。",
+        "脳卒中は0.3%、偽性動脈瘤0.4%、血腫0.3%、冠攣縮と報告された事象は1例（0.06%）だった。",
+        "食道障害、持続性横隔神経障害、肺静脈狭窄、急性腎障害は報告されず、3か月全死亡は0.3%だった。",
+        "術者経験11件以上の群では、初期・中間経験群より報告有害事象率が低かったが、探索的解析である。"
+      ],
+      "uncertainties": [
+        "無作為化された熱アブレーション比較群がなく、PFAが他方式より安全と直接結論できない。",
+        "追跡は3か月までの初期安全性で、稀な遅発性イベントや長期有効性を評価しない。",
+        "FARAPULSEのpentasplineシステムに限定され、他のPFA波形・形状へ一般化できない。",
+        "研究著者にBoston Scientific従業員が含まれる。"
+      ],
+      "scores": {
+        "clinicalImpact": 4,
+        "noveltyTrend": 4,
+        "evidenceReliability": 4,
+        "distributorMarket": 4,
+        "total": 80
+      },
+      "scoreRationale": "多数施設・多数術者の前向き実臨床データで導入時の安全管理に直結するが、単一製品・非無作為・短期追跡のため各軸を4とした。",
+      "selectionReasonJa": "",
+      "featured": false,
+      "tags": [
+        "PFA",
+        "FARAPULSE",
+        "real-world",
+        "safety",
+        "learning-curve",
+        "vascular-access",
+        "stroke",
+        "registry"
+      ],
+      "detailedArticle": null
+    },
+    {
+      "id": "2026-04-29-pvi-pwi-meta-analysis",
+      "rank": 7,
+      "titleJa": "持続性AFでPWIを足せばよいのか：PFA 1983例のメタ解析は上乗せ効果を支持せず",
+      "titleOriginal": "Pulsed field ablation for persistent atrial fibrillation: meta-analysis of pulmonary vein isolation with or without posterior wall isolation",
+      "summaryJa": "13研究1983例を統合したメタ解析では、PFAによるPVIに後壁隔離を追加しても、6つの比較コホートで心房性不整脈再発は有意に減らなかった。手技時間は平均16.22分延長し、合併症差はなかったが、全研究がFARAWAVEを用いた観察研究で、PWI不要を確定するRCTではない。",
+      "publishedAt": "2026-04-29",
+      "companies": [
+        "Boston Scientific"
+      ],
+      "products": [
+        "FARAWAVE"
+      ],
+      "conditions": [
+        "Persistent atrial fibrillation",
+        "Long-standing persistent atrial fibrillation"
+      ],
+      "regions": [
+        "Global"
+      ],
+      "informationType": "systematic-review",
+      "evidenceType": "systematic-review-and-meta-analysis-of-observational-studies",
+      "primarySource": {
+        "title": "Pulsed field ablation for persistent atrial fibrillation: meta-analysis of pulmonary vein isolation with or without posterior wall isolation",
+        "publisher": "Scientific Reports",
+        "url": "https://www.nature.com/articles/s41598-026-50715-8",
+        "accessStatus": "full"
+      },
+      "supportingSources": [
+        {
+          "title": "PubMed Central full text",
+          "publisher": "PubMed Central",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13319224/",
+          "accessStatus": "full"
+        }
+      ],
+      "manufacturerClaims": [],
+      "verifiedFacts": [
+        "13研究、1983例を対象とし、そのうち6研究がPVI単独とPVI+PWIを比較するコホートだった。",
+        "比較コホートで再発低下は認めず、リスク比は1.10（95%CI 0.78–1.57、P=0.59、I2=41%）だった。",
+        "PVI+PWIは手技時間を平均16.22分延長し、全体の周術期合併症には有意差がなかった。",
+        "全13研究がBoston ScientificのFARAWAVE pentasplineカテーテルを使用していた。"
+      ],
+      "uncertainties": [
+        "組み入れ研究はすべて観察研究で、RCTは含まれない。",
+        "発作性AF13%、再治療20%が混在し、モニタリング強度や病変定義にも差がある。",
+        "手技時間、3Dマッピング利用、単群再発率には大きな異質性がある。",
+        "結論はFARAWAVEに限られ、他形状・他波形のPFAへ一般化できない。"
+      ],
+      "scores": {
+        "clinicalImpact": 4,
+        "noveltyTrend": 4,
+        "evidenceReliability": 4,
+        "distributorMarket": 4,
+        "total": 80
+      },
+      "scoreRationale": "持続性AFでの追加病変という日常的判断と手技時間に直結し、複数研究を統合している。一方、比較は観察研究のみで単一プラットフォームのため各軸を4とした。",
+      "selectionReasonJa": "",
+      "featured": false,
+      "tags": [
+        "PFA",
+        "persistent-AF",
+        "PVI",
+        "PWI",
+        "posterior-wall",
+        "meta-analysis",
+        "workflow",
+        "FARAWAVE"
+      ],
+      "detailedArticle": null
+    },
+    {
+      "id": "2026-07-09-pfa-complication-profile",
+      "rank": 8,
+      "titleJa": "PFA時代の合併症像は「消えた」のではなく「変わった」",
+      "titleOriginal": "Evolution of the complication profile of AF ablation in the pulsed field era",
+      "summaryJa": "2026年7月のレビューは、大規模レジストリでPFAの重大有害事象が1%未満である一方、冠攣縮や溶血などPFAに特徴的な有害事象が顕在化していると整理した。従来の血管アクセス・左房内操作リスクは残り、熱損傷の減少を「全体として無条件に安全になった」と読み替えるべきではない。",
+      "publishedAt": "2026-07-09",
+      "companies": [],
+      "products": [],
+      "conditions": [
+        "Atrial fibrillation"
+      ],
+      "regions": [
+        "Global"
+      ],
+      "informationType": "clinical-review",
+      "evidenceType": "narrative-review",
+      "primarySource": {
+        "title": "Evolution of the complication profile of AF ablation in the pulsed field era",
+        "publisher": "PubMed / Journal of Cardiology",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/42419514/",
+        "accessStatus": "abstract"
+      },
+      "supportingSources": [
+        {
+          "title": "2026 HRS/EHRA scientific statement on pulsed field ablation for cardiac arrhythmias",
+          "publisher": "Heart Rhythm",
+          "url": "https://www.heartrhythmjournal.com/article/S1547-5271%2826%2900124-4/fulltext",
+          "accessStatus": "full"
+        }
+      ],
+      "manufacturerClaims": [],
+      "verifiedFacts": [
+        "レビューは大規模レジストリの重大有害事象率が1%未満であることを整理している。",
+        "従来の熱損傷に関連する食道瘻、持続性横隔神経障害、肺静脈狭窄が大幅に減る一方、冠攣縮と溶血をPFA特有の論点として挙げる。",
+        "静脈アクセスや左房内操作に伴う従来型の合併症はPFAでも残ると指摘している。"
+      ],
+      "uncertainties": [
+        "ナラティブレビューであり、各事象の発生率を同一条件で比較するメタ解析ではない。",
+        "稀な事象は報告バイアスや監視強度の影響を受け、プラットフォーム別リスクは未確定。",
+        "抄録までの確認で、本文中の個別研究の選択・評価方法は今回の収集では精査できていない。"
+      ],
+      "scores": {
+        "clinicalImpact": 4,
+        "noveltyTrend": 4,
+        "evidenceReliability": 3,
+        "distributorMarket": 4,
+        "total": 76
+      },
+      "scoreRationale": "PFAの安全性説明と導入教育を修正する重要な視点で臨床・市場への関連は高い。抄録確認に留まるナラティブレビューであるため根拠点は3。",
+      "selectionReasonJa": "",
+      "featured": false,
+      "tags": [
+        "PFA",
+        "safety",
+        "complications",
+        "hemolysis",
+        "coronary-spasm",
+        "renal-injury",
+        "risk-communication"
+      ],
+      "detailedArticle": null
+    },
+    {
+      "id": "2026-04-26-medtronic-sphere9-clear-vt",
+      "rank": 9,
+      "titleJa": "PFAの射程が心房から心室へ：Sphere-9によるVT/PVCアブレーション初期成績",
+      "titleOriginal": "Early U.S. Experience With Catheter Ablation of Ventricular Arrhythmias With a Dual-Energy Lattice-Tip Catheter: Insights From the CLEAR-VT Registry",
+      "summaryJa": "CLEAR-VTは、RFとPFAを切り替えられるMedtronic Sphere-9で心室性不整脈を治療した米国初期経験を報告した。59例の短期追跡でVTの急性成功78%、PVC 100%だった一方、PFAを左室ペーシングリード先端から約7.5mmで通電した後のICDシステム障害など、CIED近傍の新しい注意点も示した。",
+      "publishedAt": "2026-04-26",
+      "companies": [
+        "Medtronic"
+      ],
+      "products": [
+        "Sphere-9",
+        "Affera Mapping and Ablation System"
+      ],
+      "conditions": [
+        "Ventricular tachycardia",
+        "Premature ventricular contractions"
+      ],
+      "regions": [
+        "United States"
+      ],
+      "informationType": "device-indication-expansion",
+      "evidenceType": "prospective-registry-and-early-feasibility-program",
+      "primarySource": {
+        "title": "Early U.S. Experience With Catheter Ablation of Ventricular Arrhythmias With a Dual-Energy Lattice-Tip Catheter",
+        "publisher": "PubMed / JACC: Clinical Electrophysiology",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/42043359/",
+        "accessStatus": "abstract"
+      },
+      "supportingSources": [
+        {
+          "title": "CLEAR-VT Registry: Catheter Ablation of Ventricular Arrhythmias With a Dual-Energy Lattice-Tip Catheter",
+          "publisher": "American College of Cardiology",
+          "url": "https://www.acc.org/latest-in-cardiology/journal-scans/2026/04/27/14/03/clear-vt-registry",
+          "accessStatus": "full"
+        },
+        {
+          "title": "Sphere-9 VT Ablation Catheter Clinical Evidence",
+          "publisher": "Medtronic",
+          "url": "https://www.medtronic.com/en-us/e/healthcare-professionals/cardiac-ablation/sphere-9-vt-ablation-catheter-clinical-evidence.html",
+          "accessStatus": "full"
+        }
+      ],
+      "manufacturerClaims": [
+        "MedtronicはSphere-9を、マッピング、RF、PFAを一体化したwide-area focal catheterとして位置づけている。",
+        "同社は米国Sphere VT pivotal trialが2026年4月に登録開始を承認されたと説明している。"
+      ],
+      "verifiedFacts": [
+        "CLEAR-VTは2025年1〜9月にSphere-9で治療した連続59例を解析し、50例が瘢痕関連VT、9例が頻発PVCだった。",
+        "急性成功はVT 78%、PVC 100%で、中央値100日の追跡でVT再発は9例（18%）だった。",
+        "重大な手技関連合併症は3件で、2件の大出血と、左室ペーシングリード先端から約7.5mmでPFA後に生じたICDシステム障害1件が含まれた。",
+        "MedtronicのVT用途と関連ソフトウェアは米国で研究段階であり、FDA評価済みではないと同社ページが明記している。"
+      ],
+      "uncertainties": [
+        "単施設に近い初期レジストリ、59例、短期追跡で、長期の再発・安全性は不明。",
+        "RFとPFAの使い分けを含むdual-energy手技であり、PFA単独の寄与は分離できない。",
+        "AF用PFAの成績を心室性不整脈へ外挿できず、pivotal trialの結果が必要。"
+      ],
+      "scores": {
+        "clinicalImpact": 3,
+        "noveltyTrend": 5,
+        "evidenceReliability": 3,
+        "distributorMarket": 4,
+        "total": 73
+      },
+      "scoreRationale": "PFAが心室性不整脈へ広がる重要な製品トレンドで新規性は最高点。現時点では少数・短期・研究用途のため臨床点と根拠点は3、将来の製品教育・市場影響を考え代理店点は4。",
+      "selectionReasonJa": "",
+      "featured": false,
+      "tags": [
+        "PFA",
+        "RF",
+        "Medtronic",
+        "Sphere-9",
+        "Affera",
+        "ventricular-tachycardia",
+        "PVC",
+        "CIED",
+        "investigational"
+      ],
+      "detailedArticle": null
+    },
+    {
+      "id": "2026-04-24-jnj-persigma",
+      "rank": 10,
+      "titleJa": "PFAは「対熱源」から「PFA対PFA」へ：PERSIGMA直接比較試験が始動",
+      "titleOriginal": "Johnson & Johnson Launches Landmark Head-to-Head Pulsed Field Ablation Trial in Persistent Atrial Fibrillation",
+      "summaryJa": "Johnson & Johnsonは、持続性AFでVARIPULSE ProとBoston Scientific FARAPULSEを直接比較するPERSIGMA RCTを開始した。最大466例・50施設を予定し、PFA市場が単群成績の競争からプラットフォーム間の比較検証へ移る兆候だが、現時点では試験開始情報であり、有効性・安全性の結果はまだない。",
+      "publishedAt": "2026-04-24",
+      "companies": [
+        "Johnson & Johnson",
+        "Biosense Webster",
+        "Boston Scientific"
+      ],
+      "products": [
+        "VARIPULSE Pro",
+        "FARAPULSE",
+        "FARAWAVE"
+      ],
+      "conditions": [
+        "Persistent atrial fibrillation"
+      ],
+      "regions": [
+        "United States"
+      ],
+      "informationType": "clinical-trial-launch",
+      "evidenceType": "planned-randomized-head-to-head-trial",
+      "primarySource": {
+        "title": "Johnson & Johnson Launches Landmark Head-to-Head Pulsed Field Ablation Trial in Persistent Atrial Fibrillation",
+        "publisher": "Johnson & Johnson",
+        "url": "https://www.jnj.com/media-center/press-releases/johnson-johnson-launches-landmark-head-to-head-pulsed-field-ablation-trial-in-persistent-atrial-fibrillation",
+        "accessStatus": "full"
+      },
+      "supportingSources": [
+        {
+          "title": "Study Details: NCT07523750",
+          "publisher": "ClinicalTrials.gov",
+          "url": "https://clinicaltrials.gov/study/NCT07523750",
+          "accessStatus": "snippet"
+        },
+        {
+          "title": "J&J starts head-to-head PFA trial against Boston Scientific device",
+          "publisher": "MedTech Dive",
+          "url": "https://www.medtechdive.com/news/jj-starts-head-to-head-pfa-trial-against-boston-scientific-device/818515/",
+          "accessStatus": "full"
+        }
+      ],
+      "manufacturerClaims": [
+        "Johnson & Johnsonは、PERSIGMAがPFAプラットフォームの相対的な安全性・有効性を明確にし、日常診療の意思決定に役立つ比較エビデンスを提供すると説明している。"
+      ],
+      "verifiedFacts": [
+        "PERSIGMAは持続性AF患者をVARIPULSE ProまたはFARAPULSEへ無作為化する直接比較試験として発表された。",
+        "最大466例、50施設を予定し、安全性と60日以降の不整脈再発回避を主要評価項目に含む。",
+        "VARIPULSE Proは発表時点で米国未承認の研究用プラットフォームだった。",
+        "ClinicalTrials.govではNCT07523750として登録情報を確認できるが、結果は掲載されていない。"
+      ],
+      "uncertainties": [
+        "試験開始段階であり、登録完了率、追跡、結果、公表時期は未確定。",
+        "優越性・非劣性の仮説、詳細な統計計画、完全な評価期間は今回読めた企業発表だけでは十分確認できない。",
+        "臨床的価値は将来の結果に依存し、現時点の製品優劣を示す情報ではない。"
+      ],
+      "scores": {
+        "clinicalImpact": 3,
+        "noveltyTrend": 5,
+        "evidenceReliability": 2,
+        "distributorMarket": 5,
+        "total": 72
+      },
+      "scoreRationale": "PFA同士の直接比較という市場・製品評価上の新規性は高く、将来の採用競争へ直結する。まだ結果のない試験開始情報なので臨床点3、根拠点2に抑えた。",
+      "selectionReasonJa": "",
+      "featured": false,
+      "tags": [
+        "PFA",
+        "head-to-head",
+        "randomized-trial",
+        "PERSIGMA",
+        "VARIPULSE-Pro",
+        "FARAPULSE",
+        "persistent-AF",
+        "market-competition"
+      ],
+      "detailedArticle": null
+    }
+  ]
+}
