@@ -9,6 +9,7 @@
 - 各ルールが「なぜ」その設計になったかは [`decisions.md`](./decisions.md) を参照
 - 過去に実際に再発した実装ミスのチェックリストは [`known-failure-patterns.md`](./known-failure-patterns.md) を参照（レビュー・Sweep系エージェントは必読）
 - 検知手段のないルール（自然言語のみで強制力の無いルール）の一覧は [`undetectable-rules-inventory.md`](./undetectable-rules-inventory.md) を参照
+- 検知hookの検知後の是正（block/自動復旧/warning-onlyのいずれか）の一覧は [`actuator-inventory.md`](./actuator-inventory.md) を参照（issue #578）
 
 ## Next.js バージョンに関する注意
 
@@ -202,6 +203,7 @@ AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p
 | [`docs/agents/common.md`](./common.md) | 全AIエージェント共通ルール（本ファイル）・引き継ぎフォーマット |
 | [`docs/agents/observability-internals.md`](./observability-internals.md) | 観測・Eval基盤の実装詳細・既知の限界（common.mdから分離、issue #486） |
 | [`docs/agents/tooling-decisions.md`](./tooling-decisions.md) | 公式機能・プラグインの導入可否判断記録（common.mdから分離、issue #486） |
+| [`docs/agents/actuator-inventory.md`](./actuator-inventory.md) | 検知hookの検知後の是正（block/自動復旧/warning-only）の棚卸し（issue #578） |
 | `docs/ai-config-map.md` | エージェント・スキル全体マップ |
 | `src/app/` | Next.js App Router のページ・API Routes |
 | `src/components/` | UI コンポーネント |
@@ -221,7 +223,8 @@ AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p
 | `scripts/check-find-av-precision-recorded.sh` | Stop hookによるfind-av-precisionログ記録漏れの機械検知（issue #522） |
 | [`docs/agents/recovery-queue.md`](./recovery-queue.md) | 検知後の自動復旧閉ループの設計・スコープ・既知の未対応（issue #523） |
 | `scripts/queue-recovery-task.sh` | 検知hookから呼ばれ`.aidd/recovery-queue.jsonl`へ復旧タスクを登録する（issue #523） |
-| `scripts/check-recovery-queue.sh` | SessionStart hookによる未対応の復旧タスクのcontext注入（issue #523） |
+| `scripts/check-recovery-queue.sh` | SessionStart hookによる未対応の復旧タスクのcontext注入・surfaced放置エントリのエスカレーション（issue #523・#579） |
+| `scripts/resolve-recovery-task.sh` | 復旧タスク対応後に`status`を`"resolved"`へ書き換える（issue #579） |
 | `scripts/check-workflow-interruption.sh` | SessionStart hookによるWorkflow中断検知(`wf_*.json`のstatus/staleness判定)とrecovery-queueへの登録（issue #534） |
 | [`docs/agents/fault-injection-drill.md`](./fault-injection-drill.md) | `aidd-phase2.js`のdeny-by-defaultゲート実測訓練のランブック（issue #395） |
 | `scripts/aidd-fault-injection-setup.sh` / `scripts/aidd-fault-injection-teardown.sh` | fault injection訓練用の`.aidd/run-manifest.json`差し替え・復元（issue #395） |

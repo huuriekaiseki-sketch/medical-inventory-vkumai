@@ -93,6 +93,33 @@ run_hook
 assert_eq "$EXIT_CODE" "0" "exit 0（クラッシュしない）"
 assert_contains "$OUT" "systemMessage" "壊れた行があっても正当な行は処理される"
 
+echo "=== scenario 8: pending表示時にsurfacedAtが記録される ==="
+jq -nc '{id: "d", timestamp: "2026-07-23T00:00:00Z", type: "gap-check-followup", detail: {}, status: "pending"}' > "$QUEUE_FILE"
+run_hook
+assert_eq "$EXIT_CODE" "0" "exit 0"
+SURFACED_AT="$(jq -r '.surfacedAt' "$QUEUE_FILE")"
+assert_eq "$([ -n "$SURFACED_AT" ] && [ "$SURFACED_AT" != "null" ] && echo yes || echo no)" "yes" "surfacedAtが記録される"
+
+echo "=== scenario 9: 閾値超過のsurfaced放置エントリ → エスカレーション表示される ==="
+jq -nc '{id: "e", timestamp: "2026-07-01T00:00:00Z", type: "gap-check-followup", detail: {}, status: "surfaced", surfacedAt: "2026-07-01T00:00:00Z"}' > "$QUEUE_FILE"
+run_hook
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" "issue #579" "issue #579への言及が含まれる"
+assert_contains "$OUT" "resolve-recovery-task.sh" "解決方法への言及が含まれる"
+
+echo "=== scenario 10: 閾値内のsurfacedエントリ → エスカレーションされない ==="
+RECENT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+jq -nc --arg t "$RECENT" '{id: "f", timestamp: $t, type: "gap-check-followup", detail: {}, status: "surfaced", surfacedAt: $t}' > "$QUEUE_FILE"
+run_hook
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "閾値内のsurfacedは沈黙する"
+
+echo "=== scenario 11: resolved済みエントリ → エスカレーション対象外 ==="
+jq -nc '{id: "g", timestamp: "2026-07-01T00:00:00Z", type: "gap-check-followup", detail: {}, status: "resolved", surfacedAt: "2026-07-01T00:00:00Z", resolvedAt: "2026-07-02T00:00:00Z"}' > "$QUEUE_FILE"
+run_hook
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "resolved済みは対象外"
+
 echo "=== scenario 7: jq不在 → 沈黙（fail-open） ==="
 FAKE_BIN_DIR="$WORK_DIR/fake-bin-no-jq"
 mkdir -p "$FAKE_BIN_DIR"

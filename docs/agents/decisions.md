@@ -84,3 +84,28 @@ common.mdの分量は増え続けており、prose追加1件ごとに他ルー�
 引き継ぎフォーマット実施検知）も実装済み: 前者は`scripts/check-run-manifest-presence.sh`
 （issue #444）、後者は`scripts/check-handoff-format.sh`（issue #524、PR本文経由の引き継ぎのみ
 対象。セッション終了報告・`docs/sessions/`経由は引き続き未検知）。
+
+## なぜ新しい検知メカニズムに「アクチュエータ（検知後に誰が直すか）」も先に決める原則を追加したか（issue #578）
+
+**結論: 新しい検知hookを追加するときは、センサー（検知手段、issue #339原則）だけでなく、検知後に
+誰が是正するか（block / recovery-queue登録による自動復旧 / ask（実行前の人間確認ゲート） /
+warning-only（人が読んで対応）のいずれか）も先に決める。決めずに追加すると、検知hookの数は
+増え続けるのに「本当に閉じているループ」の比率は上がらない。**
+
+2026-08-01のmentor設計レビュー（ループ/ハーネスエンジニアリング観点）で、issue #339の3層
+（機械強制／機械検知（事後）／自然言語のみ）はセンサー側の分類であり、検知**後**の是正動作
+（アクチュエータ）については別軸で分類されていないことが指摘された。実際に棚卸しすると
+（[`actuator-inventory.md`](./actuator-inventory.md)参照）、`.claude/settings.json`に登録された
+検知hook約20件のうち、機械的にblock/askするものは2件（`check-direct-ddl-execution.sh`の
+deny、`check-skip-marker-write.sh`のask）、recovery-queueへ自動登録し次回セッションで
+自動的に目の前に出すものが2件（`check-workflow-interruption.sh`、`check-gap-check-state.sh`）
+のみで、残り約15件はすべて「systemMessageを人（またはセッション自身）が読んで判断する」
+warning-onlyだった。検知hookの本数だけを見るとループが充実しているように見えるが、実態は
+「センサーは多いがアクチュエータは少ない」という偏りがあった。
+
+**原則:** 新しい検知メカニズムを追加する際は、issue #339の「検知手段を先に決める」に加えて
+「検知後、誰が・どう是正するか」も同時に決める。是正が機械（block/deny/自動復旧）でできない
+場合でも、それ自体は悪ではない（停止①②のように人間判断が必須な箇所は意図的にwarning-only
+またはask止まりにすべき）。ただし「warning-onlyにした」という判断は暗黙にせず、
+[`actuator-inventory.md`](./actuator-inventory.md)の棚卸し表に反映し、意図的にwarning-onlyに
+したのか、単に手が回っていないだけなのかを区別できる状態を保つ。
