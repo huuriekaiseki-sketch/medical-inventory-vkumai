@@ -68,6 +68,22 @@ journal.jsonlのagentIdが同一空間であることを確認済み）は
 `verify-agent-progress-transcript.ts`は本モジュール経由の薄いラッパーに統合済み。既存gap check
 bashスクリプト（`check-loop-observability-gap.sh`等）・ログ書き込み側は無改修のまま。
 
+**サマリー側の組み込み（issue #569残タスクの一部、2026-08-01）**: issue #569本文の3項目のうち
+「検証・サマリー・復旧処理はcanonical event Module経由に寄せる」は、検証側（上記
+`verify-agent-progress-transcript.ts`）のみ着手済みでサマリー側は未着手だった。
+`scripts/summarize-loop-observability.sh`（`logs/loop-observability.jsonl`のみ参照）は自己申告の
+pass/failしか集計できず、`blocked`状態（Spec Check/Manifest Check等が返す）は集計から常に欠落
+していた（月次品質ゲートサマリ、issue #412、が実際にこの欠落を持ったまま運用されていた）。
+`scripts/lib/gate-effectiveness-summary.ts`が`journalAdapter`経由でWorkflow journal.jsonlの
+`blocked`件数をagentType別に集計し、`scripts/summarize-gate-blocked.sh`→
+`scripts/gate-effectiveness-monthly-check.sh`の順で月次サマリへ追記されるようにした。
+`correlateEvents()`によるagentId単位の相関（Stage2の時刻窓フォールバック等）はここでは使わず、
+journalAdapterが返すイベントを`status === 'blocked'`でフィルタしてagentType別に数えるだけの
+単純集計に留めている（blockedの有無・件数だけならagentId相関は不要なため。issue #569コメントが
+推奨した「スコープを絞った小さい一歩」の方針を踏襲）。
+- 残タスク: 「復旧処理をcanonical event Module経由に寄せる」（recovery-queue系スクリプトは
+  依然bashのみで完結しており、canonical-event.tsを経由していない）は未着手のまま
+
 ## サブエージェント骨格記録の機械強制（issue #423）
 
 上記の`agent-progress.jsonl` / `loop-observability.jsonl`は、いずれもエージェントへの

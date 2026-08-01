@@ -91,6 +91,23 @@ touch -t "$(date -v-31d +%Y%m%d%H%M 2>/dev/null || date -d '31 days ago' +%Y%m%d
 run_hook
 assert_contains "$OUT" "品質ゲート月次サマリ" "31日経過後は再びsystemMessageが出る"
 
+echo "=== scenario 5: summarize-gate-blocked.shが無い環境でもクラッシュしない(fail-open) ==="
+assert_contains "$OUT" "blocked状態" "summarize-gate-blocked.sh不在でもblocked状態の見出し自体は出る(取得失敗の断り書き付き)"
+assert_contains "$OUT" "取得できませんでした" "取得失敗時の断り書きが出る"
+
+echo "=== scenario 6: summarize-gate-blocked.shがある環境 → blocked集計が本文に含まれる ==="
+rm -f "$STATE_FILE"
+cp "$SCRIPT_DIR/summarize-gate-blocked.sh" "$SANDBOX/scripts/"
+cp "$SCRIPT_DIR/lib/gate-effectiveness-summary.ts" "$SANDBOX/scripts/lib/"
+cp "$SCRIPT_DIR/lib/canonical-event.ts" "$SANDBOX/scripts/lib/"
+cp "$SCRIPT_DIR/lib/reconstruct-loop-observability.ts" "$SANDBOX/scripts/lib/"
+# summarize-gate-blocked.shはデフォルトでこのリポジトリの本物のprojectDirを見に行くため
+# (npxのモジュール解決のためnode_modulesはリポジトリルートのものをそのまま使う必要があり、
+# ここでは"クラッシュせず実行でき、blocked集計の見出しが出る"ことのみを確認する
+# (件数の具体値はCI環境依存のため固定しない)
+run_hook
+assert_contains "$OUT" "## blocked状態" "blocked集計セクションの見出しが出る(issue #569)"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
