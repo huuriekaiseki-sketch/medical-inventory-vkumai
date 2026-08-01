@@ -1,0 +1,70 @@
+# 検知ループのアクチュエータ側棚卸し（issue #578）
+
+[`undetectable-rules-inventory.md`](./undetectable-rules-inventory.md)がセンサー（検知手段が
+「無い」ルール）の棚卸しであるのに対し、本ファイルは**センサーが「ある」検知hook約20件について、
+検知後に誰が是正するか（アクチュエータ）**を棚卸しする。原則の背景は
+[`decisions.md`の該当原則](./decisions.md#なぜ新しい検知メカニズムにアクチュエータ検知後に誰が直すかも先に決める原則を追加したかissue-578)を参照。
+
+新しい検知hookを追加・変更したら、この表に行を追加/更新すること。
+
+## 分類基準
+
+| 分類 | 意味 |
+|---|---|
+| block | ツール実行自体を機械的に拒否する（`permissionDecision: "deny"`） |
+| ask | ツール実行前に人間の明示的確認を要求する（`permissionDecision: "ask"`） |
+| 自動復旧（queue） | `scripts/queue-recovery-task.sh`で`.aidd/recovery-queue.jsonl`へ登録し、次回セッション冒頭で機械的に目の前へ出す。実際の是正はセッション自身が自律的に行うか、人が対応後`scripts/resolve-recovery-task.sh`で閉じる（issue #523・#579） |
+| warning-only | `systemMessage`/`additionalContext`を出すのみ。是正するかどうか・いつ是正するかは完全に人（またはそれを読んだセッション）の裁量に委ねられ、機械的な強制力は無い |
+
+## 棚卸し表
+
+| Hookイベント | スクリプト | 分類 | 備考 |
+|---|---|---|---|
+| PreToolUse (Bash/mcp DDL) | `check-direct-ddl-execution.sh` | **block** | 直接DDL実行を拒否 |
+| PreToolUse (Write/Edit/MultiEdit skipマーカー) | `check-skip-marker-write.sh` | **ask** | verify-claimsのエスケープハッチ書き込みに人間確認を要求 |
+| PreToolUse (Write/Edit/MultiEdit 高リスクパス) | `check-run-manifest-presence.sh` | warning-only | `permissionDecision: "allow"` + `additionalContext`。blockしない設計（issue #444、意図的） |
+| SessionStart | `check-workflow-interruption.sh` | **自動復旧（queue）** | Workflow中断を検知し`workflow-interrupted`としてqueue登録（issue #534） |
+| SessionStart | `check-recovery-queue.sh` | 自動復旧（queue、表示側） | pendingエントリのcontext注入＋surfaced放置エントリのエスカレーション表示（issue #523・#579）。是正の実行そのものはこのhookの範囲外 |
+| SessionStart | `check-branch-pr-status.sh` | warning-only | マージ済みブランチ上での作業を警告 |
+| SessionStart | `check-local-main-freshness.sh` | warning-only | ローカルmain鮮度の警告 |
+| SessionStart | `check-otel-collector-status.sh` | warning-only | OTel collector状態の情報提示 |
+| SessionStart | `check-automode-config.sh` | warning-only | autoMode(hard_deny)未設定の警告（個人設定のため機械強制不可） |
+| SessionStart | `check-blocked-issues-staleness.sh` | warning-only | `blocked`ラベル長期滞留issueの警告 |
+| SessionStart | `check-fault-injection-drill-staleness.sh` | warning-only | fault injection訓練の実施タイミング警告 |
+| Stop | `check-gap-check-state.sh` | **自動復旧（queue）** | gap check警告を`gap-check-followup`としてqueue登録（issue #488・#523） |
+| Stop | agent型（domain.md/decisions.md提案） | warning-only | 高リスクドメイン変更時のドキュメント反映漏れ提案 |
+| Stop | `ai-check-suggest.sh` | warning-only | `npm run ai:check`実行有無の警告 |
+| Stop | `verify-claims.sh` | warning-only | 直前ターンの主張の裏取り結果を警告 |
+| Stop | `gate-effectiveness-monthly-check.sh` | warning-only | 品質ゲート月次サマリの提示 |
+| Stop | `check-aidd-stats-recorded.sh` | warning-only | AIDD stats `start`呼び忘れの警告（issue #495） |
+| Stop | `check-aidd-phase-stats-recorded.sh` | warning-only | AIDD stats phase1/phase2呼び忘れの警告（issue #524） |
+| Stop | `check-handoff-format.sh` | warning-only | PR本文の引き継ぎフォーマット必須見出し欠如の警告（issue #524。PR本文経由のみ対象） |
+| Stop | `check-find-av-precision-recorded.sh` | warning-only | find-av-precisionログ記録漏れの警告（issue #522） |
+| （参考）per-edit | security-guidanceプラグイン（`possible_real_facility_name`等） | warning-only | issue #440。Claude Code公式プラグイン経由、上記`.claude/settings.json`のhooksとは別経路 |
+
+（`SubagentStart`/`SubagentStop`の`log-subagent-hook-skeleton.sh`は検知ではなく記録専用のため
+この表の対象外）
+
+## 集計と評価
+
+- block: 1件
+- ask: 1件
+- 自動復旧（queue、うち登録側）: 2件（`check-workflow-interruption.sh`・`check-gap-check-state.sh`）
+- 自動復旧（queue、表示側）: 1件（`check-recovery-queue.sh`）
+- warning-only: 15件
+
+約20件の検知hookのうち、機械的に実行を止める・確認を強制する（block/ask）のは2件のみ。
+recovery-queue接続によって「次回セッション冒頭で機械的に目の前に出る」までは自動化されている
+ものが3件。残る15件はすべて、systemMessageが出力された後の是正判断・実行タイミングを完全に
+人（またはそれを読んだセッション）に委ねている。
+
+**この偏り自体は問題ではない。** 停止①②（仕様レビュー・構造化レビュー）はそもそも人間判断が
+本質であり、機械化すべきでない。また`check-otel-collector-status.sh`のような情報提示や、
+`check-automode-config.sh`のような個人設定変更を伴うものは、原理的にblock/queue化できない
+（個人の`~/.claude/settings.json`をプロジェクト側から強制する手段が無い、issue #439）。
+
+**次に見るべき問い（この棚卸しの使い方）:** 表の各warning-only行について、「意図的に
+warning-onlyにしている（人間判断が本質・機械強制できない対象）」のか「単にrecovery-queue接続を
+まだやっていないだけ」なのかを個別に判断すること。後者に該当する候補（例:
+`check-aidd-stats-recorded.sh`・`check-aidd-phase-stats-recorded.sh`のような、対応内容が
+定型的で自律対応しやすいもの）があれば、queue接続の追加候補としてissue化する。
