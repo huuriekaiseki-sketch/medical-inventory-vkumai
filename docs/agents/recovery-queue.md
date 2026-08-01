@@ -13,10 +13,16 @@
   （`{id, timestamp, type, detail, status: "pending"}`）
 - 次回セッション開始時、SessionStart hook（`scripts/check-recovery-queue.sh`）が
   `status: "pending"` のエントリを読み、セッション冒頭のcontextへ注入する
-  （`systemMessage`。同時に`status`を`"surfaced"`へ書き換え、同一エントリを毎セッション
-  繰り返し表示しないようにする）
+  （`systemMessage`。同時に`status`を`"surfaced"`へ書き換え`surfacedAt`を記録し、同一エントリを
+  毎セッション繰り返し表示しないようにする）
 - 実際の復旧作業は、contextへ注入された内容を見てセッション自身が自律的に行う。
   hookスクリプト自体は復旧作業を一切実行しない
+- 対応が終わったら `scripts/resolve-recovery-task.sh --id <ID>` を呼び、`status`を`"resolved"`へ
+  書き換える（`resolvedAt`も記録。issue #579で実装。行を削除せず追記専用の監査ログとして残す設計）
+- `status: "surfaced"`のまま既定72時間（`RECOVERY_QUEUE_STALE_HOURS`で変更可）以上経過している
+  エントリは、`check-recovery-queue.sh`が通常のpending表示とは別枠でエスカレーション表示する
+  （issue #579）。resolved化されず放置されているタスクへの気づきを与えるためだが、これも
+  警告止まりであり`resolve-recovery-task.sh`の呼び忘れ自体をblockする手段ではない
 
 ## 第一弾の対象type
 
@@ -72,6 +78,14 @@ issue #523の起票時点では「復旧手順が既に明文化されている2
 
 - 停止①②（仕様レビュー・構造化レビュー）を自動復旧でスキップしない
 - サーキットブレーカー（`/goal`・budgetガード）を復旧ループが迂回しない
-- 復旧キュー自体の記録漏れ・処理漏れの検知手段は今回未実装のまま
-  （issue #339の原則どおり、この限界を明記しておく。`status: "surfaced"`から
-  `"resolved"`への遷移は自動化されておらず、対応後は手動でキューから該当行を削除する運用）
+- 復旧キュー自体の記録漏れ・処理漏れの検知手段は部分的に実装済み（issue #579）。
+  `status: "surfaced"`から`"resolved"`への遷移は`scripts/resolve-recovery-task.sh`で機械化し、
+  `surfacedAt`から既定閾値以上経過した未resolvedエントリは`check-recovery-queue.sh`が
+  エスカレーション表示する。ただし以下は未解決のまま残る（issue #339の原則どおり、この限界を
+  明記しておく）:
+  - `resolve-recovery-task.sh`を呼ぶこと自体を強制する手段は無い（呼び忘れてもエスカレーション
+    表示という形で気づけるだけで、blockはできない）
+  - issue #579実装前に`"surfaced"`のまま`surfacedAt`が記録されていない既存エントリは
+    エスカレーション対象から漏れる（新規に登録されるエントリのみ`surfacedAt`を持つ）
+  - エスカレーション閾値（既定72時間）の実測に基づく妥当性検証は未実施（他staleness系
+    スクリプトの閾値設定と同様、実測前の暫定値）
