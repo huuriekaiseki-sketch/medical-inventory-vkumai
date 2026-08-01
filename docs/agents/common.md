@@ -204,6 +204,7 @@ AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p
 | [`docs/agents/observability-internals.md`](./observability-internals.md) | 観測・Eval基盤の実装詳細・既知の限界（common.mdから分離、issue #486） |
 | [`docs/agents/tooling-decisions.md`](./tooling-decisions.md) | 公式機能・プラグインの導入可否判断記録（common.mdから分離、issue #486） |
 | [`docs/agents/actuator-inventory.md`](./actuator-inventory.md) | 検知hookの検知後の是正（block/自動復旧/warning-only）の棚卸し（issue #578） |
+| [`docs/agents/portability-inventory.md`](./portability-inventory.md) | 多リポジトリ展開に向けたドメイン非依存/スタック依存の切り分け棚卸し（issue #535） |
 | `docs/ai-config-map.md` | エージェント・スキル全体マップ |
 | `src/app/` | Next.js App Router のページ・API Routes |
 | `src/components/` | UI コンポーネント |
