@@ -116,6 +116,30 @@ CI（本番相当RLS）で初めて失敗するまで気づかれなかった。
 （products/categories/distributor_products等）のCUD操作に触れる場合は、着手前にこのセクションと
 該当migrationの `-- WHY:` コメントを必ず確認すること。**
 
+## なぜ発注系RPC 4関数のみsearch_path=''+完全修飾にし、他のSECURITY DEFINER関数は据え置いたか
+
+**結論: `create_case_order_atomic`/`create_loan_order_atomic`/`create_consumable_order_atomic`/`resolve_jan_unit_price`の4関数を`SET search_path = ''`＋全参照`public.`完全修飾に変更した（`20260804000001_harden_order_rpc_search_path.sql`）。`is_facility_member`・`get_distributor_product_price_history`等、他の既存`SECURITY DEFINER`関数は`SET search_path = public`のまま据え置いている。**
+
+`SET search_path = public`のままだと、`SECURITY DEFINER`関数は理論上、呼び出し元セッションが
+`public`より前に別スキーマを検索パスに追加していた場合の名前解決に依存する余地が残る
+（search_path hijacking）。`search_path = ''`＋全オブジェクトの完全修飾にすれば、名前解決が
+実行時のセッション設定と無関係に固定される。
+
+今回はSupabase機能のハンズオン学習として発注系4関数のみをスコープにした。したがって
+**このリポジトリの`SECURITY DEFINER`関数は`search_path=public`（旧方式）と`search_path=''`
+＋完全修飾（新方式）が混在した過渡状態にある。** 新規に`SECURITY DEFINER`関数を書く場合は
+新方式（`search_path=''`＋完全修飾）を採用し、他の既存関数（`is_facility_member`・
+`get_distributor_product_price_history`等）を横展開で新方式に揃えるかどうかは、範囲が
+広がるため別途判断すること。
+
+検証は、変更対象4関数の中に拡張機能（`extensions`スキーマ）由来の関数呼び出しがないこと
+（`gen_random_uuid()`は各テーブルの`id`列`DEFAULT`としてDDL側でのみ使用されており、
+CREATE TABLE時に関数OIDへ解決済みのため`search_path`変更の影響を受けない）を確認したうえで、
+ローカルSupabaseへ実際に`db push`し、実DB統合テスト（`order-repositories.integration.test.ts`
+ほかRLS/IDOR統合テスト計6ファイル・22件）が全て通ることまで確認した。静的なSQLテキスト検証
+（`__tests__/harden_order_rpc_search_path.test.ts`）だけでは、スキーマ修飾漏れによる実行時
+エラーは検知できないため、実DBでの検証を省略しないこと。
+
 ## なぜスキーマドリフト検知（issue #305）にEdge Functionを使わずpg_cron + GitHub Actionsポーリングを採用したか
 
 **結論: リアルタイムEdge Function通知案は未確認依存が多く不採用。pg_cronでDB内部に記録し、通知はGitHub Actionsの日次ポーリングに委譲する構成にした。**
