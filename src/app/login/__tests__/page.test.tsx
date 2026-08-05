@@ -5,10 +5,12 @@ import LoginPage from '../page'
 
 // createSupabaseBrowserClient をモック
 const mockSignInWithOtp = vi.fn()
+const mockSignInWithOAuth = vi.fn()
 vi.mock('@/lib/supabase/client', () => ({
   createSupabaseBrowserClient: vi.fn(() => ({
     auth: {
       signInWithOtp: mockSignInWithOtp,
+      signInWithOAuth: mockSignInWithOAuth,
     },
   })),
 }))
@@ -54,6 +56,40 @@ describe('LoginPage', () => {
     it('初期状態でエラーメッセージは表示されない', () => {
       render(<LoginPage />)
       expect(screen.queryByText('メールの送信に失敗しました。メールアドレスを確認してください。')).not.toBeInTheDocument()
+    })
+
+    it('「Googleでログイン」ボタンが表示される', () => {
+      render(<LoginPage />)
+      expect(screen.getByRole('button', { name: 'Googleでログイン' })).toBeInTheDocument()
+    })
+  })
+
+  describe('Googleログイン', () => {
+    it('クリックするとsignInWithOAuthがprovider: googleで呼ばれる', async () => {
+      mockSignInWithOAuth.mockResolvedValueOnce({ error: null })
+
+      render(<LoginPage />)
+      fireEvent.click(screen.getByRole('button', { name: 'Googleでログイン' }))
+
+      await waitFor(() => {
+        expect(mockSignInWithOAuth).toHaveBeenCalledWith({
+          provider: 'google',
+          options: {
+            redirectTo: 'http://localhost:3000/auth/callback',
+          },
+        })
+      })
+    })
+
+    it('失敗時にエラーメッセージが表示される', async () => {
+      mockSignInWithOAuth.mockResolvedValueOnce({ error: new Error('oauth error') })
+
+      render(<LoginPage />)
+      fireEvent.click(screen.getByRole('button', { name: 'Googleでログイン' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('Googleログインに失敗しました。もう一度お試しください。')).toBeInTheDocument()
+      })
     })
   })
 
