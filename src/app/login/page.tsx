@@ -49,6 +49,22 @@ function LoginForm() {
     setSent(true)
   }
 
+  async function handleGoogleLogin() {
+    setError(null)
+    const supabase = createSupabaseBrowserClient()
+    const { error: signInError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/auth/callback`,
+      },
+    })
+
+    if (signInError) {
+      setError('Googleログインに失敗しました。もう一度お試しください。')
+    }
+    // 成功時はSupabaseがGoogleの認証画面へリダイレクトするため、ここでの遷移処理は不要
+  }
+
   if (sent) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#EDEADE' }}>
@@ -100,6 +116,20 @@ function LoginForm() {
             {loading ? '送信中...' : 'ログインリンクを送信'}
           </button>
         </form>
+
+        <div className="flex items-center gap-3 my-4">
+          <div className="flex-1 h-px bg-gray-200" />
+          <span className="text-xs text-gray-400">または</span>
+          <div className="flex-1 h-px bg-gray-200" />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleGoogleLogin}
+          className="w-full py-2 px-4 rounded border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+        >
+          Googleでログイン
+        </button>
       </div>
     </div>
   )
