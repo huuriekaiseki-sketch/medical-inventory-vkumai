@@ -19,7 +19,7 @@
     "ai:check": "npm run typecheck && npm run lint && npm run test && npm run test:e2e"
   },
   "dependencies": {
-    "@next/env": "16.2.9",
+    "@next/env": "16.2.12",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
     "next": "16.2.9",
