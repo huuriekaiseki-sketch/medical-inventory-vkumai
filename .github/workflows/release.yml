@@ -1,0 +1,27 @@
+# WHY: GitHub学習ロードマップの「Release、Tag、Changelog」のハンズオン。
+# vX.Y.Zタグがpushされたら、そのタグ位置でGitHub Releaseを作成し、
+# 前回リリースからのマージ済みPRを元に変更履歴を自動生成する
+# (--generate-notes、カテゴリ分類は.github/release.ymlに従う)。
+# タグを打つタイミング・バージョニング方針自体はこのワークフローの範囲外
+# （いつ・どのバージョンでリリースするかは人間が判断してtagをpushする）。
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub Release with auto-generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: gh release create "$TAG_NAME" --generate-notes
