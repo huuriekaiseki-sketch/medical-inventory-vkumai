@@ -31,6 +31,15 @@
 --      jsonb_setはSTRICT関数のため、new_value引数にSQL NULLを渡すと関数全体がNULLを
 --      返し、eventがまるごとNULLになる(施設未所属でv_roleがNULLになるケースで発生、
 --      実機で発見。COALESCEでJSON null literalに変換してから渡す)。
+--
+-- WHY(user_roleクレームの用途をUIゲーティング専用に限定する・issue #610):
+--      bool_orによる集約は施設ごとのロール差を捨象する。施設Aのみadminで施設Bでは
+--      staffのユーザーの場合、このクレームは「admin」を返すが、それは施設B文脈での
+--      権限を意味しない。そのためこのクレームは表示/非表示等のUIゲーティングにのみ
+--      使い、認可判断には使わないこと。認可はRLS/RPCが引き続きauth.uid()から
+--      user_facilitiesを都度引き直して施設ごとに再判定するため、このクレームの
+--      曖昧さは認可結果に影響しない(前提・再検証条件はdocs/agents/decisions/db-rls.md
+--      「なぜJWTのuser_roleクレームをUIゲーティング専用に限定したか」を参照)。
 
 CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
 RETURNS jsonb
