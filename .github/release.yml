@@ -1,0 +1,12 @@
+# WHY: GitHub Releaseの自動生成ノート(--generate-notes)がPRラベルでカテゴリ分けする際の
+# 分類定義。Dependabot作成PRには"dependencies"ラベルが自動で付くため、それを専用セクションに
+# まとめ、それ以外は「その他の変更」に落とす。
+
+changelog:
+  categories:
+    - title: 依存関係の更新
+      labels:
+        - "dependencies"
+    - title: その他の変更
+      labels:
+        - "*"
