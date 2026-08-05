@@ -25,6 +25,18 @@ export default function OtherPage() {
             カテゴリ管理
           </Link>
         </div>
+        <div className="px-6 py-4">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }}>
+            アカウント設定
+          </p>
+          <Link
+            href="/account/mfa"
+            className="inline-flex items-center gap-2 text-sm font-medium hover:underline"
+            style={{ color: '#072C2C' }}
+          >
+            二段階認証(MFA)
+          </Link>
+        </div>
       </div>
     </div>
   )
