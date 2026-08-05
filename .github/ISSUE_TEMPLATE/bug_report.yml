@@ -1,0 +1,57 @@
+name: バグ報告
+description: 動作しない・想定と違う挙動を報告する
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概要
+      description: 何が起きているか簡潔に
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: 番号付きで手順を書いてください
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する挙動
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の挙動
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 重大度
+      options:
+        - critical(データ破損・認可バイパス等)
+        - high(主要機能が使えない)
+        - medium(一部機能に支障)
+        - low(軽微・見た目のみ)
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: 補足(ログ・スクリーンショット・環境など)
+    validations:
+      required: false
