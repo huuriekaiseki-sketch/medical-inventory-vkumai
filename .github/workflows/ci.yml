@@ -13,40 +13,16 @@ concurrency:
 
 jobs:
   typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-      - name: Install dependencies
-        run: npm install
-      - name: Run typecheck
-        run: npm run typecheck
+    uses: ./.github/workflows/node-check.yml
+    with:
+      run-script: typecheck
 
   lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-      - name: Install dependencies
-        run: npm install
-      - name: Run lint
-        run: npm run lint
+    uses: ./.github/workflows/node-check.yml
+    with:
+      run-script: lint
 
   test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-      - name: Install dependencies
-        run: npm install
-      - name: Run unit tests
-        run: npm run test
+    uses: ./.github/workflows/node-check.yml
+    with:
+      run-script: test

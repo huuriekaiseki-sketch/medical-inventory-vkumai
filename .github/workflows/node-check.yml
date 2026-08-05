@@ -1,0 +1,33 @@
+# WHY: ci.ymlのtypecheck/lint/testの3ジョブがcheckout→setup-node→npm installを
+# ほぼ同一コードで重複させていた。Reusable Workflow(workflow_call)に切り出し、
+# 呼び出し側は実行するnpm scriptだけを渡す形にする。
+# GitHub学習ロードマップの「Reusable Workflows」のハンズオン。
+
+name: Node Check (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      run-script:
+        description: "実行するnpm run scriptの名前(package.jsonのscripts)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install
+      - name: Run npm run ${{ inputs.run-script }}
+        env:
+          RUN_SCRIPT: ${{ inputs.run-script }}
+        run: npm run "$RUN_SCRIPT"
