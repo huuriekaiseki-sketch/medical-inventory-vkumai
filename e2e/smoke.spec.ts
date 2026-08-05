@@ -34,3 +34,15 @@ test('未認証でアクセスすると /login にリダイレクトされる', 
   await expect(page).toHaveURL(/\/login/)
   await context.close()
 })
+
+test('認証済みでヘッダーのログアウトボタンをクリックすると /login に遷移し、再アクセスで未認証扱いになる', async ({ page }) => {
+  await page.goto('/facilities')
+  await expect(page.getByRole('button', { name: 'ログアウト' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'ログアウト' }).click()
+  await expect(page).toHaveURL(/\/login/)
+
+  // ログアウト後は保護ページへ再アクセスすると未認証としてリダイレクトされる
+  await page.goto('/facilities')
+  await expect(page).toHaveURL(/\/login/)
+})
