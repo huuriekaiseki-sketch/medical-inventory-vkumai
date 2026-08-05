@@ -12,6 +12,13 @@ on:
       - '.claude/agents/**'
       - '.claude/workflows/**'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-baseline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest

@@ -25,6 +25,12 @@ on:
     - cron: '0 0 * * *' # UTC 0:00。DB側の日次チェック(UTC 23:00)より後に実行する
   workflow_dispatch:
 
+# WHY: issue作成/クローズを行う途中でキャンセルされると中途半端な状態になりうるため、
+# 古い実行を殺すのではなく新しい実行を待たせる（cancel-in-progress: false）。
+concurrency:
+  group: schema-drift-check
+  cancel-in-progress: false
+
 jobs:
   check-drift:
     runs-on: ubuntu-latest
