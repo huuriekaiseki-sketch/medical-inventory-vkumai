@@ -7,3 +7,10 @@ project_id = "medical-inventory-vkumai"
 # localhostでアクセスするテストに認証が引き継がれない）
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://localhost:3000", "http://localhost:3000/**"]
+
+# CLIデフォルトはTOTP MFAのenroll/verifyが無効。ローカルでMFA機能を検証できるよう有効化する。
+# 本番(Supabase Dashboard)側は別途手動でMFA(TOTP)を有効化する必要がある(このファイルの設定は
+# ローカル開発専用で本番には反映されない)。
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
