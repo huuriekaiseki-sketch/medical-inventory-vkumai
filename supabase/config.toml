@@ -14,3 +14,10 @@ additional_redirect_urls = ["http://localhost:3000", "http://localhost:3000/**"]
 [auth.mfa.totp]
 enroll_enabled = true
 verify_enabled = true
+
+# custom_access_token_hook(20260805000002マイグレーション)をローカルで有効化する。
+# 本番(Supabase Dashboard > Authentication > Hooks)側は別途手動設定が必要
+# (このファイルの設定はローカル開発専用で本番には反映されない)。
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
