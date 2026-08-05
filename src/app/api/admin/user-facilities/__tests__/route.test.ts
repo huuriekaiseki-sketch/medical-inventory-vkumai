@@ -68,6 +68,22 @@ describe('POST /api/admin/user-facilities', () => {
     )
   })
 
+  it('role=viewer で upsert して 200 を返す', async () => {
+    mockFrom.mockReturnValue({ upsert: mockUpsert })
+    mockUpsert.mockResolvedValue({ error: null })
+
+    const req = new NextRequest('http://localhost/api/admin/user-facilities', {
+      method: 'POST',
+      body: JSON.stringify({ userId: 'u1', facilityId: 'f1', role: 'viewer' }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    expect(mockUpsert).toHaveBeenCalledWith(
+      { user_id: 'u1', facility_id: 'f1', role: 'viewer' },
+      { onConflict: 'user_id,facility_id' }
+    )
+  })
+
   it('既存レコードの role を staff から admin に更新できる', async () => {
     mockFrom.mockReturnValue({ upsert: mockUpsert })
     mockUpsert.mockResolvedValue({ error: null })
