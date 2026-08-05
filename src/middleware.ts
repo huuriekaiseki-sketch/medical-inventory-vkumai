@@ -12,6 +12,11 @@ import { resolveIsAdmin } from '@/lib/admin-status'
 
 const PUBLIC_PATHS = ['/login', '/auth/callback']
 
+// WHY: MFA(TOTP)を有効化したユーザーがaal1(パスワード/メールリンクのみ)の
+// セッションのまま保護ページへアクセスするのを防ぐ。nextLevelがaal2で
+// currentLevelと異なる間は/mfa-challenge以外へのアクセスを許さない。
+const MFA_CHALLENGE_PATH = '/mfa-challenge'
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -42,6 +47,14 @@ export async function middleware(request: NextRequest) {
   // 未認証ガード
   if (!user && !PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
     return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  // MFAガード（aal1のまま保護ページへ進ませない）
+  if (user && pathname !== MFA_CHALLENGE_PATH) {
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== aal.nextLevel) {
+      return NextResponse.redirect(new URL(MFA_CHALLENGE_PATH, request.url))
+    }
   }
 
   // admin ガード（middleware + 各 route で二重チェック）

@@ -19,14 +19,19 @@ beforeEach(() => {
 })
 
 // resolveIsAdmin は get_admin_status RPC を呼ぶため、rpc モックを用意する
+// MFAガード用にmfa.getAuthenticatorAssuranceLevelもデフォルトでaal1/aal1(MFA未要求)を返す
 function makeSupabaseClientWithAdminRpc(
   user: { id: string; email: string } | null,
   userIsAdmin: boolean,
-  dbHasAdmin: boolean
+  dbHasAdmin: boolean,
+  aal: { currentLevel: string; nextLevel: string } = { currentLevel: 'aal1', nextLevel: 'aal1' }
 ) {
   return {
     auth: {
       getUser: vi.fn().mockResolvedValueOnce({ data: { user } }),
+      mfa: {
+        getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({ data: aal, error: null }),
+      },
     },
     rpc: vi.fn().mockResolvedValue({
       data: [{ user_is_admin: userIsAdmin, db_has_admin: dbHasAdmin }],
@@ -103,6 +108,12 @@ describe('middleware', () => {
             .mockResolvedValueOnce({
               data: { user: { id: 'user-123', email: 'user@example.com' } },
             }),
+          mfa: {
+            getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+              data: { currentLevel: 'aal1', nextLevel: 'aal1' },
+              error: null,
+            }),
+          },
         },
       } as unknown as ReturnType<typeof createServerClient>)
 
@@ -323,6 +334,89 @@ describe('middleware', () => {
     })
   })
 
+  describe('MFAガード', () => {
+    it('aal1→aal2が必要なユーザーが保護パスにアクセス→ /mfa-challenge にリダイレクト', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'mfa-user', email: 'mfa@example.com' },
+          false,
+          false,
+          { currentLevel: 'aal1', nextLevel: 'aal2' }
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/facilities')
+      )
+
+      const response = await middleware(request)
+
+      expect(response?.status).toBe(307)
+      expect(response?.headers.get('location')).toContain('/mfa-challenge')
+    })
+
+    it('aal1→aal2が必要なユーザーが /mfa-challenge 自体にアクセス→ そのまま通す', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'mfa-user', email: 'mfa@example.com' },
+          false,
+          false,
+          { currentLevel: 'aal1', nextLevel: 'aal2' }
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/mfa-challenge')
+      )
+
+      const response = await middleware(request)
+
+      expect(response?.status).not.toBe(307)
+    })
+
+    it('MFA未設定(aal1→aal1)のユーザーは保護パスへ通常通りアクセスできる', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'no-mfa-user', email: 'nomfa@example.com' },
+          false,
+          false,
+          { currentLevel: 'aal1', nextLevel: 'aal1' }
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/facilities')
+      )
+
+      const response = await middleware(request)
+
+      expect(response?.status).not.toBe(307)
+    })
+
+    it('既にaal2のユーザーは保護パスへ通常通りアクセスできる', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'aal2-user', email: 'aal2@example.com' },
+          false,
+          false,
+          { currentLevel: 'aal2', nextLevel: 'aal2' }
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/facilities')
+      )
+
+      const response = await middleware(request)
+
+      expect(response?.status).not.toBe(307)
+    })
+  })
+
   describe('パスマッチング（admin パス）', () => {
     it('名前空間の誤マッチを避ける（/adminfoo は admin パスではない）', async () => {
       // /admin のみ、または /admin/ 配下が正しい admin パス
@@ -333,6 +427,12 @@ describe('middleware', () => {
           getUser: vi.fn().mockResolvedValueOnce({
             data: { user: { id: 'admin-1', email: 'admin@example.com' } },
           }),
+          mfa: {
+            getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+              data: { currentLevel: 'aal1', nextLevel: 'aal1' },
+              error: null,
+            }),
+          },
         },
       } as unknown as ReturnType<typeof createServerClient>)
 
