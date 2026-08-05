@@ -7,7 +7,7 @@ import type { PriceHistory } from './priceHistory'
 export type UserFacilityMembership = {
   facilityId: string
   facilityName: string
-  role: 'admin' | 'staff'
+  role: 'admin' | 'staff' | 'viewer'
 }
 
 /**

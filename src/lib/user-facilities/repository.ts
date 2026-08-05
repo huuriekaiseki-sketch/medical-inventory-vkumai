@@ -16,7 +16,7 @@ export function mapUserFacilityMembership(row: UserFacilityRow): UserFacilityMem
   return {
     facilityId: asString(row.facility_id),
     facilityName: asString(row.facilities?.name),
-    role: asEnum(row.role, ['admin', 'staff'] as const, 'staff'),
+    role: asEnum(row.role, ['admin', 'staff', 'viewer'] as const, 'staff'),
   }
 }
 
@@ -34,4 +34,25 @@ export async function listUserFacilities(
     .eq('user_id', userId)
   if (error) throw new Error(error.message)
   return ((data ?? []) as unknown as UserFacilityRow[]).map(mapUserFacilityMembership)
+}
+
+/**
+ * 指定施設におけるユーザー自身のroleを取得する（UIゲーティング用）。
+ * user_facilities の RLS（self_read）により auth.uid() の行のみ取得可能。
+ * 未所属の場合は null（呼び出し元はis_admin判定と合わせて扱うこと）。
+ */
+export async function getUserFacilityRole(
+  db: SupabaseClient,
+  userId: string,
+  facilityId: string
+): Promise<'admin' | 'staff' | 'viewer' | null> {
+  const { data, error } = await db
+    .from('user_facilities')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('facility_id', facilityId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return null
+  return asEnum(data.role, ['admin', 'staff', 'viewer'] as const, 'staff')
 }
