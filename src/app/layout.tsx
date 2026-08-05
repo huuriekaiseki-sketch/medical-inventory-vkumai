@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Ubuntu, Oswald } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
+import { createServerSupabase } from "@/lib/supabase/server";
+import { LogoutButton } from "@/components/LogoutButton";
 
 const ubuntu = Ubuntu({
   variable: "--font-ubuntu",
@@ -30,11 +32,14 @@ const navLinks = [
   { href: '/other', label: 'その他' },
 ]
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const supabase = await createServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+
   return (
     <html
       lang="ja"
@@ -61,6 +66,12 @@ export default function RootLayout({
                 {label}
               </Link>
             ))}
+            {user && (
+              <>
+                <div className="h-6 w-px bg-white/20 mx-2" />
+                <LogoutButton />
+              </>
+            )}
           </nav>
         </header>
         <main className="flex-1">{children}</main>
