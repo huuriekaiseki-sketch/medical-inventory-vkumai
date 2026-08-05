@@ -59,3 +59,6 @@ e2e/.auth/*.json
 
 # AIDD Run Manifest（フロー実行ごとに生成される一時状態。スキーマはdocs/agents/run-manifest.md参照）
 /.aidd/
+
+# Supabase Studio SQL EditorがローカルDB調査時に自動保存するスニペット（デバッグ用・ローカル専用）
+/supabase/snippets/
