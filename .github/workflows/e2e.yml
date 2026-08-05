@@ -26,7 +26,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'  # ローカル開発環境に合わせる（node -v で確認）
           cache: 'npm'
