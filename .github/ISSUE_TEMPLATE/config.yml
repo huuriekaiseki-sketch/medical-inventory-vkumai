@@ -1,0 +1,5 @@
+# WHY: pending_issues.jsonl経由のStop hook自動issue化(docs/agents/common.md参照)は
+# GitHub APIで直接issueを作成するため、テンプレート選択UIを経由しない。
+# blank_issues_enabled: trueのままにして、テンプレートに当てはまらないissueの
+# 手動作成経路も残す。
+blank_issues_enabled: true
