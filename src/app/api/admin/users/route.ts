@@ -24,10 +24,10 @@ export async function GET() {
   if (facilityError) return apiError(toClientErrorMessage(facilityError, 'ユーザー一覧の取得に失敗しました'))
 
   // Group by user_id in memory
-  const facilityMap = new Map<string, { id: string; role: 'admin' | 'staff' }[]>()
+  const facilityMap = new Map<string, { id: string; role: 'admin' | 'staff' | 'viewer' }[]>()
   for (const row of (facilityRows ?? [])) {
     const list = facilityMap.get(row.user_id) ?? []
-    list.push({ id: row.facility_id, role: asEnum(row.role, ['admin', 'staff'] as const, 'staff') })
+    list.push({ id: row.facility_id, role: asEnum(row.role, ['admin', 'staff', 'viewer'] as const, 'staff') })
     facilityMap.set(row.user_id, list)
   }
 

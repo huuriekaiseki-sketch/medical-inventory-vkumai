@@ -53,7 +53,8 @@ describe('MfaSettingsPage', () => {
   })
 
   it('有効化ボタンをクリックするとenrollが呼ばれQRコードが表示される', async () => {
-    mockListFactors.mockResolvedValueOnce({ data: { totp: [] }, error: null })
+    mockListFactors.mockResolvedValueOnce({ data: { totp: [] }, error: null }) // 初期表示用
+    mockListFactors.mockResolvedValueOnce({ data: { all: [] }, error: null }) // enroll前のunverified掃除用
     mockEnroll.mockResolvedValueOnce({
       data: { id: 'new-factor', totp: { qr_code: 'data:image/svg+xml;base64,xxx', secret: 'SECRET123' } },
       error: null,
@@ -74,7 +75,8 @@ describe('MfaSettingsPage', () => {
   })
 
   it('確認コードを入力してverifyが成功すると有効状態に切り替わる', async () => {
-    mockListFactors.mockResolvedValueOnce({ data: { totp: [] }, error: null })
+    mockListFactors.mockResolvedValueOnce({ data: { totp: [] }, error: null }) // 初期表示用
+    mockListFactors.mockResolvedValueOnce({ data: { all: [] }, error: null }) // enroll前のunverified掃除用
     mockEnroll.mockResolvedValueOnce({
       data: { id: 'new-factor', totp: { qr_code: 'data:image/svg+xml;base64,xxx', secret: 'SECRET123' } },
       error: null,
@@ -107,7 +109,8 @@ describe('MfaSettingsPage', () => {
   })
 
   it('確認コードが誤っている場合エラーメッセージが表示される', async () => {
-    mockListFactors.mockResolvedValueOnce({ data: { totp: [] }, error: null })
+    mockListFactors.mockResolvedValueOnce({ data: { totp: [] }, error: null }) // 初期表示用
+    mockListFactors.mockResolvedValueOnce({ data: { all: [] }, error: null }) // enroll前のunverified掃除用
     mockEnroll.mockResolvedValueOnce({
       data: { id: 'new-factor', totp: { qr_code: 'data:image/svg+xml;base64,xxx', secret: 'SECRET123' } },
       error: null,
@@ -132,6 +135,33 @@ describe('MfaSettingsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('コードが正しくありません。もう一度お試しください。')).toBeInTheDocument()
     })
+  })
+
+  it('登録途中離脱でunverified factorが残っている場合、再度有効化ボタンを押すとunenrollで掃除してからenrollする', async () => {
+    mockListFactors.mockResolvedValueOnce({ data: { totp: [] }, error: null }) // 初期表示用
+    mockListFactors.mockResolvedValueOnce({
+      data: { all: [{ id: 'orphan-factor', factor_type: 'totp', status: 'unverified' }] },
+      error: null,
+    }) // enroll前のunverified掃除用
+    mockUnenroll.mockResolvedValueOnce({ error: null })
+    mockEnroll.mockResolvedValueOnce({
+      data: { id: 'new-factor', totp: { qr_code: 'data:image/svg+xml;base64,xxx', secret: 'SECRET123' } },
+      error: null,
+    })
+
+    const user = userEvent.setup()
+    render(<MfaSettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '二段階認証を有効化する' })).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: '二段階認証を有効化する' }))
+
+    await waitFor(() => {
+      expect(screen.getByAltText('MFA QRコード')).toBeInTheDocument()
+    })
+    expect(mockUnenroll).toHaveBeenCalledWith({ factorId: 'orphan-factor' })
+    expect(mockEnroll).toHaveBeenCalled()
   })
 
   it('解除ボタンをクリックするとunenrollが呼ばれ未登録状態に戻る', async () => {

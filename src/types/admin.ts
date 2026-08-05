@@ -2,7 +2,7 @@ export type AdminUser = {
   id: string
   email: string
   lastSignInAt: string | null
-  facilities: { id: string; role: 'admin' | 'staff' }[]
+  facilities: { id: string; role: 'admin' | 'staff' | 'viewer' }[]
 }
 
 // facility.ts の Facility はフルフィールド（createdAt/updatedAt含む）を持つため、

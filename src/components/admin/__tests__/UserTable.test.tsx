@@ -124,4 +124,32 @@ describe('UserTable', () => {
     fireEvent.change(select, { target: { value: 'admin' } })
     expect(onChangeRole).toHaveBeenCalledWith('u1', 'f1', 'admin')
   })
+
+  it('viewerロールが正しく選択表示され、viewerへの変更もonChangeRoleに伝わる', () => {
+    const viewerUsers: AdminUser[] = [
+      {
+        id: 'u2',
+        email: 'viewer@test.com',
+        lastSignInAt: null,
+        facilities: [{ id: 'f1', role: 'viewer' }],
+      },
+    ]
+    const onChangeRole = vi.fn()
+    render(
+      <UserTable
+        users={viewerUsers}
+        facilities={facilities}
+        onToggleFacility={vi.fn()}
+        onDeleteUser={vi.fn()}
+        onChangeRole={onChangeRole}
+      />
+    )
+    fireEvent.click(screen.getByText('▼ 展開して設定'))
+    const select = screen.getByLabelText('中央病院のrole') as HTMLSelectElement
+    // viewerロールのユーザーがstaffとして誤表示されない(issue #609)
+    expect(select.value).toBe('viewer')
+
+    fireEvent.change(select, { target: { value: 'viewer' } })
+    expect(onChangeRole).toHaveBeenCalledWith('u2', 'f1', 'viewer')
+  })
 })

@@ -8,7 +8,7 @@ type Props = {
   facilities: Facility[]
   onToggleFacility: (userId: string, facilityId: string, add: boolean) => void
   onDeleteUser: (userId: string, email: string) => void
-  onChangeRole: (userId: string, facilityId: string, role: 'admin' | 'staff') => void
+  onChangeRole: (userId: string, facilityId: string, role: 'admin' | 'staff' | 'viewer') => void
 }
 
 export function UserTable({ users, facilities, onToggleFacility, onDeleteUser, onChangeRole }: Props) {
@@ -77,12 +77,13 @@ export function UserTable({ users, facilities, onToggleFacility, onDeleteUser, o
                               aria-label={`${f.name}のrole`}
                               value={assigned.role}
                               onChange={(e) =>
-                                onChangeRole(user.id, f.id, e.target.value as 'admin' | 'staff')
+                                onChangeRole(user.id, f.id, e.target.value as 'admin' | 'staff' | 'viewer')
                               }
                               className="text-xs border rounded px-1"
                             >
                               <option value="staff">staff</option>
                               <option value="admin">admin</option>
+                              <option value="viewer">viewer</option>
                             </select>
                           )}
                         </div>
