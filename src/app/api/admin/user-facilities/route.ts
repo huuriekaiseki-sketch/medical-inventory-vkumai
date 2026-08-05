@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   const user = await requireAdmin()
   if (!user) return apiError('権限がありません', 403)
 
-  let userId: string | undefined, facilityId: string | undefined, role: 'staff' | 'admin' | undefined
+  let userId: string | undefined, facilityId: string | undefined, role: 'staff' | 'admin' | 'viewer' | undefined
   try {
     const body = await request.json()
     userId = body.userId
@@ -17,8 +17,8 @@ export async function POST(request: NextRequest) {
     return apiError('リクエストが不正です', 400)
   }
   if (!userId || !facilityId) return apiError('userId と facilityId は必須です', 400)
-  if (role !== undefined && role !== 'staff' && role !== 'admin') {
-    return apiError("role は 'staff' か 'admin' のみ指定できます", 400)
+  if (role !== undefined && role !== 'staff' && role !== 'admin' && role !== 'viewer') {
+    return apiError("role は 'staff'・'admin'・'viewer' のいずれかのみ指定できます", 400)
   }
 
   const admin = createAdminSupabase()
