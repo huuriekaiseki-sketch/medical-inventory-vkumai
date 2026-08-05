@@ -72,7 +72,7 @@ export default function AdminUsersPage() {
     }
   }
 
-  const handleChangeRole = async (userId: string, facilityId: string, role: 'admin' | 'staff') => {
+  const handleChangeRole = async (userId: string, facilityId: string, role: 'admin' | 'staff' | 'viewer') => {
     try {
       const res = await fetch('/api/admin/user-facilities', {
         method: 'POST',

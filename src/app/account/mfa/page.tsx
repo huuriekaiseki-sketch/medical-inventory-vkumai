@@ -41,6 +41,22 @@ export default function MfaSettingsPage() {
   async function handleEnroll() {
     setError(null)
     const supabase = createSupabaseBrowserClient()
+
+    // WHY: enroll()は未確認(unverified)factorが残っていても新規factorを作れてしまい、
+    // 登録を途中離脱するたびにunverified factorが積み上がる。再度有効化を試みる前に
+    // 既存のunverified factorを掃除してから新規enrollする。
+    const { data: existingFactors, error: listError } = await supabase.auth.mfa.listFactors()
+    if (listError) {
+      setError('MFA設定の取得に失敗しました。')
+      return
+    }
+    // WHY: data.totpは型上verifiedのfactorのみ(SDKの型定義上の制約)。unverifiedを含む
+    // 全factorはdata.allから取得する必要がある。
+    const unverified = existingFactors.all.filter(f => f.factor_type === 'totp' && f.status === 'unverified')
+    for (const factor of unverified) {
+      await supabase.auth.mfa.unenroll({ factorId: factor.id })
+    }
+
     const { data, error: enrollError } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
     if (enrollError || !data) {
       setError('MFAの登録開始に失敗しました。')
