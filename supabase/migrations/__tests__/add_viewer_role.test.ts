@@ -87,6 +87,20 @@ describe('*_add_viewer_role.sql', () => {
     expect(n).not.toContain('create or replace function resolve_jan_unit_price(')
   })
 
+  it('create_loan_return_atomicがsearch_pathを空文字に固定し、テーブル参照をpublic.で完全修飾する(search_path hijacking対策)', () => {
+    const startIdx = n.indexOf('create or replace function create_loan_return_atomic(')
+    expect(startIdx).toBeGreaterThanOrEqual(0)
+    const fnBody = n.slice(startIdx)
+
+    expect(fnBody).toContain('set search_path = \'\'')
+    expect(fnBody).not.toContain('set search_path = public')
+    expect(fnBody).toContain('v_return public.loan_returns%rowtype')
+    expect(fnBody).toContain('if not public.is_facility_writer(v_facility_id) then')
+    expect(fnBody).toContain('insert into public.loan_returns (facility_id, return_datetime, loan_order_id)')
+    expect(fnBody).toContain('insert into public.loan_return_items (loan_return_id, jan, lot, ubd, quantity)')
+    expect(fnBody).toContain('from public.loan_return_items i')
+  })
+
   it('publicスキーマのテーブル追加/削除を伴わないため refresh_schema_baseline_snapshot を呼び出さない', () => {
     expect(n).not.toMatch(/select\s+refresh_schema_baseline_snapshot\(/)
   })

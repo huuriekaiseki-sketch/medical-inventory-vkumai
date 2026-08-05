@@ -327,23 +327,23 @@ CREATE OR REPLACE FUNCTION create_loan_return_atomic(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = ''
 AS $$
 DECLARE
   v_facility_id UUID := (p_header->>'facility_id')::UUID;
   v_loan_order_id UUID := NULLIF(p_header->>'loan_order_id', '')::UUID;
-  v_return loan_returns%ROWTYPE;
+  v_return public.loan_returns%ROWTYPE;
   v_items JSONB;
 BEGIN
-  IF NOT is_facility_writer(v_facility_id) THEN
+  IF NOT public.is_facility_writer(v_facility_id) THEN
     RAISE EXCEPTION 'forbidden: not a member of this facility';
   END IF;
 
-  INSERT INTO loan_returns (facility_id, return_datetime, loan_order_id)
+  INSERT INTO public.loan_returns (facility_id, return_datetime, loan_order_id)
   VALUES (v_facility_id, (p_header->>'return_datetime')::TIMESTAMPTZ, v_loan_order_id)
   RETURNING * INTO v_return;
 
-  INSERT INTO loan_return_items (loan_return_id, jan, lot, ubd, quantity)
+  INSERT INTO public.loan_return_items (loan_return_id, jan, lot, ubd, quantity)
   SELECT
     v_return.id,
     elem->>'jan',
@@ -354,7 +354,7 @@ BEGIN
 
   SELECT COALESCE(jsonb_agg(to_jsonb(i) ORDER BY i.created_at), '[]'::JSONB)
   INTO v_items
-  FROM loan_return_items i
+  FROM public.loan_return_items i
   WHERE i.loan_return_id = v_return.id;
 
   RETURN to_jsonb(v_return) || jsonb_build_object('items', v_items);
