@@ -1,0 +1,23 @@
+# WHY: npm依存関係とGitHub Actions（actions/checkout等）のバージョンを
+# 自動追従させる。非公開リポジトリでもDependency Graphは無料で有効なため、
+# Dependabot自体はプラン制約なく利用できる（Secret Scanning/CodeQLとは異なる）。
+# open PR数を絞るためweeklyかつ上限を小さめに設定する（単独開発でレビュー容量が限られるため）。
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
