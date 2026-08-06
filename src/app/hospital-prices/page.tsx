@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import type { HospitalPrice } from '@/types/hospitalPrice'
 import type { Facility } from '@/types/facility'
 import type { DistributorProduct } from '@/types/distributorProduct'
+import type { FacilityRole } from '@/types/role'
 import { HospitalPriceList } from '@/components/hospitalPrices/HospitalPriceList'
 
 function HospitalPricesPageInner() {
@@ -19,7 +20,7 @@ function HospitalPricesPageInner() {
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, refresh] = useReducer((x: number) => x + 1, 0)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [roleByFacilityId, setRoleByFacilityId] = useState<Record<string, 'admin' | 'staff' | 'viewer'>>({})
+  const [roleByFacilityId, setRoleByFacilityId] = useState<Record<string, FacilityRole>>({})
 
   // 初回ロード用: facilities・distributorProducts を取得し、選択施設IDを決定する
   useEffect(() => {

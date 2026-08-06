@@ -1,4 +1,5 @@
 import type { PriceHistory } from './priceHistory'
+import type { FacilityRole } from './role'
 
 /**
  * ユーザーが所属する施設情報（role付き）
@@ -7,7 +8,7 @@ import type { PriceHistory } from './priceHistory'
 export type UserFacilityMembership = {
   facilityId: string
   facilityName: string
-  role: 'admin' | 'staff' | 'viewer'
+  role: FacilityRole
 }
 
 /**

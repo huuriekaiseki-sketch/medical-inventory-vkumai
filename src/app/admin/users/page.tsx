@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { UserTable } from '@/components/admin/UserTable'
 import { InviteModal } from '@/components/admin/InviteModal'
 import type { AdminUser, Facility } from '@/types/admin'
+import type { FacilityRole } from '@/types/role'
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -72,7 +73,7 @@ export default function AdminUsersPage() {
     }
   }
 
-  const handleChangeRole = async (userId: string, facilityId: string, role: 'admin' | 'staff' | 'viewer') => {
+  const handleChangeRole = async (userId: string, facilityId: string, role: FacilityRole) => {
     try {
       const res = await fetch('/api/admin/user-facilities', {
         method: 'POST',

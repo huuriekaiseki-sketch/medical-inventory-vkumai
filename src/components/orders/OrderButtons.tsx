@@ -1,8 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-
-type FacilityRole = 'admin' | 'staff' | 'viewer'
+import type { FacilityRole } from '@/types/role'
 
 type Props = {
   facilityId: string

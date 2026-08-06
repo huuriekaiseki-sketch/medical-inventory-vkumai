@@ -2,13 +2,14 @@
 
 import React, { useState } from 'react'
 import type { AdminUser, Facility } from '@/types/admin'
+import { FACILITY_ROLES, type FacilityRole } from '@/types/role'
 
 type Props = {
   users: AdminUser[]
   facilities: Facility[]
   onToggleFacility: (userId: string, facilityId: string, add: boolean) => void
   onDeleteUser: (userId: string, email: string) => void
-  onChangeRole: (userId: string, facilityId: string, role: 'admin' | 'staff' | 'viewer') => void
+  onChangeRole: (userId: string, facilityId: string, role: FacilityRole) => void
 }
 
 export function UserTable({ users, facilities, onToggleFacility, onDeleteUser, onChangeRole }: Props) {
@@ -77,13 +78,15 @@ export function UserTable({ users, facilities, onToggleFacility, onDeleteUser, o
                               aria-label={`${f.name}のrole`}
                               value={assigned.role}
                               onChange={(e) =>
-                                onChangeRole(user.id, f.id, e.target.value as 'admin' | 'staff' | 'viewer')
+                                onChangeRole(user.id, f.id, e.target.value as FacilityRole)
                               }
                               className="text-xs border rounded px-1"
                             >
-                              <option value="staff">staff</option>
-                              <option value="admin">admin</option>
-                              <option value="viewer">viewer</option>
+                              {FACILITY_ROLES.map((r) => (
+                                <option key={r} value={r}>
+                                  {r}
+                                </option>
+                              ))}
                             </select>
                           )}
                         </div>
