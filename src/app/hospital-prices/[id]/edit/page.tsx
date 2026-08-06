@@ -15,6 +15,9 @@ export default function EditHospitalPricePage({ params }: { params: Promise<{ id
   const [facilities, setFacilities] = useState<Facility[]>([])
   const [distributorProducts, setDistributorProducts] = useState<DistributorProduct[]>([])
   const [error, setError] = useState<string | null>(null)
+  // WHY: viewerロールのUIゲーティング(issue #608)。undefinedは判定中(プレースホルダ)、
+  // falseならフォームの代わりに閲覧専用メッセージを出す。
+  const [canWrite, setCanWrite] = useState<boolean | undefined>(undefined)
 
   useEffect(() => {
     let cancelled = false
@@ -31,6 +34,11 @@ export default function EditHospitalPricePage({ params }: { params: Promise<{ id
       setPrice(priceData.price)
       setFacilities(facilitiesData.facilities)
       setDistributorProducts(dpData.items)
+
+      const isAdmin = Boolean(facilitiesData.isAdmin)
+      const roleByFacilityId = (facilitiesData.roleByFacilityId ?? {}) as Record<string, 'admin' | 'staff' | 'viewer'>
+      const role = roleByFacilityId[priceData.price.facilityId as string]
+      setCanWrite(isAdmin || role === 'admin' || role === 'staff')
     }).catch(() => {
       if (!cancelled) setError('データの取得に失敗しました')
     })
@@ -76,10 +84,23 @@ export default function EditHospitalPricePage({ params }: { params: Promise<{ id
     )
   }
 
-  if (!price) {
+  if (!price || canWrite === undefined) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-8">
         <p className="text-gray-500">読み込み中...</p>
+      </div>
+    )
+  }
+
+  if (!canWrite) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-8">
+        <Link href="/hospital-prices" className="mb-4 inline-block text-sm text-blue-600 hover:text-blue-800">
+          &larr; 一覧に戻る
+        </Link>
+        <p className="rounded-md bg-gray-100 px-4 py-3 text-sm text-gray-600">
+          閲覧のみの権限のため、この価格情報を編集できません。
+        </p>
       </div>
     )
   }

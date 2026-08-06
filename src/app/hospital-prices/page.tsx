@@ -18,6 +18,8 @@ function HospitalPricesPageInner() {
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, refresh] = useReducer((x: number) => x + 1, 0)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [roleByFacilityId, setRoleByFacilityId] = useState<Record<string, 'admin' | 'staff' | 'viewer'>>({})
 
   // 初回ロード用: facilities・distributorProducts を取得し、選択施設IDを決定する
   useEffect(() => {
@@ -37,6 +39,8 @@ function HospitalPricesPageInner() {
 
         setFacilities(loadedFacilities)
         setDistributorProducts(dpData.items)
+        setIsAdmin(Boolean(facilitiesData.isAdmin))
+        setRoleByFacilityId(facilitiesData.roleByFacilityId ?? {})
 
         const isValidUrlFacility =
           urlFacilityId !== null && loadedFacilities.some((f) => f.id === urlFacilityId)
@@ -124,16 +128,26 @@ function HospitalPricesPageInner() {
     [prices, facilityNameById, productNameById]
   )
 
+  // WHY: viewerロールのUIゲーティング(issue #608)。選択中施設でのroleがadmin/staffの
+  // 場合のみ書き込み操作(新規登録・編集・削除)のUIを出す。実際の拒否はRLSが最終的に
+  // 担保するため、ここでは「表示するかどうか」の判定のみ。
+  const canWrite =
+    isAdmin ||
+    (selectedFacilityId !== null &&
+      (roleByFacilityId[selectedFacilityId] === 'admin' || roleByFacilityId[selectedFacilityId] === 'staff'))
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">施設別価格管理</h1>
-        <button
-          onClick={() => router.push('/hospital-prices/new')}
-          className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          + 新規価格を登録
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => router.push('/hospital-prices/new')}
+            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          >
+            + 新規価格を登録
+          </button>
+        )}
       </div>
 
       <div className="mb-4">
@@ -161,6 +175,7 @@ function HospitalPricesPageInner() {
           prices={resolvedPrices}
           onEdit={(id) => router.push(`/hospital-prices/${id}/edit`)}
           onDelete={handleDelete}
+          canWrite={canWrite}
         />
       </div>
     </div>

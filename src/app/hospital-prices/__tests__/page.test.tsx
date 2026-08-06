@@ -69,12 +69,16 @@ function jsonResponse(body: unknown, init: ResponseInit = {}) {
 function mockFetch({
   facilities: fac,
   pricesByFacility,
+  isAdmin = true,
+  roleByFacilityId = {},
 }: {
   facilities: typeof facilities
   pricesByFacility: Record<string, unknown[]>
+  isAdmin?: boolean
+  roleByFacilityId?: Record<string, 'admin' | 'staff' | 'viewer'>
 }) {
   return vi.fn((url: string) => {
-    if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities: fac }))
+    if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities: fac, isAdmin, roleByFacilityId }))
     if (url === '/api/distributor-products') return Promise.resolve(jsonResponse({ items: distributorProducts }))
     const match = url.match(/^\/api\/hospital-prices\?facilityId=(.+)$/)
     if (match) {
@@ -220,10 +224,43 @@ describe('HospitalPricesPage', () => {
     expect(select.children.length).toBe(0)
   })
 
+  it('選択中施設でviewerの場合、新規登録ボタンと編集/削除ボタンが表示されない(issue #608)', async () => {
+    const fetchMock = mockFetch({
+      facilities: [facilities[0]],
+      pricesByFacility: { f1: prices },
+      isAdmin: false,
+      roleByFacilityId: { f1: 'viewer' },
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<HospitalPricesPage />)
+
+    await screen.findByText('テスト商品A')
+    expect(screen.queryByRole('button', { name: '+ 新規価格を登録' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '編集' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '削除' })).not.toBeInTheDocument()
+  })
+
+  it('選択中施設でstaffの場合、新規登録ボタンと編集/削除ボタンが表示される', async () => {
+    const fetchMock = mockFetch({
+      facilities: [facilities[0]],
+      pricesByFacility: { f1: prices },
+      isAdmin: false,
+      roleByFacilityId: { f1: 'staff' },
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<HospitalPricesPage />)
+
+    await screen.findByText('テスト商品A')
+    expect(screen.getByRole('button', { name: '+ 新規価格を登録' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: '編集' }).length).toBeGreaterThan(0)
+  })
+
   it('削除でfetchが例外を投げた場合もエラーバナーを表示する', async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (init?.method === 'DELETE') return Promise.reject(new Error('network error'))
-      if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities: [facilities[0]] }))
+      if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities: [facilities[0]], isAdmin: true, roleByFacilityId: {} }))
       if (url === '/api/distributor-products') return Promise.resolve(jsonResponse({ items: distributorProducts }))
       const match = url.match(/^\/api\/hospital-prices\?facilityId=(.+)$/)
       if (match) return Promise.resolve(jsonResponse({ prices }))

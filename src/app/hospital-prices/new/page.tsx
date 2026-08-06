@@ -21,7 +21,19 @@ export default function NewHospitalPricePage() {
       fetch('/api/distributor-products').then((r) => { if (!r.ok) throw new Error(); return r.json() }),
     ]).then(([facilitiesData, dpData]) => {
       if (cancelled) return
-      setFacilities(facilitiesData.facilities)
+      // WHY: viewerロールのUIゲーティング(issue #608)。施設選択はこのフォーム内で
+      // 行われるため、あらかじめviewerの施設を選択肢から除外する(選んだ後にRLSで
+      // 拒否されるより、そもそも選べない方が分かりやすい)。実際の書き込み拒否は
+      // 引き続きRLS/RPCが最終防衛として担保する。
+      const isAdmin = Boolean(facilitiesData.isAdmin)
+      const roleByFacilityId = (facilitiesData.roleByFacilityId ?? {}) as Record<string, 'admin' | 'staff' | 'viewer'>
+      const writableFacilities = isAdmin
+        ? facilitiesData.facilities
+        : (facilitiesData.facilities as Facility[]).filter((f) => {
+            const role = roleByFacilityId[f.id]
+            return role === 'admin' || role === 'staff'
+          })
+      setFacilities(writableFacilities)
       setDistributorProducts(dpData.items)
     }).catch(() => {
       if (!cancelled) setError('データの取得に失敗しました')
