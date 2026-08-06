@@ -3,14 +3,14 @@
 import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { Facility } from '@/types/facility'
-import type { FacilityRole } from '@/types/role'
+import { useFacilityRole } from '@/hooks/useFacilityRole'
 import { OrderButtons } from '@/components/orders/OrderButtons'
 
 export default function FacilityDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const [facility, setFacility] = useState<Facility | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [role, setRole] = useState<FacilityRole | null | undefined>(undefined)
+  const { role } = useFacilityRole(id)
 
   useEffect(() => {
     let cancelled = false
@@ -18,15 +18,6 @@ export default function FacilityDetailPage({ params }: { params: Promise<{ id: s
       .then((r) => { if (!r.ok) throw new Error(); return r.json() })
       .then((d) => { if (!cancelled) setFacility(d.facility) })
       .catch(() => { if (!cancelled) setError('施設の取得に失敗しました') })
-    return () => { cancelled = true }
-  }, [id])
-
-  useEffect(() => {
-    let cancelled = false
-    fetch(`/api/facilities/${id}/my-role`)
-      .then((r) => { if (!r.ok) throw new Error(); return r.json() })
-      .then((d) => { if (!cancelled) setRole(d.role) })
-      .catch(() => { if (!cancelled) setRole(null) })
     return () => { cancelled = true }
   }, [id])
 

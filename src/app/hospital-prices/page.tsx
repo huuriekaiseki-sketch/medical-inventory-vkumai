@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import type { HospitalPrice } from '@/types/hospitalPrice'
 import type { Facility } from '@/types/facility'
 import type { DistributorProduct } from '@/types/distributorProduct'
-import type { FacilityRole } from '@/types/role'
+import { useFacilityRole } from '@/hooks/useFacilityRole'
 import { HospitalPriceList } from '@/components/hospitalPrices/HospitalPriceList'
 
 function HospitalPricesPageInner() {
@@ -19,8 +19,10 @@ function HospitalPricesPageInner() {
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, refresh] = useReducer((x: number) => x + 1, 0)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [roleByFacilityId, setRoleByFacilityId] = useState<Record<string, FacilityRole>>({})
+  // WHY: viewerロールのUIゲーティング(issue #608/#618)。選択中施設でのroleが
+  // admin/staffの場合のみ書き込み操作(新規登録・編集・削除)のUIを出す。実際の拒否は
+  // RLSが最終的に担保するため、ここでは「表示するかどうか」の判定のみ。
+  const { canWrite } = useFacilityRole(selectedFacilityId)
 
   // 初回ロード用: facilities・distributorProducts を取得し、選択施設IDを決定する
   useEffect(() => {
@@ -40,8 +42,6 @@ function HospitalPricesPageInner() {
 
         setFacilities(loadedFacilities)
         setDistributorProducts(dpData.items)
-        setIsAdmin(Boolean(facilitiesData.isAdmin))
-        setRoleByFacilityId(facilitiesData.roleByFacilityId ?? {})
 
         const isValidUrlFacility =
           urlFacilityId !== null && loadedFacilities.some((f) => f.id === urlFacilityId)
@@ -128,14 +128,6 @@ function HospitalPricesPageInner() {
       })),
     [prices, facilityNameById, productNameById]
   )
-
-  // WHY: viewerロールのUIゲーティング(issue #608)。選択中施設でのroleがadmin/staffの
-  // 場合のみ書き込み操作(新規登録・編集・削除)のUIを出す。実際の拒否はRLSが最終的に
-  // 担保するため、ここでは「表示するかどうか」の判定のみ。
-  const canWrite =
-    isAdmin ||
-    (selectedFacilityId !== null &&
-      (roleByFacilityId[selectedFacilityId] === 'admin' || roleByFacilityId[selectedFacilityId] === 'staff'))
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
