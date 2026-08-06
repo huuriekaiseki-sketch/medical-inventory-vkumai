@@ -80,6 +80,11 @@ function mockFetch({
   return vi.fn((url: string) => {
     if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities: fac, isAdmin, roleByFacilityId }))
     if (url === '/api/distributor-products') return Promise.resolve(jsonResponse({ items: distributorProducts }))
+    const myRoleMatch = url.match(/^\/api\/facilities\/(.+)\/my-role$/)
+    if (myRoleMatch) {
+      const facilityId = decodeURIComponent(myRoleMatch[1])
+      return Promise.resolve(jsonResponse({ role: isAdmin ? 'admin' : (roleByFacilityId[facilityId] ?? null) }))
+    }
     const match = url.match(/^\/api\/hospital-prices\?facilityId=(.+)$/)
     if (match) {
       const facilityId = decodeURIComponent(match[1])
@@ -262,6 +267,7 @@ describe('HospitalPricesPage', () => {
       if (init?.method === 'DELETE') return Promise.reject(new Error('network error'))
       if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities: [facilities[0]], isAdmin: true, roleByFacilityId: {} }))
       if (url === '/api/distributor-products') return Promise.resolve(jsonResponse({ items: distributorProducts }))
+      if (url.match(/^\/api\/facilities\/(.+)\/my-role$/)) return Promise.resolve(jsonResponse({ role: 'admin' }))
       const match = url.match(/^\/api\/hospital-prices\?facilityId=(.+)$/)
       if (match) return Promise.resolve(jsonResponse({ prices }))
       return Promise.resolve(jsonResponse({ error: `unexpected ${url}` }, { status: 500 }))

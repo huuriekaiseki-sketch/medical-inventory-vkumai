@@ -26,6 +26,10 @@ export default function NewHospitalPricePage() {
       // 行われるため、あらかじめviewerの施設を選択肢から除外する(選んだ後にRLSで
       // 拒否されるより、そもそも選べない方が分かりやすい)。実際の書き込み拒否は
       // 引き続きRLS/RPCが最終防衛として担保する。
+      // このページはuseFacilityRoleフック(issue #618、1施設のroleのみ扱う)を
+      // 使わず、GET /api/facilitiesのroleByFacilityIdをそのまま使う。複数施設の
+      // 選択肢を同時にフィルタする必要があり、施設数だけmy-roleを個別リクエストする
+      // のは非効率なため意図的に分離している。
       const isAdmin = Boolean(facilitiesData.isAdmin)
       const roleByFacilityId = (facilitiesData.roleByFacilityId ?? {}) as Record<string, FacilityRole>
       const writableFacilities = isAdmin

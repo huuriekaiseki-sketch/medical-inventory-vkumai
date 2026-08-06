@@ -6,7 +6,7 @@ import Link from 'next/link'
 import type { HospitalPrice, HospitalPriceInput } from '@/types/hospitalPrice'
 import type { Facility } from '@/types/facility'
 import type { DistributorProduct } from '@/types/distributorProduct'
-import type { FacilityRole } from '@/types/role'
+import { useFacilityRole } from '@/hooks/useFacilityRole'
 import { HospitalPriceForm } from '@/components/hospitalPrices/HospitalPriceForm'
 
 export default function EditHospitalPricePage({ params }: { params: Promise<{ id: string }> }) {
@@ -16,9 +16,11 @@ export default function EditHospitalPricePage({ params }: { params: Promise<{ id
   const [facilities, setFacilities] = useState<Facility[]>([])
   const [distributorProducts, setDistributorProducts] = useState<DistributorProduct[]>([])
   const [error, setError] = useState<string | null>(null)
-  // WHY: viewerロールのUIゲーティング(issue #608)。undefinedは判定中(プレースホルダ)、
-  // falseならフォームの代わりに閲覧専用メッセージを出す。
-  const [canWrite, setCanWrite] = useState<boolean | undefined>(undefined)
+  // WHY: viewerロールのUIゲーティング(issue #608)。price読み込み前はfacilityIdが
+  // 不明なためフックにnullを渡す(role=nullで待機)。price読み込み後、対象価格の
+  // facilityIdでのroleに切り替わる。isLoadingは「price未読み込み」または
+  // 「roleフック取得中」のどちらでもtrueになる。
+  const { canWrite, isLoading: roleLoading } = useFacilityRole(price?.facilityId ?? null)
 
   useEffect(() => {
     let cancelled = false
@@ -35,11 +37,6 @@ export default function EditHospitalPricePage({ params }: { params: Promise<{ id
       setPrice(priceData.price)
       setFacilities(facilitiesData.facilities)
       setDistributorProducts(dpData.items)
-
-      const isAdmin = Boolean(facilitiesData.isAdmin)
-      const roleByFacilityId = (facilitiesData.roleByFacilityId ?? {}) as Record<string, FacilityRole>
-      const role = roleByFacilityId[priceData.price.facilityId as string]
-      setCanWrite(isAdmin || role === 'admin' || role === 'staff')
     }).catch(() => {
       if (!cancelled) setError('データの取得に失敗しました')
     })
@@ -85,7 +82,7 @@ export default function EditHospitalPricePage({ params }: { params: Promise<{ id
     )
   }
 
-  if (!price || canWrite === undefined) {
+  if (!price || roleLoading) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-8">
         <p className="text-gray-500">読み込み中...</p>
