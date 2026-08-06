@@ -47,7 +47,6 @@ describe('eval fixture manifest.jsonのjsonSchemaとAGENT_RESULT_SCHEMAの同期
     // AGENT_RESULT_SCHEMAはJS構文のオブジェクトリテラル(キーがクォートされていない等)であり
     // JSON.parseできないため、Functionコンストラクタでリテラルとして評価する。関数・外部参照を
     // 含まない前提はファイル先頭のコメントで確認済み。
-    // eslint-disable-next-line no-new-func
     const schemaObject = new Function(`return (${schemaSource})`)()
 
     const manifest = JSON.parse(readFileSync(MANIFEST_FILE, 'utf-8'))
@@ -60,7 +59,6 @@ describe('eval fixture manifest.jsonのjsonSchemaとAGENT_RESULT_SCHEMAの同期
   it('scripts/eval-fixtures/spec-check/manifest.jsonのjsonSchemaがaidd-phase2.jsのSPEC_CHECK_SCHEMAと構造的に一致する', () => {
     const workflowSource = readFileSync(WORKFLOW_FILE, 'utf-8')
     const schemaSource = extractObjectLiteralSource(workflowSource, 'const SPEC_CHECK_SCHEMA = ')
-    // eslint-disable-next-line no-new-func
     const schemaObject = new Function(`return (${schemaSource})`)()
 
     const manifest = JSON.parse(readFileSync(SPEC_CHECK_MANIFEST_FILE, 'utf-8'))
