@@ -205,3 +205,37 @@ Phase 3の実装時（db-impl・api実装担当がそれぞれ別々にSPECを�
 を直接参照するようになった場合、この判断は無効になる。認可判断でJWTクレームを参照するコードを
 追加する際は、必ずこのセクションを読み直し、`user_role`クレームの施設非依存な集約方式（bool_or）が
 その用途に耐えるか再検証すること。
+
+## なぜaal2要求（issue #612）をRPC内チェックだけでなくRLSポリシー自体にも追加したか（issue #623）
+
+**結論: `facility_writer_or_admin`ポリシーが付与されている全テーブル（発注/返却4テーブル・items系4テーブル・`hospital_prices`・`consumables`）のRLSポリシー自体に`has_aal2()`を追加した（`20260806000002_require_aal2_in_facility_writer_rls.sql`）。`facilities`（UPDATE、施設名変更のみ）は対象外とした。**
+
+`20260806000001`（issue #612）で`create_case_order_atomic`等4つのRPC関数の**内部**に`has_aal2()`
+チェックを追加したが、これらのテーブル自体のRLSポリシーは`is_facility_writer(facility_id) OR
+is_admin()`のみで、aal2判定を一切含んでいなかった。Next.jsアプリは常にRPC経由で発注するため
+気づかないが、PostgRESTの`POST /rest/v1/case_orders`のようにRPCを経由せずテーブルへ直接INSERT
+すれば、aal1のセッションのままでも発注データを書き込める。issue #612が「middlewareを迂回して
+直接Supabase APIを叩く経路をDB層で塞ぐ」ことを目的としていたにもかかわらず、発注テーブル自体の
+RLSではこの経路が塞がっていなかった（RPC内チェックのみでは、RPCを経由しない直接書き込みを
+防げない）。
+
+対象範囲は、issue #619（hospital_prices・consumablesがaal2要求の対象外という指摘）の議論を
+本issueで吸収し、以下のように確定した:
+- 発注/返却4テーブル・items系4テーブル: #612の防御を完成させるために必須（バグ修正）
+- `hospital_prices`・`consumables`: 価格改定は金額に直結し、かつ発注同様に低頻度の操作と判断し
+  対象に含めた。`consumables`テーブルは在庫数列を持たず`name`/`jan`/`purpose`のみのカタログで
+  あり、頻繁な編集を想定した運用ではないことを`supabase/migrations/20260624000000_add_orders.sql`
+  のスキーマ定義で確認済み。
+- `facilities`（UPDATE）: 対象外。金額・在庫の移動を伴わない純粋な管理操作であり、issue #612の
+  「金額・在庫に影響する書き込み操作に限定する」という線引きに該当しないため。
+
+RPC内の既存`has_aal2()`チェックは冗長になるが削除しなかった。RLSとRPC両方でのチェックは
+defense-in-depthとして、このリポジトリの既存パターン（`is_facility_writer`もRLSとRPC両方で
+チェックしている）と一致するため。
+
+検証は、静的SQLテキスト検証に加え、実際のTOTP enroll→challenge→verifyフローを実行する統合テスト
+（`supabase/__tests__/integration/require-aal2-in-facility-writer-rls.integration.test.ts`）で
+「MFA登録済み・aal1のセッションでは`case_orders`・`hospital_prices`への直接INSERT（RPC非経由）が
+拒否される」「aal2まで昇格すると成功する」「`facilities`の更新はaal1のままでも成功する（対象外の
+回帰確認）」を実測した。RPC経由の防御だけを見て「実装済み」と判断せず、RLSポリシー自体が同じ
+チェックを持つかを都度確認すること。
