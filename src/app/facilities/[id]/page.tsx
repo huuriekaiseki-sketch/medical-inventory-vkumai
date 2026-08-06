@@ -5,10 +5,13 @@ import Link from 'next/link'
 import type { Facility } from '@/types/facility'
 import { OrderButtons } from '@/components/orders/OrderButtons'
 
+type FacilityRole = 'admin' | 'staff' | 'viewer'
+
 export default function FacilityDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const [facility, setFacility] = useState<Facility | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [role, setRole] = useState<FacilityRole | null | undefined>(undefined)
 
   useEffect(() => {
     let cancelled = false
@@ -16,6 +19,15 @@ export default function FacilityDetailPage({ params }: { params: Promise<{ id: s
       .then((r) => { if (!r.ok) throw new Error(); return r.json() })
       .then((d) => { if (!cancelled) setFacility(d.facility) })
       .catch(() => { if (!cancelled) setError('施設の取得に失敗しました') })
+    return () => { cancelled = true }
+  }, [id])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/facilities/${id}/my-role`)
+      .then((r) => { if (!r.ok) throw new Error(); return r.json() })
+      .then((d) => { if (!cancelled) setRole(d.role) })
+      .catch(() => { if (!cancelled) setRole(null) })
     return () => { cancelled = true }
   }, [id])
 
@@ -58,7 +70,7 @@ export default function FacilityDetailPage({ params }: { params: Promise<{ id: s
         </h1>
       </div>
 
-      <OrderButtons facilityId={id} />
+      <OrderButtons facilityId={id} role={role} />
 
       <div className="rounded bg-white shadow-sm overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
         <table className="min-w-full">

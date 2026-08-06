@@ -37,7 +37,7 @@ const prices: (HospitalPrice & { facilityName: string; productName: string })[] 
 
 describe('HospitalPriceList', () => {
   it('価格一覧が表示される（施設名・商品名・仕切値・納品価格）', () => {
-    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} canWrite={true} />)
     expect(screen.getByText('中央病院')).toBeInTheDocument()
     expect(screen.getByText('カテーテルA')).toBeInTheDocument()
     expect(screen.getByText('1,000')).toBeInTheDocument()
@@ -49,39 +49,48 @@ describe('HospitalPriceList', () => {
   })
 
   it('粗利がDBの値（grossProfit）で表示される', () => {
-    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} canWrite={true} />)
     expect(screen.getByText('500')).toBeInTheDocument()
     expect(screen.getByText('5,000')).toBeInTheDocument()
   })
 
   it('掛け率が数値のとき % 表示される（小数点1桁）', () => {
-    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} canWrite={true} />)
     expect(screen.getAllByText('80.0%')).toHaveLength(1)
     expect(screen.getAllByText('96.0%')).toHaveLength(1)
   })
 
   it('掛け率が null のとき「—」が表示される', () => {
-    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} canWrite={true} />)
     const dashes = screen.getAllByText('—')
     expect(dashes).toHaveLength(2)
   })
 
   it('空のとき「価格情報が登録されていません」が表示される', () => {
-    render(<HospitalPriceList prices={[]} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    render(<HospitalPriceList prices={[]} onEdit={vi.fn()} onDelete={vi.fn()} canWrite={true} />)
     expect(screen.getByText('価格情報が登録されていません')).toBeInTheDocument()
   })
 
   it('編集ボタンクリックで onEdit が呼ばれる', async () => {
     const onEdit = vi.fn()
-    render(<HospitalPriceList prices={prices} onEdit={onEdit} onDelete={vi.fn()} />)
+    render(<HospitalPriceList prices={prices} onEdit={onEdit} onDelete={vi.fn()} canWrite={true} />)
     await userEvent.click(screen.getAllByText('編集')[0])
     expect(onEdit).toHaveBeenCalledWith('1')
   })
 
   it('削除ボタンクリックで onDelete が呼ばれる', async () => {
     const onDelete = vi.fn()
-    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={onDelete} />)
+    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={onDelete} canWrite={true} />)
     await userEvent.click(screen.getAllByText('削除')[0])
     expect(onDelete).toHaveBeenCalledWith('1')
+  })
+
+  it('canWrite=falseの場合、編集/削除ボタンも操作列ヘッダーも表示されない(issue #608)', () => {
+    render(<HospitalPriceList prices={prices} onEdit={vi.fn()} onDelete={vi.fn()} canWrite={false} />)
+    expect(screen.queryByText('編集')).not.toBeInTheDocument()
+    expect(screen.queryByText('削除')).not.toBeInTheDocument()
+    expect(screen.queryByText('操作')).not.toBeInTheDocument()
+    // 価格情報自体は引き続き閲覧できる
+    expect(screen.getByText('中央病院')).toBeInTheDocument()
   })
 })
