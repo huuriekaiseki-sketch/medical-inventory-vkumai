@@ -3,9 +3,8 @@
 import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { Facility } from '@/types/facility'
+import type { FacilityRole } from '@/types/role'
 import { OrderButtons } from '@/components/orders/OrderButtons'
-
-type FacilityRole = 'admin' | 'staff' | 'viewer'
 
 export default function FacilityDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)

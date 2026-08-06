@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asEnum } from '@/lib/mapping'
 import type { UserFacilityMembership } from '@/types/dashboard'
+import { FACILITY_ROLES, type FacilityRole } from '@/types/role'
 
 interface UserFacilityRow {
   facility_id?: unknown
@@ -16,7 +17,7 @@ export function mapUserFacilityMembership(row: UserFacilityRow): UserFacilityMem
   return {
     facilityId: asString(row.facility_id),
     facilityName: asString(row.facilities?.name),
-    role: asEnum(row.role, ['admin', 'staff', 'viewer'] as const, 'staff'),
+    role: asEnum(row.role, FACILITY_ROLES, 'staff'),
   }
 }
 
@@ -45,7 +46,7 @@ export async function getUserFacilityRole(
   db: SupabaseClient,
   userId: string,
   facilityId: string
-): Promise<'admin' | 'staff' | 'viewer' | null> {
+): Promise<FacilityRole | null> {
   const { data, error } = await db
     .from('user_facilities')
     .select('role')
@@ -54,5 +55,5 @@ export async function getUserFacilityRole(
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) return null
-  return asEnum(data.role, ['admin', 'staff', 'viewer'] as const, 'staff')
+  return asEnum(data.role, FACILITY_ROLES, 'staff')
 }

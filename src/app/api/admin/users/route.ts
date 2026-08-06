@@ -4,6 +4,7 @@ import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { requireAdmin } from '@/lib/admin-auth'
 import { asEnum } from '@/lib/mapping'
 import type { AdminUser } from '@/types/admin'
+import { FACILITY_ROLES, type FacilityRole } from '@/types/role'
 
 export async function GET() {
   const user = await requireAdmin()
@@ -24,10 +25,10 @@ export async function GET() {
   if (facilityError) return apiError(toClientErrorMessage(facilityError, 'ユーザー一覧の取得に失敗しました'))
 
   // Group by user_id in memory
-  const facilityMap = new Map<string, { id: string; role: 'admin' | 'staff' | 'viewer' }[]>()
+  const facilityMap = new Map<string, { id: string; role: FacilityRole }[]>()
   for (const row of (facilityRows ?? [])) {
     const list = facilityMap.get(row.user_id) ?? []
-    list.push({ id: row.facility_id, role: asEnum(row.role, ['admin', 'staff', 'viewer'] as const, 'staff') })
+    list.push({ id: row.facility_id, role: asEnum(row.role, FACILITY_ROLES, 'staff') })
     facilityMap.set(row.user_id, list)
   }
 
