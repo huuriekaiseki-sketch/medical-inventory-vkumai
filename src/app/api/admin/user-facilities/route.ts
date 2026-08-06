@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/server'
 import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { requireAdmin } from '@/lib/admin-auth'
+import { FACILITY_ROLES, type FacilityRole } from '@/types/role'
 
 export async function POST(request: NextRequest) {
   const user = await requireAdmin()
   if (!user) return apiError('権限がありません', 403)
 
-  let userId: string | undefined, facilityId: string | undefined, role: 'staff' | 'admin' | 'viewer' | undefined
+  let userId: string | undefined, facilityId: string | undefined, role: FacilityRole | undefined
   try {
     const body = await request.json()
     userId = body.userId
@@ -17,8 +18,8 @@ export async function POST(request: NextRequest) {
     return apiError('リクエストが不正です', 400)
   }
   if (!userId || !facilityId) return apiError('userId と facilityId は必須です', 400)
-  if (role !== undefined && role !== 'staff' && role !== 'admin' && role !== 'viewer') {
-    return apiError("role は 'staff'・'admin'・'viewer' のいずれかのみ指定できます", 400)
+  if (role !== undefined && !FACILITY_ROLES.includes(role)) {
+    return apiError(`role は ${FACILITY_ROLES.map((r) => `'${r}'`).join('・')} のいずれかのみ指定できます`, 400)
   }
 
   const admin = createAdminSupabase()

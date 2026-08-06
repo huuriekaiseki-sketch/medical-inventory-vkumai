@@ -6,6 +6,7 @@ import Link from 'next/link'
 import type { HospitalPrice, HospitalPriceInput } from '@/types/hospitalPrice'
 import type { Facility } from '@/types/facility'
 import type { DistributorProduct } from '@/types/distributorProduct'
+import type { FacilityRole } from '@/types/role'
 import { HospitalPriceForm } from '@/components/hospitalPrices/HospitalPriceForm'
 
 export default function EditHospitalPricePage({ params }: { params: Promise<{ id: string }> }) {
@@ -36,7 +37,7 @@ export default function EditHospitalPricePage({ params }: { params: Promise<{ id
       setDistributorProducts(dpData.items)
 
       const isAdmin = Boolean(facilitiesData.isAdmin)
-      const roleByFacilityId = (facilitiesData.roleByFacilityId ?? {}) as Record<string, 'admin' | 'staff' | 'viewer'>
+      const roleByFacilityId = (facilitiesData.roleByFacilityId ?? {}) as Record<string, FacilityRole>
       const role = roleByFacilityId[priceData.price.facilityId as string]
       setCanWrite(isAdmin || role === 'admin' || role === 'staff')
     }).catch(() => {

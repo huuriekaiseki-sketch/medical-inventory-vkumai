@@ -6,6 +6,7 @@ import Link from 'next/link'
 import type { HospitalPriceInput } from '@/types/hospitalPrice'
 import type { Facility } from '@/types/facility'
 import type { DistributorProduct } from '@/types/distributorProduct'
+import type { FacilityRole } from '@/types/role'
 import { HospitalPriceForm } from '@/components/hospitalPrices/HospitalPriceForm'
 
 export default function NewHospitalPricePage() {
@@ -26,7 +27,7 @@ export default function NewHospitalPricePage() {
       // 拒否されるより、そもそも選べない方が分かりやすい)。実際の書き込み拒否は
       // 引き続きRLS/RPCが最終防衛として担保する。
       const isAdmin = Boolean(facilitiesData.isAdmin)
-      const roleByFacilityId = (facilitiesData.roleByFacilityId ?? {}) as Record<string, 'admin' | 'staff' | 'viewer'>
+      const roleByFacilityId = (facilitiesData.roleByFacilityId ?? {}) as Record<string, FacilityRole>
       const writableFacilities = isAdmin
         ? facilitiesData.facilities
         : (facilitiesData.facilities as Facility[]).filter((f) => {
