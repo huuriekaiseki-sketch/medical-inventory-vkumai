@@ -13,6 +13,24 @@ export function isBudgetExhausted({ budget, minRemainingForRound }) {
   return Boolean(budget?.total && budget.remaining() < minRemainingForRound)
 }
 
+// 単発タスクの総量サーキットブレーカー（2026-08-06 mentor評価）。issue #500の再発防止
+// （キーワード誤判定という原因別の対策）とは独立に、「別の原因で暴走しても量で止める」
+// 保険として機能する。budget.total（ユーザーの「+500k」等の明示予算）が設定されている場合は
+// Workflowツール本体がハード強制する（超過時にagent()がthrowする）ため、このガードは
+// total未設定時のみdefaultCapを代替上限として適用する。budget.spent()はメインループと
+// 全workflowを合算したターン累計出力トークンであり、このworkflow単体の消費量ではない点に注意。
+// aidd-1-1-deep-task.js / aidd-phase2.js（Workflow DSL、require不可）にインライン複製している。
+// 同期は budget-guard-sync.test.js が検証する。このファイルは単体テスト用の正本。
+// 引数を既存関数のようなオブジェクト分割代入にしていないのは意図的:
+// extract-declaration.js は宣言後の最初の `{` を関数本体とみなすため、パラメータに
+// 分割代入 `({ ... })` があると引数部分だけを抽出してしまい、本体のドリフトを検知できない
+// （budget-guard-sync.test.js 導入時のfault injectionで実測した偽陰性）。
+export function isDefaultCapExceeded(budget, defaultCap) {
+  if (!budget || typeof budget.spent !== 'function') return false
+  if (budget.total) return false
+  return budget.spent() >= defaultCap
+}
+
 // Sweepループ(while)の継続条件。dryRounds/maxRoundsの既存条件に加え、budgetガードをORではなくAND連結する
 // （budgetが尽きていなくてもdry収束・ラウンド上限到達なら従来通り停止する）。
 export function shouldContinueLoop({ dryRounds, round, maxRounds, budget, minRemainingForRound }) {

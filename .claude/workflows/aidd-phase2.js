@@ -91,6 +91,34 @@ function shouldBlock(results) {
   return !results.every(r => r?.status === 'pass' || isMinorOnlyFailure(r))
 }
 
+// 単発タスクの総量サーキットブレーカー（2026-08-06 mentor評価）。正本・単体テストは
+// .claude/workflows/lib/budget-guard.js。Workflow DSLはrequire不可のためインライン複製し、
+// 同期は budget-guard-sync.test.js が検証する。budget.total（明示予算）が未設定のときのみ
+// DEFAULT_TOKEN_CAPを代替上限として適用し、原因を問わず量で止める。
+// 上限値はこのworkflow固有の仮置き値: phase2は実装5体+統合+レビュー4体×最大4ラウンド+
+// 差し戻しimplementerを起動するためdeep-taskより高めの2_500_000を選んだ。実測の裏付けは
+// 薄く、運用しながら再調整する前提（deep-task側DEFAULT_TOKEN_CAPと同じ位置づけ）。
+const DEFAULT_TOKEN_CAP = 2_500_000
+function isDefaultCapExceeded(budget, defaultCap) {
+  if (!budget || typeof budget.spent !== 'function') return false
+  if (budget.total) return false
+  return budget.spent() >= defaultCap
+}
+
+// フェーズ境界でのサーキットブレーカー判定と、blocked相当の共通return生成。
+// 既存の品質ゲート（shouldBlock）と同じ「止めて人間に引き渡す」流儀に合わせる
+function tokenCapReturn(blockedAt, partialResults) {
+  log(`サーキットブレーカー: 累計${budget.spent()}トークンがデフォルト上限${DEFAULT_TOKEN_CAP}を超過したため中断（${blockedAt}へは進みません）`)
+  return {
+    done: false,
+    ...partialResults,
+    blocked: true,
+    blockedAt: `Token Cap (before ${blockedAt})`,
+    tokenCapExceeded: true,
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: `Token Cap (before ${blockedAt})`, expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
+  }
+}
+
 // ログ記録漏れ検知（.claude/workflows/lib/loop-observability-expectation.js の
 // isLoggableAgentType と同一ロジック。Workflow DSLはrequire不可のためインライン複製）。
 // reviewer/implementer/judge-panelのみ scripts/log-loop-observability.sh 呼び出し指示を
@@ -267,6 +295,9 @@ if (manifestCheck?.status !== 'pass') {
 // ─── Phase A: Contract Write + DB（並列）─────────────────────────────
 // contract-writer: src/types/ の型定義を確定（implementerの「契約」）
 // db-impl: supabase/migrations/ を実装（SPEC.mdから直接、contract-writerと並行）
+if (isDefaultCapExceeded(budget, DEFAULT_TOKEN_CAP)) {
+  return tokenCapReturn('Contract + DB', { specCheck, manifestCheck })
+}
 phase('Contract + DB')
 
 const [contractResult, dbResult] = await parallel([
@@ -314,6 +345,10 @@ if (shouldBlock([contractResult, dbResult])) {
   }
 }
 logMinorOnlyPassThrough('Contract + DB', [contractResult, dbResult])
+
+if (isDefaultCapExceeded(budget, DEFAULT_TOKEN_CAP)) {
+  return tokenCapReturn('Implement', { manifestCheck, contractResult, dbResult })
+}
 
 // ─── Phase B: data / api / ui（並列）─────────────────────────────────
 // 3グループは contract-writer の出力（src/types/）を契約として参照する
@@ -565,6 +600,21 @@ let reviewRetryAgentCount = 0
 const retryHistory = []
 
 while (true) {
+  // サーキットブレーカー: Review差し戻しループはこのworkflow内で唯一の反復構造のため、
+  // ラウンドごとに累計量を確認する（MAX_REVIEW_RETRIESの回数上限とは独立した量ベースの保険）
+  if (isDefaultCapExceeded(budget, DEFAULT_TOKEN_CAP)) {
+    return tokenCapReturn('Review', {
+      manifestCheck,
+      contractResult,
+      dbResult,
+      dataResult,
+      apiResult,
+      uiResult,
+      coverageCheck,
+      groupImplResult,
+      integration: integrationResult,
+    })
+  }
   reviewAttempt++
   log(`Reviewラウンド ${reviewAttempt}/${MAX_REVIEW_RETRIES + 1} 開始`)
 

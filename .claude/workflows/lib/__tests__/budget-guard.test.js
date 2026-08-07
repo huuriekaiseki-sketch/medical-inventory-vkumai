@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isBudgetExhausted, shouldContinueLoop } from '../budget-guard.js'
+import { isBudgetExhausted, isDefaultCapExceeded, shouldContinueLoop } from '../budget-guard.js'
 
 const MIN_REMAINING = 400_000
 
@@ -25,6 +25,38 @@ describe('isBudgetExhausted', () => {
   it('remaining()がちょうど閾値と同値ならfalse(境界は消費側に倒す)', () => {
     const budget = { total: 1_000_000, remaining: () => MIN_REMAINING }
     expect(isBudgetExhausted({ budget, minRemainingForRound: MIN_REMAINING })).toBe(false)
+  })
+})
+
+describe('isDefaultCapExceeded', () => {
+  const CAP = 2_000_000
+
+  it('budgetそのものが渡されない(undefined)場合はfalse（判定不能時はfail-openで既存動作維持）', () => {
+    expect(isDefaultCapExceeded(undefined, CAP)).toBe(false)
+  })
+
+  it('budget.spentが関数でない場合はfalse（Workflowツール外での誤用ガード）', () => {
+    expect(isDefaultCapExceeded({ total: null }, CAP)).toBe(false)
+  })
+
+  it('budget.totalが設定されている場合はfalse（明示予算はWorkflowツール本体がハード強制する）', () => {
+    const budget = { total: 500_000, spent: () => 10_000_000 }
+    expect(isDefaultCapExceeded(budget, CAP)).toBe(false)
+  })
+
+  it('total未設定でspent()がdefaultCap未満ならfalse', () => {
+    const budget = { total: null, spent: () => CAP - 1 }
+    expect(isDefaultCapExceeded(budget, CAP)).toBe(false)
+  })
+
+  it('total未設定でspent()がちょうどdefaultCapと同値ならtrue（境界は停止側に倒す）', () => {
+    const budget = { total: null, spent: () => CAP }
+    expect(isDefaultCapExceeded(budget, CAP)).toBe(true)
+  })
+
+  it('total未設定でspent()がdefaultCap超過ならtrue', () => {
+    const budget = { total: null, spent: () => CAP + 1 }
+    expect(isDefaultCapExceeded(budget, CAP)).toBe(true)
   })
 })
 
