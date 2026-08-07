@@ -556,3 +556,42 @@ CI上のcheck名は`CI / test`・`CI / lint`）。新規CI jobの追加は不要
 mentorスキルの判断軸（閾値を先に決めてからゲートを作る）に従うが、今回は既存のci.yml/
 node-check.ymlが既にtest/lintを実行していたため、新規job作成ではなく既存jobへの閾値明記と
 lint scriptの`--max-warnings=0`追加のみをまとめて行った。
+
+## なぜトークン量のデフォルト上限（原因非依存のサーキットブレーカー）をWorkflow内に追加したか（2026-08-06 mentor評価）
+
+**結論: `budget.total`（ユーザーの「+500k」等の明示予算）が未設定でも、累計出力トークンがworkflow固有のデフォルト上限を超えたらフェーズ境界・ループ先頭で中断する量ベースの保険を`aidd-1-1-deep-task.js`と`aidd-phase2.js`に追加した。**
+
+`router-risk.js`の346万トークン消費インシデントは、issue #500で根本原因（changedFiles空時の
+キーワード誤判定によるルート誤選択）を修正済みだが、これは原因別の個別対策であり、
+「別の原因で暴走した場合に量で止める」汎用の上限はコード上どこにも存在しなかった
+（2026-08-06のmentor評価指摘）。既存機構の棚卸し結果:
+
+- Workflowツール本体の`budget.total`ハード強制（超過で`agent()`がthrow）は、ユーザーが
+  「+500k」等を明示したときだけ発動するopt-in
+- `budget-guard.js`（issue #442）は`aidd-1-1-deep-task.js`のSweepループ限定で、かつ
+  `budget.total`未設定なら素通りする後方互換設計
+- `/goal`のターン数上限はWorkflow外のセッション自走向けで、設定有無を機械検知できない
+  自己申告（`undetectable-rules-inventory.md`記載）
+
+つまり欠けていたのは「指示が無いときのデフォルト上限」のみ。`budget.spent()`は
+`budget.total`未設定でも呼べるため、正本`lib/budget-guard.js`の`isDefaultCapExceeded`
+（`total`設定時はWorkflowツール本体に委ねてfalse、未設定時のみ`spent() >= defaultCap`で判定）を
+両workflowへインライン複製し（同期は`budget-guard-sync.test.js`）、以下の位置で判定する:
+
+- `aidd-1-1-deep-task.js`（上限2,000,000トークン）: Sweepループ継続条件・Find前・
+  Adversarial Verify前（指摘件数比例でopusが起動する最高単価フェーズ）
+- `aidd-phase2.js`（上限2,500,000トークン）: Contract+DB前・Implement前・Review差し戻し
+  ループの各ラウンド先頭
+
+上限値はいずれも仮置き（346万インシデントを確実に止められ、正常収束時の想定消費を大きく
+上回る値）で、実測の裏付けは薄く運用しながら再調整する前提（`MIN_BUDGET_FOR_SWEEP_ROUND`と
+同じ位置づけ）。`budget.spent()`はメインループと全workflowを合算したターン累計のため、
+このworkflow単体の消費量より大きく出る（=安全側に倒れる）点に注意。
+
+**既知の限界（意図的にスコープ外）:** Workflow外、つまりメインセッションが手動でターンを
+重ねる暴走は引き続き`/goal`頼みで自己申告のまま。hookからトークン量を機械測定する手段が
+現状無く、statusline可視化（issue #446）止まりが現実的なため、今回は対象にしていない。
+
+**How to apply:** 新しいWorkflowスクリプトに反復構造（ループ・リトライ）や台数可変の
+フェーズを追加する際は、`isDefaultCapExceeded`をインライン複製し（`budget-guard-sync.test.js`の
+`WORKFLOW_FILES`にも追加）、workflow固有の`DEFAULT_TOKEN_CAP`を根拠コメント付きで定める。

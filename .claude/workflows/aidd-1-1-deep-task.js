@@ -73,10 +73,27 @@ const MIN_BUDGET_FOR_SWEEP_ROUND = 400_000
 function isBudgetExhausted(minRemainingForRound) {
   return Boolean(budget?.total && budget.remaining() < minRemainingForRound)
 }
+
+// 単発タスクの総量サーキットブレーカー（2026-08-06 mentor評価）。正本・単体テストは
+// .claude/workflows/lib/budget-guard.js。Workflow DSLはrequire不可のためインライン複製し、
+// 同期は budget-guard-sync.test.js が検証する。budget.total（明示予算）が未設定のときのみ
+// DEFAULT_TOKEN_CAPを代替上限として適用し、原因を問わず量で止める。
+// 上限値はこのworkflow固有の仮置き値: router-risk.js誤判定インシデント（346万トークン、
+// issue #500）を確実に止められ、かつ正常収束時（maxRounds=3のSweep+後続フェーズ）の
+// 想定消費を大きく上回る値として2_000_000を選んだ。実測の裏付けは薄く、運用しながら
+// 再調整する前提（MIN_BUDGET_FOR_SWEEP_ROUNDと同じ位置づけ）。
+const DEFAULT_TOKEN_CAP = 2_000_000
+function isDefaultCapExceeded(budget, defaultCap) {
+  if (!budget || typeof budget.spent !== 'function') return false
+  if (budget.total) return false
+  return budget.spent() >= defaultCap
+}
+
 function shouldContinueSweepLoop(dryRounds, round, maxRounds, minRemainingForRound) {
   if (dryRounds >= 2) return false
   if (round > maxRounds) return false
   if (isBudgetExhausted(minRemainingForRound)) return false
+  if (isDefaultCapExceeded(budget, DEFAULT_TOKEN_CAP)) return false
   return true
 }
 
@@ -173,10 +190,13 @@ const sweepSummary = [
 // ケースも同様に一律「ラウンド上限到達」と誤報しないよう区別を追加）
 const sweepConverged = dryRounds >= 2
 const sweepBudgetExhausted = !sweepConverged && isBudgetExhausted(MIN_BUDGET_FOR_SWEEP_ROUND)
+const sweepTokenCapExceeded = !sweepConverged && !sweepBudgetExhausted && isDefaultCapExceeded(budget, DEFAULT_TOKEN_CAP)
 if (sweepConverged) {
   log(`Sweep完了（収束）: ${round - 1}ラウンド`)
 } else if (sweepBudgetExhausted) {
   log(`Sweep未完了: budget残高不足のため打ち切り（残り${budget.remaining()}トークン < 閾値${MIN_BUDGET_FOR_SWEEP_ROUND}）。未解決の指摘が残っている可能性があります`)
+} else if (sweepTokenCapExceeded) {
+  log(`Sweep未完了: サーキットブレーカー発動のため打ち切り（累計${budget.spent()}トークン >= デフォルト上限${DEFAULT_TOKEN_CAP}）。未解決の指摘が残っている可能性があります`)
 } else {
   log(`Sweep未完了: ラウンド上限(${maxRounds})に到達したため打ち切り。未解決の指摘が残っている可能性があります`)
 }
@@ -211,6 +231,23 @@ if (draftSpec?.status !== 'pass') {
     draftSpec,
     blocked: true,
     blockedAt: 'Draft Spec',
+  }
+}
+
+// サーキットブレーカー: Find以降（Find 5体 → Adversarial Verify(opus×指摘数) → Judge Panel →
+// Synthesize）へ進む前にフェーズ境界で累計量を確認する。Sweepループ内のガードだけでは、
+// ループ外の後続フェーズが上限超過後もフルに走ってしまう
+if (isDefaultCapExceeded(budget, DEFAULT_TOKEN_CAP)) {
+  log(`サーキットブレーカー: 累計${budget.spent()}トークンがデフォルト上限${DEFAULT_TOKEN_CAP}を超過したため中断（Find以降へは進みません）`)
+  return {
+    sweepFindings: allFindings,
+    sweepConverged,
+    sweepBudgetExhausted,
+    sweepBlockedAxes: lastRoundBlockedAxes,
+    draftSpec,
+    blocked: true,
+    blockedAt: 'Token Cap (before Find)',
+    tokenCapExceeded: true,
   }
 }
 
@@ -267,6 +304,24 @@ const dedupedFindings = allFindResults.filter(f => {
   return true
 })
 log(`Find完了: ${allFindResults.length}件 → dedup後 ${dedupedFindings.length}件`)
+
+// サーキットブレーカー: Adversarial Verifyは指摘件数に比例してopusエージェントが起動する
+// 最も単価の高いフェーズのため、直前に累計量を再確認する（以降のJudge Panel/Synthesizeは
+// 台数上限が固定のためガードは置かない）
+if (isDefaultCapExceeded(budget, DEFAULT_TOKEN_CAP)) {
+  log(`サーキットブレーカー: 累計${budget.spent()}トークンがデフォルト上限${DEFAULT_TOKEN_CAP}を超過したため中断（Adversarial Verify以降へは進みません）`)
+  return {
+    sweepFindings: allFindings,
+    sweepConverged,
+    sweepBudgetExhausted,
+    sweepBlockedAxes: lastRoundBlockedAxes,
+    draftSpec,
+    dedupedFindings,
+    blocked: true,
+    blockedAt: 'Token Cap (before Adversarial Verify)',
+    tokenCapExceeded: true,
+  }
+}
 
 // ─── Phase 5: Adversarial Verify ─────────────────────────────────────
 phase('Adversarial Verify')
