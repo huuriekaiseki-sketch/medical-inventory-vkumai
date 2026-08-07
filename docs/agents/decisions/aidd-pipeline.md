@@ -520,3 +520,39 @@ completeness-critic-2/propose/score/synthesize向けのeval fixture新設は本i
 ため、`scripts/check-agent-baseline-freshness.sh`（issue #429）のCI警告対象に該当する。
 同一PRで`scripts/snapshot-agent-baseline.sh`を実行し`docs/agents/baselines/2026-07-23.json`
 を追加した。
+
+## なぜtest/lintゲートの誤差許容率を「0件」に設定し、既存のCI job（ci.yml→node-check.yml経由）にlintの--max-warnings=0を追加したか（OBL7評価設計タスク）
+
+**結論: 単体テスト・lintのいずれも失敗0件・警告0件を合否ラインとし、flaky再試行の余地を持たせない。既存のe2e/RLS統合テストのみ`playwright.config.ts:17`のCI内1回リトライを踏襲する。**
+
+2026-07-22のmentor評価（[[project_obl7_kgi_direction]]、Codex側ログ）で、既存の3ゲート
+（test/lint/RLS静的チェック）が「動くか/動かないか」のpass/fail判定はあるが「何%まで
+誤判定を許容するか」という数値的な合格ラインを事前定義していない点を指摘された
+（根拠: `router-risk.js`の346万トークン消費インシデント、issue #500で対応済み）。
+
+調査の結果、`npm test`（vitest単体テスト、183ファイル/1402件）と`npm run lint`は
+`.github/workflows/ci.yml`が`node-check.yml`（Reusable Workflow）経由で`test`・`lint`・
+`typecheck`の各jobとして既にPRごとに実行していることを確認した（PR #596で導入済み、
+CI上のcheck名は`CI / test`・`CI / lint`）。新規CI jobの追加は不要だったため、今回は
+既存jobに対する閾値の明文化と、lintの`--max-warnings=0`追加のみを行った:
+
+- **単体テスト（vitest、`CI / test`）**: 失敗許容率0%（1件でも失敗したらred）。単体テストは
+  外部I/Oに依存しない前提のため、flakyを許容する理由がない。flakyが実際に発生した場合は
+  「テストの独立性を壊す実装がある」というバグ報告として扱い、閾値を緩めて誤魔化さない
+- **lint（`CI / lint`）**: `package.json`のlint scriptに`--max-warnings=0`を追加し、警告も
+  含めて0件を合格ラインにした。これがないと`npm run lint`は警告があってもexit 0のままで、
+  CI上のcheckが警告を検知できなかった。既存の2件の警告（未使用eslint-disableコメント）は
+  同PRで解消済み
+- **e2e/RLS統合テスト（`e2e.yml`の`test:integration`・`test:e2e`）**: 今回は変更していない。
+  `playwright.config.ts:17`が既にCI環境でのみ`retries: 1`を設定しており、これを
+  「ブラウザ操作特有の一過性の不安定さを1回まで許容し、2回連続失敗なら実装側の問題として扱う」
+  という既存の閾値と位置づけて明文化した
+
+[[なぜCI品質ゲートの失敗が赤バツ表示止まりで、マージボタン自体は止められないか]]の制約により、
+これらは全てPR上の可視化に留まる（`docs/agents/decisions.md`参照）。
+
+**How to apply:** 今後新しいCI jobやテストスイートを追加する際は、追加と同時に「失敗0件」
+「警告N件まで」のような数値を本エントリに準じて明記する。「後で閾値を決める」順序ではなく、
+mentorスキルの判断軸（閾値を先に決めてからゲートを作る）に従うが、今回は既存のci.yml/
+node-check.ymlが既にtest/lintを実行していたため、新規job作成ではなく既存jobへの閾値明記と
+lint scriptの`--max-warnings=0`追加のみをまとめて行った。

@@ -20,6 +20,23 @@ DBスキーマ固有の「なぜ」は、まずそのマイグレーションフ
 - [`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md) — Workflow DSL・TRI/RISKルーター・品質ゲート・hook
 - [`tooling-decisions.md`](./tooling-decisions.md) — 公式機能・プラグインの導入可否判断（issue #486でcommon.mdから分離した際に新設。#491でこちらへ統合し、decisions.md側は各エントリからのリンクのみに変更）
 
+## なぜCI品質ゲートの失敗が赤バツ表示止まりで、マージボタン自体は止められないか
+
+**結論: このリポジトリはGitHub Freeプランの非公開リポジトリであり、branch protection（必須ステータスチェック）APIが使えないため。**
+
+`gh api repos/<owner>/<repo>/branches/main/protection`は`403 Upgrade to GitHub Pro or make
+this repository public to enable this feature`を返す（2026-08-07確認）。このため
+test/lint/RLSいずれのCI jobも、PR画面にfailing checkとして表示することはできるが、
+「必須チェック未達なら[Merge]ボタンを押せなくする」という機械的ブロックは設定できない。
+公開リポジトリ化またはGitHub Proへのアップグレードをしない限りこの制約は解消しない。
+
+**How to apply:** test/lint/RLSゲートの「閾値超えで止める」という表現は、いずれも
+「PR上に赤バツを出す」までを指し、マージそのものの機械的停止を意味しない点を、新しい
+ゲートを追加・説明するたびに前提として書く。実際の強制力は、AIDDパイプライン内の
+`quality-gate.js`によるdeny-by-default判定（サブエージェント実行フロー内でのみ機能、
+`docs/agents/decisions/aidd-pipeline.md`参照）と、人間レビュアーが赤バツを見て
+マージを手動で控える運用に依存する。
+
 ## なぜdomain.md/decisions.mdを単一ファイルで始めたか
 
 **結論: エントリ・分野が少ないうちは単一ファイルで始め、分野が3つ以上に増えたタイミングで分割する前提にした（issue #491で実際に分割した）。**
