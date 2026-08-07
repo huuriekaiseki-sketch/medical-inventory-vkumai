@@ -266,3 +266,10 @@ lintの--max-warnings=0を追加したか（OBL7評価設計タスク）]]と同
 **How to apply:** RLS/IDOR系のテストを新規追加する際は、このエントリの「0%許容」を
 デフォルトの合否ラインとして踏襲する。緩める場合（例: 既知のflaky個別ケースを一時的に
 skipする等）は、その理由と再検証タイミングを本エントリに追記してから行う。
+
+**セーフティネット追加（2026-08-07）:** 上記の統合テストは「書かれたテストがあるテーブル」
+しか守れないため、`supabase/migrations/__tests__/rls_enabled_all_tables.test.ts`（DB接続不要の
+静的解析、`npm test`＝`CI / test`で毎PR実行）が全migrationを横断走査し、「全テーブルに明示的な
+ENABLE ROW LEVEL SECURITYがある」「DISABLEが存在しない」「ポリシー0のテーブルは許可リスト管理」
+を機械検証する。`ensure_rls`イベントトリガー（20260707000001）による自動有効化は失敗を
+RAISE LOGで握り潰す仕様のため、これに暗黙依存せずmigrationへの明示を要求する。
