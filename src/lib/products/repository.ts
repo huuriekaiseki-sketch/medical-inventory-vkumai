@@ -1,8 +1,8 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { asNullableString, asString } from '@/lib/mapping'
 import { buildIlikeValue } from '@/lib/search/like-pattern'
 import { ClientVisibleError } from '@/lib/client-visible-error'
 import type { Product, ProductInput, ProductListFilter } from '@/types/product'
+import type { TypedSupabaseClient } from '@/lib/supabase/database'
 
 const PRODUCT_COLUMNS = 'id, jan, ref, name, maker, created_at, updated_at'
 
@@ -29,7 +29,7 @@ export function mapProduct(row: ProductRow): Product {
 }
 
 export async function listProducts(
-  db: SupabaseClient,
+  db: TypedSupabaseClient,
   filter?: ProductListFilter
 ): Promise<Product[]> {
   let query = db
@@ -49,7 +49,7 @@ export async function listProducts(
   return data.map(mapProduct)
 }
 
-export async function getProduct(db: SupabaseClient, id: string): Promise<Product | null> {
+export async function getProduct(db: TypedSupabaseClient, id: string): Promise<Product | null> {
   const { data, error } = await db
     .from('products')
     .select(PRODUCT_COLUMNS)
@@ -62,7 +62,7 @@ export async function getProduct(db: SupabaseClient, id: string): Promise<Produc
   return mapProduct(data)
 }
 
-export async function createProduct(db: SupabaseClient, input: ProductInput): Promise<Product> {
+export async function createProduct(db: TypedSupabaseClient, input: ProductInput): Promise<Product> {
   const { data, error } = await db
     .from('products')
     .insert({ jan: input.jan, ref: input.ref, name: input.name, maker: input.maker ?? null })
@@ -75,7 +75,7 @@ export async function createProduct(db: SupabaseClient, input: ProductInput): Pr
   return mapProduct(data)
 }
 
-export async function updateProduct(db: SupabaseClient, id: string, input: ProductInput): Promise<Product> {
+export async function updateProduct(db: TypedSupabaseClient, id: string, input: ProductInput): Promise<Product> {
   const { data, error } = await db
     .from('products')
     .update({ jan: input.jan, ref: input.ref, name: input.name, maker: input.maker ?? null })
@@ -90,7 +90,7 @@ export async function updateProduct(db: SupabaseClient, id: string, input: Produ
   return mapProduct(data)
 }
 
-export async function deleteProduct(db: SupabaseClient, id: string): Promise<void> {
+export async function deleteProduct(db: TypedSupabaseClient, id: string): Promise<void> {
   const { data, error } = await db
     .from('products')
     .delete()
