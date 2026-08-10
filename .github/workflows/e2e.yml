@@ -49,6 +49,9 @@ jobs:
           supabase start
           supabase db reset
 
+      - name: Verify generated Supabase types
+        run: bash scripts/check-generated-supabase-types.sh
+
       - name: Export local Supabase connection info
         run: |
           echo "SUPABASE_API_URL=$(supabase status -o json | jq -r '.API_URL')" >> "$GITHUB_ENV"
