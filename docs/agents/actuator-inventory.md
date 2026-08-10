@@ -34,7 +34,7 @@
 | Stop | `check-gap-check-state.sh` | **自動復旧（queue）** | gap check警告を`gap-check-followup`としてqueue登録（issue #488・#523） |
 | Stop | agent型（domain.md/decisions.md提案） | warning-only | 高リスクドメイン変更時のドキュメント反映漏れ提案 |
 | Stop | `ai-check-suggest.sh` | warning-only | `npm run ai:check`実行有無の警告 |
-| Stop | `verify-claims.sh` | warning-only | 直前ターンの主張の裏取り結果を警告 |
+| Stop | `verify-claims.sh` | **block**（retry上限3回のエスケープ付き） | 未解消の指摘があれば`emit_block`で`exit 2`しStopをブロックする。3回試行しても解消しなければ人間介入待ちのメッセージでブロックし続ける |
 | Stop | `gate-effectiveness-monthly-check.sh` | warning-only | 品質ゲート月次サマリの提示 |
 | Stop | `check-aidd-stats-recorded.sh` | warning-only | AIDD stats `start`呼び忘れの警告（issue #495） |
 | Stop | `check-aidd-phase-stats-recorded.sh` | warning-only | AIDD stats phase1/phase2呼び忘れの警告（issue #524） |
@@ -47,16 +47,21 @@
 
 ## 集計と評価
 
-- block: 1件
+- block: 2件（うち1件はretry上限付きエスケープあり）
 - ask: 1件
 - 自動復旧（queue、うち登録側）: 2件（`check-workflow-interruption.sh`・`check-gap-check-state.sh`）
 - 自動復旧（queue、表示側）: 1件（`check-recovery-queue.sh`）
-- warning-only: 15件
+- warning-only: 14件
 
-約20件の検知hookのうち、機械的に実行を止める・確認を強制する（block/ask）のは2件のみ。
+約20件の検知hookのうち、機械的に実行を止める・確認を強制する（block/ask）のは3件。
 recovery-queue接続によって「次回セッション冒頭で機械的に目の前に出る」までは自動化されている
-ものが3件。残る15件はすべて、systemMessageが出力された後の是正判断・実行タイミングを完全に
+ものが3件。残る14件はすべて、systemMessageが出力された後の是正判断・実行タイミングを完全に
 人（またはそれを読んだセッション）に委ねている。
+
+（2026-08-10訂正: `verify-claims.sh`は当初この表でwarning-onlyと誤記されていたが、実装は
+`emit_block`による`exit 2`のblockだった。棚卸し文書自体が実装とドリフトし得るという実例。
+cardiosearch側issue #5でこの種の乖離を機械検知する仕組みを導入済み、本リポジトリへの
+逆輸入は未着手）
 
 **この偏り自体は問題ではない。** 停止①②（仕様レビュー・構造化レビュー）はそもそも人間判断が
 本質であり、機械化すべきでない。また`check-otel-collector-status.sh`のような情報提示や、
