@@ -23,6 +23,12 @@ effort: low
 ## 除外対象
 - `__tests__/` ディレクトリ配下のファイルおよび `*.test.ts`・`*.test.tsx` ファイルはすべて除外する
 
+## 決定的な探索手順（省略禁止）
+1. 調査開始の進捗を記録した直後、個別ファイルを読む前に、`src/lib/supabase/**`・`src/lib/`配下のドメインrepository層・`src/lib/admin-auth.ts`・`src/lib/api-error.ts`・`src/middleware.ts`・`src/app/**/route.ts`のうち存在する全調査対象rootを `rg --files`（利用できない場合は同等の方法）で完全に一覧化する。
+2. 一覧から除外対象を取り除き、重複を除いてsortした確認対象ファイル一覧をBash出力へ列挙する。
+3. 列挙したファイルを全件確認する。全対象を`SECURITY DEFINER`・`GRANT EXECUTE`・`rpc(`・認証チェック（`admin-auth`・`getUser`・`auth.uid`）・クエリパラメータ取得（`searchParams`・`req.json`）のanchorで大文字小文字を区別せず機械検索し、各該当箇所を文脈ごと読む。特に`route.ts`は全件を必ず開き、認証チェックと入力値検証の両方が存在するか1件ずつ確認する。
+4. 最初の指摘を見つけても探索を止めない。除外後の一覧を最後まで確認してからのみ最終結果を返す。
+
 ## 調査観点
 - 型エラー・暗黙のany・未定義値の伝播
 - セキュリティ（認証チェック漏れ・入力値検証なし・SQLインジェクション相当の問題）
