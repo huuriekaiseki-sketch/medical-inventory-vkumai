@@ -1,0 +1,4 @@
+{
+  "expectedFilePathContains": "eval-fixture-recall-b/search-filter-panel.tsx",
+  "expectedKeywords": ["Suspense", "useSearchParams"]
+}
