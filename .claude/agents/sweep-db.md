@@ -16,6 +16,12 @@ effort: low
 ## 除外対象
 - `__tests__/` ディレクトリ配下のファイルおよび `*.test.ts`・`*.test.tsx` ファイルはすべて除外する
 
+## 決定的な探索手順（省略禁止）
+1. 調査開始の進捗を記録した直後、個別ファイルを読む前に、存在する全調査対象rootを `rg --files`（利用できない場合は同等の方法）で完全に一覧化する。
+2. 一覧から除外対象を取り除き、重複を除いてsortした確認対象ファイル一覧をBash出力へ列挙する。
+3. 列挙したファイルを全件確認する。特に `supabase/migrations/**` は全件を必ず開き、全対象SQLをRLS・policy・role（`anon`・`authenticated`・`service_role`）・`USING`・`WITH CHECK`・`SECURITY DEFINER`・grant・revokeのanchorで大文字小文字を区別せず機械検索して、各該当SQLを文脈ごと読む。`anon`へのINSERT・書き込みを許すpolicyは、`WITH CHECK (true)`を含む無条件許可になっていないか必ず評価する。
+4. 最初の指摘を見つけても探索を止めない。除外後の一覧を最後まで確認してからのみ最終結果を返す。
+
 ## 調査観点
 - スキーマ整合性（外部キー参照の整合・NULL制約の妥当性）
 - マイグレーションの順序・依存関係の問題
