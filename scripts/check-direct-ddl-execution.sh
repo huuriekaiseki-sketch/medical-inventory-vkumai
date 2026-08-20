@@ -42,10 +42,39 @@ set -euo pipefail
 
 # WHY: bashの[[ =~ ]]（ERE）は\bを単語境界として解釈しない(実機確認済み: パターンごと
 # 静かにマッチしなくなる)。[[:space:]]|$ で明示的に境界を表現する。
-DIRECT_EXEC_PATTERN='(^|[;&[:space:]])(npx[[:space:]]+)?supabase[[:space:]]+db[[:space:]]+execute([[:space:]]|$)|(^|[;&[:space:]])psql([[:space:]]|$)'
+# 以前は境界文字クラスが`(^|[;&[:space:]])`のみで、パイプ(`|`)やコマンド置換(`$(`・
+# バッククォート)を挟むと境界条件を満たさずすり抜けた（issue #633: `cat schema.sql|psql mydb`
+# や`$(psql ...)`）。判定はコマンド全体への正規表現一発ではなく、「実行単位のセグメント」に
+# 分割してからセグメント先頭に対して判定する方式に変更した（下記split_segments）ため、
+# 各パターンはセグメント先頭アンカー(^)のみを見ればよい。
+DIRECT_EXEC_PATTERN='^(npx[[:space:]]+)?supabase[[:space:]]+db[[:space:]]+execute([[:space:]]|$)|^psql([[:space:]]|$)|/psql([[:space:]]|$)'
 # issue #485: supabase db push はフラグ無指定時のデフォルトがリモート(linkedプロジェクト)。
 # --local が明示されていなければ、bare実行・--linked・--db-url いずれであっても一律denyする。
-DB_PUSH_PATTERN='(^|[;&[:space:]])(npx[[:space:]]+)?supabase[[:space:]]+db[[:space:]]+push([[:space:]]|$)'
+DB_PUSH_PATTERN='^(npx[[:space:]]+)?supabase[[:space:]]+db[[:space:]]+push([[:space:]]|$)'
+
+# WHY: `which psql`・`man psql`・`git grep psql`のような読み取り専用の前置コマンドは
+# psqlを実行しないため誤denyしない（issue #633）。本スクリプトの既存方針（完全な難読化対策は
+# 不要、典型的な手段を塞ぐのが目的）を踏襲し、代表的な読み取りコマンドのみ除外する。
+is_readonly_segment() {
+  local seg="$1" first_word second_word
+  first_word="$(printf '%s' "$seg" | sed -E 's/^[[:space:]]+//' | awk '{print $1}')"
+  case "$first_word" in
+    which|man|type|grep|egrep|fgrep) return 0 ;;
+    git)
+      second_word="$(printf '%s' "$seg" | awk '{print $2}')"
+      [[ "$second_word" == "grep" ]]
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# WHY: コマンド文字列を「実行されようとしている個々のコマンド」単位（制御演算子 ; & |、
+# およびコマンド置換の開始 `$(` / バッククォート で区切られた各セグメント）に分割する
+# （issue #633）。区切り文字の種類に関わらず、各セグメントの先頭コマンドだけを見れば
+# psql/supabase db execute/db pushの実行を漏れなく拾える。
+split_segments() {
+  printf '%s' "$1" | tr ';&|`' $'\n' | sed 's/\$(/\n/g'
+}
 
 INPUT="$(cat)"
 TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')"
@@ -56,13 +85,28 @@ REASON=""
 case "$TOOL_NAME" in
   Bash)
     COMMAND="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')"
-    if [[ "$COMMAND" =~ $DIRECT_EXEC_PATTERN ]]; then
-      DENY=1
-      REASON="supabase db execute・psqlの直接実行はDBスキーマ変更ルール（migration経由）で禁止されています。supabase/migrations/配下にマイグレーションファイルを作成し、supabase db push --localで適用してください。"
-    elif [[ "$COMMAND" =~ $DB_PUSH_PATTERN ]] && [[ "$COMMAND" != *"--local"* ]]; then
-      DENY=1
-      REASON="supabase db push はフラグ無指定時のデフォルトがリモート(本番)データベースです（--linked・--db-url指定時も同様）。ローカルSupabaseへ適用する場合は明示的に --local を付けてください（例: supabase db push --local）。本番への適用が本当に必要な場合は、人間が手動で実行してください（issue #485）。"
-    fi
+    # WHY: プロセス置換(`done < <(...)`)はmacOS標準のbash 3.2ではset -o pipefail下で
+    # 読み込みが空になる事象を実機確認したため、ヒアストリング経由の読み込みに変更している。
+    SEGMENTS="$(split_segments "$COMMAND")"
+    while IFS= read -r RAW_SEG; do
+      SEG="$(printf '%s' "$RAW_SEG" | sed -E 's/^[[:space:]]+//')"
+      [ -z "$SEG" ] && continue
+      is_readonly_segment "$SEG" && continue
+      if [[ "$SEG" =~ $DIRECT_EXEC_PATTERN ]]; then
+        DENY=1
+        REASON="supabase db execute・psqlの直接実行はDBスキーマ変更ルール（migration経由）で禁止されています。supabase/migrations/配下にマイグレーションファイルを作成し、supabase db push --localで適用してください。"
+        break
+      elif [[ "$SEG" =~ $DB_PUSH_PATTERN ]]; then
+        # WHY: --localの有無はセグメント単位で判定する（issue #634）。以前はコマンド文字列
+        # 全体への部分文字列一致だったため、無関係な位置に`--local`があるだけで素通りしていた
+        # （例: `echo see --local docs; supabase db push`、`db push --local && db push`の2つ目）。
+        if [[ "$SEG" != *"--local"* ]]; then
+          DENY=1
+          REASON="supabase db push はフラグ無指定時のデフォルトがリモート(本番)データベースです（--linked・--db-url指定時も同様）。ローカルSupabaseへ適用する場合は明示的に --local を付けてください（例: supabase db push --local）。本番への適用が本当に必要な場合は、人間が手動で実行してください（issue #485）。"
+          break
+        fi
+      fi
+    done <<< "$SEGMENTS"
     ;;
   mcp__*execute_sql*)
     DENY=1
