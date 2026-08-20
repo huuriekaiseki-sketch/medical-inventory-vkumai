@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WHY: issue #636はdeny/ask系ゲート3本(check-direct-ddl-execution.sh・
+# check-skip-marker-write.sh・本ファイル)にfail-closedのjqガードを求めていたが、
+# 本ファイルは3行下のコメントの通り常にpermissionDecision: "allow"のみを返す設計
+# （ブロックせず警告を注入するだけ）で、他2本のようなdeny/askゲートではない。
+# fail-closed(exit 2)にすると「絶対にブロックしない」という既存設計方針と矛盾するため、
+# 本ファイルはfail-open（jq不在時は警告注入を諦めexit 0）にする。
+command -v jq >/dev/null 2>&1 || exit 0
+
 # PreToolUse hook。issue #444（issue #339「aidd-phase1-routerを経由せず直接実装に入れば
 # 判定がまるごとスキップされる」の機械化・優先度2候補）。
 #

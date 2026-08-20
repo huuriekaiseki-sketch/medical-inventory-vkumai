@@ -128,6 +128,15 @@ MATCHER="$(jq -r '.hooks.PreToolUse[] | select(.hooks[].command | endswith("chec
 assert_contains "$MATCHER" "Bash" "matcherにBashが含まれる"
 assert_contains "$MATCHER" "execute_sql" "matcherにexecute_sqlパターンが含まれる"
 
+echo "=== scenario 18: jq未インストール環境 → fail-closed(exit 2でブロック、issue #636) ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "psql -c \"drop table x\""}}')"
+set +e
+OUT="$(printf '%s' "$input" | PATH="" /bin/bash "$SCRIPT" 2>&1)"
+EXIT_CODE=$?
+set -e
+assert_eq "$EXIT_CODE" "2" "exit 2(fail-closed)"
+assert_contains "$OUT" "jq not found" "jq未検出のエラーメッセージが出る"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

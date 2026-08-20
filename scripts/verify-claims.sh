@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WHY: 本スクリプトは既にfail-open設計が明文化されている（下記参照）。jq未インストール
+# 環境ではjq呼び出しがexit 127でスクリプトごと死んでいたが、これも同じfail-openの一種
+# として扱い、エラーノイズだけを消す（issue #636）。
+command -v jq >/dev/null 2>&1 || exit 0
+
 # Stop hookから呼ばれる。直前アシスタントターンの主張（行番号・既存コード挙動・環境変数名の
 # 一致等）と実際のdiffを低コストモデル(Haiku, 読み取り専用)で突き合わせ、裏取りの取れていない
 # critical/important指摘があればStopをブロックする。

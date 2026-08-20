@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WHY: 本スクリプトは警告専用（ブロックしない）hookである。jq未インストール環境では
+# jq呼び出しがexit 127でスクリプトごと死に、警告が出せなくなっていた（issue #636）。
+# ブロックしないスクリプトなので実害は無音のfail-open（警告が出ないだけ）であり、
+# エラーノイズだけを消す目的でjq不在時は静かにexit 0する。
+command -v jq >/dev/null 2>&1 || exit 0
+
 # WHY: issue #488。gap check（記録漏れ検知）の実行はこれまで人起動の4ステップ手順で
 # 「checkし忘れたら気づけない」第3層ルールだった。このスクリプトはStop hookとして毎ターン
 # 終了時に発火し、record-gap-check-state.sh が書いた .aidd/gap-check-state.json を読んで、

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WHY: 本スクリプトは警告専用（ブロックしない）hookである。jq未インストール環境では
+# jq呼び出しがexit 127でスクリプトごと死に、警告が出せなくなっていた（issue #636）。
+# ブロックしないスクリプトなので実害は無音のfail-open（警告が出ないだけ）であり、
+# エラーノイズだけを消す目的でjq不在時は静かにexit 0する。
+command -v jq >/dev/null 2>&1 || exit 0
+
 # WHY: issue #524（#444「hook拡張第2弾」の後続、issue #495と同型のStop hook）。
 # docs/agents/common.md「引き継ぎフォーマット」の実施（PR本文・セッション終了報告・
 # docs/sessions/への記録のいずれかに作業サマリ・検証済み・既知の未対応・後任AIへの注意の
