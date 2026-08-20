@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WHY: 本スクリプトは警告専用（ブロックしない）hookである。jq未インストール環境では
+# jq呼び出しがexit 127でスクリプトごと死に、警告が出せなくなっていた（issue #636）。
+# ブロックしないスクリプトなので実害は無音のfail-open（警告が出ないだけ）であり、
+# エラーノイズだけを消す目的でjq不在時は静かにexit 0する。
+command -v jq >/dev/null 2>&1 || exit 0
+
 # WHY: issue #534（issue #523フォローアップ）。docs/agents/recovery-queue.md
 # 「今後この機能を拡張する場合」の手順に従う。
 #
