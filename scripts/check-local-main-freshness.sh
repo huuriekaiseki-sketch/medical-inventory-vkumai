@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WHY: 本スクリプトは警告専用（ブロックしない）hookである。jq未インストール環境では
+# jq呼び出しがexit 127でスクリプトごと死に、警告が出せなくなっていた（issue #636）。
+# ブロックしないスクリプトなので実害は無音のfail-open（警告が出ないだけ）であり、
+# エラーノイズだけを消す目的でjq不在時は静かにexit 0する。
+command -v jq >/dev/null 2>&1 || exit 0
+
 # issue #499: docs/agents/common.md「ブランチ運用ルール」のうち、
 # 「git checkout -b の前に必ず git fetch origin main してから origin/main 起点にする」
 # ルールは未検知のまま棚卸し表（issue #339）に残っていた。過去に古いローカルmain起点で

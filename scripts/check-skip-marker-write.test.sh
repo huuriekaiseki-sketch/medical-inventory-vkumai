@@ -130,6 +130,15 @@ MATCHER_TOOLS="$(jq -r '.hooks.PreToolUse[] | select(.hooks[].command | endswith
 CASE_TOOLS="$(grep -oE '^  [A-Za-z]+(\|[A-Za-z]+)*\)' "$SCRIPT" | grep -v '^  \*)' | tr -d ' )' | tr '|' '\n' | sort -u)"
 assert_eq "$CASE_TOOLS" "$MATCHER_TOOLS" "settings.jsonのmatcherとcase文のツール一覧(Bash/Write/Edit/MultiEdit)が一致する(片方だけ変更されている場合はここで失敗する)"
 
+echo "=== scenario 14: jq未インストール環境 → fail-closed(exit 2でブロック、issue #636) ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "touch .claude/.verify-state/x.skip"}}')"
+set +e
+OUT="$(printf '%s' "$input" | PATH="" /bin/bash "$SCRIPT" 2>&1)"
+EXIT_CODE=$?
+set -e
+assert_eq "$EXIT_CODE" "2" "exit 2(fail-closed)"
+assert_contains "$OUT" "jq not found" "jq未検出のエラーメッセージが出る"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

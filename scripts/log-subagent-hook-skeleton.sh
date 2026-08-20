@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WHY: 本スクリプトは警告専用（ブロックしない）hookである。jq未インストール環境では
+# jq呼び出しがexit 127でスクリプトごと死に、記録が取れなくなっていた（issue #636）。
+# ブロックしないスクリプトなので実害は無音のfail-open（記録が残らないだけ）であり、
+# エラーノイズだけを消す目的でjq不在時は静かにexit 0する。
+command -v jq >/dev/null 2>&1 || exit 0
+
 # SubagentStart/SubagentStop hook（settings.jsonに登録）から標準入力でJSONペイロードを受け取り、
 # logs/subagent-skeleton.jsonlへ「骨格」記録（agent_id・agent_type・開始/終了・timestamp）を
 # 機械的に追記する(issue #423)。

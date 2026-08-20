@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WHY: 本スクリプトはjqでhook入力JSONをパースする。jq未インストール環境では
+# set -euo pipefail下でjq呼び出しがexit 127となりスクリプトごと死に、
+# askゲートが暗黙にfail-openになっていた（issue #636）。denyゲートに準ずる
+# 重要度のためfail-closed（jq不在時はexit 2でブロック側に倒す）にする。
+command -v jq >/dev/null 2>&1 || { echo "jq not found: check-skip-marker-write.sh cannot run" >&2; exit 2; }
+
 # PreToolUse hook。issue #348: verify-claims.shのエスケープハッチ
 # (.claude/.verify-state/<session_id>.skip の作成)を、touch/echo/python等の手段を問わず
 # 人間の確認プロンプト(ask)に強制する。

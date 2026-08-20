@@ -145,6 +145,15 @@ MATCHER_TOOLS="$(jq -r '.hooks.PreToolUse[] | select(.hooks[].command | endswith
 CASE_TOOLS="$(grep -oE '^  [A-Za-z]+(\|[A-Za-z]+)*\)' "$SCRIPT" | grep -v '^  \*)' | tr -d ' )' | tr '|' '\n' | sort -u)"
 assert_eq "$CASE_TOOLS" "$MATCHER_TOOLS" "settings.jsonのmatcherとcase文のツール一覧(Write/Edit/MultiEdit)が一致する"
 
+echo "=== scenario 10: jq未インストール環境 → fail-open(常にブロックしない設計のためexit 0、issue #636) ==="
+input="$(jq -n --arg cwd "$NO_MANIFEST_REPO" --arg fp "$NO_MANIFEST_REPO/src/lib/supabase/client.ts" '{tool_name: "Write", tool_input: {file_path: $fp, content: "x"}, cwd: $cwd}')"
+set +e
+OUT="$(printf '%s' "$input" | PATH="" /bin/bash "$SCRIPT" 2>&1)"
+EXIT_CODE=$?
+set -e
+assert_eq "$EXIT_CODE" "0" "exit 0(fail-open。本ファイルは元々ブロックしない設計のため他2ゲートと異なりfail-closedにしない)"
+assert_empty "$OUT" "出力が空である(警告注入は諦めるが、ブロックはしない)"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

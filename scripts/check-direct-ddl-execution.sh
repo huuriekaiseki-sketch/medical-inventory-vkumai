@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WHY: 本スクリプトはjqでhook入力JSONをパースする。jq未インストール環境では
+# set -euo pipefail下でjq呼び出しがexit 127となりスクリプトごと死に、
+# denyゲートが暗黙にfail-openになっていた（issue #636）。「安全と証明されない限り拒否」
+# （本ファイル既存コメント参照）の設計方針に合わせ、jq不在時もfail-closed
+# （exit 2でブロック側に倒す）にする。
+command -v jq >/dev/null 2>&1 || { echo "jq not found: check-direct-ddl-execution.sh cannot run" >&2; exit 2; }
+
 # PreToolUse hook。issue #444（issue #339「直接DDL実行禁止は事後のドリフト検知(issue #305)
 # のみで、実行しようとした瞬間に止める事前ブロックはない」の機械化・優先度2候補）。
 #
