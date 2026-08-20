@@ -114,6 +114,15 @@ run_hook_no_gh_on_path
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_empty "$OUT" "出力が空である"
 
+echo "=== scenario 5: jqコマンドが無い環境 → fail-open(警告専用hookのため exit 0、issue #636) ==="
+setup_fakes "issue-20-orders-list-page" '[{"number":336,"title":"feat: 発注履歴ページ","url":"https://github.com/example/repo/pull/336"}]'
+set +e
+OUT="$(PATH="$FAKE_BIN" "$BASH_BIN" "$SCRIPT" < /dev/null 2>&1)"
+EXIT_CODE=$?
+set -e
+assert_eq "$EXIT_CODE" "0" "exit 0(fail-open)"
+assert_empty "$OUT" "出力が空である(警告は出せないがクラッシュもしない)"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

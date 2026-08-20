@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WHY: 本スクリプトは警告専用（ブロックしない）hookである。jq未インストール環境では
+# jq呼び出しがexit 127でスクリプトごと死に、警告が出せなくなっていた（issue #636）。
+# ブロックしないスクリプトなので実害は無音のfail-open（警告が出ないだけ）であり、
+# エラーノイズだけを消す目的でjq不在時は静かにexit 0する。
+command -v jq >/dev/null 2>&1 || exit 0
+
 # WHY: docs/agents/common.md「ブランチ運用ルール」（新しいissue・機能の作業を始める前に、
 # 現在のブランチが別issue用の未マージPRの対象になっていないか確認する）には、これまで
 # 検知手段がなかった（自然言語指示のみ）。実際にissue-20-orders-list-page等、既にPRが

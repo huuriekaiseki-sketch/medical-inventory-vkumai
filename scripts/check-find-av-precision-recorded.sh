@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WHY: 本スクリプトは警告専用（ブロックしない）hookである。jq未インストール環境では
+# jq呼び出しがexit 127でスクリプトごと死に、警告が出せなくなっていた（issue #636）。
+# ブロックしないスクリプトなので実害は無音のfail-open（警告が出ないだけ）であり、
+# エラーノイズだけを消す目的でjq不在時は静かにexit 0する。
+command -v jq >/dev/null 2>&1 || exit 0
+
 # WHY: issue #522（issue #432の後続）。品質ゲートの許容誤判定率（precision/recall閾値）を
 # 数値で確定させる作業に着手する前に、baselineデータを実際に集計したところ、
 # `logs/find-av-precision.jsonl`（Find→Adversarial Verify生存率。issue #432で仕組みは

@@ -147,42 +147,42 @@
         "hooks": [
           {
             "type": "command",
-            "command": "scripts/check-branch-pr-status.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-branch-pr-status.sh",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "scripts/check-local-main-freshness.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-local-main-freshness.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "scripts/check-otel-collector-status.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-otel-collector-status.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "scripts/check-automode-config.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-automode-config.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "scripts/check-blocked-issues-staleness.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-blocked-issues-staleness.sh",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "scripts/check-fault-injection-drill-staleness.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-fault-injection-drill-staleness.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "scripts/check-workflow-interruption.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-workflow-interruption.sh",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "scripts/check-recovery-queue.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-recovery-queue.sh",
             "timeout": 10
           }
         ]
@@ -192,33 +192,33 @@
       {
         "matcher": "Bash|Write|Edit|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "scripts/check-skip-marker-write.sh", "timeout": 5 }
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-skip-marker-write.sh", "timeout": 5 }
         ]
       },
       {
         "matcher": "Write|Edit|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "scripts/check-run-manifest-presence.sh", "timeout": 5 }
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-run-manifest-presence.sh", "timeout": 5 }
         ]
       },
       {
         "matcher": "Bash|mcp__.*execute_sql",
         "hooks": [
-          { "type": "command", "command": "scripts/check-direct-ddl-execution.sh", "timeout": 5 }
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-direct-ddl-execution.sh", "timeout": 5 }
         ]
       }
     ],
     "SubagentStart": [
       {
         "hooks": [
-          { "type": "command", "command": "scripts/log-subagent-hook-skeleton.sh", "timeout": 5 }
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/log-subagent-hook-skeleton.sh", "timeout": 5 }
         ]
       }
     ],
     "SubagentStop": [
       {
         "hooks": [
-          { "type": "command", "command": "scripts/log-subagent-hook-skeleton.sh", "timeout": 5 }
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/log-subagent-hook-skeleton.sh", "timeout": 5 }
         ]
       }
     ],
@@ -232,49 +232,49 @@
           },
           {
             "type": "command",
-            "command": "scripts/ai-check-suggest.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/ai-check-suggest.sh",
             "timeout": 15,
             "statusMessage": "ai:check実行有無を確認中..."
           },
           {
             "type": "command",
-            "command": "scripts/verify-claims.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/verify-claims.sh",
             "timeout": 90,
             "statusMessage": "直前ターンの主張を裏取り中..."
           },
           {
             "type": "command",
-            "command": "scripts/gate-effectiveness-monthly-check.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/gate-effectiveness-monthly-check.sh",
             "timeout": 15,
             "statusMessage": "品質ゲート月次サマリを確認中..."
           },
           {
             "type": "command",
-            "command": "scripts/check-gap-check-state.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-gap-check-state.sh",
             "timeout": 90,
             "statusMessage": "AIDD gap check stateを確認中(issue #488)..."
           },
           {
             "type": "command",
-            "command": "scripts/check-aidd-stats-recorded.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-aidd-stats-recorded.sh",
             "timeout": 15,
             "statusMessage": "AIDD stats記録の有無を確認中(issue #495)..."
           },
           {
             "type": "command",
-            "command": "scripts/check-aidd-phase-stats-recorded.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-aidd-phase-stats-recorded.sh",
             "timeout": 15,
             "statusMessage": "AIDD stats phase単位の記録漏れを確認中(issue #524)..."
           },
           {
             "type": "command",
-            "command": "scripts/check-handoff-format.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-handoff-format.sh",
             "timeout": 15,
             "statusMessage": "PR引き継ぎフォーマットの有無を確認中(issue #524)..."
           },
           {
             "type": "command",
-            "command": "scripts/check-find-av-precision-recorded.sh",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-find-av-precision-recorded.sh",
             "timeout": 15,
             "statusMessage": "find-av-precisionログ記録の有無を確認中(issue #522)..."
           }
