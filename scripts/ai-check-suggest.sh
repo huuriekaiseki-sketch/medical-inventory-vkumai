@@ -43,9 +43,18 @@ if [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ]; then
   exit 0
 fi
 
-echo "$CURRENT_HASH" > "$STATE_FILE"
+# WHY: 以前はtranscript全文に対してgrepしていたため、警告文自体(MSG)に含まれる
+# "npm run ai:check"という文字列がtranscriptへ記録されると、次回以降のgrepが自分自身の
+# 警告文にマッチして「実行済み」と誤判定し、以降永久に警告が出なくなる自己抑制バグが
+# あった（issue #635）。実際に実行されたBashコマンド（tool_useブロックのinput.command）
+# だけを対象にすることで、警告文自体・会話中の言及（実行を伴わない）の両方を除外する。
+EXECUTED_COMMANDS="$(jq -r 'select(.message.content? != null) | .message.content[]? | select(.type=="tool_use" and .name=="Bash") | .input.command' "$TRANSCRIPT" 2>/dev/null || true)"
 
-if grep -qE 'npm run (ai:check|typecheck|lint|test)\b' "$TRANSCRIPT" 2>/dev/null; then
+if printf '%s' "$EXECUTED_COMMANDS" | grep -qE 'npm run (ai:check|typecheck|lint|test)\b'; then
+  # WHY: 状態ハッシュは「実行済みと確認できた場合のみ」書き込む（issue #635）。
+  # 未実行のまま書き込むと、同一diff状態での再Stopが30行目の早期returnで
+  # 無条件にスキップされ、警告が最大1回しか出なくなってしまう。
+  echo "$CURRENT_HASH" > "$STATE_FILE"
   echo '{"systemMessage": ""}'
 else
   MSG="ソースコード変更（.ts/.tsx/.sql）があるにもかかわらず、このセッションで npm run ai:check 相当のコマンド（typecheck/lint/test）が実行された痕跡が見当たりません。実行を検討してください。"
