@@ -13,16 +13,25 @@ import { journalAdapter, type CanonicalEvent } from './canonical-event'
 export interface BlockedGateSummary {
   totalBlocked: number
   byAgentType: Record<string, number>
+  // journalに実行記録が1件以上あるがblockedが0件のagentType一覧（issue #640）。
+  // 分母をjournalソースに限定するのは、agent-progress等の他ソースにはblockedという
+  // 値自体が存在せず、混ぜると「発火しようがないagentType」がノイズとして並ぶため。
+  neverBlockedAgentTypes: string[]
 }
 
 export function summarizeBlockedGates(events: CanonicalEvent[]): BlockedGateSummary {
-  const blocked = events.filter((event) => event.source === 'journal' && event.status === 'blocked')
+  const journalEvents = events.filter((event) => event.source === 'journal')
+  const blocked = journalEvents.filter((event) => event.status === 'blocked')
   const byAgentType: Record<string, number> = {}
   for (const event of blocked) {
     const key = event.agentType ?? 'unknown'
     byAgentType[key] = (byAgentType[key] ?? 0) + 1
   }
-  return { totalBlocked: blocked.length, byAgentType }
+  const seenAgentTypes = new Set(journalEvents.map((event) => event.agentType ?? 'unknown'))
+  const neverBlockedAgentTypes = [...seenAgentTypes]
+    .filter((agentType) => !(agentType in byAgentType))
+    .sort()
+  return { totalBlocked: blocked.length, byAgentType, neverBlockedAgentTypes }
 }
 
 function main() {
@@ -43,13 +52,21 @@ function main() {
 
   if (asJson) {
     console.log(JSON.stringify(summary, null, 2))
-  } else if (summary.totalBlocked === 0) {
+    return
+  }
+  if (summary.totalBlocked === 0) {
     console.log('blocked状態のWorkflow実行はありません（journal.jsonlベース）。')
   } else {
     console.log(`blocked状態のWorkflow実行: ${summary.totalBlocked}件（journal.jsonlベース。issue #569）`)
     const sorted = Object.entries(summary.byAgentType).sort((a, b) => b[1] - a[1])
     for (const [agentType, count] of sorted) {
       console.log(`  - ${agentType}: ${count}件`)
+    }
+  }
+  if (summary.neverBlockedAgentTypes.length > 0) {
+    console.log(`一度もblockedを返していないagentType（journalに実行記録あり。issue #640）:`)
+    for (const agentType of summary.neverBlockedAgentTypes) {
+      console.log(`  - ${agentType}`)
     }
   }
 }

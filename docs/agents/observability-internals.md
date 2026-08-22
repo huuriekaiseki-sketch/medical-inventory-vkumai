@@ -81,6 +81,11 @@ pass/failしか集計できず、`blocked`状態（Spec Check/Manifest Check等�
 journalAdapterが返すイベントを`status === 'blocked'`でフィルタしてagentType別に数えるだけの
 単純集計に留めている（blockedの有無・件数だけならagentId相関は不要なため。issue #569コメントが
 推奨した「スコープを絞った小さい一歩」の方針を踏襲）。
+issue #640で「journalに実行記録が1件以上あるがblockedが0件のagentType一覧」
+（`neverBlockedAgentTypes`）を同集計に追加した。issue #412が本来可視化したかった
+「一度も発火していないゲート（維持コストが純損失の候補）」の判別がこれで可能になる。
+分母はjournalソースのみ（agent-progress等にはblockedという値自体が存在しないため、
+混ぜると発火しようがないagentTypeがノイズとして並ぶ）。
 - 残タスク: 「復旧処理をcanonical event Module経由に寄せる」（recovery-queue系スクリプトは
   依然bashのみで完結しており、canonical-event.tsを経由していない）は未着手のまま
 
