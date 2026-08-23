@@ -26,6 +26,8 @@
 | SessionStart | `check-workflow-interruption.sh` | **自動復旧（queue）** | Workflow中断を検知し`workflow-interrupted`としてqueue登録（issue #534） |
 | SessionStart | `check-recovery-queue.sh` | 自動復旧（queue、表示側） | pendingエントリのcontext注入＋surfaced放置エントリのエスカレーション表示（issue #523・#579）。是正の実行そのものはこのhookの範囲外 |
 | SessionStart | `check-branch-pr-status.sh` | warning-only | マージ済みブランチ上での作業を警告 |
+| SessionStart | `check-branch-tool-ownership.sh` | warning-only | ブランチ命名規約（codex/*・claude/*）と起動ツールの取り違えを警告。Claude/Codex両方のhook設定に登録される共有ガード（引数で自ツール名を渡す）。block不可のSessionStartのため意図的にwarning-only |
+| PreToolUse (Codex側・Bash/Write/Edit skipマーカー) | `codex-skip-marker-deny.sh` | **deny**（Codex側のみ） | `check-skip-marker-write.sh`（Claude側ask）のCodex用ラッパー。Codexはask未対応（実機確認済み）のためdenyへ読み替える。判定ロジックは共有正本に委譲し、出力契約の変換のみ担う |
 | SessionStart | `check-local-main-freshness.sh` | warning-only | ローカルmain鮮度の警告 |
 | SessionStart | `check-otel-collector-status.sh` | warning-only | OTel collector状態の情報提示 |
 | SessionStart | `check-automode-config.sh` | warning-only | autoMode(hard_deny)未設定の警告（個人設定のため機械強制不可） |

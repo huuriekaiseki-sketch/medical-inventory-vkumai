@@ -1,7 +1,31 @@
 # このリポジトリの AI エージェント設定ガイド
 
-医療在庫管理アプリ (medical-inventory-vkumai) における Claude Code のエージェント・スキル設定。
+医療在庫管理アプリ (medical-inventory-vkumai) における Claude Code / Codex のエージェント・スキル設定。
 **詳細は [`docs/ai-config-map.md`](docs/ai-config-map.md) を参照。**
+
+## Claude Code / Codex 並行作業ルール（必読）
+
+- **同一worktreeでClaude CodeとCodexを同時に動かさない。** Claude Code用worktree/ブランチと
+  Codex用worktree/`codex/*`ブランチを分離し、PRも個別に作る
+- **作業開始前にGit状態・既存PR・worktreeを確認する**（`git branch --show-current` →
+  `gh pr list --head <branch>` → `git worktree list`）
+- ブランチ取り違え（Codexが`claude/*`を開く等）はSessionStart hookが警告する
+- 詳細手順: [`docs/agents/parallel-agent-work.md`](docs/agents/parallel-agent-work.md) /
+  設計原則: [`docs/agents/claude-codex-coexistence-template.md`](docs/agents/claude-codex-coexistence-template.md)
+
+## Codex 用設定（`.codex/`）
+
+| ファイル | 目的 |
+|---|---|
+| `.codex/hooks.json` | Codex用hook設定（Claude用`.claude/settings.json`とは完全分離。相互参照禁止） |
+| `.codex/agents/*.toml` | Codex用subagent定義。**全tomlが`sandbox_mode`を明示する**（読み取り専用ロールは`read-only`、書き込みロールは`workspace-write`。`scripts/codex-agents-sandbox.test.sh`が機械検証） |
+
+- CodexのPreToolUseは`permissionDecision: "ask"`未対応。ask型ガードは
+  `scripts/codex-skip-marker-deny.sh`（deny変換ラッパー）経由で登録する
+- Codex側subagentはClaude Code側の観測ログ（`logs/`配下・`scripts/log-agent-progress.sh`）に
+  書き込まない（Claude側gap check集計が狂うため）
+- Codex hookを変更したら実機検証（Terminalから`codex` CLI起動・`/hooks`確認・実発火確認）を
+  完了してからpushする（手順は上記テンプレートの「実機検証手順」）
 
 ## 開発フロー概要
 
