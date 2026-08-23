@@ -152,6 +152,11 @@
           },
           {
             "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-branch-tool-ownership.sh claude",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-local-main-freshness.sh",
             "timeout": 10
           },
