@@ -54,10 +54,12 @@ command -v jq >/dev/null 2>&1 || { echo "jq not found: check-direct-ddl-executio
 # や`$(psql ...)`）。判定はコマンド全体への正規表現一発ではなく、「実行単位のセグメント」に
 # 分割してからセグメント先頭に対して判定する方式に変更した（下記split_segments）ため、
 # 各パターンはセグメント先頭アンカー(^)のみを見ればよい。
-DIRECT_EXEC_PATTERN='^(npx[[:space:]]+)?supabase[[:space:]]+db[[:space:]]+execute([[:space:]]|$)|^psql([[:space:]]|$)|/psql([[:space:]]|$)'
+# パス前置（/opt/homebrew/bin/supabase・./node_modules/.bin/supabase等）の迂回経路も塞ぐため、
+# supabaseの前に任意の非空白パスプレフィックス ([^[:space:]]*/)? を許容する（psqlの/psql対応と同型）。
+DIRECT_EXEC_PATTERN='^(npx[[:space:]]+)?([^[:space:]]*/)?supabase[[:space:]]+db[[:space:]]+execute([[:space:]]|$)|^psql([[:space:]]|$)|/psql([[:space:]]|$)'
 # issue #485: supabase db push はフラグ無指定時のデフォルトがリモート(linkedプロジェクト)。
 # --local が明示されていなければ、bare実行・--linked・--db-url いずれであっても一律denyする。
-DB_PUSH_PATTERN='^(npx[[:space:]]+)?supabase[[:space:]]+db[[:space:]]+push([[:space:]]|$)'
+DB_PUSH_PATTERN='^(npx[[:space:]]+)?([^[:space:]]*/)?supabase[[:space:]]+db[[:space:]]+push([[:space:]]|$)'
 
 # WHY: `which psql`・`man psql`・`git grep psql`のような読み取り専用の前置コマンドは
 # psqlを実行しないため誤denyしない（issue #633）。本スクリプトの既存方針（完全な難読化対策は
