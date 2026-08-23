@@ -5,6 +5,11 @@
 開発フローのオーケストレーション等）は各ツールの入口ファイル（`CLAUDE.md` / `AGENTS.md`）
 側を参照すること。
 
+**Claude CodeとCodexの並行作業**（同一worktree同時作業の禁止・設定/状態ファイルの分離・
+共有ガードの扱い）は [`parallel-agent-work.md`](./parallel-agent-work.md) を参照。
+リポジトリ非依存の設計原則・他リポジトリへの移植手順は
+[`claude-codex-coexistence-template.md`](./claude-codex-coexistence-template.md) を参照。
+
 - ドメイン用語（facility・price等が何であるか）は [`domain.md`](./domain.md) を参照
 - 各ルールが「なぜ」その設計になったかは [`decisions.md`](./decisions.md) を参照
 - 過去に実際に再発した実装ミスのチェックリストは [`known-failure-patterns.md`](./known-failure-patterns.md) を参照（レビュー・Sweep系エージェントは必読）
@@ -205,6 +210,10 @@ AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p
 | [`docs/agents/tooling-decisions.md`](./tooling-decisions.md) | 公式機能・プラグインの導入可否判断記録（common.mdから分離、issue #486） |
 | [`docs/agents/actuator-inventory.md`](./actuator-inventory.md) | 検知hookの検知後の是正（block/自動復旧/warning-only）の棚卸し（issue #578） |
 | [`docs/agents/portability-inventory.md`](./portability-inventory.md) | 多リポジトリ展開に向けたドメイン非依存/スタック依存の切り分け棚卸し（issue #535） |
+| [`docs/agents/parallel-agent-work.md`](./parallel-agent-work.md) | Claude Code / Codex 並行作業ルール（同一worktree同時作業禁止・状態分離） |
+| [`docs/agents/claude-codex-coexistence-template.md`](./claude-codex-coexistence-template.md) | Claude/Codex共存設計のリポジトリ非依存テンプレート（9原則・実機検証手順・移植チェックリスト） |
+| `scripts/check-branch-tool-ownership.sh` | ブランチ命名規約（codex/*・claude/*）と起動ツールの取り違えをSessionStartで警告（両ツール共有） |
+| `scripts/codex-skip-marker-deny.sh` | Codex用ask→deny変換ラッパー（Codexはask未対応のため） |
 | `docs/ai-config-map.md` | エージェント・スキル全体マップ |
 | `src/app/` | Next.js App Router のページ・API Routes |
 | `src/components/` | UI コンポーネント |

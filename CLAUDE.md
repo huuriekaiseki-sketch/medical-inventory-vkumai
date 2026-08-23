@@ -4,6 +4,10 @@
 
 → 全体マップ: [`docs/ai-config-map.md`](docs/ai-config-map.md)
 
+## Claude Code / Codex 並行作業ルール
+- **同一worktreeでClaude CodeとCodexを同時に動かさない**。作業開始前にGit状態・既存PR・
+  worktreeを確認する。詳細手順: [`docs/agents/parallel-agent-work.md`](docs/agents/parallel-agent-work.md)
+
 ## プロジェクト設定
 - テストコマンド: npm test
 - Lintコマンド:   npm run lint
