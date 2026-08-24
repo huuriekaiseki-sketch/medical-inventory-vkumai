@@ -43,6 +43,10 @@ next-env.d.ts
 
 # playwright
 e2e/.auth/*.json
+/test-results/
+
+# AIDDセッションレポート（Stop hookがローカル生成する作業成果物。リポジトリには含めない）
+session-report-*.html
 
 # loop observability
 /logs/
