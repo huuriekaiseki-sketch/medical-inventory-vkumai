@@ -48,9 +48,25 @@ OTEL_DEBUG_COLLECTOR_PORT=19192 OTEL_DEBUG_COLLECTOR_LOG_DIR="$COLLECTOR_LOG_DIR
   node "$SCRIPT_DIR/otel-debug-collector.mjs" > /dev/null 2>&1 &
 COLLECTOR_PID=$!
 trap 'kill "$COLLECTOR_PID" 2>/dev/null || true; rm -rf "$COLLECTOR_LOG_DIR"' EXIT
-sleep 0.5
-OUT="$(CLAUDE_CODE_ENABLE_TELEMETRY=1 OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:19192" bash "$SCRIPT" < /dev/null)"
-assert_empty "$OUT" "出力が空である"
+# collectorの起動完了をポート疎通のリトライで待つ(最大10秒)。固定sleep 0.5では
+# コールドなCIランナーでnode起動が間に合わず、本体スクリプトが「接続できない→警告」を
+# 返してテストが散発的に落ちていた(issue #649。PR #648のhooks-testで2連続失敗を実測)。
+# 疎通確認は本体スクリプト(check-otel-collector-status.sh:32)と同じエンドポイントを使う。
+COLLECTOR_READY=0
+for _ in $(seq 1 50); do
+  if curl -s -o /dev/null --max-time 1 "http://localhost:19192/v1/metrics" 2>/dev/null; then
+    COLLECTOR_READY=1
+    break
+  fi
+  sleep 0.2
+done
+if [ "$COLLECTOR_READY" -ne 1 ]; then
+  echo "  NG: テスト前提エラー: collectorが10秒以内に起動しなかった"
+  fail=1
+else
+  OUT="$(CLAUDE_CODE_ENABLE_TELEMETRY=1 OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:19192" bash "$SCRIPT" < /dev/null)"
+  assert_empty "$OUT" "出力が空である"
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
