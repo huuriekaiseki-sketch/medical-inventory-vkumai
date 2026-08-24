@@ -91,7 +91,13 @@ while IFS= read -r -d '' wf_file; do
     # statが両OSとも失敗した場合はfail-open（staleness判定をスキップ）する。
     # PRレビュー指摘: 失敗時にepoch 0へフォールバックすると「無限に古い」扱いになり
     # warning側へ倒れてしまう（このスクリプトの他の箇所のfail-open方針と矛盾する）
-    MTIME_EPOCH="$(stat -f %m "$wf_file" 2>/dev/null || stat -c %Y "$wf_file" 2>/dev/null || true)"
+    # GNU stat(Linux)では`stat -f %m`が「失敗せず」ファイルシステム情報の文字列を返すため、
+    # BSD形式を先に試す従来の書き方だとLinuxで非数値が混入し、算術式がset -uでクラッシュした
+    # (CI hooks-test初回実行で検出)。GNU形式を先に試し、さらに数値でない値はfail-open扱いにする。
+    MTIME_EPOCH="$(stat -c %Y "$wf_file" 2>/dev/null || stat -f %m "$wf_file" 2>/dev/null || true)"
+    case "$MTIME_EPOCH" in
+      ''|*[!0-9]*) MTIME_EPOCH="" ;;
+    esac
     if [ -n "$MTIME_EPOCH" ]; then
       AGE_SECONDS=$((NOW_EPOCH - MTIME_EPOCH))
       [ "$AGE_SECONDS" -ge "$STALE_SECONDS" ] && IS_TARGET=1
