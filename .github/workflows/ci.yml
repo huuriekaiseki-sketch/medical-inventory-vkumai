@@ -26,3 +26,31 @@ jobs:
     uses: ./.github/workflows/node-check.yml
     with:
       run-script: test
+
+  # WHY: typecheckが通ってもNext.jsの本番ビルド(next build)だけが失敗するケース
+  # (静的生成時のエラー等)はこれまでCIで検知できなかった。派生リポジトリ(riff-gear)では
+  # buildジョブが標準構成のため、本家にも同じ検知を持たせる。
+  # ローカル検証済み: env無し(.env.local不在)でも next build は成功する。
+  build:
+    uses: ./.github/workflows/node-check.yml
+    with:
+      run-script: build
+
+  # WHY: .claude/settings.json / .codex/hooks.json から呼ばれるhook・ガードスクリプトには
+  # 回帰テスト(scripts/**/*.test.sh、39本)があるが、npm test(vitest)にもCIにも載っておらず
+  # 全て手動実行依存だった(docs/agents/observability-internals.md にも明記)。これは
+  # 「起動トリガーは機械にする」(issue #411)の原則に検知網自身が反している状態のため、
+  # 派生リポジトリ(riff-gear)で実証済みのhooks-testジョブを逆輸入して全件を機械実行する。
+  # Codex設定分離の検証(codex-config-separation.test.sh等、対応スクリプトを持たない
+  # 設定検証テスト)もこのジョブで初めて機械化される。
+  hooks-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run hook script regression tests
+        run: |
+          for t in scripts/*.test.sh scripts/lib/*.test.sh; do
+            echo "::group::$t"
+            bash "$t"
+            echo "::endgroup::"
+          done
