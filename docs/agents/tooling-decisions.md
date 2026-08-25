@@ -318,3 +318,76 @@ platform側の内部メカニズムが完全には文書化されていない）
   }
 }
 ```
+
+## subagent frontmatterの`skills:`プリロード・`permissionMode: plan`は見送り、`maxTurns`は延期（issue #652）
+
+**結論: `skills:`プリロードはClaude/Codex共存設計と衝突するため見送り。`permissionMode: plan`は
+実機検証で書き込みをブロックしないことを確認したため見送り。`maxTurns`はsweep系の決定的手順を
+打ち切るリスクがあるため実測データが揃うまで延期する。**
+
+issue #652は2026-08-25の公式ドキュメント突き合わせレビュー（`docs/ai-config-map.md`とは別件、
+Anthropic公式`code.claude.com/docs/en/sub-agents.md`で実在確認済み）で見つかった、subagent
+frontmatterの未活用フィールド3種（`skills:`・`permissionMode:`・`maxTurns:`）の導入検討issue
+だった。Phase 1調査で以下が判明し、いずれも見送り／延期とした。
+
+### `skills:`プリロード（known-failure-patterns.mdの機械保証化）を見送った理由
+
+issue原案は「`docs/agents/known-failure-patterns.md`を`.claude/skills/`配下のスキルに変換し、
+reviewer・sweep系のfrontmatterに`skills:`プリロード指定する」というものだった。しかし
+`known-failure-patterns.md`は`.agents/skills/handoff-format/SKILL.md`（Codex用の`handoff-format`
+スキル）からも参照される**ツール中立の共有資産**であることが判明した。`.claude/skills/`への
+移動はClaude専用ディレクトリへ資産を囲い込むことになりCodex/Claude共存設計
+（[`claude-codex-coexistence-template.md`](./claude-codex-coexistence-template.md)）に反し、
+`.claude/skills/`と`docs/agents/`の両方に置く複製案はこのリポジトリが一貫して避けてきた
+二重管理・ドリフトの温床になる（[`load-bearing-workarounds.md`](./load-bearing-workarounds.md)の
+正本+複製+sync test方式が必要な規模の変更であり、今回のスコープには見合わない）。
+
+加えて、現状の参照方式は原案が想定したよりも細かく設計されていることも判明した：
+`reviewer.md`は全文参照、`sweep-ui.md`/`sweep-data.md`は担当セクションのみを参照する指示
+（haiku・`effort: low`の軽量設計を守るため）で、全員へ一律プリロードすると軽量sweepに
+無関係なセクション（RLS等）まで常時読ませることになり、この設計思想と衝突する。
+
+**唯一の実利益（sweep-dbが「RLS/テナント分離層」セクションへの参照を持たない、issue #24型の
+再発防止の穴）のみ、sweep-ui/sweep-dataと同型の手動参照節を追加する形で対応した
+（`.claude/agents/sweep-db.md`）。プリロード機構自体は導入していない。**
+
+### `permissionMode: plan`を見送った理由（実機検証）
+
+reviewer・judge-panel・adversarial-verify（いずれも`tools: Read, Bash`で読み取り専用のはずが、
+Bashで書き込み系コマンドを打てる余地がある）にread-only強制を機械的にかける手段として検討した。
+
+`sweep-ui.md`に一時的に`permissionMode: plan`を追加し、Agent tool経由（`subagent_type:
+"sweep-ui"`）で以下3種の書き込み系Bashコマンドを実行させたところ、**すべて許可プロンプトなしで
+実行完了し、ファイル実体の作成も確認した**（検証後、frontmatterの変更は`git checkout --`で
+元に戻した）：
+
+1. `scripts/log-agent-progress.sh`（このリポジトリのサブエージェントが実運用で必ず呼ぶ進捗記録
+   スクリプト。ファイル追記）
+2. `echo ... > file`（直接ファイル書き込み）
+3. `mkdir`（ファイルシステム変更）
+
+read-onlyを機械強制する目的には使えないと判明した。むしろ「permissionMode: planを設定した」
+という事実だけが残り、実際には効いていないのに読み手に誤った安心感を与えるリスクがあるため、
+導入しないことにした。
+
+**再開条件:** Claude Code側の公式ドキュメントでplanモードのBashコマンド制御が明記・強化された
+場合（現状のsub-agents.mdの記載は「プランモード」という値の存在のみで、Bash実行への制御内容は
+明記されていない）、再度実機検証してから判断する。
+
+### `maxTurns`を延期した理由
+
+sweep-ui/sweep-data/sweep-db（すべてhaiku・`effort: low`）は「対象ファイルをrgで完全一覧化し、
+除外後の一覧を最後まで確認してから結果を返す」という決定的な探索手順を必須としている
+（各`.claude/agents/sweep-*.md`の「決定的な探索手順（省略禁止）」節）。対象ファイル数が
+`maxTurns`の設定値を超えると、この手順は正常動作の途中でエージェントごと打ち切られる。
+打ち切られたエージェントが返す空応答・部分応答は「指摘なし（正常完了）」と外形的に区別できず、
+静かな見逃しモードを新設してしまう。
+
+適正な`maxTurns`値を決めるための実測データ（エージェントタイプごとの典型的なターン数）が
+現状存在しない。`docs/agents/observability-internals.md`の「agents設定変更時のbaselineスナップ
+ショット機械強制（issue #429）」は`model:`/`effort:`変更のみを対象としており、ターン数の
+baseline化は未整備。
+
+**再開条件:** `scripts/snapshot-agent-baseline.sh`にエージェントタイプ別の典型ターン数が
+記録されるようになった後、実測の最大値に十分な余裕を持たせた`maxTurns`値を設計する
+（issue #654の低優先バックログに次点として記載済み）。
