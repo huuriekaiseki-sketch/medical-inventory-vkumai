@@ -2,6 +2,18 @@ name: CI
 
 on:
   pull_request:
+    # WHY: ドキュメントのみの変更でも5ジョブ(runner 5台)が起動しActions無料枠を消費して
+    # いたため、CIのテスト対象に影響しないパスを除外する(2026-08-25、無料枠枯渇対応)。
+    # .claude/workflows/(vitestのsync test対象)・.claude/settings.jsonとscripts/
+    # (hooks-test対象)・.claude/agents/と.codex/(baseline・設定分離のtest.shが参照)は
+    # テストが参照するため除外しない。
+    paths-ignore:
+      - 'docs/**'
+      - '.claude/skills/**'
+      - '.claude/rules/**'
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+      - 'README.md'
   workflow_dispatch:
 
 permissions:
@@ -47,6 +59,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # 認証ファイル漏洩チェック（BSGではなくCI側で行う方針）。e2e.ymlがPR自動実行を
+      # やめた(2026-08-25、無料枠対応)ため、PRごとに回る本ジョブへ移設した(軽量・数秒)
+      - name: Check auth state files are not committed
+        run: |
+          leaked=$(git ls-files 'e2e/.auth' | grep -v '\.gitkeep$' || true)
+          if [ -n "$leaked" ]; then
+            echo "::error::e2e/.auth 配下に認証ファイルがコミットされています: $leaked"
+            exit 1
+          fi
       - name: Run hook script regression tests
         run: |
           for t in scripts/*.test.sh scripts/lib/*.test.sh; do
