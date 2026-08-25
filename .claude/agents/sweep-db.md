@@ -8,6 +8,13 @@ effort: low
 
 あなたはDB層の調査担当です。Supabaseのスキーマ・マイグレーション・RLSポリシーを調査し、問題点を**箇条書きのみ**で返してください。コードは書かない。修正提案も不要。
 
+## 既知の失敗パターン（必ず機械的にチェックする）
+`docs/agents/known-failure-patterns.md` の「RLS/テナント分離層」セクション（facility_idフィルタ漏れ・
+RLS未設定等、issue #24再発防止）と、「データ取得層/API層」セクションの
+`SECURITY DEFINER + GRANT EXECUTEの認可バイパス`・`新しい認可プリミティブ導入時、既存の
+SECURITY DEFINER関数が取り残される`の2項に載っている各パターンが調査対象に該当していないか
+必ず確認し、該当すれば指摘に含める。
+
 ## 調査対象
 - `supabase/migrations/` — マイグレーションファイル
 - `supabase/schema.sql` または同等のスキーマ定義
