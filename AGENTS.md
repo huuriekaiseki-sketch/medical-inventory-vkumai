@@ -13,6 +13,19 @@
 - 詳細手順: [`docs/agents/parallel-agent-work.md`](docs/agents/parallel-agent-work.md) /
   設計原則: [`docs/agents/claude-codex-coexistence-template.md`](docs/agents/claude-codex-coexistence-template.md)
 
+## ビルド・テストコマンド
+
+パッケージマネージャは npm（`package-lock.json`）。
+
+| コマンド | 用途 |
+|---|---|
+| `npm run dev` | 開発サーバ起動（Next.js） |
+| `npm test` | ユニットテスト（vitest run） |
+| `npm run lint` | Lint（`eslint --max-warnings=0`） |
+| `npm run typecheck` | 型チェック（`tsc --noEmit`） |
+| `npm run test:e2e` | E2Eテスト（Playwright。テスト専用Supabase接続が前提。下記「テスト環境・データ衛生ルール」参照） |
+| `npm run ai:check` | typecheck→lint→test→test:e2e の一括実行。作業完了前に実行する |
+
 ## Codex 用設定（`.codex/`）
 
 | ファイル | 目的 |
@@ -51,7 +64,7 @@ Phase 1 調査(並列) → Phase 2 仕様書 → [停止① 人間レビュー]
 | `judge-panel` | sonnet | 複数の設計提案を評価・採点し、synthesis（統合提案）を作成。読み取り専用 | Phase 1深掘り |
 | `adversarial-verify` | opus | Sweep指摘に反論を試み、偽陽性を除去。読み取り専用 | Phase 1深掘り |
 | `contract-writer` | sonnet | src/types/ の型定義・APIインターフェース型を先行確定。implementerへの「契約」を書く | Phase 3 |
-| `implementer` | opus | TDD実装（RED→GREEN→REFACTOR）。テスト削除・期待値改ざん禁止 | Phase 3 |
+| `implementer` | sonnet | TDD実装（RED→GREEN→REFACTOR）。テスト削除・期待値改ざん禁止 | Phase 3 |
 | `integrator` | sonnet | マイグレーション適用確認・共有ファイルの結線・npm test/lint確認 | Phase 4 |
 | `reviewer` | sonnet | TDD品質規約検証・4観点指摘（正しさ/仕様カバレッジ/重複/型安全）読み取り専用 | Phase 5 |
 
@@ -62,6 +75,7 @@ Phase 1 調査(並列) → Phase 2 仕様書 → [停止① 人間レビュー]
 | `feature-spec` | `/feature-spec` | 調査結果から SPEC.md を生成（Phase 2） |
 | `structured-review` | `/structured-review` | 最終構造化レビュー（Phase 5 後・人間が起動） |
 | `e2e-runner` | `/e2e-runner` | E2Eテスト・スクリーンショット生成（随時） |
+| `handoff-format` | 作業完了報告（PR本文・セッション終了報告）を書くとき | 引き継ぎメモの必須フォーマット（issue #542） |
 
 ## TRI/RISK 機械判定基準（AIDDパイプライン採用条件）
 

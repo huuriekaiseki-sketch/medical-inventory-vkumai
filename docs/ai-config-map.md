@@ -39,7 +39,7 @@ medical-inventory-vkumai/               ← このプロジェクト
     │   ├── sweep-types.md              ← Phase 1: 型整合性Sweep（haiku）
     │   ├── completeness-critic.md      ← Phase 1: 調査網羅チェック（sonnet）
     │   ├── contract-writer.md          ← Phase 3 前: 型定義・API契約確定（sonnet）
-    │   ├── implementer.md              ← Phase 3: TDD実装（opus）・契約参照前提
+    │   ├── implementer.md              ← Phase 3: TDD実装（sonnet）・契約参照前提
     │   ├── integrator.md               ← Phase 4: 統合ゲート（sonnet）
     │   ├── reviewer.md                 ← Phase 5: 品質レビュー4観点（sonnet）
     │   ├── adversarial-verify.md       ← 深掘り調査: 偽陽性除去（opus）
@@ -47,7 +47,8 @@ medical-inventory-vkumai/               ← このプロジェクト
     ├── skills/
     │   ├── feature-spec/SKILL.md       ← 仕様書生成（Phase 2）
     │   ├── structured-review/SKILL.md  ← 最終構造化レビュー（Phase 5後）
-    │   └── e2e-runner/SKILL.md         ← E2Eテスト・スクリーンショット
+    │   ├── e2e-runner/SKILL.md         ← E2Eテスト・スクリーンショット
+    │   └── handoff-format/SKILL.md     ← 作業完了時の引き継ぎメモフォーマット（issue #542）
     └── workflows/
         ├── aidd-phase1-router.js       ← Phase 1 入口。TRI/RISKキーワードでaidd-phase1/aidd-1-1-deep-task/メタ改修軽量ルート(issue #457)へ自動振り分け
         ├── aidd-phase1.js              ← Phase 1 調査ワークフロー（軽量Sweep。routerから呼ばれる）
@@ -154,6 +155,7 @@ frontmatterを変更しても実フローの挙動が変わらないケースが
 | `feature-spec` | Phase 2：調査結果から仕様書を生成するとき | `SPEC.md`（Part 1: 人間向け / Part 2: AI向け技術詳細） |
 | `structured-review` | Phase 5 後：最終構造化レビューを実施するとき（`/structured-review` で起動） | レビュー観点別の指摘リスト |
 | `e2e-runner` | E2Eテストやスクリーンショットが必要なとき（随時） | Playwright テスト + スクリーンショット |
+| `handoff-format` | 作業完了報告（PR本文・セッション終了報告・`docs/sessions/`記録）を書くとき | 引き継ぎメモ（作業サマリ/検証済み/既知の未対応/後任AIへの注意） |
 
 ---
 
