@@ -51,6 +51,11 @@ cp "$SCRIPT_DIR/lib/resolve-log-dir.sh" "$SANDBOX/scripts/lib/"
 STATE_FILE="$SANDBOX/.claude/.gate-effectiveness-state/last-summary-at"
 LOG_FILE="$SANDBOX/logs/loop-observability.jsonl"
 
+# harvest-journal-events.shが実環境の~/.claude/projects/を読んでサンドボックスの
+# 収穫ファイルへ実データを混入させないよう、空のprojectDirへ差し替える(issue #642)
+export AIDD_JOURNAL_PROJECT_DIR="$SANDBOX/empty-projects"
+mkdir -p "$AIDD_JOURNAL_PROJECT_DIR"
+
 run_hook() {
   set +e
   OUT="$(cd "$SANDBOX" && bash scripts/gate-effectiveness-monthly-check.sh < /dev/null)"
@@ -91,22 +96,33 @@ touch -t "$(date -v-31d +%Y%m%d%H%M 2>/dev/null || date -d '31 days ago' +%Y%m%d
 run_hook
 assert_contains "$OUT" "品質ゲート月次サマリ" "31日経過後は再びsystemMessageが出る"
 
-echo "=== scenario 5: summarize-gate-blocked.shが無い環境でもクラッシュしない(fail-open) ==="
-assert_contains "$OUT" "blocked状態" "summarize-gate-blocked.sh不在でもblocked状態の見出し自体は出る(取得失敗の断り書き付き)"
+echo "=== scenario 5: summarize-gate-passfail.sh/harvest-journal-events.shが無い環境でもクラッシュしない(fail-open) ==="
+assert_contains "$OUT" "## agent別pass/fail/blocked" "スクリプト不在でもjournalベース集計の見出し自体は出る(取得失敗の断り書き付き)"
 assert_contains "$OUT" "取得できませんでした" "取得失敗時の断り書きが出る"
+assert_contains "$OUT" "自己申告" "loop-observability側セクションに自己申告(欠落あり得る)の注記が出る(issue #642)"
 
-echo "=== scenario 6: summarize-gate-blocked.shがある環境 → blocked集計が本文に含まれる ==="
+echo "=== scenario 6: 収穫・集計スクリプトがある環境 → journalベース集計が本文に含まれる ==="
 rm -f "$STATE_FILE"
-cp "$SCRIPT_DIR/summarize-gate-blocked.sh" "$SANDBOX/scripts/"
+cp "$SCRIPT_DIR/summarize-gate-passfail.sh" "$SANDBOX/scripts/"
+cp "$SCRIPT_DIR/harvest-journal-events.sh" "$SANDBOX/scripts/"
 cp "$SCRIPT_DIR/lib/gate-effectiveness-summary.ts" "$SANDBOX/scripts/lib/"
+cp "$SCRIPT_DIR/lib/harvest-journal-events.ts" "$SANDBOX/scripts/lib/"
 cp "$SCRIPT_DIR/lib/canonical-event.ts" "$SANDBOX/scripts/lib/"
 cp "$SCRIPT_DIR/lib/reconstruct-loop-observability.ts" "$SANDBOX/scripts/lib/"
-# summarize-gate-blocked.shはデフォルトでこのリポジトリの本物のprojectDirを見に行くため
-# (npxのモジュール解決のためnode_modulesはリポジトリルートのものをそのまま使う必要があり、
-# ここでは"クラッシュせず実行でき、blocked集計の見出しが出る"ことのみを確認する
-# (件数の具体値はCI環境依存のため固定しない)
+# model-pricing.tsはreconstruct-loop-observability.tsの推移的依存。コピーし忘れると
+# tsxがMODULE_NOT_FOUNDで落ち、fail-openの断り書き側に倒れてテストが実体を検証できない
+# (旧テストは見出ししか見ておらずこの欠落を検知できていなかった)
+cp "$SCRIPT_DIR/lib/model-pricing.ts" "$SANDBOX/scripts/lib/"
+# 収穫済みJSONLをサンドボックスに用意し、実際のprojectDir(実環境依存)を読まずに
+# 集計パスだけを決定的に検証する
+cat > "$SANDBOX/logs/journal-harvest.jsonl" <<'EOF'
+{"eventId":"journal:reviewer:2026-08-01T00:00:00Z:0","agentId":"agent-test-1","agentType":"reviewer","feature":null,"startTimestamp":null,"endTimestamp":"2026-08-01T00:00:00Z","status":"pass","detail":null,"intent":null,"scenario":null,"source":"journal"}
+{"eventId":"journal:implementer:2026-08-01T00:01:00Z:1","agentId":"agent-test-2","agentType":"implementer","feature":null,"startTimestamp":null,"endTimestamp":"2026-08-01T00:01:00Z","status":"blocked","detail":null,"intent":null,"scenario":null,"source":"journal"}
+EOF
 run_hook
-assert_contains "$OUT" "## blocked状態" "blocked集計セクションの見出しが出る(issue #569)"
+assert_contains "$OUT" "Workflow実行記録: 2件" "収穫済みjournalの件数が集計に出る(issue #642)"
+assert_contains "$OUT" "reviewer: pass=1" "agentType別のpass集計が出る"
+assert_contains "$OUT" "implementer: pass=0 / fail=0 / blocked=1" "blockedも同じ集計に統合されて出る(旧summarize-gate-blocked.shの統合先)"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

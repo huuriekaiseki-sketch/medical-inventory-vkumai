@@ -1,45 +1,41 @@
-# SPEC: 消耗品(consumables)登録のデッドAPI解消とseed.sql整備の方針決定(Issue #647)
+# SPEC: 月次品質ゲートサマリのpass/fail集計をjournal.jsonlベースへ移行する(Issue #642)
 
 ## Part 1 — 仕様(★人間がレビューする部分)
 
-### 背景・調査結果
+### 背景
 
-1. **消耗品登録POSTがデッドAPI**
-   - `src/app/api/consumables/route.ts` の POST(`createConsumable`)は施設スコープの認可(`requireFacilityAccess`)・バリデーション・リポジトリ層まで実装済み
-   - 実際の消耗品発注フローは `src/app/facilities/[id]/consumable-orders/new/page.tsx` で、GETで一覧取得するのみで登録UIが存在しない
-   - (訂正: 当初この背景で言及していた`ConsumableOrderModal.tsx`は、調査時点で既にアプリのどこからも参照されていない未使用コンポーネントだった。実際に使われているのは`new/page.tsx`の方であり、モーダルは今回の対応でファイルごと削除した)
-   - 結果として、実運用では**施設ユーザーが消耗品を1件も登録できず**、発注画面は「消耗品が登録されていません」という空状態のまま発注不能になる(DBに直接データを入れない限り機能しない)
-   - e2eテストにもconsumables関連のカバレッジは無し
+- `scripts/summarize-loop-observability.sh`(月次品質ゲートサマリの主集計)は`logs/loop-observability.jsonl`という**自己申告ログ**のみを見ており、欠落期間があっても「発火ゼロ」と誤読されうる
+- `scripts/lib/canonical-event.ts`の`journalAdapter`はWorkflowの`journal.jsonl`(機械記録・pass/fail/blockedを保持)を正規化済みだが、**`~/.claude/projects/.../wf_*`ディレクトリはtranscript cleanupで消える**(実測: 2026-08-22時点で3ディレクトリしか残存せず、7月以降の大量の実行履歴が既に消失)
+- そのため、journalベースに集計を寄せるには、消える前に永続化する「収穫層」が前提として必要
 
-2. **`supabase/seed.sql` 不在**
-   - `supabase db reset` 後は空のDBになる
-   - 一方で `supabase/__tests__/integration/helpers/seed-rls-idor.ts` というテストヘルパー方式が既に確立されており、4つのRLS/IDOR統合テスト(case/consumable/loan-orders/loan-returns)で運用中
+### 方針決定
 
-### 方針決定(提案)
-
-1. **消耗品登録UIを追加する**(POST削除ではなくUI追加)
-   - 理由: これは単なるデッドコード掃除ではなく、機能として未完成の状態(発注機能の前提となるマスタ登録手段が欠落)。既存のPOST実装(認可・バリデーション込み)を活かせる
-   - 施設ごとにスコープされたシンプルな登録フォーム(品名・JAN・用途)を、消耗品発注ページ(`/facilities/[id]/consumable-orders`)に追加する
-   - products(グローバルadmin限定マスタ)とは異なり、consumablesは施設メンバーなら誰でも登録可能(既存API設計を踏襲)
-
-2. **seed.sqlは新規作成せず、既存のテストヘルパー方式を正式設計として文書化する**
-   - 理由: 既に確立され4箇所で運用実績のあるパターンがあるため、別方式(seed.sql)を並存させると二重管理になる
-   - `docs/agents/decisions.md`に「なぜseed.sqlではなくテストヘルパー方式を採用するか」を記録する
+1. **収穫層(Stage 1)**: Stop hookから毎回(通知の30日間隔ゲートとは無関係に)実行し、`journalAdapter`が返すイベントを`logs/journal-harvest.jsonl`(全worktree共有の`resolve_log_dir()`配下)へ**agentId基準**で重複排除しながら追記する
+   - 注: eventId基準にしない理由 — `journalAdapter`のeventIdは全wf_*ディレクトリ横断の出現順連番(`lineIndex`)を含むため、古いwf_*がtranscript cleanupで消えると同一イベントのeventIdが収穫のたびに変わり、重複排除が壊れる。agentIdはエージェント実行ごとに一意かつディレクトリの増減に影響されないため、こちらを永続キーにする
+2. **集計切替(Stage 2)**: 月次サマリのagent別pass/fail集計を、収穫済み`journal-harvest.jsonl`ベースに切り替える。既存の`summarize-gate-blocked.sh`(blockedのみ集計)は新集計に統合し廃止する(同じ数値を二重表示しない)
+3. **残す部分(Stage 3)**: feature別・token/costUsd集計は当面`loop-observability.jsonl`(自己申告)参照のまま残すが、月次サマリ出力に「自己申告のため欠落があり得る」旨を明記する
 
 ### 受け入れ条件
 
-- [x] `/facilities/[id]/consumable-orders` ページに消耗品登録フォーム(品名必須・JAN任意・用途必須)が追加されている
-- [x] 登録後、同ページ内の「登録済みの消耗品」一覧に反映される(かつ`new/page.tsx`の発注選択リストにも次回取得時に反映される)
-- [x] 他施設の消耗品は見えない・登録できない(既存のfacility-scope認可を維持)
-- [x] 品名・用途が空白のみの場合は400エラーになる(既存API側バリデーションと整合するUI側チェック)
-- [x] `docs/agents/decisions.md`に、seed.sqlを作らずテストヘルパー方式を正式採用する旨の決定が追記されている
+- [ ] `harvestJournalEvents()`が、同じagentIdのイベントを二重に追記しない(wf_*ディレクトリの増減後も安定。ユニットテストで検証)
+- [ ] `scripts/harvest-journal-events.sh`が`resolve_log_dir()`配下の`journal-harvest.jsonl`へ収穫結果を追記する
+- [ ] `gate-effectiveness-monthly-check.sh`が、30日通知ゲートの前に毎回harvestを実行する(通知が出ない回でも収穫は行われる)
+- [ ] `summarizePassFailGates()`が、journal由来イベント(status: pass/fail/blocked)をagentType別に集計できる(ユニットテストで検証)
+- [ ] `gate-effectiveness-monthly-check.sh`の月次サマリメッセージが、journal-harvestベースのpass/fail/blocked集計を主とし、loop-observability.jsonlベースのfeature別/コスト集計には「自己申告・欠落あり得る」旨の注記がある
+- [ ] `scripts/summarize-gate-blocked.sh`は新集計に統合され、重複した出力が残らない
+- [ ] 既存の`npm test`・`npm run lint`が全て通過する(回帰なし)
 
 ## Part 2 — 実装計画
 
-### Set A: 消耗品登録UI
-- `src/components/orders/ConsumableRegisterForm.tsx`(新規): 品名・JAN・用途の入力フォーム。送信で`POST /api/consumables`を呼ぶ
-- `src/app/facilities/[id]/consumable-orders/page.tsx`: 登録フォームを配置し、登録成功時に一覧を再取得する
-- テスト: フォームの必須項目バリデーション・送信成功時の一覧更新・エラー表示
+### Set A: 収穫層
+- `scripts/lib/harvest-journal-events.ts`(新規): `harvestJournalEvents(projectDir, outputFile)`。既存`outputFile`の行からeventIdの集合を読み込み、`journalAdapter(projectDir).load()`との差分のみ追記する。CLIエントリ(`--project-dir`, `--output`)も持つ
+- `scripts/lib/harvest-journal-events.test.ts`(新規): 重複排除・新規追記・ファイル未存在時の挙動をテスト
+- `scripts/harvest-journal-events.sh`(新規): `resolve-log-dir.sh`を使い`logs/journal-harvest.jsonl`を解決して上記CLIを呼ぶ。fail-open(エラーでも exit 0)
 
-### Set B: seed方針の文書化
-- `docs/agents/decisions.md`に決定理由を追記(コードマイグレーション不要)
+### Set B: 集計切替
+- `scripts/lib/gate-effectiveness-summary.ts`: `summarizePassFailGates(events: CanonicalEvent[])`を追加。journal由来イベントをagentType別にpass/fail/blocked集計する。`loadHarvestedEvents(logFile)`(JSONL読み込み)も追加
+- `scripts/lib/gate-effectiveness-summary.test.ts`: 新関数のテストを追加
+- `scripts/summarize-gate-passfail.sh`(新規): harvest済みJSONLを読んでCLI出力する(`summarize-gate-blocked.sh`を置き換え)
+- `scripts/summarize-gate-blocked.sh`: 削除(新スクリプトに統合)
+- `scripts/gate-effectiveness-monthly-check.sh`: 冒頭でharvestを実行するよう変更。MSG組み立てを新集計ベースに変更し、loop-observability.jsonlベースの部分に自己申告の注記を追加
+- `scripts/gate-effectiveness-monthly-check.test.sh`: 既存テストの更新

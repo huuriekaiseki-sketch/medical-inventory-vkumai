@@ -224,7 +224,8 @@ AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p
 | `scripts/log-agent-progress.sh` / `scripts/show-agent-status.sh` | サブエージェント進捗の記録・一覧表示（issue #18） |
 | `scripts/lib/resolve-log-dir.sh` | `logs/`の書き込み先をworktree横断で単一のディレクトリ（メインworktree直下）に解決する。全`log-*.sh`/`check-*.sh`/`summarize-*.sh`が参照する（issue #546。従来は各worktreeが起動時のカレントディレクトリ相対で別々の`logs/`に書き込み、観測記録の約半数が死蔵していた） |
 | `scripts/lib/canonical-event.ts` | hook/journal/agent-progress/loop-observabilityの4ログを正規化する読み取り専用Adapter層（issue #569） |
-| `scripts/summarize-gate-blocked.sh` / `scripts/lib/gate-effectiveness-summary.ts` | journal.jsonlのblocked状態をagentType別に集計し月次品質ゲートサマリへ追記（issue #569残タスク） |
+| `scripts/harvest-journal-events.sh` / `scripts/lib/harvest-journal-events.ts` | Workflow journal(wf_*)をtranscript cleanupで消える前に`logs/journal-harvest.jsonl`へ収穫（Stop hook契機・source+agentIdで重複排除。issue #642） |
+| `scripts/summarize-gate-passfail.sh` / `scripts/lib/gate-effectiveness-summary.ts` | 収穫済みjournalベースでagentType別pass/fail/blockedを集計し月次品質ゲートサマリへ出力（旧summarize-gate-blocked.sh=blockedのみ集計を統合。issue #569・#642） |
 | `scripts/check-agent-progress-gap.sh` | agent-progress記録漏れの機械検知（issue #339） |
 | `scripts/record-gap-check-state.sh` | gap check用before/expected件数の記録（issue #488。オーケストレーター専用） |
 | `scripts/check-gap-check-state.sh` | Stop hookによるgap checkの自動実行（issue #488） |
