@@ -66,3 +66,8 @@ session-report-*.html
 
 # Supabase Studio SQL EditorがローカルDB調査時に自動保存するスニペット（デバッグ用・ローカル専用）
 /supabase/snippets/
+
+# Supabase CLI（supabase link/start等）がローカルに生成する作業状態。project ref・組織ID・
+# pooler接続文字列（パスワードは含まないが本番プロジェクトの識別情報）を含むため常に除外する。
+# 2026-08-26時点で過去に誤ってコミットされていたことが判明（履歴には残るが今後の再混入を防ぐ）
+/supabase/.temp/
