@@ -137,6 +137,31 @@ globパターン（`*`等を含むパス）を渡していないか確認する�
 
 詳細: [`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#なぜissue-444のpretooluse-hookを警告のみdenyの二段構えにしたか)
 
+### 設計提案・機構追加をgreen方向のみ検証して人間レビューに出す
+
+**チェック内容:** 新しい強制機構（`permissionMode`等のagent frontmatterフィールド、feature flag、
+バリデーション、PreToolUse hookのブロック条件等）を追加する提案をする前に、「意図通り動く
+（green）」だけでなく「意図通り止める/防ぐ（red）」も実測したか確認する。片方向の検証だけで
+「導入してよい」と結論づけていないか、SPEC.md・PR本文・レビュー指摘のいずれかで書く前に
+自問する。
+
+**なぜ再発したか:** issue #652で、subagentの`permissionMode: plan`がread-only強制になるという
+提案を、Bash(grep)のような読み取り系コマンドが通ることの確認（green）だけで進めかけた。
+実際にはlog-agent-progress.sh呼び出し・`echo >`リダイレクト・`mkdir`のような書き込み系
+Bashコマンドも許可プロンプト無しで素通りしており、red方向（書き込みを本当に止めるか）を
+別途実測して初めて「効果がない」と判明した。green方向だけの確認は「動いた」ことしか
+証明せず、「防ぐはずのものを防いでいるか」は別に検証しないと分からない。
+
+**推奨:** 「新しい制御・ゲートを追加する」提案は、成功ケースの実測だけでなく、そのゲートが
+防ぐはずの失敗ケースを実際に発生させて防がれるか確認してから提示する。ただしこのチェック
+自体は自然言語ルールであり機械強制ではない（`docs/agents/undetectable-rules-inventory.md`
+参照）。効果があるのは、提案した本人とは別のエージェント・人間がレビュー時にこのファイルを
+参照する場合のみで、meta改修のSPEC自体を別エージェントがレビューする仕組みは現状無い
+（2026-08-26時点。将来`adversarial-verify`をmeta改修SPEC提示前にも呼ぶ運用に広げる案は
+issue化を検討）。
+
+詳細: [`tooling-decisions.md`](./tooling-decisions.md#subagent-frontmatterのskillsプリロードpermissionmode-planは見送りmaxturnsは延期issue-652)
+
 ## RLS/テナント分離層
 
 ### 「動いたからOK」でfacility_idフィルタ漏れ・RLS未設定を見逃す（issue #24再発防止）
