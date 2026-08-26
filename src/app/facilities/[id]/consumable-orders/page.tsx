@@ -49,7 +49,7 @@ export default function ConsumableOrdersPage({ params }: { params: Promise<{ id:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  const handleRegistered = (_consumable: Consumable) => {
+  const handleRegistered = () => {
     fetchConsumables()
   }
 
