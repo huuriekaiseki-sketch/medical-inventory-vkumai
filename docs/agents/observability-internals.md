@@ -77,6 +77,15 @@ pass/failしか集計できず、`blocked`状態（Spec Check/Manifest Check等�
 `scripts/lib/gate-effectiveness-summary.ts`が`journalAdapter`経由でWorkflow journal.jsonlの
 `blocked`件数をagentType別に集計し、`scripts/summarize-gate-blocked.sh`→
 `scripts/gate-effectiveness-monthly-check.sh`の順で月次サマリへ追記されるようにした。
+（追記・issue #642: その後、agent別のpass/fail集計自体もjournalベースへ移行した。journal＝
+wf_*ディレクトリはtranscript cleanupで消えるため、Stop hook契機で毎回
+`scripts/harvest-journal-events.sh`が`logs/journal-harvest.jsonl`へ収穫し（重複排除キーは
+eventIdでなく`source+agentId`。eventIdは全wf_*横断の出現順連番を含むためディレクトリの増減で
+同一イベントのIDが変わり、永続キーに使えない）、`scripts/summarize-gate-passfail.sh`が
+その収穫ファイルからpass/fail/blockedをagentType別に一括集計する。blockedのみ別枠だった
+`summarize-gate-blocked.sh`はこの新集計へ統合し廃止。feature別・token/cost集計は引き続き
+自己申告のloop-observability.jsonl参照のため、月次サマリ内に「欠落を発火ゼロと誤読しない」
+旨の注記を付けている。）
 `correlateEvents()`によるagentId単位の相関（Stage2の時刻窓フォールバック等）はここでは使わず、
 journalAdapterが返すイベントを`status === 'blocked'`でフィルタしてagentType別に数えるだけの
 単純集計に留めている（blockedの有無・件数だけならagentId相関は不要なため。issue #569コメントが

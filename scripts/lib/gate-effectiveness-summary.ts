@@ -1,4 +1,7 @@
+import { realpathSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 import { journalAdapter, type CanonicalEvent } from './canonical-event'
+import { loadHarvestedEvents } from './harvest-journal-events'
 
 // WHY: issue #569の残タスクのうち「サマリー・復旧処理をcanonical event Module経由に寄せる」を
 // 部分的に実装する。summarize-loop-observability.sh（logs/loop-observability.jsonlのみ参照）は
@@ -34,6 +37,36 @@ export function summarizeBlockedGates(events: CanonicalEvent[]): BlockedGateSumm
   return { totalBlocked: blocked.length, byAgentType, neverBlockedAgentTypes }
 }
 
+// issue #642: 月次サマリのagent別pass/fail集計をjournalベースへ移行するための集計。
+// loop-observability.jsonl(自己申告。記録漏れ＝欠落があり得る)と異なり、journalは
+// Workflowランタイムの機械記録なので、欠落を「発火ゼロ」と誤読する問題が起きない。
+export interface PassFailGateCounts {
+  pass: number
+  fail: number
+  blocked: number
+  other: number
+}
+
+export interface PassFailGateSummary {
+  totalEvents: number
+  byAgentType: Record<string, PassFailGateCounts>
+}
+
+export function summarizePassFailGates(events: CanonicalEvent[]): PassFailGateSummary {
+  const journalEvents = events.filter((event) => event.source === 'journal')
+  const byAgentType: Record<string, PassFailGateCounts> = {}
+  for (const event of journalEvents) {
+    const key = event.agentType ?? 'unknown'
+    const counts = (byAgentType[key] ??= { pass: 0, fail: 0, blocked: 0, other: 0 })
+    if (event.status === 'pass' || event.status === 'fail' || event.status === 'blocked') {
+      counts[event.status] += 1
+    } else {
+      counts.other += 1
+    }
+  }
+  return { totalEvents: journalEvents.length, byAgentType }
+}
+
 function main() {
   const args = process.argv.slice(2)
   const getArg = (name: string, fallback: string) => {
@@ -45,32 +78,53 @@ function main() {
     '--project-dir',
     `${process.env.HOME ?? ''}/.claude/projects/-Users-masanori-medical-inventory-vkumai`,
   )
+  // --harvest-file指定時は収穫済みJSONL(logs/journal-harvest.jsonl)を読む。
+  // 未指定時は従来どおりwf_*ディレクトリを直接読む(残存分のみ)。
+  const harvestFile = getArg('--harvest-file', '')
   const asJson = args.includes('--json')
 
-  const events = journalAdapter(projectDir).load()
-  const summary = summarizeBlockedGates(events)
+  const events = harvestFile ? loadHarvestedEvents(harvestFile) : journalAdapter(projectDir).load()
+  const passFail = summarizePassFailGates(events)
+  const blocked = summarizeBlockedGates(events)
 
   if (asJson) {
-    console.log(JSON.stringify(summary, null, 2))
+    console.log(JSON.stringify({ passFail, blocked }, null, 2))
     return
   }
-  if (summary.totalBlocked === 0) {
-    console.log('blocked状態のWorkflow実行はありません（journal.jsonlベース）。')
-  } else {
-    console.log(`blocked状態のWorkflow実行: ${summary.totalBlocked}件（journal.jsonlベース。issue #569）`)
-    const sorted = Object.entries(summary.byAgentType).sort((a, b) => b[1] - a[1])
-    for (const [agentType, count] of sorted) {
-      console.log(`  - ${agentType}: ${count}件`)
-    }
+
+  const sourceLabel = harvestFile ? `収穫済みjournal: ${harvestFile}` : 'journal.jsonl(残存wf_*のみ)'
+  if (passFail.totalEvents === 0) {
+    console.log(`Workflow実行記録がありません（${sourceLabel}）。`)
+    return
   }
-  if (summary.neverBlockedAgentTypes.length > 0) {
+  console.log(`Workflow実行記録: ${passFail.totalEvents}件（${sourceLabel}。issue #642）`)
+  const sorted = Object.entries(passFail.byAgentType).sort(
+    (a, b) => b[1].pass + b[1].fail + b[1].blocked + b[1].other - (a[1].pass + a[1].fail + a[1].blocked + a[1].other),
+  )
+  for (const [agentType, counts] of sorted) {
+    console.log(`  - ${agentType}: pass=${counts.pass} / fail=${counts.fail} / blocked=${counts.blocked}${counts.other > 0 ? ` / other=${counts.other}` : ''}`)
+  }
+  if (blocked.neverBlockedAgentTypes.length > 0) {
     console.log(`一度もblockedを返していないagentType（journalに実行記録あり。issue #640）:`)
-    for (const agentType of summary.neverBlockedAgentTypes) {
+    for (const agentType of blocked.neverBlockedAgentTypes) {
       console.log(`  - ${agentType}`)
     }
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// WHY: 単純な`file://${argv[1]}`比較だと、argv[1]がsymlink経由のパス
+// (例: macOSの/var/folders→/private/var/folders)のときimport.meta.url(実パス)と
+// 一致せずmain()が無言でスキップされる(issue #642のテストで発覚)。realpathで正規化する。
+function isRunAsCli(): boolean {
+  const entry = process.argv[1]
+  if (!entry) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entry)).href
+  } catch {
+    return false
+  }
+}
+
+if (isRunAsCli()) {
   main()
 }
