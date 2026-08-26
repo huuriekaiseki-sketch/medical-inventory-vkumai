@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { POST } from '../route'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 
 const mockGetUser = vi.fn()
 const mockRequireFacilityAccess = vi.fn()
@@ -32,6 +33,30 @@ beforeEach(() => {
 })
 
 describe('POST /api/consumables', () => {
+  // 受け入れ条件「品名・用途が空白のみの場合は400エラーになる」はUI側の事前バリデーション
+  // だけでなく、API自体が実際に400を返すことをここで担保する(issue #647 レビュー指摘対応)。
+  it('品名が空白のみの場合は400を返す', async () => {
+    authenticated()
+    const req = new Request('http://localhost', {
+      method: 'POST',
+      body: JSON.stringify({ ...validBody, name: '   ' }),
+    })
+    const res = await POST(req as never)
+    expect(res.status).toBe(400)
+    expect(mockCreateConsumable).not.toHaveBeenCalled()
+  })
+
+  it('用途が空白のみの場合は400を返す', async () => {
+    authenticated()
+    const req = new Request('http://localhost', {
+      method: 'POST',
+      body: JSON.stringify({ ...validBody, purpose: '   ' }),
+    })
+    const res = await POST(req as never)
+    expect(res.status).toBe(400)
+    expect(mockCreateConsumable).not.toHaveBeenCalled()
+  })
+
   it('未認証の場合は401を返す', async () => {
     unauthenticated()
     const req = new Request('http://localhost', { method: 'POST', body: JSON.stringify(validBody) })
@@ -47,6 +72,19 @@ describe('POST /api/consumables', () => {
     const res = await POST(req as never)
     expect(res.status).toBe(403)
     expect(mockCreateConsumable).not.toHaveBeenCalled()
+  })
+
+  // consumables.jan は products(jan) への FK(20260714000004)。存在しないJANを指定した場合、
+  // repository層が投げるClientVisibleErrorをAPIが400として返すことを担保する
+  // (issue #647 レビュー指摘: FK違反時に汎用500になっていた境界条件の未カバー)。
+  it('存在しないJANを指定した場合はDB FK違反により400を返す', async () => {
+    authenticated()
+    mockCreateConsumable.mockRejectedValue(new ClientVisibleError('指定されたJANコードの製品が見つかりません'))
+    const req = new Request('http://localhost', { method: 'POST', body: JSON.stringify(validBody) })
+    const res = await POST(req as never)
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.error).toBe('指定されたJANコードの製品が見つかりません')
   })
 
   it('認証済み・アクセス権ありで正常に作成できる', async () => {

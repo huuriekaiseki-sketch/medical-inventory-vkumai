@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listConsumablesByFacility, createConsumable } from '@/lib/consumables/repository'
 import { apiError, toClientErrorMessage } from '@/lib/api-error'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import type { ConsumableInput } from '@/types/order'
 
 export async function GET(request: NextRequest) {
@@ -46,14 +47,19 @@ export async function POST(request: NextRequest) {
     return apiError('アクセス権限がありません', 403)
   }
 
+  const trimmedJan = body.jan?.trim()
   try {
     const consumable = await createConsumable(db, body.facilityId, {
       name: body.name,
-      jan: body.jan,
+      jan: trimmedJan || undefined,
       purpose: body.purpose,
     })
     return NextResponse.json({ consumable }, { status: 201 })
   } catch (error) {
+    // WHY: 存在しないJANを指定した場合(consumables.jan → products(jan) のFK違反)は、
+    //      サーバ側の問題ではなくクライアント入力の不備なので400として返す
+    //      (issue #647 レビュー指摘: FK違反時に汎用500になっていた境界条件の対応)。
+    if (error instanceof ClientVisibleError) return apiError(error.message, 400)
     return apiError(toClientErrorMessage(error, '消耗品の作成に失敗しました'))
   }
 }

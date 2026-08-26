@@ -58,6 +58,39 @@ export type ConsumableInput = {
   purpose: string
 }
 
+/**
+ * GET /api/consumables のレスポンス型（成功時）
+ * Issue #647 Set A: 消耗品登録UIが一覧再取得に使う
+ */
+export type ConsumablesApiGetResponse = {
+  consumables: Consumable[]
+}
+
+/**
+ * POST /api/consumables のリクエストボディ型
+ * Issue #647 Set A: ConsumableRegisterForm.tsx が送信するペイロード
+ * facilityId は必須。name/purpose は空白のみの場合route側で400になる
+ */
+export type ConsumablesApiPostRequest = ConsumableInput & {
+  facilityId: string
+}
+
+/**
+ * POST /api/consumables のレスポンス型（成功時、201）
+ * Issue #647 Set A
+ */
+export type ConsumablesApiPostResponse = {
+  consumable: Consumable
+}
+
+/**
+ * /api/consumables (GET/POST共通) のエラーレスポンス型
+ * 400: facilityId/name/purpose 不正, 401: 未認証, 403: 他施設アクセス, 500: サーバーエラー
+ */
+export type ConsumablesApiErrorResponse = {
+  error: string
+}
+
 export type ConsumableOrder = {
   id: string
   facilityId: string

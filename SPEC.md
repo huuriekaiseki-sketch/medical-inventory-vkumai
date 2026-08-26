@@ -1,59 +1,45 @@
-# SPEC: issue #652 subagent frontmatter新フィールド導入 — 実機検証に基づく確定版
-
-プロダクトコードに触れないメタ改修。Phase 1調査+実機検証2回の結果、issue原案の3要素のうち
-**実施は1点に縮小し、2点は実測根拠付きで見送る**方針とする。
+# SPEC: 消耗品(consumables)登録のデッドAPI解消とseed.sql整備の方針決定(Issue #647)
 
 ## Part 1 — 仕様(★人間がレビューする部分)
 
-### 結論サマリ
+### 背景・調査結果
 
-| issue #652の要素 | 判断 | 決め手(すべて実測・実ファイル確認) |
-|---|---|---|
-| `skills:`プリロード | **見送り** | known-failure-patterns.mdはCodex側(`.agents/skills/handoff-format`)からも参照される**ツール中立の共有資産**。スキル化=`.claude/skills/`への移動はClaude/Codex共存設計違反、複製は二重管理(ドリフト温床)になる |
-| `permissionMode: plan` | **見送り** | sweep-uiに一時設定して実機検証した結果、**書き込み3種(ログスクリプト追記・`>`リダイレクト・mkdir)がすべて素通り**し、ファイル実体の作成を確認した。read-onlyの機械強制にならず、「強制済み」という誤った安心感だけが増える |
-| `maxTurns` | **延期** | sweep系は「対象ファイル全件列挙→全件Read」の決定的手順のため、対象30ファイル超で正常動作を打ち切る。打ち切られた空応答は「指摘なし」と区別不能で、静かな見逃しモードを新設してしまう。turns実測(baselinesへの追加)が先 |
-| (調査で発見した穴) | **実施** | `sweep-db.md`だけが既知失敗パターン集への参照を持たない。RLS担当なのに「RLS/テナント分離層」セクション(issue #24再発防止)と繋がっていないため、sweep-ui/dataと同型の参照節を追加する |
+1. **消耗品登録POSTがデッドAPI**
+   - `src/app/api/consumables/route.ts` の POST(`createConsumable`)は施設スコープの認可(`requireFacilityAccess`)・バリデーション・リポジトリ層まで実装済み
+   - 実際の消耗品発注フローは `src/app/facilities/[id]/consumable-orders/new/page.tsx` で、GETで一覧取得するのみで登録UIが存在しない
+   - (訂正: 当初この背景で言及していた`ConsumableOrderModal.tsx`は、調査時点で既にアプリのどこからも参照されていない未使用コンポーネントだった。実際に使われているのは`new/page.tsx`の方であり、モーダルは今回の対応でファイルごと削除した)
+   - 結果として、実運用では**施設ユーザーが消耗品を1件も登録できず**、発注画面は「消耗品が登録されていません」という空状態のまま発注不能になる(DBに直接データを入れない限り機能しない)
+   - e2eテストにもconsumables関連のカバレッジは無し
 
-### 何が変わるか
+2. **`supabase/seed.sql` 不在**
+   - `supabase db reset` 後は空のDBになる
+   - 一方で `supabase/__tests__/integration/helpers/seed-rls-idor.ts` というテストヘルパー方式が既に確立されており、4つのRLS/IDOR統合テスト(case/consumable/loan-orders/loan-returns)で運用中
 
-- sweep-db(DB層調査エージェント)が、調査時に「RLS/テナント分離層」の既知失敗パターン
-  (認可チェック漏れ・SECURITY DEFINERの取り残し等、過去に実際に起きたミス)を必ず
-  チェックリストとして確認するようになる
-- それ以外のエージェントの挙動・フローの使い方は一切変わらない
+### 方針決定(提案)
+
+1. **消耗品登録UIを追加する**(POST削除ではなくUI追加)
+   - 理由: これは単なるデッドコード掃除ではなく、機能として未完成の状態(発注機能の前提となるマスタ登録手段が欠落)。既存のPOST実装(認可・バリデーション込み)を活かせる
+   - 施設ごとにスコープされたシンプルな登録フォーム(品名・JAN・用途)を、消耗品発注ページ(`/facilities/[id]/consumable-orders`)に追加する
+   - products(グローバルadmin限定マスタ)とは異なり、consumablesは施設メンバーなら誰でも登録可能(既存API設計を踏襲)
+
+2. **seed.sqlは新規作成せず、既存のテストヘルパー方式を正式設計として文書化する**
+   - 理由: 既に確立され4箇所で運用実績のあるパターンがあるため、別方式(seed.sql)を並存させると二重管理になる
+   - `docs/agents/decisions.md`に「なぜseed.sqlではなくテストヘルパー方式を採用するか」を記録する
 
 ### 受け入れ条件
 
-- [ ] `sweep-db.md`に「## 既知の失敗パターン」節が追加され、対象セクションが
-      「RLS/テナント分離層」(および関連の深い「データ取得層/API層」のSECURITY DEFINER項)である
-- [ ] `sweep-types.md`には追加しない(known-failure-patterns.mdに型整合性セクションが
-      存在しないため。将来セクションが増えたら追随)
-- [ ] 見送り2件+延期1件の判断と実測結果が`docs/agents/tooling-decisions.md`に記録されている
-      (再評価トリガー: 公式がplanのBash強制を強化したら/baselinesにturns実測が入ったら)
-- [ ] issue #652に調査結果をコメントしてクローズする
-- [ ] `npm test`が通る(frontmatterは変更しないためbaselineスナップショット義務は非発生)
+- [x] `/facilities/[id]/consumable-orders` ページに消耗品登録フォーム(品名必須・JAN任意・用途必須)が追加されている
+- [x] 登録後、同ページ内の「登録済みの消耗品」一覧に反映される(かつ`new/page.tsx`の発注選択リストにも次回取得時に反映される)
+- [x] 他施設の消耗品は見えない・登録できない(既存のfacility-scope認可を維持)
+- [x] 品名・用途が空白のみの場合は400エラーになる(既存API側バリデーションと整合するUI側チェック)
+- [x] `docs/agents/decisions.md`に、seed.sqlを作らずテストヘルパー方式を正式採用する旨の決定が追記されている
 
-## Part 2 — 実装計画(AI用・レビュー不要)
+## Part 2 — 実装計画
 
-### 実装セット(依存なし、1波)
+### Set A: 消耗品登録UI
+- `src/components/orders/ConsumableRegisterForm.tsx`(新規): 品名・JAN・用途の入力フォーム。送信で`POST /api/consumables`を呼ぶ
+- `src/app/facilities/[id]/consumable-orders/page.tsx`: 登録フォームを配置し、登録成功時に一覧を再取得する
+- テスト: フォームの必須項目バリデーション・送信成功時の一覧更新・エラー表示
 
-1. `sweep-db.md`: sweep-data.mdと同型の「## 既知の失敗パターン」節を調査対象の直前に挿入。
-   参照セクション=「RLS/テナント分離層」+「データ取得層/API層」のSECURITY DEFINER 2項
-2. `docs/agents/tooling-decisions.md`: 見送り記録エントリを追加(既存の「Bashサンドボックス
-   保留(issue #438)」等と同型式)。permissionMode検証の実測手順・結果(3種素通り)、
-   skillsプリロードのアーキテクチャ理由、maxTurns延期理由と再評価条件を記載
-3. issue #652へのコメント+クローズ(gh issue comment / gh issue close --reason completed。
-   sweep-db穴埋めを実施した上でのスコープ縮小クローズ)
-
-frontmatter(model/effort行)は変更しないため、check-agent-baseline-freshness.shの
-baseline更新警告は発生しない。プロンプト本文のみの変更で、`.claude/workflows/`にも
-触れないためeval義務も非発生。
-
-### テスト観点
-
-- `npm test`(プロンプト同期テスト群を含む)がgreenのまま
-- sweep-db.mdの追加節がsweep-ui/dataの既存節と同型式であること(目視)
-
-## Part 3 — 仕様レビュー前セルフチェック(AI用・レビュー不要)
-
-新しい型・enum・statusフィールドの導入なし。包含/除外リストは結論サマリ表の4行のみで、
-本文と件数一致(実施1・見送り2・延期1)。既存判定ロジックの置き換えなし。全項目非該当を確認。
+### Set B: seed方針の文書化
+- `docs/agents/decisions.md`に決定理由を追記(コードマイグレーション不要)
