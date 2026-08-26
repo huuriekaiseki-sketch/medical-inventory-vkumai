@@ -8,7 +8,7 @@
     "supabase/migrations/20260710000000_example_feature.sql"
   ],
   "approval": {
-    "approvedBy": "huuriekaiseki@gmail.com",
+    "approvedBy": "example-reviewer@example.com",
     "approvedAt": "2026-07-10T05:00:00+09:00"
   }
 }
