@@ -1,0 +1,23 @@
+# WHY: issue #653。Codexのhooks機能はデフォルト無効(features.hooks=false)で、
+# .codex/hooks.jsonが実際に発火するかは各開発者の~/.codex/config.toml頼みになっていた。
+# featuresキーはプロジェクトスコープのこのファイルでも宣言可能(上書き不可キー一覧に
+# 含まれない、developers.openai.com/codex/config-reference確認済み)ため、ここで宣言し
+# チーム全体でhooks.jsonが確実に有効になるようにする。正名は`hooks`(`codex_hooks`は非推奨エイリアス)。
+[features]
+hooks = true
+
+[mcp_servers.context7]
+command = "npx"
+args = [
+    "-y",
+    "@upstash/context7-mcp@latest",
+]
+
+[mcp_servers.playwright]
+command = "npx"
+args = [
+    "-y",
+    "@playwright/mcp@latest",
+    "--isolated",
+    "--storage-state=e2e/.auth/user.json",
+]
