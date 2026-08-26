@@ -16,7 +16,7 @@ describe('classifyManifestCheck', () => {
   })
 
   it('approval.approvedAtが無ければblocked', () => {
-    const manifest = { specHash: 'abc123', approval: { approvedBy: 'huuriekaiseki@gmail.com' } }
+    const manifest = { specHash: 'abc123', approval: { approvedBy: 'example-reviewer@example.com' } }
     const result = classifyManifestCheck(manifest, 'abc123')
     expect(result.status).toBe('blocked')
     expect(result.detail).toContain('承認が記録されていません')
@@ -30,7 +30,7 @@ describe('classifyManifestCheck', () => {
   })
 
   it('specHashが無ければblocked', () => {
-    const manifest = { approval: { approvedBy: 'huuriekaiseki@gmail.com', approvedAt: '2026-07-10T05:00:00+09:00' } }
+    const manifest = { approval: { approvedBy: 'example-reviewer@example.com', approvedAt: '2026-07-10T05:00:00+09:00' } }
     const result = classifyManifestCheck(manifest, 'abc123')
     expect(result.status).toBe('blocked')
     expect(result.detail).toContain('specHashが記録されていません')
@@ -39,7 +39,7 @@ describe('classifyManifestCheck', () => {
   it('manifest.specHashとactualSpecHashが一致すればpass', () => {
     const manifest = {
       specHash: 'abc123',
-      approval: { approvedBy: 'huuriekaiseki@gmail.com', approvedAt: '2026-07-10T05:00:00+09:00' },
+      approval: { approvedBy: 'example-reviewer@example.com', approvedAt: '2026-07-10T05:00:00+09:00' },
     }
     const result = classifyManifestCheck(manifest, 'abc123')
     expect(result.status).toBe('pass')
@@ -49,7 +49,7 @@ describe('classifyManifestCheck', () => {
   it('manifest.specHashとactualSpecHashが不一致ならblocked（レビュー承認後にSPEC.mdが変更された）', () => {
     const manifest = {
       specHash: 'abc123',
-      approval: { approvedBy: 'huuriekaiseki@gmail.com', approvedAt: '2026-07-10T05:00:00+09:00' },
+      approval: { approvedBy: 'example-reviewer@example.com', approvedAt: '2026-07-10T05:00:00+09:00' },
     }
     const result = classifyManifestCheck(manifest, 'xyz789')
     expect(result.status).toBe('blocked')
@@ -66,7 +66,7 @@ describe('applyChangedFiles', () => {
       specHash: 'abc123',
       baseCommit: 'd1a7dbd',
       changedFiles: [],
-      approval: { approvedBy: 'huuriekaiseki@gmail.com', approvedAt: '2026-07-10T05:00:00+09:00' },
+      approval: { approvedBy: 'example-reviewer@example.com', approvedAt: '2026-07-10T05:00:00+09:00' },
     }
     const updated = applyChangedFiles(manifest, ['src/app/page.tsx', 'src/lib/foo.ts'])
     expect(updated.changedFiles).toEqual(['src/app/page.tsx', 'src/lib/foo.ts'])
