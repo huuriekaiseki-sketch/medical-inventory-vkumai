@@ -113,7 +113,7 @@ assert_empty "$OUT" "出力が空である"
 echo "=== scenario 3: PR本文に必須見出しが両方揃っている → 沈黙 ==="
 reset_env
 pr_command_transcript
-set_pr_response 100 $'## 作業サマリ\n内容\n\n## 検証済み\n内容'
+set_pr_response 100 $'## 30秒サマリー\n内容\n\n## 04 どう確認したか\n内容'
 run_hook
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_empty "$OUT" "見出しが揃っていれば沈黙する"
@@ -126,7 +126,7 @@ run_hook
 assert_eq "$EXIT_CODE" "0" "exit 0（block不可）"
 assert_contains "$OUT" "systemMessage" "systemMessageフィールドがある"
 assert_contains "$OUT" "PR #101" "PR番号が含まれる"
-assert_contains "$OUT" "作業サマリ" "作業サマリへの言及が含まれる"
+assert_contains "$OUT" "30秒サマリー" "30秒サマリーへの言及が含まれる"
 assert_eq "$([ -f "$MARKER" ] && echo yes || echo no)" "yes" "警告済みマーカーが作成される"
 
 echo "=== scenario 5: 警告済みマーカーあり（同一セッション・同一PR） → 2回目は沈黙 ==="
@@ -140,10 +140,10 @@ run_hook
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_contains "$OUT" "PR #102" "別PR番号では抑止されない"
 
-echo "=== scenario 7: 片方の見出しのみ（作業サマリのみ） → 警告する ==="
+echo "=== scenario 7: 片方の見出しのみ（30秒サマリーのみ） → 警告する ==="
 reset_env
 pr_command_transcript
-set_pr_response 103 $'## 作業サマリ\n内容のみ'
+set_pr_response 103 $'## 30秒サマリー\n内容のみ'
 run_hook
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_contains "$OUT" "systemMessage" "片方のみでは警告される"
