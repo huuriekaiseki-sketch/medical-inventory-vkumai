@@ -1,6 +1,7 @@
 // WHY: requireFacilityAccess()のadmin判定はresolveIsAdmin()（admin-status.ts）に
-//      一本化されているため、db.rpc('get_admin_status', ...)とdb.rpc('is_facility_member', ...)
-//      の両方を1つのdbモックで切り替えて返す。
+//      一本化されているため、db.rpc('get_admin_status')（引数なし。issue #642由来の
+//      認可バイパス修正でp_user_id引数を廃止しauth.uid()採用に変更済み）と
+//      db.rpc('is_facility_member', ...)の両方を1つのdbモックで切り替えて返す。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
@@ -69,7 +70,7 @@ describe('requireFacilityAccess', () => {
     it('is_facility_member RPC を呼ばない', async () => {
       const db = makeDb({ userIsAdmin: false, dbHasAdmin: false, isMember: true })
       await requireFacilityAccess(db, admin, null)
-      expect(db.rpc).toHaveBeenCalledWith('get_admin_status', { p_user_id: admin.id })
+      expect(db.rpc).toHaveBeenCalledWith('get_admin_status')
       expect(db.rpc).not.toHaveBeenCalledWith('is_facility_member', expect.anything())
     })
   })

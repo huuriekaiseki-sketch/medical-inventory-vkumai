@@ -34,7 +34,7 @@ describe('resolveIsAdmin', () => {
 
     const result = await resolveIsAdmin(db, user)
     expect(result).toBe(true)
-    expect(db.rpc).toHaveBeenCalledWith('get_admin_status', { p_user_id: USER_ID })
+    expect(db.rpc).toHaveBeenCalledWith('get_admin_status')
   })
 
   it('自分はadminでないが他にadminがいる場合はfalseを返す', async () => {

@@ -846,7 +846,7 @@ export type Database = {
       }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       get_admin_status: {
-        Args: { p_user_id: string }
+        Args: never
         Returns: {
           db_has_admin: boolean
           user_is_admin: boolean

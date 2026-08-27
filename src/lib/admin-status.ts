@@ -13,7 +13,7 @@ interface AdminStatusRow {
 }
 
 export async function resolveIsAdmin(db: SupabaseClient, user: User): Promise<boolean> {
-  const { data, error } = await db.rpc('get_admin_status', { p_user_id: user.id })
+  const { data, error } = await db.rpc('get_admin_status')
   if (error || !data || (data as AdminStatusRow[]).length === 0) return false
 
   const { user_is_admin, db_has_admin } = (data as AdminStatusRow[])[0]

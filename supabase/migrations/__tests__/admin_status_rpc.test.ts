@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest'
 const MIGRATIONS_DIR = path.resolve(__dirname, '..')
 const RPC_FILE = path.join(MIGRATIONS_DIR, '20260704000001_add_admin_status_rpc.sql')
 const RESTRICT_FILE = path.join(MIGRATIONS_DIR, '20260704000002_restrict_admin_status_rpc.sql')
+const AUTHZ_FIX_FILE = path.join(MIGRATIONS_DIR, '20260827000001_fix_admin_status_rpc_authz.sql')
 
 function normalize(sql: string): string {
   return sql.replace(/\s+/g, ' ').toLowerCase()
@@ -48,5 +49,54 @@ describe('20260704000002_restrict_admin_status_rpc.sql', () => {
 
   it('anon からEXECUTE権限を取り消す（resolveIsAdminは認証済みユーザーのみが呼ぶため過剰権限だった）', () => {
     expect(n).toContain('revoke execute on function get_admin_status from anon')
+  })
+})
+
+// WHY: get_admin_status(p_user_id UUID) は SECURITY DEFINER で動くにもかかわらず
+//      呼び出し本人かどうかを確認しておらず、任意のp_user_idを指定して他人の管理者
+//      フラグを取得できる認可バイパス（情報漏えい）が存在した。修正後のマイグレーションが
+//      SPECの受け入れ条件（パラメータ廃止・auth.uid()採用・旧関数のDROP・
+//      search_path=''完全修飾・anon非付与）を満たすことを静的に固定する。
+describe('20260827000001_fix_admin_status_rpc_authz.sql', () => {
+  it('ファイルが存在する', () => {
+    expect(existsSync(AUTHZ_FIX_FILE)).toBe(true)
+  })
+
+  const sql = existsSync(AUTHZ_FIX_FILE) ? readFileSync(AUTHZ_FIX_FILE, 'utf-8') : ''
+  const n = normalize(sql)
+
+  it('旧シグネチャ get_admin_status(UUID) を明示的にDROPする（オーバーロード残存によるバイパス再発防止）', () => {
+    expect(n).toContain('drop function if exists get_admin_status(uuid)')
+  })
+
+  it('パラメータなしの get_admin_status() を定義し、auth.uid()で呼び出し本人のみ判定する', () => {
+    expect(n).toContain('create or replace function get_admin_status()')
+    expect(n).toContain('auth.uid()')
+    // WHY: WHYコメント内で旧パラメータ名p_user_idに言及するのは許容する
+    //      （経緯説明のため）。ここで禁止したいのは実行コード側（コメント除去後）に
+    //      p_user_idが「関数の引数」として残っていないことの確認。
+    const codeOnly = sql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join(' ')
+    expect(codeOnly.toLowerCase()).not.toMatch(/p_user_id/)
+  })
+
+  it('SECURITY DEFINER / search_path=\'\' でテーブル参照を完全修飾する', () => {
+    expect(n).toContain('security definer')
+    expect(n).toContain("set search_path = ''")
+    expect(n).toContain('public.user_facilities')
+  })
+
+  it('authenticated, service_role にのみ EXECUTE を許可し anon は含めない', () => {
+    expect(n).toContain('grant execute on function get_admin_status() to authenticated, service_role')
+    expect(n).not.toMatch(/to\s+anon/)
+  })
+
+  it('PUBLICへの暗黙付与分をGRANTより前にREVOKEする（CREATE OR REPLACEで新規作成された関数オブジェクトはデフォルトでPUBLICにEXECUTEが自動付与されるため、明示REVOKEなしではGRANTだけではanonの実行権限が残ってしまう）', () => {
+    const revokeIdx = n.indexOf('revoke all on function get_admin_status() from public')
+    const grantIdx = n.indexOf('grant execute on function get_admin_status() to authenticated, service_role')
+    expect(revokeIdx).toBeGreaterThanOrEqual(0)
+    expect(grantIdx).toBeGreaterThan(revokeIdx)
   })
 })
