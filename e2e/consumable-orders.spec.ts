@@ -21,7 +21,11 @@ test.describe('消耗品登録（issue #647）', () => {
   test('登録した消耗品が一覧に即座に反映される', async ({ page }) => {
     await page.goto('/facilities')
     await page.waitForLoadState('networkidle')
-    const firstFacilityLink = page.getByRole('link').filter({ hasText: /./ }).first()
+    // WHY: page全体を対象にすると、headerのロゴリンク（href="/"）が「表示テキストを持つ
+    // 最初のリンク」として先に一致してしまい、facilityIdがJSのundefinedになって
+    // /facilities/undefined/... へ遷移する不具合があった（issue #669）。
+    // 施設一覧の行リンクは<main>内にしか存在しないため、mainに限定して確実に一覧行を拾う。
+    const firstFacilityLink = page.locator('main').getByRole('link').filter({ hasText: /./ }).first()
     // 施設一覧から最初の施設の詳細IDを取得し、その消耗品発注ページへ遷移する
     const href = await firstFacilityLink.getAttribute('href')
     test.skip(!href, '施設一覧に遷移可能な施設が存在しない')
@@ -51,7 +55,7 @@ test.describe('消耗品登録（issue #647）', () => {
   test('品名・用途が空白のみの場合はエラー表示され登録されない', async ({ page }) => {
     await page.goto('/facilities')
     await page.waitForLoadState('networkidle')
-    const href = await page.getByRole('link').filter({ hasText: /./ }).first().getAttribute('href')
+    const href = await page.locator('main').getByRole('link').filter({ hasText: /./ }).first().getAttribute('href')
     test.skip(!href, '施設一覧に遷移可能な施設が存在しない')
 
     const facilityId = href!.split('/').filter(Boolean).pop()
@@ -77,8 +81,13 @@ test.describe('消耗品登録の施設間境界（issue #647）', () => {
     await page.waitForLoadState('networkidle')
 
     // src/app/api/consumable-orders/route.ts・src/app/api/consumables/route.ts の
-    // requireFacilityAccess が403を返し、一覧取得が失敗表示になることを確認する
-    await expect(page.getByText('一覧の取得に失敗しました')).toBeVisible()
+    // requireFacilityAccess が403を返し、一覧取得が失敗表示になることを確認する。
+    // WHY: 発注履歴側は「一覧の取得に失敗しました」、消耗品側は「消耗品一覧の取得に失敗しました」で
+    // 後者が前者を部分文字列として含むため、getByText(exact指定なし)だと2要素にマッチして
+    // strict mode violationになる（issue #669）。両方が独立した防御として効いていることを
+    // exact指定でそれぞれ検証する。
+    await expect(page.getByText('一覧の取得に失敗しました', { exact: true })).toBeVisible()
+    await expect(page.getByText('消耗品一覧の取得に失敗しました', { exact: true })).toBeVisible()
 
     await context.close()
   })

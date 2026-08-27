@@ -617,7 +617,15 @@ export type Database = {
           new_value?: number | null
           old_value?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "price_histories_distributor_product_id_fkey"
+            columns: ["distributor_product_id"]
+            isOneToOne: false
+            referencedRelation: "distributor_products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       product_compatibilities: {
         Row: {
@@ -1050,3 +1058,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
