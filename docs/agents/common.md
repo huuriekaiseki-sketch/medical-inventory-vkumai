@@ -164,10 +164,12 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 「できました」で終わる完了報告は禁止。作業完了時（PR本文・セッション終了報告・
 `docs/sessions/` への記録のいずれか）は、`handoff-format`スキル（[`../../.claude/skills/handoff-format/SKILL.md`](../../.claude/skills/handoff-format/SKILL.md)）のフォーマットで
 引き継ぎメモを残す（issue #542。タスク完了時のみ必要なため常時ロードから外しスキル化した）。
-PR本文経由での引き継ぎ（`gh pr create`/`gh pr edit`）は、Stop hook
-（`scripts/check-handoff-format.sh`、issue #524）が「## 作業サマリ」「## 検証済み」の
-2見出しの有無を機械検知し、無ければ警告する（PRにつき1回・warningのみ。セッション終了報告・
-`docs/sessions/`経由の引き継ぎは検知対象外）。
+このフォーマットはissue #666で、後任AI向けの観点に加え、人間レビュアーが「何が変わり、
+危険度はどれくらいで、どこを見ればよいか」を短時間で判断できる「30秒サマリー」＋
+00〜05の証拠パッケージ構成に刷新した。PR本文経由での引き継ぎ（`gh pr create`/`gh pr edit`）は、
+Stop hook（`scripts/check-handoff-format.sh`、issue #524／新フォーマットへの追従は
+issue #666）が「30秒サマリー」「どう確認したか」の見出しの有無を機械検知し、無ければ警告する
+（PRにつき1回・warningのみ。セッション終了報告・`docs/sessions/`経由の引き継ぎは検知対象外）。
 
 ## 検知手段のないルールの棚卸し（issue #339）
 
