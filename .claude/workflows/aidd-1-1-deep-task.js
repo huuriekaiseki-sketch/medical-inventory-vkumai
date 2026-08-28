@@ -112,9 +112,14 @@ while (shouldContinueSweepLoop(dryRounds, round, maxRounds, MIN_BUDGET_FOR_SWEEP
   log(`Sweepラウンド ${round}/${maxRounds} 開始`)
   phase('Sweep')
 
+  // issue #675: sweep-*エージェントに調査範囲を明示する。aidd-1-1-deep-taskはバグ修正・
+  // 特定機能の深掘り調査が目的のためfocusedを渡す（正本: lib/prompts/sweep.jsのbuildSweepPrompt）。
+  // 全体を漏れなく監査するfullのままだと、taskDescriptionと無関係な指摘（他機能のエラー
+  // ハンドリング等）で仕様書ドラフトが埋まってしまう問題があった。
+  const SCOPE_LINE_FOCUSED = '\n調査範囲: focused（このタスクに直接関連するファイル・機能のみに絞り込むこと。無関係な全件列挙は不要）'
   const sweepPrompt = (additionalContext
     ? `タスク: ${taskDescription}\n\n前ラウンドのCritic追加指示:\n${additionalContext}`
-    : `タスク: ${taskDescription}`) + SWEEP_GUIDE
+    : `タスク: ${taskDescription}`) + SCOPE_LINE_FOCUSED + SWEEP_GUIDE
 
   const [uiResult, dataResult, dbResult, typesResult] = await parallel([
     () => agent(sweepPrompt, { label: `sweep-ui:R${round}`,    agentType: 'sweep-ui',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
