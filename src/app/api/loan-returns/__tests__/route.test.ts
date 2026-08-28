@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 import { GET, POST } from '../route'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 
 const mockGetUser = vi.fn()
 const mockRequireFacilityAccess = vi.fn()
@@ -179,7 +180,7 @@ describe('POST /api/loan-returns', () => {
   //      区別して返すことを確認する
   it('loanOrderIdが自施設に存在しない場合は400を返す', async () => {
     authenticated()
-    mockCreateLoanReturn.mockRejectedValue(new Error('指定された短貸発注が見つかりません'))
+    mockCreateLoanReturn.mockRejectedValue(new ClientVisibleError('指定された短貸発注が見つかりません'))
     const res = await POST(makeRequest({
       facilityId: 'f1',
       returnDatetime: '2026-06-24T15:00:00Z',
@@ -189,5 +190,22 @@ describe('POST /api/loan-returns', () => {
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error).toBe('指定された短貸発注が見つかりません')
+  })
+
+  // WHY: 同一loan_order_idへの返却二重登録はDB側のUNIQUE制約違反(23505)として検知され、
+  //      repository層がClientVisibleErrorに翻訳する（issue #675）。route側は他の
+  //      ClientVisibleErrorと同様に400として返すことを確認する
+  it('同一短貸発注へ返却済みの場合は400を返す', async () => {
+    authenticated()
+    mockCreateLoanReturn.mockRejectedValue(new ClientVisibleError('この短貸発注は既に返却登録されています'))
+    const res = await POST(makeRequest({
+      facilityId: 'f1',
+      returnDatetime: '2026-06-24T15:00:00Z',
+      loanOrderId: 'lo-1',
+      items: [{ jan: '490001', quantity: 1 }],
+    }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('この短貸発注は既に返却登録されています')
   })
 })

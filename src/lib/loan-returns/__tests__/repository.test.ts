@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLoanReturn, listLoanReturns, LOAN_ORDER_NOT_FOUND_ERROR } from '@/lib/loan-returns/repository'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeChainableQuery(result: { data: unknown; error: unknown }): any {
@@ -106,6 +107,29 @@ describe('createLoanReturn', () => {
         items: [{ jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1 }],
       })
     ).rejects.toThrow('insert failed')
+  })
+
+  // WHY: loan_returns.loan_order_id にUNIQUE制約(部分インデックス)を追加した(issue #675 セットA)。
+  //      同一loan_order_idへの2回目の返却登録はPostgresの一意制約違反(23505)になる。
+  //      生のPostgresエラー(制約名・テーブル名を含む)をそのままthrowするとスキーマ情報が
+  //      漏洩し得るため、ClientVisibleErrorとして翻訳しroute側で400として扱えるようにする
+  //      (consumables/repository.ts:53 と同じパターン)
+  it('RPCが23505(UNIQUE制約違反)エラーを返した場合はClientVisibleErrorに翻訳する', async () => {
+    const { db } = makeMockRpcDb({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "loan_returns_loan_order_id_unique"' } })
+
+    await expect(
+      createLoanReturn(db, 'f-1', {
+        returnDatetime: '2026-06-24T15:00:00Z',
+        items: [{ jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1 }],
+      })
+    ).rejects.toThrow('この短貸発注は既に返却登録されています')
+
+    await expect(
+      createLoanReturn(db, 'f-1', {
+        returnDatetime: '2026-06-24T15:00:00Z',
+        items: [{ jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1 }],
+      })
+    ).rejects.toBeInstanceOf(ClientVisibleError)
   })
 
   it('loanOrderIdを指定すると RPC の p_header.loan_order_id として渡る（未返却誤判定バグの修正）', async () => {

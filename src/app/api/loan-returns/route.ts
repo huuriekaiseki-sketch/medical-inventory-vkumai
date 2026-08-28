@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
-import { listLoanReturns, createLoanReturn, LOAN_ORDER_NOT_FOUND_ERROR } from '@/lib/loan-returns/repository'
+import { listLoanReturns, createLoanReturn } from '@/lib/loan-returns/repository'
 import { apiError, toClientErrorMessage } from '@/lib/api-error'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import { parsePagination } from '@/lib/api-pagination'
 import type { LoanReturnInput } from '@/types/order'
 
@@ -63,11 +64,12 @@ export async function POST(request: NextRequest) {
     const loanReturn = await createLoanReturn(db, body.facilityId, input, body.loanOrderId)
     return NextResponse.json({ loanReturn }, { status: 201 })
   } catch (error) {
-    // WHY: loanOrderId が自施設のloan_orderに存在しない場合はクライアント起因の入力エラーであり、
-    //      500(サーバーエラー)ではなく400として区別する（issue #20 レビュー指摘: critical fix）
-    if (error instanceof Error && error.message === LOAN_ORDER_NOT_FOUND_ERROR) {
-      return apiError(LOAN_ORDER_NOT_FOUND_ERROR, 400)
-    }
+    // WHY: ClientVisibleError は repository層が「クライアントに見せてよいと翻訳済み」と
+    //      保証したエラー（loanOrderIdが自施設に存在しない場合の LOAN_ORDER_NOT_FOUND_ERROR、
+    //      および今回追加されたUNIQUE制約違反(23505)時の重複返却エラーの両方を含む）。
+    //      consumables/route.ts と同じ経路に統一し、個別の文字列比較を廃止する
+    //      （issue #675 Part2 セットB）
+    if (error instanceof ClientVisibleError) return apiError(error.message, 400)
     return apiError(toClientErrorMessage(error, '返却に失敗しました'))
   }
 }

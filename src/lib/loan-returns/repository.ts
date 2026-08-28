@@ -134,7 +134,15 @@ export async function createLoanReturn(db: SupabaseClient, facilityId: string, i
       quantity: item.quantity,
     })),
   })
-  if (error) throw new Error(error.message)
+  if (error) {
+    // WHY: loan_returns.loan_order_id には部分UNIQUEインデックス(loan_order_id IS NOT NULL)
+    //      が追加されている(issue #675 セットA)。同一loan_order_idへの2回目の返却登録は
+    //      Postgresの一意制約違反(23505)になる。生のPostgresエラー(制約名・テーブル名を
+    //      含む文字列)をそのままthrowするとスキーマ情報が漏洩しうるため、ClientVisibleError
+    //      として翻訳しroute側で400として扱えるようにする(consumables/repository.ts:53と同じパターン)
+    if (error.code === '23505') throw new ClientVisibleError('この短貸発注は既に返却登録されています')
+    throw new Error(error.message)
+  }
   if (!data) throw new ClientVisibleError('loan_returns の作成に失敗しました')
 
   const r = data as LoanReturnRow & { items?: unknown }
