@@ -65,7 +65,10 @@ status と detail を返すこと。
 phase('Sweep')
 log('4軸並列Sweep 開始（1ラウンド）')
 
-const sweepPrompt = `タスク: ${taskDescription}${STATUS_GUIDE}`
+// issue #675: sweep-*エージェントに調査範囲を明示する。aidd-phase1は新機能追加前の
+// 既存コード構造の全体把握が目的のため常にfullを渡す（正本: lib/prompts/sweep.jsのbuildSweepPrompt）。
+const SCOPE_LINE_FULL = '\n調査範囲: full（新機能追加に向けた既存コード構造の全体像を把握するため、対象ディレクトリ全体を漏れなく確認すること）'
+const sweepPrompt = `タスク: ${taskDescription}${SCOPE_LINE_FULL}${STATUS_GUIDE}`
 
 const sweepAgents = [
   () => agent(sweepPrompt, { label: 'sweep-ui',    agentType: 'sweep-ui',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA, effort: 'low' }),
