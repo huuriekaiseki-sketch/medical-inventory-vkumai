@@ -1,104 +1,111 @@
-# 仕様書: 短貸返却(loan_return)の二重登録を防止する(issue #675)
+# SPEC: AAL2要件の統合テストを追加する（issue #684）
 
-## Part 1 — 仕様（人間レビュー用）
+## Part 1 — 仕様（★人間がレビューする部分）
 
-### 何ができるようになるか（利用者目線）
+### 何ができるようになるか
 
-同じ短貸発注(loan_order)に対して返却登録を誤って2回行おうとした場合（ダブルクリック・ネットワーク再送・複数タブでの同時操作など）、2件目の登録がエラーとして拒否されるようになります。エラー時には生のDBエラーではなく「既に返却済みです」等の分かりやすいメッセージが表示されます。
+MFA（多要素認証）を有効化したユーザーが、二段階認証（TOTP）を完了しないまま発注・返却・価格変更などの重要操作を行おうとしたとき、システムが実際に拒否することを、本物のSupabase環境を使って自動的に確認できるようになります。
 
-### 背景（何が問題だったか）
+これは新しい機能を追加するものではなく、**既にDB側に実装されている防御（AAL2要求）が、将来コードが変更されても壊れずに効き続けることを自動チェックする「見張り番」を増やす**作業です。
 
-`create_loan_return_atomic` RPC（`supabase/migrations/20260726120000_add_loan_order_id_to_loan_return_atomic_rpc.sql`）は `loan_returns.loan_order_id` を保存するが、この列にUNIQUE制約が無い。そのため同じ `loan_order_id` に対して返却登録を2回実行すると、`loan_returns` に重複行が作られてしまう。
+### 背景（なぜ必要か）
 
-実測（`src/app/facilities/[id]/loan-returns/new/page.tsx`）で確認した現状:
-- 返却フォームの「対象の短貸発注」プルダウンは、`unreturned`（未返却）な `loan_order` のみを選択肢に表示する（`src/lib/orders/repository.ts:171` の `unreturned = status === 'submitted' && returns.length === 0`）ため、**画面を開いた時点で返却済みのものは選択肢に出ない**。
-- 送信ボタンは `disabled={submitting}` により、送信中は再クリックできない。
+- すでに「二段階認証を完了していないと発注できない」という制限はデータベース側に実装済みです（PR #612, #619, #623）。
+- しかし、その制限が正しく効いているかを検証するテストは、対象になっているはずの機能のうち**一部（発注の一種類、価格の一部）にしか存在しません**。
+- 今回の調査で、残りの機能（消耗品の発注・器械の貸出発注・貸出返却・消耗品カタログの編集、およびそれぞれの明細）については、制限が正しく効いているかどうかがまだ**一度も自動確認されていない**ことが判明しました。
+- 将来誰かが誤ってこの制限を緩めるコード変更をしてしまっても、テストが無ければ気づけません。今回追加するテストが、その「事故に気づく仕組み」になります。
 
-したがって「同一ブラウザでの単純な連打」は既存UIで概ね防がれているが、以下のケースはすり抜ける:
-- 2つのタブ/ウィンドウで同じ画面を開いたまま片方が先に返却登録し、もう片方が（未返却のまま見えている）同じ `loan_order` を選んで送信する
-- ネットワーク再送（クライアントの二重fetch等）
+### やること（対象範囲）
 
-これらのケースは正規の操作からでも発生しうるため、**DB制約による最終防御**が必要（issue本文が参照するRiffGearの知見「DB制約は認可ではない。権限のある処理からでも、不正なデータ状態そのものを保存させない最後のルール」）。
+以下の操作について、「二段階認証を完了していない状態では拒否され、完了した状態では成功する」ことを確認するテストを追加します。
 
-### 対象外（今回のスコープに含まないこと）
+📸 このタスクはUI変更を伴わないため、スクリーンショット撮影ポイントはありません。テスト実行結果（全件green）が成果物です。
 
-- `loan_order_id` を指定しない返却（従来通り無制限に複数回登録できる。対象外の値なのでUNIQUE制約の対象にしない）
-- 「返却済み」ラベルをプルダウン内に表示する対応（現状は選択肢から除外する設計になっており、これ自体は今回のスコープでは変更しない。除外の代わりにラベル表示へ変更する要望は別issueとする）
-- 返却の取り消し・再オープン機能
+**テーブルへの直接書き込みチェック（画面を経由しない不正な抜け道が塞がっているかの確認）**
+- 消耗品発注・器械貸出発注・貸出返却・消耗品カタログ、およびそれぞれの明細データ
+
+**発注操作（RPC）そのもののチェック**
+- 症例発注・消耗品発注・貸出返却の3操作（器械貸出発注は既にテスト済みのため対象外）
 
 ### 受け入れ条件（チェックリスト）
 
-- [ ] `loan_returns.loan_order_id` に、NULLを除外した部分UNIQUEインデックスが追加されている（`loan_order_id IS NOT NULL` の行のみ一意）
-- [ ] 同一 `loan_order_id` を指定して `create_loan_return_atomic` RPCを2回連続で呼ぶと、1回目は成功、2回目はエラーになる
-- [ ] 2回目のエラーがAPIレスポンスとして返る際、生のPostgresエラー（制約名・テーブル名を含む文字列）ではなく「既に返却済みです」等のクライアント向けメッセージになっており、HTTPステータスは400（クライアント起因）である
-- [ ] `loan_order_id` を指定しない返却（対象を選ばない返却登録）は、従来通り何回でも登録できる（回帰なし）
-- [ ] 同じ `loan_order_id` へ返却登録を2件同時送信した場合、成功1件・失敗1件になり、`loan_returns` に対応する行が1件だけ残る（同時実行時もDB制約で最終的に1件に収束する）
-- [ ] 既存の `add_loan_order_id_to_loan_return_atomic_rpc.test.ts`（静的SQL検証）が引き続きgreenである
-- [ ] `supabase/__tests__/integration/loan-returns-rls-idor.integration.test.ts` 等の既存integrationテストが引き続きgreenである
-- [x] DBスキーマ変更を伴うため `npm run test:integration`（RLS/IDOR integrationテスト）をローカル実行し結果を確認する（`.claude/rules/db-schema.md`のルール）— 実装完了後に実行し、結果をPRの引き継ぎメモに記載する
+- [ ] 二段階認証を完了していないセッションで、上記の各操作を試みると拒否される
+- [ ] 二段階認証を完了したセッションで、同じ操作を試みると成功する（「常に拒否されているだけ」ではないことの対照確認）
+- [ ] 二段階認証そのものを一度も設定していないユーザーは、これまで通り操作できる（既存ユーザーへの影響がないことの回帰確認）
+- [ ] 既存の2つのテストファイル（症例発注・貸出発注の既存テスト、施設名更新の対象外確認）が、変更後も壊れずに通り続ける
+- [ ] `npm run test:integration` をローカル実行し、全件成功することを確認する
+
+### 影響範囲
+
+- 本番のアプリの挙動・画面には一切変更がありません（テストコードの追加・整理のみ）
+- 対象はテスト用のローカルSupabase環境のみで、本番データには触れません
 
 ---
 
-## Part 2 — 実装計画（AI用）
+## Part 2 — 実装計画（AI用・レビュー不要）
+
+### 現状（Phase1調査で確認済み）
+
+- `supabase/__tests__/integration/require-aal2-in-facility-writer-rls.integration.test.ts`（PR #624）: RLS直接書き込みaal1拒否/aal2成功を`case_orders`・`hospital_prices`のみ確認。`facilities`は対象外の回帰確認あり。
+- `supabase/__tests__/integration/require-aal2-for-order-rpcs.integration.test.ts`（PR #612）: RPC呼び出しaal1拒否/aal2成功を`create_loan_order_atomic`のみ確認。
+- 両ファイルとも`base32Decode()`/`generateTotp()`（RFC 6238準拠、Node組み込み`crypto`のみ）を独立に重複実装している。
+- `supabase/__tests__/integration/helpers/seed-rls-idor.ts`の`createSeededUser`にTOTP関連ロジックはない。
 
 ### 実装セット一覧（依存順）
 
-**セットA: DB — UNIQUE制約追加（独立・最優先）**
-- 新規マイグレーション（例: `supabase/migrations/2026xxxxxxxxxx_add_unique_loan_order_id_to_loan_returns.sql`）
-  ```sql
-  CREATE UNIQUE INDEX loan_returns_loan_order_id_unique
-    ON loan_returns (loan_order_id)
-    WHERE loan_order_id IS NOT NULL;
-  ```
-  （`loan_order_id` はNULL許容のFKであり、大多数の既存行はNULLのまま。部分インデックスでNULLを除外しないと「NULL同士は不一致」というPostgresのUNIQUE制約の挙動に依存する必要がなくなり意図が明確になる）
-- publicスキーマのテーブル追加/削除ではない（インデックス追加のみ）ため `refresh_schema_baseline_snapshot` の呼び出しは不要（`.claude/rules/db-schema.md`の対象は「テーブルを追加/削除するmigration」）
-- テスト観点: `supabase/migrations/__tests__/` に静的SQL検証テストを追加し、`CREATE UNIQUE INDEX ... WHERE loan_order_id IS NOT NULL` を含むことを確認する（`add_loan_order_id_to_loan_return_atomic_rpc.test.ts`と同じ静的検証パターン）
-- 触るファイル: 新規migrationファイル1つ、対応する`__tests__/*.test.ts`1つ
+#### Set A: TOTPヘルパーの共通化
+- **触るファイル**:
+  - 新規: `supabase/__tests__/integration/helpers/mfa-totp.ts`
+  - 変更: `supabase/__tests__/integration/require-aal2-in-facility-writer-rls.integration.test.ts`（自前実装を削除し共通ヘルパーに置き換え）
+  - 変更: `supabase/__tests__/integration/require-aal2-for-order-rpcs.integration.test.ts`（同上）
+- **内容**: `base32Decode`/`generateTotp`/`enrollAndVerifyTotp(client): Promise<{factorId, secret}>`/`signInAtAal1(email, password): Promise<SupabaseClient>`/`stepUpToAal2(client, factorId, secret): Promise<void>`をエクスポートする関数として`mfa-totp.ts`に集約する。既存2ファイルはこれをimportして使う形にリファクタし、**既存のテストケース・アサーションの意味は変更しない**（回帰防止）。
+- **テスト観点**: 既存2ファイルの全テストケースが、リファクタ後も同じ結果（pass/fail）になること。`npm run test:integration`をこのセット完了時点で一度実行し、緑を確認してから次に進む。
 
-**セットB: ロジック/API — UNIQUE制約違反(23505)のエラー翻訳（セットA完了後）**
-- `src/lib/loan-returns/repository.ts` の `createLoanReturn` 内、`db.rpc('create_loan_return_atomic', ...)` のエラーハンドリング（現在 `if (error) throw new Error(error.message)` の箇所、107-137行目付近）に、`consumables/repository.ts:53` と同じパターンで分岐を追加する:
-  ```ts
-  if (error) {
-    if (error.code === '23505') throw new ClientVisibleError('この短貸発注は既に返却登録されています')
-    throw new Error(error.message)
-  }
-  ```
-- `src/app/api/loan-returns/route.ts` のPOSTハンドラのcatch節を、`consumables/route.ts:62` と同じ `instanceof ClientVisibleError` チェックに統一する（現状は `error.message === LOAN_ORDER_NOT_FOUND_ERROR` という文字列比較のみで、`ClientVisibleError` の型チェックをしていない）:
-  ```ts
-  } catch (error) {
-    if (error instanceof ClientVisibleError) return apiError(error.message, 400)
-    return apiError(toClientErrorMessage(error, '返却に失敗しました'))
-  }
-  ```
-  この変更により、既存の `LOAN_ORDER_NOT_FOUND_ERROR`（`ClientVisibleError`として投げられている）と、新規追加する重複エラーの両方が同じ経路で400として扱われる（`LOAN_ORDER_NOT_FOUND_ERROR`という個別のimport・文字列比較は不要になり削除する）
-- テスト観点（unit）: `src/lib/loan-returns/__tests__/repository.test.ts` に、RPCエラーの `code` が `'23505'` のときに `ClientVisibleError('この短貸発注は既に返却登録されています')` がthrowされることを検証するテストを追加。`src/app/api/loan-returns/__tests__/route.test.ts` に、`ClientVisibleError` がthrowされた場合にPOSTが400+当該メッセージを返すことを検証するテストを追加
-- 触るファイル: `src/lib/loan-returns/repository.ts`, `src/app/api/loan-returns/route.ts`, 上記2つの `__tests__/*.test.ts`
+#### Set B: RLS直接書き込みテストの拡充
+- **触るファイル**: `supabase/__tests__/integration/require-aal2-in-facility-writer-rls.integration.test.ts`（Set A完了後、同ファイルへの追記）
+- **内容**: 既存の`describe`ブロック内に、以下のテーブルへの直接`.insert()`について「aal1で拒否」「aal2で成功」の対を追加する。
+  - `consumable_orders`（列: `facility_id`のみ。他はデフォルト）
+  - `loan_orders`（列: `facility_id`, `procedure_name`, `maker`）
+  - `loan_returns`（列: `facility_id`, `return_datetime`。`loan_order_id`はNULL許容なので省略可）
+  - `consumables`（列: `facility_id`, `jan`, `name`, `purpose`。jan一意制約に注意し`runId`でユニーク化）
+  - 明細4テーブル（親レコードをservice_roleで先に作成してから、明細への直接insertでaal1拒否/aal2成功を確認）:
+    - `case_order_items`（親`case_orders`必要。列: `case_order_id`, `jan`, `lot`, `ubd`, `quantity`）
+    - `consumable_order_items`（親`consumable_orders`と`consumables`必要。列: `consumable_order_id`, `consumable_id`, `quantity`）
+    - `loan_order_items`（親`loan_orders`必要。列: `loan_order_id`, `jan`, `name`, `quantity`）
+    - `loan_return_items`（親`loan_returns`必要。列: `loan_return_id`, `jan`, `lot`, `ubd`, `quantity`）
+- **テスト観点**: 各テーブルにつき最低2ケース（aal1拒否／aal2成功）。明細テーブルの親レコードはservice_roleクライアントで作成し、RLSの影響を受けないようにする（既存の`hospital_prices`テストの`products`/`categories`/`distributor_products`作成パターンを踏襲）。
 
-**セットC: UI — 二重送信の追加防御確認（独立・小規模、既存実装の確認が主）**
-- 実測の通り、送信ボタンは既に `disabled={submitting}` で二重送信防止済み、プルダウンは既に未返却のもの（`unreturned`）のみを表示している。**この2点についてはコード変更不要**
-- 追加対応: セットBで新設したエラーメッセージ（「この短貸発注は既に返却登録されています」）が、`src/app/facilities/[id]/loan-returns/new/page.tsx` の `handleSubmit` 内の既存エラー表示（`error` state、87行目）にそのまま表示されることを確認する（コードの変更は不要。API側が `{ error: string }` 形式で返す既存の仕組みに乗るため）
-- テスト観点（E2E, 任意）: 2つのタブ/ウィンドウで同一 `loan_order` に対して返却登録を試み、片方が成功しもう片方がエラーメッセージ表示になることを確認する。E2Eでの多重タブ再現が難しい場合は、integrationテスト（セットD）の同時実行テストで代替してよい
-- 触るファイル: なし（確認のみ）。E2Eを追加する場合は `e2e/` 配下に1ファイル追加
-
-**セットD: テスト — RLS/integration・同時実行テスト（セットA完了後、B/Cと並行可）**
-- `supabase/__tests__/integration/loan-returns-rls-idor.integration.test.ts` に以下を追加:
-  - 同一 `loan_order_id` を指定して `create_loan_return_atomic` を2回連続で呼び、1回目success・2回目errorになることを確認するテスト
-  - 同一 `loan_order_id` を指定して `Promise.all` で2件同時に `create_loan_return_atomic` を呼び、`results.filter(r => r.error === null).length === 1` かつ、その後 `loan_returns` を `loan_order_id` で絞り込むと1件だけ返ることを確認するテスト（`e2e-test-hygiene.md`のテストデータ衛生ルールに従うこと）
-- テスト観点: 上記2件（連続呼び出し・同時呼び出し）
-- 触るファイル: `supabase/__tests__/integration/loan-returns-rls-idor.integration.test.ts`（既存ファイルへの追記）
+#### Set C: RPC呼び出しテストの拡充
+- **触るファイル**: `supabase/__tests__/integration/require-aal2-for-order-rpcs.integration.test.ts`（Set A完了後、同ファイルへの追記）
+- **内容**: 既存の`describe`ブロックと同じ構造で、以下3RPCについて「MFA未登録は成功（回帰なし）」「aal1は拒否（forbidden: aal2 required）」「aal2は成功」の3ケースを追加する。
+  - `create_case_order_atomic(p_facility_id, p_case_datetime, p_procedure_name, p_patient_id, p_patient_initials, p_gender, p_doctor_name, p_items)`
+  - `create_consumable_order_atomic(p_facility_id, p_items)`（`p_items`は空配列`[]`でよい）
+  - `create_loan_return_atomic(p_header, p_items)`（`p_header`は`{facility_id, return_datetime}`のJSONB。`p_items`は空配列でよい）
+- **テスト観点**: 既存の`create_loan_order_atomic`向けテストと同一パターン（enroll→aal1拒否→aal2成功）。3RPCそれぞれ独立した`describe`または既存の1つの`describe`内にテストケースを追加する形でよい（新規ユーザー・施設を都度作るか共有するかは既存の`beforeAll`構造に合わせる）。
 
 ### 並列グループ宣言
 
-- **波1（同時実装可）**: セットA（DBマイグレーション）
-- **波2（セットA完了後、同時実装可）**: セットB（ロジック/API） / セットD（integrationテスト）
-- **波3（セットB完了後）**: セットC（UI確認・任意のE2E追加）
-- **統合ゲート**: 全セット完了後、`npm test` と `npm run test:integration` を実行しgreenであることを確認する
+- **波1（単独）**: Set A — 他の2セットの前提となる共通ヘルパー抽出。単独で先行実装し、`npm run test:integration`で既存回帰がないことを確認してから波2へ進む。
+- **波2（並列可）**: Set B と Set C — 互いに別ファイル（`require-aal2-in-facility-writer-rls...`と`require-aal2-for-order-rpcs...`）のみを触るため同時実装可能。どちらもSet Aが作る`mfa-totp.ts`をimportするのみで、Set Aのファイル自体は編集しない。
+- **統合ゲート**: 波2完了後、両ファイルを合わせて`npm run test:integration`を実行し、全件成功を確認する。DBスキーマ変更は伴わないため、`docs/agents/db-schema.md`の直接DDL実行系ルールは非該当（migrationファイル自体の変更なし）。
+
+### 型・データアクセス層の方針
+
+- 新規のプロダクションコード（`src/`配下）・migrationの変更は無い。純粋にテストコードの追加・リファクタのみ。
+- `mfa-totp.ts`の関数シグネチャ:
+  ```ts
+  export function generateTotp(secretBase32: string): string
+  export async function enrollAndVerifyTotp(client: SupabaseClient): Promise<{ factorId: string; secret: string }>
+  export async function signInAtAal1(client: SupabaseClient, email: string, password: string): Promise<void>
+  export async function stepUpToAal2(client: SupabaseClient, factorId: string, secret: string): Promise<void>
+  ```
+  （`base32Decode`は`generateTotp`内部のプライベート実装のままでよく、exportは不要）
 
 ---
 
-## Part 3 — 仕様レビュー前セルフチェック（AI用）
+## Part 3 — 仕様レビュー前セルフチェック（AI用・レビュー不要）
 
-- 新しいenum/status型の導入なし
-- 列挙・包含/除外リストなし（UNIQUE制約はNULLを除外する部分インデックスのみ）
-- 判定基準の明記: `loan_order_id IS NOT NULL` の行のみを対象にUNIQUE制約を課す。NULL（対象を選ばない返却）は制約対象外で従来通り複数回許可
-- 信号の意味変更に該当する箇所: なし（既存の `unreturned` 判定・エラーレスポンス形式 `{ error: string }` は変更しない。エラーメッセージの翻訳経路を `instanceof ClientVisibleError` に統一する変更のみで、既存の `LOAN_ORDER_NOT_FOUND_ERROR` の外部向け挙動（メッセージ文言・400ステータス）は変わらない）
+- **判定基準の欠落**: 新しい型・enum・statusフィールドは導入しないため非該当。
+- **下流の反応の欠落**: 非該当（既存の`has_aal2()`の判定ロジックはPart2で一切変更しない。テストは既存実装の外部観測のみ）。
+- **列挙の自己矛盾**: 対象テーブル一覧を数え直した — 発注/返却4テーブル(consumable_orders, case_orders, loan_orders, loan_returns) + 価格・カタログ2テーブル(hospital_prices, consumables) + 明細4テーブル(case_order_items, consumable_order_items, loan_order_items, loan_return_items) = 計10テーブル。うち`case_orders`/`hospital_prices`は既存テスト済みのため、Set Bで新規追加するのは残り8テーブル（consumable_orders, loan_orders, loan_returns, consumables + 明細4件）。migrationファイル（20260806000002_...sql）内のポリシー定義10件と一致することを確認済み。RPCは4件のうちcreate_loan_order_atomicが既存テスト済み、Set Cで追加するのは残り3件。migrationファイル（20260806000001_...sql）内の関数定義4件と一致することを確認済み。
+- **信号の意味変更**: 既存の判定ロジック（`has_aal2()`のSQL、`aal1`/`aal2`文字列比較）は一切変更しない。テスト追加のみ。

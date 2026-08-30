@@ -10,44 +10,13 @@
 //      あわせて、facilities(施設名更新)は意図的にaal2要求の対象外としたため、
 //      MFA登録済み・aal1のままでも更新できることも回帰確認する。
 
-import { randomUUID, createHmac } from 'crypto'
+import { randomUUID } from 'crypto'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { assertTestSupabaseEnv } from '../../../e2e/env-guard'
+import { enrollAndVerifyTotp, signInAtAal1 as signInClientAtAal1, stepUpToAal2 } from './helpers/mfa-totp'
 
 const TEST_USER_PASSWORD = 'require-aal2-facility-writer-rls-test-0000'
-
-function base32Decode(input: string): Buffer {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
-  const clean = input.toUpperCase().replace(/=+$/, '')
-  let bits = ''
-  for (const char of clean) {
-    const val = alphabet.indexOf(char)
-    if (val === -1) throw new Error(`invalid base32 character: ${char}`)
-    bits += val.toString(2).padStart(5, '0')
-  }
-  const bytes: number[] = []
-  for (let i = 0; i + 8 <= bits.length; i += 8) {
-    bytes.push(parseInt(bits.slice(i, i + 8), 2))
-  }
-  return Buffer.from(bytes)
-}
-
-// RFC 6238 (TOTP) / RFC 4226 (HOTP) 準拠。30秒ステップ・6桁・SHA1。
-function generateTotp(secretBase32: string): string {
-  const key = base32Decode(secretBase32)
-  const counter = Math.floor(Date.now() / 1000 / 30)
-  const counterBuffer = Buffer.alloc(8)
-  counterBuffer.writeBigUInt64BE(BigInt(counter))
-  const hmac = createHmac('sha1', key).update(counterBuffer).digest()
-  const offset = hmac[hmac.length - 1] & 0xf
-  const binCode =
-    ((hmac[offset] & 0x7f) << 24) |
-    ((hmac[offset + 1] & 0xff) << 16) |
-    ((hmac[offset + 2] & 0xff) << 8) |
-    (hmac[offset + 3] & 0xff)
-  return (binCode % 1_000_000).toString().padStart(6, '0')
-}
 
 function createServiceRoleClient(): SupabaseClient {
   assertTestSupabaseEnv()
@@ -105,47 +74,36 @@ describe('facility_writer_or_adminポリシーはRPCを経由しない直接書�
 
     // 以降のテストで使うTOTP factorをここで一度だけ登録する
     const client = createAnonClient()
-    const { error: signInError } = await client.auth.signInWithPassword({ email, password: TEST_USER_PASSWORD })
-    if (signInError) throw new Error(`サインイン失敗: ${signInError.message}`)
+    await signInClientAtAal1(client, email, TEST_USER_PASSWORD)
+    const enrolled = await enrollAndVerifyTotp(client)
+    factorId = enrolled.factorId
+    secret = enrolled.secret
 
-    const { data: enrollData, error: enrollError } = await client.auth.mfa.enroll({ factorType: 'totp' })
-    if (enrollError || !enrollData) throw new Error(`MFA enroll失敗: ${enrollError?.message}`)
-    factorId = enrollData.id
-    secret = enrollData.totp.secret
-
-    const { data: challengeData, error: challengeError } = await client.auth.mfa.challenge({ factorId })
-    if (challengeError || !challengeData) throw new Error(`MFA challenge失敗: ${challengeError?.message}`)
-
-    const { error: verifyError } = await client.auth.mfa.verify({
-      factorId,
-      challengeId: challengeData.id,
-      code: generateTotp(secret),
-    })
-    if (verifyError) throw new Error(`MFA verify失敗: ${verifyError.message}`)
+    // case_order_items/consumables/loan_return_itemsのjanはproducts(jan)へのFKのため、
+    // 使用するjan分だけ事前にproductsへ登録しておく(issue #684)
+    const { error: productsError } = await serviceClient.from('products').insert(
+      [`999${runId}-1`, `999${runId}-2`, `111${runId}`, `222${runId}`, `333${runId}`].map((jan) => ({
+        jan,
+        ref: `REF-${jan}`,
+        name: `RLSテスト製品-${jan}`,
+      }))
+    )
+    if (productsError) throw new Error(`products作成失敗: ${productsError.message}`)
   }, 60_000)
 
   afterAll(async () => {
     await serviceClient.auth.admin.deleteUser(userId)
     await serviceClient.from('facilities').delete().eq('id', facilityId)
+    await serviceClient
+      .from('products')
+      .delete()
+      .in('jan', [`999${runId}-1`, `999${runId}-2`, `111${runId}`, `222${runId}`, `333${runId}`])
   })
 
   async function signInAtAal1(): Promise<SupabaseClient> {
-    // パスワードのみの再サインインは、factorが検証済みでも新規セッションはaal1から始まる
     const client = createAnonClient()
-    const { error } = await client.auth.signInWithPassword({ email, password: TEST_USER_PASSWORD })
-    if (error) throw new Error(`サインイン失敗: ${error.message}`)
+    await signInClientAtAal1(client, email, TEST_USER_PASSWORD)
     return client
-  }
-
-  async function stepUpToAal2(client: SupabaseClient): Promise<void> {
-    const { data: challengeData, error: challengeError } = await client.auth.mfa.challenge({ factorId })
-    if (challengeError || !challengeData) throw new Error(`MFA challenge失敗: ${challengeError?.message}`)
-    const { error: verifyError } = await client.auth.mfa.verify({
-      factorId,
-      challengeId: challengeData.id,
-      code: generateTotp(secret),
-    })
-    if (verifyError) throw new Error(`MFA verify失敗: ${verifyError.message}`)
   }
 
   it('MFA登録済みだがaal1のセッションでは、case_ordersへの直接INSERT(RPC非経由)がRLSで拒否される', async () => {
@@ -166,7 +124,7 @@ describe('facility_writer_or_adminポリシーはRPCを経由しない直接書�
 
   it('aal2まで昇格したセッションでは、case_ordersへの直接INSERT(RPC非経由)が成功する', async () => {
     const client = await signInAtAal1()
-    await stepUpToAal2(client)
+    await stepUpToAal2(client, factorId, secret)
 
     const { error } = await client.from('case_orders').insert({
       facility_id: facilityId,
@@ -226,5 +184,205 @@ describe('facility_writer_or_adminポリシーはRPCを経由しない直接書�
       .eq('id', facilityId)
 
     expect(error).toBeNull()
+  })
+
+  it('MFA登録済みだがaal1のセッションでは、consumable_ordersへの直接INSERT(RPC非経由)がRLSで拒否される(issue #684)', async () => {
+    const client = await signInAtAal1()
+
+    const { error } = await client.from('consumable_orders').insert({ facility_id: facilityId })
+
+    expect(error).not.toBeNull()
+  })
+
+  it('aal2まで昇格したセッションでは、consumable_ordersへの直接INSERT(RPC非経由)が成功する(issue #684)', async () => {
+    const client = await signInAtAal1()
+    await stepUpToAal2(client, factorId, secret)
+
+    const { error } = await client.from('consumable_orders').insert({ facility_id: facilityId })
+
+    expect(error).toBeNull()
+  })
+
+  it('MFA登録済みだがaal1のセッションでは、loan_ordersへの直接INSERT(RPC非経由)がRLSで拒否される(issue #684)', async () => {
+    const client = await signInAtAal1()
+
+    const { error } = await client.from('loan_orders').insert({
+      facility_id: facilityId,
+      procedure_name: 'RLS直接書き込みテスト(aal1)',
+      maker: 'テストメーカー',
+    })
+
+    expect(error).not.toBeNull()
+  })
+
+  it('aal2まで昇格したセッションでは、loan_ordersへの直接INSERT(RPC非経由)が成功する(issue #684)', async () => {
+    const client = await signInAtAal1()
+    await stepUpToAal2(client, factorId, secret)
+
+    const { error } = await client.from('loan_orders').insert({
+      facility_id: facilityId,
+      procedure_name: 'RLS直接書き込みテスト(aal2)',
+      maker: 'テストメーカー',
+    })
+
+    expect(error).toBeNull()
+  })
+
+  it('MFA登録済みだがaal1のセッションでは、loan_returnsへの直接INSERT(RPC非経由)がRLSで拒否される(issue #684)', async () => {
+    const client = await signInAtAal1()
+
+    const { error } = await client.from('loan_returns').insert({
+      facility_id: facilityId,
+      return_datetime: new Date().toISOString(),
+    })
+
+    expect(error).not.toBeNull()
+  })
+
+  it('aal2まで昇格したセッションでは、loan_returnsへの直接INSERT(RPC非経由)が成功する(issue #684)', async () => {
+    const client = await signInAtAal1()
+    await stepUpToAal2(client, factorId, secret)
+
+    const { error } = await client.from('loan_returns').insert({
+      facility_id: facilityId,
+      return_datetime: new Date().toISOString(),
+    })
+
+    expect(error).toBeNull()
+  })
+
+  it('MFA登録済みだがaal1のセッションでは、consumablesへの直接INSERT(RPC非経由)がRLSで拒否される(issue #684)', async () => {
+    const client = await signInAtAal1()
+
+    const { error } = await client.from('consumables').insert({
+      facility_id: facilityId,
+      name: 'RLSテスト消耗品',
+      jan: `999${runId}-1`,
+      purpose: 'テスト用途',
+    })
+
+    expect(error).not.toBeNull()
+  })
+
+  it('aal2まで昇格したセッションでは、consumablesへの直接INSERT(RPC非経由)が成功する(issue #684)', async () => {
+    const client = await signInAtAal1()
+    await stepUpToAal2(client, factorId, secret)
+
+    const { error } = await client.from('consumables').insert({
+      facility_id: facilityId,
+      name: 'RLSテスト消耗品',
+      jan: `999${runId}-2`,
+      purpose: 'テスト用途',
+    })
+
+    expect(error).toBeNull()
+  })
+
+  describe('明細4テーブルへの直接INSERT(親経由のEXISTS+has_aal2()判定、issue #684)', () => {
+    it('case_order_itemsはaal1で拒否・aal2で成功する', async () => {
+      const { data: parent } = await serviceClient
+        .from('case_orders')
+        .insert({
+          facility_id: facilityId,
+          case_datetime: new Date().toISOString(),
+          procedure_name: '明細RLSテスト術式',
+          patient_id: 'PT-ITEM-1',
+          patient_initials: 'I.T.',
+          gender: 'other',
+          doctor_name: 'RLSテスト医師',
+        })
+        .select('id')
+        .single()
+
+      const aal1Client = await signInAtAal1()
+      const { error: aal1Error } = await aal1Client
+        .from('case_order_items')
+        .insert({ case_order_id: parent!.id, jan: `111${runId}`, quantity: 1 })
+      expect(aal1Error).not.toBeNull()
+
+      const aal2Client = await signInAtAal1()
+      await stepUpToAal2(aal2Client, factorId, secret)
+      const { error: aal2Error } = await aal2Client
+        .from('case_order_items')
+        .insert({ case_order_id: parent!.id, jan: `111${runId}`, quantity: 1 })
+      expect(aal2Error).toBeNull()
+    })
+
+    it('consumable_order_itemsはaal1で拒否・aal2で成功する', async () => {
+      const { data: consumable } = await serviceClient
+        .from('consumables')
+        .insert({
+          facility_id: facilityId,
+          name: '明細RLSテスト消耗品',
+          jan: `222${runId}`,
+          purpose: 'テスト用途',
+        })
+        .select('id')
+        .single()
+      const { data: parent } = await serviceClient
+        .from('consumable_orders')
+        .insert({ facility_id: facilityId })
+        .select('id')
+        .single()
+
+      const aal1Client = await signInAtAal1()
+      const { error: aal1Error } = await aal1Client
+        .from('consumable_order_items')
+        .insert({ consumable_order_id: parent!.id, consumable_id: consumable!.id, quantity: 1 })
+      expect(aal1Error).not.toBeNull()
+
+      const aal2Client = await signInAtAal1()
+      await stepUpToAal2(aal2Client, factorId, secret)
+      const { error: aal2Error } = await aal2Client
+        .from('consumable_order_items')
+        .insert({ consumable_order_id: parent!.id, consumable_id: consumable!.id, quantity: 1 })
+      expect(aal2Error).toBeNull()
+    })
+
+    it('loan_order_itemsはaal1で拒否・aal2で成功する', async () => {
+      const { data: parent } = await serviceClient
+        .from('loan_orders')
+        .insert({
+          facility_id: facilityId,
+          procedure_name: '明細RLSテスト術式',
+          maker: 'テストメーカー',
+        })
+        .select('id')
+        .single()
+
+      const aal1Client = await signInAtAal1()
+      const { error: aal1Error } = await aal1Client
+        .from('loan_order_items')
+        .insert({ loan_order_id: parent!.id, name: '明細RLSテスト器械', quantity: 1 })
+      expect(aal1Error).not.toBeNull()
+
+      const aal2Client = await signInAtAal1()
+      await stepUpToAal2(aal2Client, factorId, secret)
+      const { error: aal2Error } = await aal2Client
+        .from('loan_order_items')
+        .insert({ loan_order_id: parent!.id, name: '明細RLSテスト器械', quantity: 1 })
+      expect(aal2Error).toBeNull()
+    })
+
+    it('loan_return_itemsはaal1で拒否・aal2で成功する', async () => {
+      const { data: parent } = await serviceClient
+        .from('loan_returns')
+        .insert({ facility_id: facilityId, return_datetime: new Date().toISOString() })
+        .select('id')
+        .single()
+
+      const aal1Client = await signInAtAal1()
+      const { error: aal1Error } = await aal1Client
+        .from('loan_return_items')
+        .insert({ loan_return_id: parent!.id, jan: `333${runId}`, quantity: 1 })
+      expect(aal1Error).not.toBeNull()
+
+      const aal2Client = await signInAtAal1()
+      await stepUpToAal2(aal2Client, factorId, secret)
+      const { error: aal2Error } = await aal2Client
+        .from('loan_return_items')
+        .insert({ loan_return_id: parent!.id, jan: `333${runId}`, quantity: 1 })
+      expect(aal2Error).toBeNull()
+    })
   })
 })
