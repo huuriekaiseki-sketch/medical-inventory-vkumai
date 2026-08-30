@@ -282,6 +282,40 @@ export function findRlsTablesWithoutIdorTest({ allMigrationSql, idorTestSource, 
   }
 }
 
+/**
+ * 「adminだけが書ける」テーブルのうち、非adminが書けないことを一度も試していないものを探す。
+ *
+ * WHY: RLS/IDOR軸で `categories` / `distributor_products` / `product_compatibilities` を
+ *      「施設境界の約束がそもそも無い」として除外したが、**代わりに admin 境界という
+ *      別の約束が存在する**。除外したまま admin 側の軸を作らないと、
+ *      「面倒な指摘を除外リストに逃がしただけ」になる。
+ *
+ *      `is_facility_member` / `is_facility_writer` との OR がある場合は
+ *      「adminは追加の許可」であって admin境界ではないため対象外にする。
+ *      （この区別を入れないと15テーブルが該当し、ノイズだらけになる。実測で確認）
+ *
+ * @param {{allMigrationSql: string, adminTestSource: string}} options
+ * @returns {{adminOnlyTables: string[], uncovered: string[]}}
+ */
+export function findAdminOnlyTablesWithoutTest({ allMigrationSql, adminTestSource }) {
+  const sql = String(allMigrationSql ?? '').toLowerCase()
+  const tested = String(adminTestSource ?? '').toLowerCase()
+
+  const tables = new Set()
+  for (const m of sql.matchAll(
+    /create policy[^;]*?\son\s+(?:public\.)?"?([a-z_][a-z0-9_]*)"?([^;]*)/g,
+  )) {
+    const [, table, rest] = m
+    const isWrite = /for\s+(all|insert|update|delete)/.test(rest)
+    const hasFacilityAlternative =
+      rest.includes('is_facility_member') || rest.includes('is_facility_writer')
+    if (isWrite && rest.includes('is_admin') && !hasFacilityAlternative) tables.add(table)
+  }
+
+  const adminOnlyTables = [...tables].sort()
+  return { adminOnlyTables, uncovered: adminOnlyTables.filter((t) => !tested.includes(t)) }
+}
+
 // ---- CLI ----
 
 const LEVEL_ORDER = { high: 0, medium: 1, low: 2 }
@@ -397,6 +431,33 @@ function main() {
     console.log('  なし\n')
   } else {
     for (const r of rlsRanked) {
+      console.log(`  ${LEVEL_LABEL[r.risk.level]} ${r.table}`)
+      for (const reason of r.risk.reasons) console.log(`           - ${reason}`)
+    }
+    console.log('')
+  }
+
+  const adminTestSource = existsSync(intDir)
+    ? readdirSync(intDir)
+        .filter((f) => f.includes('admin'))
+        .map((f) => readFileSync(path.join(intDir, f), 'utf-8'))
+        .join('\n')
+    : ''
+  const admin = findAdminOnlyTablesWithoutTest({ allMigrationSql, adminTestSource })
+  const adminRanked = admin.uncovered
+    .map((t) => ({
+      table: t,
+      risk: assessRisk({ tables: [t], constraintCount: 0, appSource, allMigrationSql }),
+    }))
+    .sort((a, b) => LEVEL_ORDER[a.risk.level] - LEVEL_ORDER[b.risk.level])
+
+  console.log(
+    `■ adminだけが書けるはずだが、非adminで書けないことを試していない（${admin.uncovered.length}/${admin.adminOnlyTables.length}テーブル）`,
+  )
+  if (adminRanked.length === 0) {
+    console.log('  なし\n')
+  } else {
+    for (const r of adminRanked) {
       console.log(`  ${LEVEL_LABEL[r.risk.level]} ${r.table}`)
       for (const reason of r.risk.reasons) console.log(`           - ${reason}`)
     }

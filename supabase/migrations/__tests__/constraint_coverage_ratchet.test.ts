@@ -3,6 +3,7 @@ import path from 'path'
 import { describe, it, expect } from 'vitest'
 import {
   assessRisk,
+  findAdminOnlyTablesWithoutTest,
   findRlsTablesWithoutIdorTest,
   findUndeclaredCardinality,
   findUncoveredConstraintMigrations,
@@ -91,6 +92,17 @@ const actualRlsRisk = new Map(
   ]),
 )
 
+const adminTestSource = existsSync(INTEGRATION_DIR)
+  ? readdirSync(INTEGRATION_DIR)
+      .filter((f) => f.includes('admin'))
+      .map((f) => readFileSync(path.join(INTEGRATION_DIR, f), 'utf-8'))
+      .join('\n')
+  : ''
+const adminUncovered: string[] = findAdminOnlyTablesWithoutTest({
+  allMigrationSql,
+  adminTestSource,
+}).uncovered
+
 /** 業務データ判定の材料としてアプリ本体のソースを集める（生成物の型定義は含めない） */
 function collectSource(dirs: string[]): string {
   const chunks: string[] = []
@@ -130,6 +142,15 @@ describe('DB制約カバレッジのratchet（issue #675 再発防止）', () =>
     //   （known-failure-patterns.md「動いたからOKで…見逃す（issue #24再発防止）」参照）
     const added = rlsUncovered.filter((t) => !baselineRlsTables.includes(t))
     expect(added).toEqual([])
+  })
+
+  it('adminだけが書けるのに非adminで試していないテーブルが無い', () => {
+    // WHY: RLS/IDOR軸で「施設境界の約束が無い」として除外したマスタ群は、
+    //      代わりに admin境界を守っている。そちらの軸を持たないと
+    //      「面倒な指摘を除外リストに逃がしただけ」になる。
+    //      直し方: *-admin-boundary.integration.test.ts に
+    //      「非adminでは書けない／adminなら書ける」の対照テストを追加する
+    expect(adminUncovered).toEqual([])
   })
 
   it('rlsIdorNotRequired の各行に理由が書かれている', () => {

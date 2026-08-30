@@ -85,7 +85,9 @@ export async function createFacility(serviceClient: SupabaseClient, dummyName: s
 export async function createSeededUser(
   serviceClient: SupabaseClient,
   emailPrefix: string,
-  facilityId: string
+  facilityId: string,
+  /** 既定は staff（従来の呼び出し側の挙動を変えない）。is_admin() は role='admin' で真になる */
+  role: 'staff' | 'admin' | 'viewer' = 'staff'
 ): Promise<SeededUser> {
   const email = `${emailPrefix}-${randomUUID()}@example.test`
 
@@ -101,7 +103,7 @@ export async function createSeededUser(
 
   const { error: linkError } = await serviceClient
     .from('user_facilities')
-    .insert({ user_id: userId, facility_id: facilityId, role: 'staff' })
+    .insert({ user_id: userId, facility_id: facilityId, role })
   if (linkError) {
     throw new Error(`[seed-rls-idor] user_facilities作成失敗 (${email}): ${linkError.message}`)
   }
@@ -597,6 +599,102 @@ export async function cleanupPriceHistoriesFixtures(
     .delete()
     .eq('distributor_product_id', fixtures.distributorProduct.id)
   await cleanupHospitalPricesRlsIdorFixtures(fixtures)
+}
+
+export interface SeedAdminBoundaryFixtures {
+  facility: { id: string; name: string }
+  /** role='admin'。is_admin() が真になる */
+  adminUser: SeededUser
+  /** role='staff'。施設のメンバーだが admin ではない */
+  staffUser: SeededUser
+  /** 既存行の更新・削除を試すための種 */
+  existing: { categoryId: string; productId: string; distributorProductId: string }
+  /**
+   * product_compatibilities の insert検証用。UUID辞書順で small < large に整列済み。
+   * WHY: 同じ製品IDを2つ渡すと `no_self_compat` CHECK で**誰が呼んでも失敗**し、
+   *      「adminでないから拒否された」ことを検証できない（実際にこの罠を踏んだ）。
+   *      逆順でも `ordered_pair` CHECK で同様に失敗するため、正しい順序で渡す。
+   */
+  compatPair: { small: string; large: string }
+  productId2: string
+  runId: string
+}
+
+/**
+ * admin境界（adminだけが書けるマスタ）の検証用シード。
+ *
+ * WHY: categories / distributor_products / products / product_compatibilities / facilities は
+ *      SELECT が `USING (true)`（テナント非分離）で、書き込みだけが `is_admin()` に限定される。
+ *      施設境界の約束が無いのでIDOR軸からは除外したが、**代わりに admin 境界という別の
+ *      約束がある**。そこを一度も試していなかった（`findAdminOnlyTablesWithoutTest` で発覚）。
+ *      is_admin() は user_facilities.role='admin' を見るだけなので、シードは role 違いの
+ *      ユーザーを2人作るだけでよい。
+ */
+export async function seedAdminBoundaryFixtures(): Promise<SeedAdminBoundaryFixtures> {
+  const serviceClient = createServiceRoleClient()
+  const runId = randomUUID()
+
+  const facility = await createFacility(serviceClient, `テスト施設-${runId}`)
+  const adminUser = await createSeededUser(serviceClient, 'admin-boundary-admin', facility.id, 'admin')
+  const staffUser = await createSeededUser(serviceClient, 'admin-boundary-staff', facility.id, 'staff')
+
+  const insertOne = async (table: string, row: Record<string, unknown>) => {
+    const { data, error } = await serviceClient.from(table).insert(row).select('id').single()
+    if (error || !data) {
+      throw new Error(`[seed-rls-idor] ${table} シード作成失敗: ${error?.message}`)
+    }
+    return data.id as string
+  }
+
+  const categoryId = await insertOne('categories', { name: `admin境界テストカテゴリ-${runId}` })
+  const productId = await insertOne('products', {
+    jan: `jan-admin-${runId}`,
+    ref: `ref-admin-${runId}`,
+    name: `admin境界テスト製品-${runId}`,
+  })
+  const distributorProductId = await insertOne('distributor_products', {
+    product_id: productId,
+    category_id: categoryId,
+    maker: 'テストメーカー',
+    supplier: 'テスト販売業者',
+    name: `admin境界テスト取扱商品-${runId}`,
+  })
+
+  // product_compatibilities の insert検証には**別の製品**が要る（自己参照禁止のため）
+  const productId2 = await insertOne('products', {
+    jan: `jan-admin2-${runId}`,
+    ref: `ref-admin2-${runId}`,
+    name: `admin境界テスト製品2-${runId}`,
+  })
+  const [small, large] =
+    productId < productId2 ? [productId, productId2] : [productId2, productId]
+
+  return {
+    facility,
+    adminUser,
+    staffUser,
+    existing: { categoryId, productId, distributorProductId },
+    compatPair: { small, large },
+    productId2,
+    runId,
+  }
+}
+
+export async function cleanupAdminBoundaryFixtures(
+  fixtures: SeedAdminBoundaryFixtures
+): Promise<void> {
+  const serviceClient = createServiceRoleClient()
+  await serviceClient.auth.admin.deleteUser(fixtures.adminUser.id)
+  await serviceClient.auth.admin.deleteUser(fixtures.staffUser.id)
+  await serviceClient.from('facilities').delete().eq('id', fixtures.facility.id)
+  // products の削除で distributor_products / product_compatibilities も CASCADE で消える
+  await serviceClient
+    .from('products')
+    .delete()
+    .in('id', [fixtures.existing.productId, fixtures.productId2])
+  await serviceClient.from('categories').delete().eq('id', fixtures.existing.categoryId)
+  // adminが対照テストで作った行（名前に runId を含む）も後始末する
+  await serviceClient.from('categories').delete().like('name', `%${fixtures.runId}%`)
 }
 
 export interface SeedProductCompatibilitiesFixtures {

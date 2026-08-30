@@ -89,6 +89,14 @@ DB制約は「破ろうとしたら拒否される」ことでしか検証でき
 `CREATE POLICY` を持つのに `*-rls-idor.integration.test.ts` に一度も登場しないテーブルを
 同じく怪しい順に出し、新規発生をratchetで止める（下記「issue #24再発防止」と対になる機構）。
 
+さらに**admin境界**（`findAdminOnlyTablesWithoutTest`）も同じ型で検知する。
+`categories` / `distributor_products` / `products` / `product_compatibilities` / `facilities` は
+SELECTが `USING (true)` でテナント非分離のため施設境界の軸からは除外されるが、
+**書き込みだけが `is_admin()` に限定される**という別の約束を持つ。除外したまま
+admin側の軸を作らないと「面倒な指摘を除外リストに逃がしただけ」になるため対で運用する。
+`is_facility_member` / `is_facility_writer` との OR は「adminは追加の許可」であって
+境界ではないので対象外（この区別を入れないと15テーブルが該当しノイズになる。実測確認済み）。
+
 **リストの読み方（重要）**: このリストは「**ここは確かめていない**」と言っているだけで、
 「**ここ以外は確かめてある**」とは言っていない。障害時に「載っているからまず疑う」に使うのは
 正しいが、「載っていないから違う」に使うと調査が遅れる。カバレッジ%と同じ誤読に注意する。

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   assessRisk,
+  findAdminOnlyTablesWithoutTest,
   findRlsTablesWithoutIdorTest,
   findUncoveredConstraintMigrations,
   findUndeclaredCardinality,
@@ -227,6 +228,54 @@ describe('findRlsTablesWithoutIdorTest（認可側への応用）', () => {
       idorTestSource: '',
     })
     expect(result).toEqual({ policyTables: [], uncovered: [] })
+  })
+})
+
+describe('findAdminOnlyTablesWithoutTest（認可のもう一方の軸）', () => {
+  const adminOnly = `
+    CREATE POLICY "categories_write" ON categories
+      FOR ALL TO authenticated USING (is_admin()) WITH CHECK (is_admin());
+  `
+  // adminは「追加の許可」であって境界ではないケース
+  const facilityOrAdmin = `
+    CREATE POLICY "facility_writer_or_admin" ON loan_orders
+      FOR ALL TO authenticated
+      USING (is_facility_writer(facility_id) OR is_admin());
+  `
+
+  it('adminだけが書けるテーブルを拾う', () => {
+    const result = findAdminOnlyTablesWithoutTest({
+      allMigrationSql: adminOnly,
+      adminTestSource: '',
+    })
+    expect(result.adminOnlyTables).toEqual(['categories'])
+    expect(result.uncovered).toEqual(['categories'])
+  })
+
+  it('is_facility_member / is_facility_writer との OR は対象外にする', () => {
+    // WHY: この区別を入れないと15テーブルが該当してノイズだらけになる（実測で確認）。
+    //      これらは「adminは追加の許可」であって admin境界ではない
+    const result = findAdminOnlyTablesWithoutTest({
+      allMigrationSql: adminOnly + facilityOrAdmin,
+      adminTestSource: '',
+    })
+    expect(result.adminOnlyTables).toEqual(['categories'])
+  })
+
+  it('SELECTのみのポリシーは書き込み境界ではないので対象外', () => {
+    const result = findAdminOnlyTablesWithoutTest({
+      allMigrationSql: `CREATE POLICY "p" ON products FOR SELECT TO authenticated USING (is_admin());`,
+      adminTestSource: '',
+    })
+    expect(result.adminOnlyTables).toEqual([])
+  })
+
+  it('admin境界テストに登場していればuncoveredにしない', () => {
+    const result = findAdminOnlyTablesWithoutTest({
+      allMigrationSql: adminOnly,
+      adminTestSource: "it('staffはcategoriesを作成できない', ...)",
+    })
+    expect(result.uncovered).toEqual([])
   })
 })
 
