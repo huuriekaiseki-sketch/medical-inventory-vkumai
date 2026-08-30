@@ -33,6 +33,7 @@
 | SessionStart | `check-automode-config.sh` | warning-only | autoMode(hard_deny)未設定の警告（個人設定のため機械強制不可） |
 | SessionStart | `check-blocked-issues-staleness.sh` | warning-only | `blocked`ラベル長期滞留issueの警告 |
 | SessionStart | `check-fault-injection-drill-staleness.sh` | warning-only | fault injection訓練の実施タイミング警告 |
+| SessionStart | `check-stale-worktrees.sh` | warning-only | worktree・ローカルブランチ残骸の蓄積警告（issue #674）。マージ/クローズ済みPRに対応するworktree数・goneブランチ数（閾値超過時）を警告。削除は不可逆に近い操作のため意図的にwarning-only |
 | Stop | `check-gap-check-state.sh` | **自動復旧（queue）** | gap check警告を`gap-check-followup`としてqueue登録（issue #488・#523） |
 | Stop | `check-domain-decisions-suggest.sh` | warning-only | 高リスクドメイン変更時のドキュメント反映漏れ提案。**issue #685でagent型からcommand型へ置き換えた**（agent版は抑止条件に該当する場面でも毎ターンサブエージェントを起動し、「何も返さない」指示に反して判定理由を返し続けていた）。重複抑止はマーカーファイルで決定的に行い、「設計判断かどうか」の判断だけをメインループへ委ねる。**これによりagent型hookは0本になった** |
 | Stop | `ai-check-suggest.sh` | warning-only | `npm run ai:check`実行有無の警告 |
@@ -55,11 +56,11 @@
 - ask: 1件
 - 自動復旧（queue、うち登録側）: 2件（`check-workflow-interruption.sh`・`check-gap-check-state.sh`）
 - 自動復旧（queue、表示側）: 1件（`check-recovery-queue.sh`）
-- warning-only: 14件
+- warning-only: 15件
 
-約20件の検知hookのうち、機械的に実行を止める・確認を強制する（block/ask）のは3件。
+約21件の検知hookのうち、機械的に実行を止める・確認を強制する（block/ask）のは3件。
 recovery-queue接続によって「次回セッション冒頭で機械的に目の前に出る」までは自動化されている
-ものが3件。残る14件はすべて、systemMessageが出力された後の是正判断・実行タイミングを完全に
+ものが3件。残る15件はすべて、systemMessageが出力された後の是正判断・実行タイミングを完全に
 人（またはそれを読んだセッション）に委ねている。
 
 （2026-08-10訂正: `verify-claims.sh`は当初この表でwarning-onlyと誤記されていたが、実装は

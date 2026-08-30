@@ -88,6 +88,8 @@
       "Bash(bash scripts/check-blocked-issues-staleness.test.sh*)",
       "Bash(scripts/check-fault-injection-drill-staleness.sh *)",
       "Bash(bash scripts/check-fault-injection-drill-staleness.test.sh*)",
+      "Bash(scripts/check-stale-worktrees.sh*)",
+      "Bash(bash scripts/check-stale-worktrees.test.sh*)",
       "Bash(curl -s http://localhost:*)",
       "Bash(sort *)",
       "Bash(ps *)",
@@ -184,6 +186,11 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-recovery-queue.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-stale-worktrees.sh",
+            "timeout": 20
           }
         ]
       }
