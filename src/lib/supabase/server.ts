@@ -18,7 +18,7 @@ export async function createServerSupabase() {
               cookieStore.set(name, value, options)
             )
           } catch {
-            // Server Components は cookies を書けない。middleware が token refresh を担当する。
+            // Server Components は cookies を書けない。proxy（旧middleware）が token refresh を担当する。
           }
         },
       },

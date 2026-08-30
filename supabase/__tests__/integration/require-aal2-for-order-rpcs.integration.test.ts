@@ -98,7 +98,7 @@ describe('発注RPCはMFA登録済みユーザーのaal2昇格を要求する(is
 
   it('MFA登録済みだがaal1のセッションでは発注RPCがforbidden(aal2 required)で拒否される', async () => {
     // パスワードのみの再サインインは、factorが検証済みでも新規セッションはaal1から始まる
-    // (src/middleware.tsのnextLevel判定と同じ挙動)
+    // (src/proxy.ts（旧middleware.ts）のnextLevel判定と同じ挙動)
     const client = createAnonClient()
     await signInAtAal1(client, email, TEST_USER_PASSWORD)
 

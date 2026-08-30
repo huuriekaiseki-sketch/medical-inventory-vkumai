@@ -6,7 +6,7 @@
 
 **結論: 高リスクパス・ドメインに触れる変更はレビュー省略可否を人間の裁量に委ねず、無条件でM/L扱いにする。**
 
-`supabase/migrations/` ・`src/lib/supabase/` ・`middleware.ts` ・auth/facility/tenant/
+`supabase/migrations/` ・`src/lib/supabase/` ・`middleware.ts`/`proxy.ts` ・auth/facility/tenant/
 organization/inventory/RLS/policyドメインに触れる変更は、無条件でM/L扱い（RISK=はい）と
 common.mdに定めている。
 

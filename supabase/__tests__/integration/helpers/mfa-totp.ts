@@ -64,7 +64,7 @@ export async function enrollAndVerifyTotp(
 }
 
 // パスワードのみの再サインインは、factorが検証済みでも新規セッションはaal1から始まる
-// (src/middleware.tsのnextLevel判定と同じ挙動)。
+// (src/proxy.ts（旧middleware.ts）のnextLevel判定と同じ挙動)。
 export async function signInAtAal1(client: SupabaseClient, email: string, password: string): Promise<void> {
   const { error } = await client.auth.signInWithPassword({ email, password })
   if (error) throw new Error(`サインイン失敗: ${error.message}`)

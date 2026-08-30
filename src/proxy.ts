@@ -1,6 +1,7 @@
-// src/middleware.ts
+// src/proxy.ts
 // WHY: 全パスの認証ガード（未認証→/login）と admin ガード（/admin/*, /api/admin/*）を
-//      middleware で一元化し、重複実装を避けるため。セッションリフレッシュも同時実行。
+//      proxy（旧middleware。Next.js 16でファイル規約がproxyへ改名、issue #681）で
+//      一元化し、重複実装を避けるため。セッションリフレッシュも同時実行。
 //      admin判定はresolveIsAdmin()（src/lib/admin-status.ts）に一本化する。
 //      SECURITY DEFINER RPC(get_admin_status)を使うため、Edge Runtimeでも
 //      service role keyなしにセッション付きクライアントでDB roleベース判定＋
@@ -17,7 +18,7 @@ const PUBLIC_PATHS = ['/login', '/auth/callback']
 // currentLevelと異なる間は/mfa-challenge以外へのアクセスを許さない。
 const MFA_CHALLENGE_PATH = '/mfa-challenge'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
