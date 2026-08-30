@@ -56,6 +56,7 @@ MATCHED="$(printf '%s' "$CHANGED_FILES" | grep -E \
   -e '^supabase/migrations/' \
   -e '^src/lib/supabase/' \
   -e '(^|/)middleware\.ts$' \
+  -e '(^|/)proxy\.ts$' \
   -e '(facilit|tenant|organization|inventor|rls|polic|auth)' || true)"
 # WHY: 語尾変化を拾うため語幹で照合する。`facility` と書くと `facilities/` に一致せず
 #      取りこぼす（テストで検出）。`polic`→policy/policies、`inventor`→inventory/inventories

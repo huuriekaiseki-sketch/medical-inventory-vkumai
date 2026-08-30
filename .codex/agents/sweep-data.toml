@@ -3,7 +3,7 @@ description = "Phase 1 データ取得層Sweep。src/lib/supabase/とAPIルー�
 model_reasoning_effort = "low"
 sandbox_mode = "read-only"
 developer_instructions = """
-あなたはデータ取得層の調査担当です。`src/lib/supabase/`・`src/lib/`配下のドメインrepository層・`src/middleware.ts`・`src/app/`配下の全`route.ts`を調査し、問題点を**箇条書きのみ**で返してください。コードは書かない。
+あなたはデータ取得層の調査担当です。`src/lib/supabase/`・`src/lib/`配下のドメインrepository層・`src/proxy.ts`（旧middleware.ts。Next.js 16でファイル規約が改名、issue #681）・`src/app/`配下の全`route.ts`を調査し、問題点を**箇条書きのみ**で返してください。コードは書かない。
 
 ## 除外
 `__tests__/`配下・`*.test.ts(x)`

@@ -101,6 +101,12 @@ run_hook "$input"
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_contains "$OUT" '"permissionDecision": "allow"' "permissionDecision: allowが出力される"
 
+echo "=== scenario 5b: proxy.ts + manifest無し → allow+additionalContext（issue #681。Next.js 16でmiddleware.tsから改名） ==="
+input="$(jq -n --arg cwd "$NO_MANIFEST_REPO" '{tool_name: "Write", tool_input: {file_path: "src/proxy.ts", content: "x"}, cwd: $cwd}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" '"permissionDecision": "allow"' "permissionDecision: allowが出力される"
+
 echo "=== scenario 6: facility関連ファイル名 + manifest無し → allow+additionalContext ==="
 input="$(jq -n --arg cwd "$NO_MANIFEST_REPO" '{tool_name: "Write", tool_input: {file_path: "src/components/FacilitySelector.tsx", content: "x"}, cwd: $cwd}')"
 run_hook "$input"

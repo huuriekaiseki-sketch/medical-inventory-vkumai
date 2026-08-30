@@ -83,7 +83,7 @@ Phase 1 調査(並列) → Phase 2 仕様書 → [停止① 人間レビュー]
 
 - `supabase/migrations/` 配下のファイル
 - `src/lib/supabase/` 配下のファイル
-- `middleware.ts`（プロジェクト内のすべての middleware）
+- `middleware.ts` / `proxy.ts`（プロジェクト内のすべてのmiddleware/proxy。proxy.tsはNext.js 16でmiddleware.tsから改名された同一ファイル規約。issue #681）
 - パス・ファイル名・変更内容が以下のドメインに関わるファイル：
   **auth / facility / tenant / organization / inventory / RLS / policy**
 

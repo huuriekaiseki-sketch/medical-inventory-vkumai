@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { middleware } from '../middleware'
+import { proxy } from '../proxy'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Mock createServerClient
@@ -40,7 +40,7 @@ function makeSupabaseClientWithAdminRpc(
   }
 }
 
-describe('middleware', () => {
+describe('proxy', () => {
   afterEach(() => {
     vi.resetAllMocks()
   })
@@ -58,7 +58,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/facilities')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response).toBeInstanceOf(NextResponse)
       expect(response?.status).toBe(307) // redirect
@@ -76,7 +76,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/login')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       // PUBLIC_PATHS なのでリダイレクトされない
       expect(response?.status).not.toBe(307)
@@ -94,7 +94,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/auth/callback')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).not.toBe(307)
     })
@@ -121,7 +121,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/facilities')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       // 認証済みなのでリダイレクトされない
       expect(response?.status).not.toBe(307)
@@ -145,7 +145,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/admin/settings')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).toBe(307)
     })
@@ -164,7 +164,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/admin/settings')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).toBe(307)
     })
@@ -181,7 +181,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/api/admin/users')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).toBe(307)
     })
@@ -200,7 +200,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/admin/users')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).not.toBe(307)
     })
@@ -220,7 +220,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/admin/settings')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       // ADMIN_EMAILS が空なので admin チェック失敗→ リダイレクト
       expect(response?.status).toBe(307)
@@ -243,7 +243,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/admin')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).not.toBe(307)
     })
@@ -263,7 +263,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/admin')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).toBe(307)
     })
@@ -287,7 +287,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/admin/settings')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).not.toBe(307)
     })
@@ -307,14 +307,14 @@ describe('middleware', () => {
         new URL('http://localhost:3000/admin/settings')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).toBe(307)
     })
   })
 
   describe('updateSession（トークンリフレッシュ）', () => {
-    it('middleware が cookie セットを呼び出す', async () => {
+    it('proxy が cookie セットを呼び出す', async () => {
       const { createServerClient } = await import('@supabase/ssr')
       vi.mocked(createServerClient).mockReturnValueOnce({
         auth: {
@@ -327,7 +327,7 @@ describe('middleware', () => {
       )
       request.cookies.set = vi.fn()
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       // レスポンスは正常に返される
       expect(response).toBeInstanceOf(NextResponse)
@@ -350,7 +350,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/facilities')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).toBe(307)
       expect(response?.headers.get('location')).toContain('/mfa-challenge')
@@ -371,7 +371,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/mfa-challenge')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).not.toBe(307)
     })
@@ -391,7 +391,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/facilities')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).not.toBe(307)
     })
@@ -411,7 +411,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/facilities')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       expect(response?.status).not.toBe(307)
     })
@@ -440,7 +440,7 @@ describe('middleware', () => {
         new URL('http://localhost:3000/adminfoo')
       )
 
-      const response = await middleware(request)
+      const response = await proxy(request)
 
       // /adminfoo は admin パスではないので、通常のみドルウェアロジック通す
       expect(response).toBeInstanceOf(NextResponse)

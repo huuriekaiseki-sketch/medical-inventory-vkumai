@@ -22,6 +22,7 @@ on:
       - 'supabase/__tests__/**'
       - 'src/lib/supabase/**'
       - '**/middleware.ts'
+      - '**/proxy.ts'   # middleware.tsの後継（Next.js 16、issue #681）。移行期間中の互換のためmiddleware.tsも残す
       - '.github/workflows/integration-gate.yml'
   workflow_dispatch:
 

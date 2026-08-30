@@ -29,6 +29,11 @@ describe('classifyRisk', () => {
     expect(result.isHighRisk).toBe(true)
   })
 
+  it('taskDescriptionにキーワードが無くてもproxy.tsの変更があれば高リスク（issue #681。Next.js 16でmiddleware.tsから改名）', () => {
+    const result = classifyRisk('リファクタ', ['src/proxy.ts'])
+    expect(result.isHighRisk).toBe(true)
+  })
+
   it('taskDescriptionにキーワードが無くてもドメインキーワードを含むパスの変更があれば高リスク（issue #286の完了条件）', () => {
     const result = classifyRisk('画面のちょっとした調整', ['src/app/(pages)/facility/settings/page.tsx'])
     expect(result.isHighRisk).toBe(true)

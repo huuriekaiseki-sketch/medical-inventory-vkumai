@@ -102,6 +102,8 @@ setup_fake_git "src/lib/supabase/server.ts"
 assert_contains "$(run_hook hooktest-libsupabase)" "高リスクドメイン" "src/lib/supabase/ → 通知"
 setup_fake_git "middleware.ts"
 assert_contains "$(run_hook hooktest-middleware)" "高リスクドメイン" "middleware.ts → 通知"
+setup_fake_git "src/proxy.ts"
+assert_contains "$(run_hook hooktest-proxy)" "高リスクドメイン" "proxy.ts → 通知（issue #681。Next.js 16でmiddleware.tsから改名）"
 
 echo "== 7. ファイル名にドメイン語を含む場合も対象 =="
 setup_fake_git "src/lib/facilities/repository.ts"

@@ -19,7 +19,7 @@ paths:
   integrationテスト）をローカル実行してから作業を完了する**（2026-08-25、Actions無料枠対応で
   `e2e.yml`のPR自動実行を廃止したため）。実行結果は引き継ぎメモの「検証済み」欄に記載する
   - **このうちパスで表せる範囲は、`integration-gate.yml`がPR時点で機械的にゲートする**
-    （`supabase/migrations/**`・`supabase/__tests__/**`・`src/lib/supabase/**`・`**/middleware.ts`）。
+    （`supabase/migrations/**`・`supabase/__tests__/**`・`src/lib/supabase/**`・`**/middleware.ts`・`**/proxy.ts`）。
     従来は`push:[main]`のみで、壊れたRLS変更をマージ前に止められなかった
   - **ただしローカル実行義務は無くならない**。`paths`はファイルパスしか見られず、TRI/RISK基準の
     内容ベース判定（auth / facility / tenant / organization / inventory / RLS / policy に

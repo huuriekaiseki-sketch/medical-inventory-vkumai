@@ -28,7 +28,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 # 対象ツール: Write / Edit / MultiEdit（tool_input.file_pathに書き込み先が現れる）。
 # .claude/settings.jsonのmatcherと本スクリプトのcase文の両方を揃える必要がある。
 
-HIGH_RISK_PATTERN='(^|/)supabase/migrations/|(^|/)src/lib/supabase/|(^|/)middleware\.ts$|[Aa]uth|[Ff]acility|[Tt]enant|[Oo]rganization|[Ii]nventory|[Rr][Ll][Ss]|[Pp]olicy'
+HIGH_RISK_PATTERN='(^|/)supabase/migrations/|(^|/)src/lib/supabase/|(^|/)middleware\.ts$|(^|/)proxy\.ts$|[Aa]uth|[Ff]acility|[Tt]enant|[Oo]rganization|[Ii]nventory|[Rr][Ll][Ss]|[Pp]olicy'
 
 INPUT="$(cat)"
 TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')"

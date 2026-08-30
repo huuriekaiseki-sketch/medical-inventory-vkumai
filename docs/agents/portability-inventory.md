@@ -32,7 +32,7 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 | Supabase RLS/migration概念、`supabase db diff`等のCLI呼び出し | `supabase/migrations/`・`.claude/rules/db-schema.md` | DBがSupabase(PostgreSQL)であることに強く依存 |
 | facility/tenant/organization/inventory等のドメインキーワード | `.claude/workflows/lib/router-risk.js`の`RISK_KEYWORDS`一部 | 医療在庫管理ドメイン固有の語彙 |
 | GitHub issue/PR連携（`gh`コマンド依存） | `docs/agents/common.md`各所、`scripts/check-branch-pr-status.sh`等 | GitHub以外のissue tracker（Linear等）を使うリポジトリでは差し替えが必要 |
-| Next.js App Router固有の構造（`src/app/`・`middleware.ts`） | ルート`CLAUDE.md`「プロジェクト設定」 | フレームワーク固有のディレクトリ規約 |
+| Next.js App Router固有の構造（`src/app/`・`proxy.ts`/旧`middleware.ts`） | ルート`CLAUDE.md`「プロジェクト設定」 | フレームワーク固有のディレクトリ規約 |
 | e2e/env-guard.ts・Playwright認証状態（`--isolated --storage-state`） | `e2e/`配下、`.claude/rules/e2e-test-hygiene.md` | Playwright前提。本番Supabase分離の実装もこのスタック向け |
 | `.env.local`/`.env.test`分離と`scripts/create-worktree.sh`の自動コピー | `docs/agents/common.md`「ブランチ運用ルール」 | Next.js/Supabaseの環境変数運用に特化 |
 

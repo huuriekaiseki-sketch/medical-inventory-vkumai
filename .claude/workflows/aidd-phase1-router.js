@@ -29,7 +29,7 @@ export const meta = {
 const RISK_KEYWORDS = [
   // パス由来
   'migrations', 'migration', 'マイグレーション', 'スキーマ',
-  'src/lib/supabase', 'middleware.ts', 'ミドルウェア',
+  'src/lib/supabase', 'middleware.ts', 'proxy.ts', 'ミドルウェア',
   // ドメイン由来（common.md TRI/RISK基準）
   'auth', '認証', 'ログイン',
   'facility', '施設',
@@ -48,8 +48,12 @@ const RISK_DOMAIN_KEYWORDS = ['auth', 'facility', 'tenant', 'organization', 'inv
 function isHighRiskPath(filePath) {
   const normalized = String(filePath).toLowerCase().replace(/\\/g, '/')
   if (RISK_PATH_PREFIXES.some(prefix => normalized.startsWith(prefix))) return true
-  // middleware.ts はプロジェクト内のすべてのmiddlewareが対象（common.md）
+  // middleware.ts / proxy.ts はプロジェクト内のすべてが対象（common.md）。
+  // proxy.tsはNext.js 16でmiddleware.tsから改名された同一ファイル規約（issue #681）。
+  // 移行前後どちらのブランチでも高リスク判定が抜け落ちないよう両方を判定する
+  // （middleware.tsの削除は当issueのスコープ外・恒久的に併存させる方針）。
   if (normalized === 'middleware.ts' || normalized.endsWith('/middleware.ts')) return true
+  if (normalized === 'proxy.ts' || normalized.endsWith('/proxy.ts')) return true
   return RISK_DOMAIN_KEYWORDS.some(kw => normalized.includes(kw))
 }
 
