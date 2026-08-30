@@ -17,5 +17,10 @@ paths:
   呼ばないと、正規のPRレビュー済み変更であっても`table_added`/`table_removed`ドリフトとして恒久的に誤検知され続け、対応するGitHub Issueが自動クローズされなくなる
 - **`supabase/migrations/`やRLSポリシーを変更したPRでは、`npm run test:integration`（RLS/IDOR
   integrationテスト）をローカル実行してから作業を完了する**（2026-08-25、Actions無料枠対応で
-  `e2e.yml`のPR自動実行を廃止したため。CIでの自動実行はmainへのpush後のみ）。実行結果は
-  引き継ぎメモの「検証済み」欄に記載する
+  `e2e.yml`のPR自動実行を廃止したため）。実行結果は引き継ぎメモの「検証済み」欄に記載する
+  - **このうちパスで表せる範囲は、`integration-gate.yml`がPR時点で機械的にゲートする**
+    （`supabase/migrations/**`・`supabase/__tests__/**`・`src/lib/supabase/**`・`**/middleware.ts`）。
+    従来は`push:[main]`のみで、壊れたRLS変更をマージ前に止められなかった
+  - **ただしローカル実行義務は無くならない**。`paths`はファイルパスしか見られず、TRI/RISK基準の
+    内容ベース判定（auth / facility / tenant / organization / inventory / RLS / policy に
+    関わる変更）は表現できないため、上記パス外でRLSの約束に触れる変更はゲートに掛からない

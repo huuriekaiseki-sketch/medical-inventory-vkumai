@@ -1,27 +1,39 @@
-name: E2E Smoke Tests
+name: RLS/DB Integration Gate
 
-# WHY: PRごとの自動実行はPlaywright+ローカルSupabase起動で1回あたりの消費分数が最大級で、
-# Actions無料枠枯渇(2026-08)の主因だったため、mainへのpush後と手動起動のみに変更した。
-# PR段階のE2Eはローカル実行(npm run test:e2e)で代替する。
-# RLS/IDOR integrationテストについては、**高リスクパスに触れたPRに限り**
-# integration-gate.yml がPR時点で必須ゲートとして走る（全PRではないので消費分数は抑えられる）。
-# それ以外のPRおよび内容ベースの高リスク判定は、引き続き .claude/rules/db-schema.md の
-# ローカル実行義務に依存する。認証ファイル漏洩チェックはPRごとに回る
-# ci.ymlのhooks-testジョブへ移設した。
+# WHY: RLS/IDOR統合テスト(npm run test:integration)は e2e.yml で回っているが、
+# トリガーが push:[main] のみのため **マージ前に壊れたRLS変更を止められない**
+# （mainへ入った後で初めて鳴る火災報知器になっている）。
+#
+# 一方で全PRでローカルSupabase起動を伴うジョブを回すと、Actions無料枠の枯渇
+# （2026-08、e2e.yml をPRトリガーから外した理由）を再発させる。
+#
+# 折衷として、docs/agents/common.md「TRI/RISK 機械判定基準」の高リスクパスに
+# 触れたPRだけをゲート対象にする。Playwrightのインストールとe2e実行は行わず、
+# 統合テストのみを走らせることで、e2e.yml より消費分数を抑える。
+#
+# 既知の限界: paths フィルタはファイルパスしか見られないため、TRI/RISK基準のうち
+# 「auth / facility / tenant / organization / inventory / RLS / policy に関わる変更」
+# という**内容ベースの判定は表現できない**。パスで表せる範囲のみをここでゲートし、
+# 内容ベースの判定は引き続き .claude/rules/db-schema.md のローカル実行義務に依存する。
 on:
-  push:
-    branches: [main]
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/__tests__/**'
+      - 'src/lib/supabase/**'
+      - '**/middleware.ts'
+      - '.github/workflows/integration-gate.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  group: integration-gate-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  e2e:
+  integration:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -33,9 +45,6 @@ jobs:
 
       - name: Install dependencies
         run: npm install
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
 
       - uses: supabase/setup-cli@v3
         with:
@@ -64,14 +73,3 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_API_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
-
-      - name: Run E2E smoke tests
-        run: npm run test:e2e
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_API_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
-          NEXT_PUBLIC_SITE_URL: http://localhost:3000
-          # WHY: ダミーデータ規約（docs/agents/common.md）に合わせた固定のテスト用メール。
-          #      ローカルSupabaseは毎回まっさらな状態なので機密情報ではなくsecrets化不要
-          E2E_TEST_EMAIL: e2e-test-user@example.com
