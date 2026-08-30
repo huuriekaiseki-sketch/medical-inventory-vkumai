@@ -6,44 +6,13 @@
 //      TOTPコードはRFC 6238に基づきNode組み込みcryptoのみで生成し、新規npm依存
 //      (otpauth等)を追加しない。
 
-import { randomUUID, createHmac } from 'crypto'
+import { randomUUID } from 'crypto'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { assertTestSupabaseEnv } from '../../../e2e/env-guard'
+import { enrollAndVerifyTotp, signInAtAal1, stepUpToAal2 } from './helpers/mfa-totp'
 
 const TEST_USER_PASSWORD = 'require-aal2-order-rpcs-test-0000'
-
-function base32Decode(input: string): Buffer {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
-  const clean = input.toUpperCase().replace(/=+$/, '')
-  let bits = ''
-  for (const char of clean) {
-    const val = alphabet.indexOf(char)
-    if (val === -1) throw new Error(`invalid base32 character: ${char}`)
-    bits += val.toString(2).padStart(5, '0')
-  }
-  const bytes: number[] = []
-  for (let i = 0; i + 8 <= bits.length; i += 8) {
-    bytes.push(parseInt(bits.slice(i, i + 8), 2))
-  }
-  return Buffer.from(bytes)
-}
-
-// RFC 6238 (TOTP) / RFC 4226 (HOTP) 準拠。30秒ステップ・6桁・SHA1。
-function generateTotp(secretBase32: string): string {
-  const key = base32Decode(secretBase32)
-  const counter = Math.floor(Date.now() / 1000 / 30)
-  const counterBuffer = Buffer.alloc(8)
-  counterBuffer.writeBigUInt64BE(BigInt(counter))
-  const hmac = createHmac('sha1', key).update(counterBuffer).digest()
-  const offset = hmac[hmac.length - 1] & 0xf
-  const binCode =
-    ((hmac[offset] & 0x7f) << 24) |
-    ((hmac[offset + 1] & 0xff) << 16) |
-    ((hmac[offset + 2] & 0xff) << 8) |
-    (hmac[offset + 3] & 0xff)
-  return (binCode % 1_000_000).toString().padStart(6, '0')
-}
 
 function createServiceRoleClient(): SupabaseClient {
   assertTestSupabaseEnv()
@@ -107,8 +76,7 @@ describe('発注RPCはMFA登録済みユーザーのaal2昇格を要求する(is
 
   it('MFA未登録・aal1のセッションでは発注RPCが成功する(既存ユーザーへの回帰なし)', async () => {
     const client = createAnonClient()
-    const { error: signInError } = await client.auth.signInWithPassword({ email, password: TEST_USER_PASSWORD })
-    expect(signInError).toBeNull()
+    await signInAtAal1(client, email, TEST_USER_PASSWORD)
 
     const { error } = await client.rpc('create_loan_order_atomic', {
       p_facility_id: facilityId,
@@ -121,32 +89,18 @@ describe('発注RPCはMFA登録済みユーザーのaal2昇格を要求する(is
 
   it('TOTP factorをenroll・verifyできる(以降のテストの前提)', async () => {
     const client = createAnonClient()
-    const { error: signInError } = await client.auth.signInWithPassword({ email, password: TEST_USER_PASSWORD })
-    expect(signInError).toBeNull()
+    await signInAtAal1(client, email, TEST_USER_PASSWORD)
 
-    const { data: enrollData, error: enrollError } = await client.auth.mfa.enroll({ factorType: 'totp' })
-    expect(enrollError).toBeNull()
-    expect(enrollData).not.toBeNull()
-    factorId = enrollData!.id
-    secret = enrollData!.totp.secret
-
-    const { data: challengeData, error: challengeError } = await client.auth.mfa.challenge({ factorId })
-    expect(challengeError).toBeNull()
-
-    const { error: verifyError } = await client.auth.mfa.verify({
-      factorId,
-      challengeId: challengeData!.id,
-      code: generateTotp(secret),
-    })
-    expect(verifyError).toBeNull()
+    const enrolled = await enrollAndVerifyTotp(client)
+    factorId = enrolled.factorId
+    secret = enrolled.secret
   }, 30_000)
 
   it('MFA登録済みだがaal1のセッションでは発注RPCがforbidden(aal2 required)で拒否される', async () => {
     // パスワードのみの再サインインは、factorが検証済みでも新規セッションはaal1から始まる
     // (src/middleware.tsのnextLevel判定と同じ挙動)
     const client = createAnonClient()
-    const { error: signInError } = await client.auth.signInWithPassword({ email, password: TEST_USER_PASSWORD })
-    expect(signInError).toBeNull()
+    await signInAtAal1(client, email, TEST_USER_PASSWORD)
 
     const { data: aal } = await client.auth.mfa.getAuthenticatorAssuranceLevel()
     expect(aal?.currentLevel).toBe('aal1')
@@ -164,18 +118,8 @@ describe('発注RPCはMFA登録済みユーザーのaal2昇格を要求する(is
 
   it('MFA登録済みでaal2まで昇格したセッションでは発注RPCが成功する', async () => {
     const client = createAnonClient()
-    const { error: signInError } = await client.auth.signInWithPassword({ email, password: TEST_USER_PASSWORD })
-    expect(signInError).toBeNull()
-
-    const { data: challengeData, error: challengeError } = await client.auth.mfa.challenge({ factorId })
-    expect(challengeError).toBeNull()
-
-    const { error: verifyError } = await client.auth.mfa.verify({
-      factorId,
-      challengeId: challengeData!.id,
-      code: generateTotp(secret),
-    })
-    expect(verifyError).toBeNull()
+    await signInAtAal1(client, email, TEST_USER_PASSWORD)
+    await stepUpToAal2(client, factorId, secret)
 
     const { error } = await client.rpc('create_loan_order_atomic', {
       p_facility_id: facilityId,
@@ -184,5 +128,79 @@ describe('発注RPCはMFA登録済みユーザーのaal2昇格を要求する(is
       p_items: [],
     })
     expect(error).toBeNull()
+  })
+
+  describe('残りの発注・返却RPC(create_case_order_atomic/create_consumable_order_atomic/create_loan_return_atomic、issue #684)', () => {
+    it('create_case_order_atomicはaal1で拒否・aal2で成功する', async () => {
+      const aal1Client = createAnonClient()
+      await signInAtAal1(aal1Client, email, TEST_USER_PASSWORD)
+      const { error: aal1Error } = await aal1Client.rpc('create_case_order_atomic', {
+        p_facility_id: facilityId,
+        p_case_datetime: new Date().toISOString(),
+        p_procedure_name: 'aal2テスト術式(RPC-case)',
+        p_patient_id: 'PT-RPC-1',
+        p_patient_initials: 'R.P.',
+        p_gender: 'other',
+        p_doctor_name: 'RPCテスト医師',
+        p_items: [],
+      })
+      expect(aal1Error).not.toBeNull()
+      expect(aal1Error?.message).toContain('aal2')
+
+      const aal2Client = createAnonClient()
+      await signInAtAal1(aal2Client, email, TEST_USER_PASSWORD)
+      await stepUpToAal2(aal2Client, factorId, secret)
+      const { error: aal2Error } = await aal2Client.rpc('create_case_order_atomic', {
+        p_facility_id: facilityId,
+        p_case_datetime: new Date().toISOString(),
+        p_procedure_name: 'aal2テスト術式(RPC-case)',
+        p_patient_id: 'PT-RPC-2',
+        p_patient_initials: 'R.P.',
+        p_gender: 'other',
+        p_doctor_name: 'RPCテスト医師',
+        p_items: [],
+      })
+      expect(aal2Error).toBeNull()
+    })
+
+    it('create_consumable_order_atomicはaal1で拒否・aal2で成功する', async () => {
+      const aal1Client = createAnonClient()
+      await signInAtAal1(aal1Client, email, TEST_USER_PASSWORD)
+      const { error: aal1Error } = await aal1Client.rpc('create_consumable_order_atomic', {
+        p_facility_id: facilityId,
+        p_items: [],
+      })
+      expect(aal1Error).not.toBeNull()
+      expect(aal1Error?.message).toContain('aal2')
+
+      const aal2Client = createAnonClient()
+      await signInAtAal1(aal2Client, email, TEST_USER_PASSWORD)
+      await stepUpToAal2(aal2Client, factorId, secret)
+      const { error: aal2Error } = await aal2Client.rpc('create_consumable_order_atomic', {
+        p_facility_id: facilityId,
+        p_items: [],
+      })
+      expect(aal2Error).toBeNull()
+    })
+
+    it('create_loan_return_atomicはaal1で拒否・aal2で成功する', async () => {
+      const aal1Client = createAnonClient()
+      await signInAtAal1(aal1Client, email, TEST_USER_PASSWORD)
+      const { error: aal1Error } = await aal1Client.rpc('create_loan_return_atomic', {
+        p_header: { facility_id: facilityId, return_datetime: new Date().toISOString() },
+        p_items: [],
+      })
+      expect(aal1Error).not.toBeNull()
+      expect(aal1Error?.message).toContain('aal2')
+
+      const aal2Client = createAnonClient()
+      await signInAtAal1(aal2Client, email, TEST_USER_PASSWORD)
+      await stepUpToAal2(aal2Client, factorId, secret)
+      const { error: aal2Error } = await aal2Client.rpc('create_loan_return_atomic', {
+        p_header: { facility_id: facilityId, return_datetime: new Date().toISOString() },
+        p_items: [],
+      })
+      expect(aal2Error).toBeNull()
+    })
   })
 })
