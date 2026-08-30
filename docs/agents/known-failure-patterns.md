@@ -46,6 +46,61 @@ Next.js API Route（`requireFacilityAccess`等）を経由せず直接呼び出�
 
 詳細: [`decisions/db-rls.md`](./decisions/db-rls.md#なぜ施設分離をrls--is_facility_member関数で実現したか)
 
+### 後付けFK列のカーディナリティを宣言しないまま放置する（issue #675）
+
+**チェック内容:** 既存テーブルへ `ALTER TABLE ... ADD COLUMN ... REFERENCES` で
+関係を後付けしたら、その場で「**1対1か1対多か**」を宣言する。
+1対1なら同じPRで UNIQUE 制約/部分UNIQUEインデックスを追加し、1対多なら SQL に
+`-- cardinality: many <理由>` と書く。
+
+**実際に起きたこと:** 2026-07-14 の `20260714000005_orders_history_prereqs.sql` が
+`loan_returns` へ `loan_order_id UUID REFERENCES loan_orders(id)` を追加したが、
+「loan_order 1件に返却は1件まで」というカーディナリティを誰も宣言しなかった。
+宣言されなかったので仕様書にも書かれず、テストにも現れず、レビューでも問われず、
+**84コミット・CI 1400本超を6週間通過し続けた**（2026-08-28 の issue #675 で発覚）。
+
+**なぜテストで気づけなかったか:** 当該RPCの migration テスト
+（`add_loan_order_id_to_loan_return_atomic_rpc.test.ts`）は
+`expect(sql).toContain('insert into loan_returns (facility_id, return_datetime, loan_order_id)')`
+という**実装で書いたSQL文字列を同じ文字列で照合する静的検証**だった。
+実装の鏡になっているため、書き忘れたものは原理的に検出できない。
+また `loan_returns` の統合テスト4本はすべて「**誰が**アクセスできるか」（RLS/IDOR）で、
+「**何件まで**許すか」の軸が1つも無かった。
+
+**教訓:** Assert は「あるべきものがある」だけでなく「**あってはならないものが無い**」を書く。
+DB制約は「破ろうとしたら拒否される」ことでしか検証できず、静的SQL検証では原理的に確かめられない。
+
+**機械検知:** `supabase/migrations/__tests__/constraint_coverage_ratchet.test.ts`
+（`npm test` に含まれる）が、①カーディナリティ未宣言の後付けFK列、②制約を導入したのに
+そのテーブルが実DB統合テストに一度も登場しない migration、の2つを ratchet 方式で止める
+（既知の未対応分は `constraint-coverage-baseline.json` に固定し、新規発生のみを失敗させる）。
+判定ロジックは `.claude/workflows/lib/constraint-coverage.js`。
+
+`scripts/check-constraint-coverage.sh` は現存する穴を**怪しい順**に表示する。怪しさは
+機械判定（人の申告に依存しない）で、材料は「アプリのコード(`src/`)がそのテーブルを実際に
+読み書きしているか（＝業務データか裏方か）」「`facility_id` を持つか（＝施設境界に関わるか）」
+「制約の個数（＝書き忘れの余地の大きさ）」の3つ。判定結果は
+`constraint-coverage-baseline.json` にも書き写され、機械判定とズレるとratchetテストが落ちる
+（負債リストが「書いたきり陳腐化する」ことを防ぐ）。
+
+同じ検知の型を**認可の側にも適用**している（`findRlsTablesWithoutIdorTest`）。
+「RLSポリシーを書いた」＝「他人から守られている」ではなく、守られていることは
+**他人（別施設のユーザー）のIDで実際に叩いて弾かれる**ことでしか確かめられない。
+`CREATE POLICY` を持つのに `*-rls-idor.integration.test.ts` に一度も登場しないテーブルを
+同じく怪しい順に出し、新規発生をratchetで止める（下記「issue #24再発防止」と対になる機構）。
+
+さらに**admin境界**（`findAdminOnlyTablesWithoutTest`）も同じ型で検知する。
+`categories` / `distributor_products` / `products` / `product_compatibilities` / `facilities` は
+SELECTが `USING (true)` でテナント非分離のため施設境界の軸からは除外されるが、
+**書き込みだけが `is_admin()` に限定される**という別の約束を持つ。除外したまま
+admin側の軸を作らないと「面倒な指摘を除外リストに逃がしただけ」になるため対で運用する。
+`is_facility_member` / `is_facility_writer` との OR は「adminは追加の許可」であって
+境界ではないので対象外（この区別を入れないと15テーブルが該当しノイズになる。実測確認済み）。
+
+**リストの読み方（重要）**: このリストは「**ここは確かめていない**」と言っているだけで、
+「**ここ以外は確かめてある**」とは言っていない。障害時に「載っているからまず疑う」に使うのは
+正しいが、「載っていないから違う」に使うと調査が遅れる。カバレッジ%と同じ誤読に注意する。
+
 ### 新しい認可プリミティブ導入時、既存のSECURITY DEFINER関数が取り残される（issue #458）
 
 **チェック内容:** `is_admin()`のような新しい認可プリミティブを導入し、既存のRLSポリシーを

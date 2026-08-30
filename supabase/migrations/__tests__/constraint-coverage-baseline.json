@@ -1,0 +1,30 @@
+{
+  "_why": "issue #675 の再発防止。既知の未対応分をここに固定し、新規発生のみをテストで止める（ratchet）。riskは機械判定の結果を書き写したもので、ズレるとテストが落ちる（放置しても陳腐化しないようにするため）。既存分を解消したら該当行を削除すること。",
+  "_riskの意味": {
+    "high": "アプリのコードが読み書きする業務データで、制約が多いか施設境界に関わる。優先して統合テストを書く",
+    "medium": "アプリのコードが読み書きするが、制約が少なく施設境界にも関わらない",
+    "low": "アプリのコードが一度も触っていない裏方テーブル。実DBで試す必要は薄い"
+  },
+  "_rlsIdorNotRequiredとは": "「他施設から見えてはいけない」という約束がそもそも無いテーブル。負債の免除ではなく検知条件の訂正であり、理由を必須にする。約束が後から変わったら（施設スコープを導入したら）ここから外すこと。下記3件は 2026-08-30 にリポジトリ所有者が『施設非分離でよい』と業務要件として確認済み（SQLの読み取りだけでなく人の承認を得ている）",
+  "rlsIdorNotRequired": [
+    {
+      "table": "categories",
+      "reason": "マスタ。意図的にテナント非分離で SELECT は USING(true)。守る約束は施設境界ではなくadmin境界（categories_write が is_admin()）"
+    },
+    {
+      "table": "distributor_products",
+      "reason": "マスタ。同上（distributor_products_select が USING(true)、write が is_admin()）"
+    },
+    {
+      "table": "product_compatibilities",
+      "reason": "マスタ。migration に「本機能はテナント非分離＝施設スコープなし」と明記。compat_select が USING(true)、compat_write が is_admin()"
+    }
+  ],
+  "rlsWithoutIdorTest": [],
+  "undeclaredCardinality": [],
+  "_既知の偽陰性": "この軸は『テーブル名が統合テストに登場するか』で判定するため、登場さえすれば消える。実際 price_histories の CHECK 制約（entity_type/field_name の許可値）は、GRANTがSELECTのみで service_role でも直接INSERTできず、唯一の書き手であるSECURITY DEFINERトリガーが固定リテラルを渡すため、**どのクライアント経路からも違反させられない**（実測確認済み）。代わりにトリガーが正しい履歴を残すことを price-histories-rls-idor.integration.test.ts で検証している",
+  "uncoveredIntegration": [
+    { "migration": "20260714000001_create_schema_drift_detection.sql", "risk": "low" },
+    { "migration": "20260714000003_schema_drift_v1_hardening.sql", "risk": "low" }
+  ]
+}

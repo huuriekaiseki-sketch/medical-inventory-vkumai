@@ -42,6 +42,7 @@
 | Stop | `check-aidd-phase-stats-recorded.sh` | warning-only | AIDD stats phase1/phase2呼び忘れの警告（issue #524） |
 | Stop | `check-handoff-format.sh` | warning-only | PR本文の引き継ぎフォーマット必須見出し欠如の警告（issue #524。PR本文経由のみ対象） |
 | Stop | `check-find-av-precision-recorded.sh` | warning-only | find-av-precisionログ記録漏れの警告（issue #522） |
+| （参考）`npm test`（CI含む） | `supabase/migrations/__tests__/constraint_coverage_ratchet.test.ts` | **block**（テスト失敗、ただしCI上の強制力はプラン依存） | issue #675。カーディナリティ未宣言の後付けFK列・統合テスト対応の無い制約migrationの**新規発生**を止める（既知分はbaselineに固定するratchet方式）。hookではなくテストなので、ローカル`npm test`とCIの両方で機械的に起動する。ただし本リポジトリはFreeプランでCI失敗がマージを阻止しないため、実効的な強制力はローカル実行時に限る |
 | （参考）per-edit | security-guidanceプラグイン（`possible_real_facility_name`等） | warning-only | issue #440。Claude Code公式プラグイン経由、上記`.claude/settings.json`のhooksとは別経路 |
 
 （`SubagentStart`/`SubagentStop`の`log-subagent-hook-skeleton.sh`は検知ではなく記録専用のため

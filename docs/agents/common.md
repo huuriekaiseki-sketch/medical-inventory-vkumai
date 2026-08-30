@@ -228,6 +228,8 @@ AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p
 | `scripts/lib/canonical-event.ts` | hook/journal/agent-progress/loop-observabilityの4ログを正規化する読み取り専用Adapter層（issue #569） |
 | `scripts/harvest-journal-events.sh` / `scripts/lib/harvest-journal-events.ts` | Workflow journal(wf_*)をtranscript cleanupで消える前に`logs/journal-harvest.jsonl`へ収穫（Stop hook契機・source+agentIdで重複排除。issue #642） |
 | `scripts/summarize-gate-passfail.sh` / `scripts/lib/gate-effectiveness-summary.ts` | 収穫済みjournalベースでagentType別pass/fail/blockedを集計し月次品質ゲートサマリへ出力（旧summarize-gate-blocked.sh=blockedのみ集計を統合。issue #569・#642） |
+| `.claude/workflows/lib/constraint-coverage.js` | DB制約の2つの穴（後付けFK列のカーディナリティ未宣言・制約migrationの実DB統合テスト欠落）の判定ロジック正本（issue #675） |
+| `scripts/check-constraint-coverage.sh` | 現存する穴を**怪しい順**に表示（怪しさは機械判定：業務データか裏方か・施設境界に関わるか・制約の個数）。新規発生の阻止は`supabase/migrations/__tests__/constraint_coverage_ratchet.test.ts`が`npm test`で行う |
 | `scripts/check-agent-progress-gap.sh` | agent-progress記録漏れの機械検知（issue #339） |
 | `scripts/record-gap-check-state.sh` | gap check用before/expected件数の記録（issue #488。オーケストレーター専用） |
 | `scripts/check-gap-check-state.sh` | Stop hookによるgap checkの自動実行（issue #488） |

@@ -14,6 +14,7 @@ create trigger categories_updated_at
 grant all on table public.categories to postgres, anon, authenticated, service_role;
 
 -- distributor_products.category(text) → category_id(uuid FK)
+-- cardinality: many 1つのカテゴリに複数の取扱商品がぶら下がる（カテゴリはマスタ側）
 alter table distributor_products
   add column category_id uuid references categories(id);
 
