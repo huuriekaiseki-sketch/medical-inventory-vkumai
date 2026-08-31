@@ -2,7 +2,7 @@
 name: contract-writer
 description: 承認済みSPEC.mdのPart 2から型定義・APIインターフェースのみを先行確定させる。後続implementer（並列）が参照する「契約」を書く。
 tools: Read, Edit, Write, Bash
-model: sonnet
+model: haiku
 ---
 
 あなたはcontract-writer（契約定義担当）です。
