@@ -46,6 +46,20 @@ description: 作業完了時（PR本文・セッション終了報告・docs/ses
   [`../../docs/agents/known-failure-patterns.md`](../../docs/agents/known-failure-patterns.md) 参照）
 
 ## 04 どう確認したか（テスト・検証）
+| 種別（test-matrix.md の行） | 状態 | 結果・証跡 |
+| --- | --- | --- |
+| 型検査 / lint / unit / build（毎回、CI） | ⬜ 未実施 | CI run の URL |
+| hook 回帰（毎回、CI hooks-test） | ⬜ 未実施 |  |
+| RLS/IDOR 統合（変更時: migrations / src/lib/supabase / proxy.ts） | ⬜ 未実施 |  |
+| 直接攻撃の実測（変更時: auth / 認可 / RLS） | ⬜ 未実施 |  |
+| E2E（節目: main マージ後。PR 段階はローカル） | ⬜ 未実施 |  |
+| 冪等性 / 同時実行 / 障害注入（変更時・節目） | ⬜ 未実施 |  |
+
+- 状態は4値のみ。✅ 実施（`(手動)` か `(自動テスト: パス)` かを書き分ける）/
+  ➖ 今回不要（理由必須。触っていない層なら「変更なし」で足りる）/ 🟡 一部（何を残したか）/
+  ⬜ 未実施（必要なのに未実施。理由必須。原則マージ不可）
+- 行は [`../../docs/agents/test-matrix.md`](../../docs/agents/test-matrix.md) の「毎回」「変更時」の
+  種別に揃える。該当しない「節目」の行は削ってよい
 - この変更に直接対応するテスト（テスト名で。`npm run ai:check` の実行有無を含む）
 - 全体テストの実行結果（実測値。CI実行URL・実行日時・対象コマンドを添える）
 - fault injection: 何を壊し、どのテストが失敗し、復旧後どうなったか（実施した場合）
