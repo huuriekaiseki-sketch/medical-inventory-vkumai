@@ -24,16 +24,25 @@ assert_fail() {
   fail=1
 }
 
-# 一覧の表行（先頭が "| " で、区切り行 "| ---" ではないもの）を返す。
+# 一覧の表行（"## 一覧" セクション内で、先頭が "| " で、区切り行 "| ---" と見出し行ではないもの）を返す。
+# 「節目のイベント」等の別セクションの表は対象外。列数の条件は付けない（列ずれ行を無言で
+# 落とさず、check_matrix 側で違反として数えるため）。
 # 列: 1=種別 2=状態 3=実施タイミング 4=トリガー 5=理由 6=証跡 7=相場 8=コマンド
 matrix_rows() {
-  awk -F'|' '/^\| / && $2 !~ /^ *-+ *$/ && $2 !~ /^ *種別 *$/ && NF >= 10 {print}' "$MATRIX"
+  awk -F'|' '/^## 一覧/{f=1; next} /^## /{f=0} f && /^\| / && $2 !~ /^ *-+ *$/ && $2 !~ /^ *種別 *$/ {print}' "$MATRIX"
+}
+
+# .github/workflows/*.yml の jobs: 直下のジョブ名を全て返す（証跡列の「CI `xxx` ジョブ」の実在検査用）。
+# on: 配下の pull_request: 等を拾わないよう、jobs: 行からトップレベルの次のキーまでだけを見る。
+ci_job_names() {
+  awk '/^jobs:/{f=1; next} /^[^ ]/{f=0} f && /^  [a-z][a-z0-9_-]*:$/{sub(/^  /,""); sub(/:$/,""); print}' \
+    "$REPO_ROOT"/.github/workflows/*.yml | sort -u
 }
 
 # 検査本体。$1=一覧ファイル。NG件数を標準出力の末尾行に "violations=N" で返す。
 # fixture 差し替え scenario から再利用するため関数化している。
 check_matrix() {
-  local file="$1" violations=0 line status timing evidence kind
+  local file="$1" violations=0 line status timing reason evidence kind nf job jobs
 
   if [ ! -f "$file" ]; then
     echo "    missing: $file"
@@ -41,12 +50,42 @@ check_matrix() {
     return
   fi
 
+  jobs="$(ci_job_names)"
+
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     kind="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')"
+
+    # 0. 列数は8列（区切り "|" で分けると先頭・末尾の空を含めて NF=10）ちょうど。
+    #    理由や証跡に "|" を含めると列がずれ、以降の検査が別の列を見てしまうため、
+    #    ずれた行は無言で落とさず違反として数える
+    nf="$(printf '%s' "$line" | awk -F'|' '{print NF}')"
+    if [ "$nf" -ne 10 ]; then
+      echo "    columns: [$kind] 列数が8列でない（区切り数=$((nf-1))。理由・証跡に | を含めていないか）"
+      violations=$((violations+1))
+      continue
+    fi
+
     status="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')"
     timing="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')"
+    reason="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$6); print $6}')"
     evidence="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$7); print $7}')"
+
+    # 0b. ✅ 以外（➖ / 🟡 / ⬜）の行は理由列が必須（凡例の「理由必須」を機械で守る）
+    if ! printf '%s' "$status" | grep -q '✅'; then
+      if [ -z "$reason" ] || [ "$reason" = "—" ]; then
+        echo "    reason: [$kind] 状態 '$status' なのに理由列が空"
+        violations=$((violations+1))
+      fi
+    fi
+
+    # 0c. 証跡列の「CI `xxx` ジョブ」は .github/workflows/*.yml の jobs: に実在する
+    for job in $(printf '%s' "$evidence" | grep -o 'CI `[a-z][a-z0-9_-]*` ジョブ' | sed 's/CI `\(.*\)` ジョブ/\1/'); do
+      if ! printf '%s\n' "$jobs" | grep -qx "$job"; then
+        echo "    job: [$kind] 証跡の CI ジョブが存在しない: $job"
+        violations=$((violations+1))
+      fi
+    done
 
     # 1. 実施タイミングは4語 + 対象外の "—" のみ
     case "$timing" in
@@ -107,18 +146,45 @@ FIXTURE="$WORK_DIR/bad-matrix.md"
 cat > "$FIXTURE" <<'EOF'
 # fixture
 
+## 一覧
+
 | 種別 | 状態 | 実施タイミング | トリガー | 理由 | 証跡 | 相場 | コマンド |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 証跡なし✅ | ✅ | 毎回 | 全PR | 理由 | — | — | `npm test` |
 | 存在しないパス | ✅ | 毎回 | 全PR | 理由 | `scripts/this-file-does-not-exist.sh` | — | — |
 | タイミング不正 | ⬜ 未整備 | いつか | — | 理由 | — | — | — |
+| CIジョブ不在 | ✅ | 毎回 | 全PR | 理由 | CI `no-such-job` ジョブ（`package.json`） | — | — |
+| 理由なし➖ | ➖ | — | — | — | — | — | — |
+| 列ずれ | ✅ | 毎回 | 全PR | 理由 a|b | `package.json` | — | — |
 | 正常行 | ✅ | 毎回 | 全PR | 理由 | `package.json` | — | `npm test` |
+| 正常🟡 | 🟡 | 変更時 | 何か | 欠けている点 | `package.json` | — | — |
+
+## 節目のイベント
+
+| イベント | 実施する種別 |
+| --- | --- |
+| 別セクションの2列表 | 検査対象外であること |
 EOF
 RESULT="$(check_matrix "$FIXTURE")"
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=3" ]; then
-  assert_ok "違反3件（証跡なし✅・不在パス・タイミング不正）を検知"
+if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=6" ]; then
+  assert_ok "違反6件（証跡なし✅・不在パス・タイミング不正・CIジョブ不在・理由なし・列ずれ）をちょうど検知"
 else
   assert_fail "違反件数が期待と異なる" "$RESULT"
+fi
+if printf '%s\n' "$RESULT" | grep -q 'job: \[CIジョブ不在\]'; then
+  assert_ok "CIジョブ不在を検知"
+else
+  assert_fail "CIジョブ不在を検知できない"
+fi
+if printf '%s\n' "$RESULT" | grep -q 'reason: \[理由なし➖\]'; then
+  assert_ok "理由なし➖ を検知"
+else
+  assert_fail "理由なし➖ を検知できない"
+fi
+if printf '%s\n' "$RESULT" | grep -q 'columns: \[列ずれ\]'; then
+  assert_ok "列ずれを検知"
+else
+  assert_fail "列ずれを検知できない"
 fi
 if printf '%s\n' "$RESULT" | grep -q 'evidence: \[証跡なし✅\]'; then
   assert_ok "証跡なし✅ を検知"
