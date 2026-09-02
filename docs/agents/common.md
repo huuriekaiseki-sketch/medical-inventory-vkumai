@@ -176,6 +176,14 @@ Stop hook（`scripts/check-handoff-format.sh`、issue #524／新フォーマッ�
 issue #666）が「30秒サマリー」「どう確認したか」の見出しの有無を機械検知し、無ければ警告する
 （PRにつき1回・warningのみ。セッション終了報告・`docs/sessions/`経由の引き継ぎは検知対象外）。
 
+引き継ぎメモの「04 どう確認したか」は表形式・4値（✅ 実施 / ➖ 今回不要 / 🟡 一部 / ⬜ 未実施）で
+書き、行は [`test-matrix.md`](./test-matrix.md)（テスト種別ごとの実施タイミング・トリガー・証跡の
+正本）の「毎回」「変更時」の種別に揃える。「⬜ 未実施」が「今回不要」なのか「穴」なのかを
+読み手が区別できるようにするためで、一覧と 4値文言の整合は `scripts/check-test-matrix.test.sh`
+（CI `hooks-test`）が機械検査する。設計判断は
+[`decisions.md`](./decisions.md#なぜテスト一覧test-matrixmdと04の4値化を先に入れ機械導出deriveと約束カタログを後続prに分けたか)
+参照。
+
 ## 検知手段のないルールの棚卸し（issue #339）
 
 新しい運用ルールを書く前は必ず[`decisions.md`の該当原則](./decisions.md#なぜ新しい運用ルールに検知手段を先に決める原則を導入したかissue-339)を先に読むこと。
@@ -209,6 +217,7 @@ AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p
 |---|---|
 | [`docs/agents/common.md`](./common.md) | 全AIエージェント共通ルール（本ファイル）・引き継ぎフォーマット |
 | [`docs/agents/observability-internals.md`](./observability-internals.md) | 観測・Eval基盤の実装詳細・既知の限界（common.mdから分離、issue #486） |
+| [`docs/agents/test-matrix.md`](./test-matrix.md) | テスト種別ごとの実施タイミング（毎回/変更時/節目/一度きり）・トリガー・証跡の正本。整合は`scripts/check-test-matrix.test.sh`が機械検査 |
 | [`docs/agents/tooling-decisions.md`](./tooling-decisions.md) | 公式機能・プラグインの導入可否判断記録（common.mdから分離、issue #486） |
 | [`docs/agents/actuator-inventory.md`](./actuator-inventory.md) | 検知hookの検知後の是正（block/自動復旧/warning-only）の棚卸し（issue #578） |
 | [`docs/agents/portability-inventory.md`](./portability-inventory.md) | 多リポジトリ展開に向けたドメイン非依存/スタック依存の切り分け棚卸し（issue #535） |
