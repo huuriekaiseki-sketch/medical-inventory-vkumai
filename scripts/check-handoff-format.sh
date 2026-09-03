@@ -120,7 +120,8 @@ if [ "$HAS_VERIFIED" -eq 1 ]; then
       status=$3; gsub(/^ +| +$/,"",status)
       reason=$4; gsub(/^ +| +$/,"",reason)
       if (status !~ /^(✅|➖|🟡|⬜)/) { printf "%s（状態 \"%s\" が4値でない）; ", kind, status; next }
-      if (status ~ /^(➖|⬜)/ && (reason=="" || reason=="—")) { printf "%s（%s なのに理由が無い）; ", kind, substr(status,1,3) }
+      # substr は Linux の awk（C ロケール）だとバイト単位で絵文字を切るため使わない
+      if (status ~ /^(➖|⬜)/ && (reason=="" || reason=="—")) { mark = (status ~ /^➖/) ? "➖" : "⬜"; printf "%s（%s なのに理由が無い）; ", kind, mark }
     }' 2>/dev/null || true)"
 fi
 
