@@ -148,6 +148,40 @@ run_hook
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_contains "$OUT" "systemMessage" "片方のみでは警告される"
 
+echo "=== scenario 9: 04 表が4値で理由付き → 沈黙 ==="
+reset_env
+pr_command_transcript
+set_pr_response 104 $'## 30秒サマリー\n内容\n\n## 04 どう確認したか\n| 種別（test-matrix.md の行） | 状態 | 結果・証跡 |\n| --- | --- | --- |\n| 型検査 | ✅ 実施 | (自動テスト: パス) |\n| RLS/IDOR 統合（実 DB） | ➖ 今回不要 | 高リスクパスに触れていない |\n| E2E（Playwright） | 🟡 一部 | smoke のみ |\n| 直接攻撃の実測（テスト外） | ⬜ 未実施 | 認可に触れていないため次回 |\n\n## 05 何かあったら\n内容'
+run_hook
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "4値で理由付きなら沈黙する"
+
+echo "=== scenario 10: 04 表に4値でない状態・理由の無い ➖ / ⬜ がある → 行を名指しで警告 ==="
+reset_env
+pr_command_transcript
+set_pr_response 105 $'## 30秒サマリー\n内容\n\n## 04 どう確認したか\n| 種別（test-matrix.md の行） | 状態 | 結果・証跡 |\n| --- | --- | --- |\n| 型検査 | 済 | CI |\n| lint | ➖ 今回不要 |  |\n| build | ⬜ 未実施 | — |\n| unit | ✅ 実施 | パス |\n\n## 05 何かあったら\n内容'
+run_hook
+assert_eq "$EXIT_CODE" "0" "exit 0（block不可）"
+assert_contains "$OUT" "systemMessage" "警告が出る"
+assert_contains "$OUT" "4値" "4値への言及がある"
+assert_contains "$OUT" "型検査（状態" "4値でない行を種別名で名指しする"
+assert_contains "$OUT" "lint（➖ なのに理由が無い）" "理由の無い ➖ を名指しする"
+assert_contains "$OUT" "build（⬜ なのに理由が無い）" "理由の無い ⬜ を名指しする"
+if printf '%s' "$OUT" | grep -qF 'unit（'; then
+  echo "  NG: 正常行 unit が名指しされている"; fail=1
+else
+  echo "  OK: 正常行は名指しされない"
+fi
+run_hook
+assert_empty "$OUT" "同一PRでは2回目は沈黙する"
+
+echo "=== scenario 11: 04 が表ではなく箇条書き（バグ修正時の代替形式） → 検査対象外で沈黙 ==="
+reset_env
+pr_command_transcript
+set_pr_response 106 $'## 30秒サマリー\n内容\n\n## 04 どう確認したか\n- 問題→原因仮説→修正→確認結果\n\n## 05\n内容'
+run_hook
+assert_empty "$OUT" "表が無ければ4値検知は発火しない"
+
 echo "=== scenario 8: transcriptが読めない → 沈黙（fail-open） ==="
 reset_env
 rm -f "$TRANSCRIPT"
