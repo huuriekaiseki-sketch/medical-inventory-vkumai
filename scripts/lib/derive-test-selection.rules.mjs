@@ -134,7 +134,8 @@ export const RULES = [
     timing: 'on-change',
     status: 'not-ready',
     trigger: ctx => {
-      const hits = anyPath(ctx.files, /^supabase\/migrations\/.*(order|loan|return|rpc)/i)
+      // migration 本体（.sql）だけを見る。migrations/__tests__/*.test.ts はテストであり RPC の挙動を変えない
+      const hits = anyPath(ctx.files, /^supabase\/migrations\/[^/]*(order|loan|return|rpc)[^/]*\.sql$/i)
       const hit = ctx.risks.includes('retry_possible') || hits.length > 0
       return { hit, why: ctx.risks.includes('retry_possible') ? 'リスク申告 retry_possible' : `注文・返却系 RPC の migration に触れた: ${hits.join(', ')}` }
     },
@@ -147,7 +148,7 @@ export const RULES = [
     timing: 'on-change',
     status: 'not-ready',
     trigger: ctx => {
-      const hits = anyPath(ctx.files, /^supabase\/migrations\/.*(order|loan|return|inventory|stock)/i)
+      const hits = anyPath(ctx.files, /^supabase\/migrations\/[^/]*(order|loan|return|inventory|stock)[^/]*\.sql$/i)
       const hit = ctx.risks.includes('contention') || hits.length > 0
       return { hit, why: ctx.risks.includes('contention') ? 'リスク申告 contention' : `同一注文・同一在庫行を更新しうる migration に触れた: ${hits.join(', ')}` }
     },
