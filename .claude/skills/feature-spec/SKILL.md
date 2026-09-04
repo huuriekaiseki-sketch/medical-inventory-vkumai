@@ -10,8 +10,10 @@ description: 調査結果から機能仕様書を生成する。新機能の実�
 - 画面イメージ / 操作の流れ / 受け入れ条件（チェックリスト）
 - スクショ撮影ポイントには 📸 マークを付ける（STEP 7 の e2e-runner と対応させる）
 - **UI変更（見た目のレイアウトだけでなく、処理中表示・モーダル開閉・バリデーション表示タイミング等のJS/UXの挙動変化も含む）が絡む機能では、「画面イメージ」を文章で済ませず、`design`スキルでClaude Designのモックを作ることを必須とする**（文章のみでの代替は不可）。
-  モック作成後、`e2e-runner`スキルの`screenshot.sh`をローカルの`.dc.html`（または通常HTML）に`file://`パスで向けて撮影し（`screenshot.sh file:///<絶対パス> mock-<name>`）、`screenshots/`に保存した画像をPart 1に埋め込む。
   DB/API/バックエンドロジックのみで画面にも操作感にも変化が無い機能は対象外（従来通り文章のみでよい）。
+  - **静的モック**（`{{}}`バインディング・tweak無し、見た目の比較だけ）: `e2e-runner`スキルの`screenshot.sh`をローカルの`.dc.html`（または通常HTML）に`file://`パスで向けて撮影する（`screenshot.sh file:///<絶対パス> mock-<name>`）。新規スクリプト不要。
+  - **インタラクティブなモック**（クリックで状態遷移するUX等）: `.dc.html`のartboardはsandboxed iframe内に描画されるため`screenshot.sh`では撮れない。`e2e-runner`スキル同梱の`mock-capture.mjs`の`openMock()`でシード済みファイルを開き、`frame.getByText(...).click()`等で状態を進めながら`shoot(name)`で状態ごとに撮影する（実装例は同スキルのSKILL.md参照）。
+  撮影した画像は`screenshots/`に保存し、Part 1に埋め込む。
 
 ## Part 2 — 実装計画（AI用・レビュー不要）
 - 実装セット一覧（依存順）/ 各セットのテスト観点 / 型・データアクセス層の方針
