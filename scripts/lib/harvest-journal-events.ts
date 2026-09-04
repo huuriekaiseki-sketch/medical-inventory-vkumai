@@ -1,7 +1,9 @@
 import { appendFileSync, mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { journalAdapter, type CanonicalEvent } from './canonical-event'
+// 拡張子付き import: npx tsx ではなく Node 標準の型除去（--experimental-strip-types）で直接実行するため
+// （Node の ESM 解決は拡張子を補完しない。tsconfig の allowImportingTsExtensions で型検査も通す）
+import { journalAdapter, type CanonicalEvent } from './canonical-event.ts'
 
 // WHY: issue #642。journalAdapterが読むwf_*ディレクトリ(~/.claude/projects/配下)は
 // transcript cleanupで消えるため(実測: 2026-08-22時点で3ディレクトリしか残存せず)、

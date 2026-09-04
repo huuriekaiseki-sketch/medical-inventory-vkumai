@@ -32,7 +32,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci   # ロックファイルどおりに展開（依存解決を省く。node-check.yml のコメント参照）
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium

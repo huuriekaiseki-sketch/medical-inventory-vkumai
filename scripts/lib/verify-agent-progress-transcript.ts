@@ -1,4 +1,4 @@
-import { loadAllEvents, correlateEvents, type CanonicalEvent, type CorrelatedExecution } from './canonical-event'
+import { loadAllEvents, correlateEvents, type CanonicalEvent, type CorrelatedExecution } from './canonical-event.ts'
 
 export type StatusComparison = 'match' | 'mismatch' | 'unknown'
 

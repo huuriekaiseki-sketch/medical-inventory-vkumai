@@ -25,8 +25,11 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
+      # WHY: npm install はロックファイルがあっても依存解決のためレジストリへ問い合わせに行き、
+      #      レジストリが遅い日は 15 秒 → 300 秒になった（2026-09-04 実測、キャッシュは命中していた）。
+      #      npm ci はロックファイルどおりに展開するだけで解決を行わず、不整合なら失敗して知らせる。
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Run npm run ${{ inputs.run-script }}
         env:
           RUN_SCRIPT: ${{ inputs.run-script }}

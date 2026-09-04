@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { getPricing } from './model-pricing'
+import { getPricing } from './model-pricing.ts'
 
 // WHY: reviewer/judge-panelはscripts/log-loop-observability.shを`--loop developer`明示で呼ぶ設計、
 //      implementer等それ以外はスクリプトのデフォルト値`agentic`に依存する設計だった（docs/agents/*.md参照）。

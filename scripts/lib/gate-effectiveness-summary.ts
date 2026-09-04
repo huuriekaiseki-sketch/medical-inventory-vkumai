@@ -1,7 +1,8 @@
 import { realpathSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { journalAdapter, type CanonicalEvent } from './canonical-event'
-import { loadHarvestedEvents } from './harvest-journal-events'
+// 拡張子付き import: Node 標準の型除去で直接実行するため（harvest-journal-events.ts のコメント参照）
+import { journalAdapter, type CanonicalEvent } from './canonical-event.ts'
+import { loadHarvestedEvents } from './harvest-journal-events.ts'
 
 // WHY: issue #569の残タスクのうち「サマリー・復旧処理をcanonical event Module経由に寄せる」を
 // 部分的に実装する。summarize-loop-observability.sh（logs/loop-observability.jsonlのみ参照）は
