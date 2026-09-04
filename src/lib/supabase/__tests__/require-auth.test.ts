@@ -10,7 +10,8 @@ function makeDb(user: User | null, error: Error | null = null): SupabaseClient {
   } as unknown as SupabaseClient
 }
 
-describe('requireAuth', () => {
+// P-001（docs/agents/promise-catalog.md）: 未認証の呼び出しは requireAuth が UNAUTHORIZED で止める
+describe('requireAuth (P-001)', () => {
   it('認証済みユーザーを返す', async () => {
     const user = { id: 'u-1', email: 'test@example.com' } as User
     const result = await requireAuth(makeDb(user))

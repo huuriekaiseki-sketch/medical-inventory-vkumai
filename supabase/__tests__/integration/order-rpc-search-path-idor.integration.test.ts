@@ -27,7 +27,8 @@ function createServiceRoleClient(): SupabaseClient {
   })
 }
 
-describe('発注作成RPC 4関数 search_path=\'\'化後のIDOR拒否確認', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-012 RPC に他施設 id は forbidden / P-041 search_path='' でも認可を迂回できない
+describe('発注作成RPC 4関数 search_path=\'\'化後のIDOR拒否確認 [P-012 P-041]', () => {
   const runId = randomUUID()
   const serviceClient = createServiceRoleClient()
 

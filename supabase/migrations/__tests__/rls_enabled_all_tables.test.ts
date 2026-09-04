@@ -117,7 +117,8 @@ function filesContainingDisableRls(): string[] {
     )
 }
 
-describe('全テーブルRLS有効化の横断静的検査', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-040 全テーブル RLS 有効・DISABLE 無し・ポリシー最低 1 つ
+describe('全テーブルRLS有効化の横断静的検査 [P-040]', () => {
   const tables = scanMigrations()
 
   it('migrationからテーブルを1つ以上検出できている（パーサ自壊の検知）', () => {

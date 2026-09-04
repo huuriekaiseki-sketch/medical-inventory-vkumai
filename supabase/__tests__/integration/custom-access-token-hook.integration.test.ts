@@ -71,7 +71,8 @@ async function signUpAndAssignRole(
   return client
 }
 
-describe('custom_access_token_hook: JWTにuser_roleクレームが埋め込まれる', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-022 user_role クレーム
+describe('custom_access_token_hook: JWTにuser_roleクレームが埋め込まれる [P-022]', () => {
   const runId = randomUUID()
   const serviceClient = createServiceRoleClient()
 

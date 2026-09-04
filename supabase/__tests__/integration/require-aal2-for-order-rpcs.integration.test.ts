@@ -36,7 +36,8 @@ function createAnonClient(): SupabaseClient {
   })
 }
 
-describe('発注RPCはMFA登録済みユーザーのaal2昇格を要求する(issue #612)', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-030 MFA 登録済みは aal2 が要る、未登録は aal1 で通る
+describe('発注RPCはMFA登録済みユーザーのaal2昇格を要求する(issue #612) [P-030]', () => {
   const runId = randomUUID()
   const serviceClient = createServiceRoleClient()
   const email = `require-aal2-${runId}@example.test`

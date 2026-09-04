@@ -118,7 +118,8 @@ function collectSource(dirs: string[]): string {
   return chunks.join('\n').toLowerCase()
 }
 
-describe('DB制約カバレッジのratchet（issue #675 再発防止）', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-042 ポリシーを持つテーブルは IDOR / admin 境界テストに登場する
+describe('DB制約カバレッジのratchet（issue #675 再発防止） [P-042]', () => {
   it('カーディナリティ未宣言の後付けFK列が新規に増えていない', () => {
     // 増えていた場合の直し方:
     //   1対1なら UNIQUE 制約/インデックスを同じPRで追加する

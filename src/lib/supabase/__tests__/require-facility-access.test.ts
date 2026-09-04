@@ -37,7 +37,8 @@ function makeDb(
   } as unknown as SupabaseClient
 }
 
-describe('requireFacilityAccess', () => {
+// P-002（docs/agents/promise-catalog.md）: 施設非所属は FORBIDDEN、admin は施設指定なしでも通る
+describe('requireFacilityAccess (P-002)', () => {
   const originalEnv = process.env.ADMIN_EMAILS
 
   beforeEach(() => {

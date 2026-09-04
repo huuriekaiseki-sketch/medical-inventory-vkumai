@@ -19,7 +19,8 @@ import {
   type SeedAdminBoundaryFixtures,
 } from './helpers/seed-rls-idor'
 
-describe('マスタテーブルのadmin境界', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-021 マスタの書き込みは admin だけ
+describe('マスタテーブルのadmin境界 [P-021]', () => {
   let fixtures: SeedAdminBoundaryFixtures
 
   beforeAll(async () => {

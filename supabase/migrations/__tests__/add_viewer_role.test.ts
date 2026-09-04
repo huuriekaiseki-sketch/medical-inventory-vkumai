@@ -22,7 +22,8 @@ function findMigrationFile(): string | undefined {
     .at(-1)
 }
 
-describe('*_add_viewer_role.sql', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-020 viewer は閲覧のみ / P-041 search_path=''
+describe('*_add_viewer_role.sql [P-020 P-041]', () => {
   const fileName = findMigrationFile()
 
   it('ファイルが存在する', () => {

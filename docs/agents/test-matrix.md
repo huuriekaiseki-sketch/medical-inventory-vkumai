@@ -6,7 +6,9 @@
 
 設計書: [`../superpowers/specs/2026-09-02-test-matrix-design.md`](../superpowers/specs/2026-09-02-test-matrix-design.md)（PR①）、
 [`../superpowers/specs/2026-09-04-derive-test-selection-design.md`](../superpowers/specs/2026-09-04-derive-test-selection-design.md)（PR②: derive キー列）。
-後続予定: auth / RLS / facility 境界に限定した約束カタログ（PR③）。
+「何を守っているか」は [`promise-catalog.md`](./promise-catalog.md)（auth / RLS / facility 境界に限定した
+約束カタログ、PR③）が正本。守るテストの `describe` 名に `P-xxx` を書き、
+`scripts/check-promise-catalog.test.sh` がカタログとテストコードを双方向に突合する。
 
 今回の変更で何が必須かは、人が表を読んで決めるのではなく `bash scripts/derive-test-selection.sh
 [base] --format table` の出力を 04 表に貼る（「➖ 今回不要」の理由はここが出す）。判定は

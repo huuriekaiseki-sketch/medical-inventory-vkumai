@@ -21,7 +21,8 @@ import {
   type SeedOrderItemsRlsIdorFixtures,
 } from './helpers/seed-rls-idor'
 
-describe('明細テーブル（親経由で施設スコープ）RLS/IDOR', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-011 更新・削除・作成できない / P-013 明細は親経由で施設スコープ
+describe('明細テーブル（親経由で施設スコープ）RLS/IDOR [P-011 P-013]', () => {
   let fixtures: SeedOrderItemsRlsIdorFixtures
 
   beforeAll(async () => {
