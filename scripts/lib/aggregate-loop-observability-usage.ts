@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { getPricing } from './model-pricing'
+import { getPricing } from './model-pricing.ts'
 
 export interface LoopObservabilityEntry {
   timestamp: string

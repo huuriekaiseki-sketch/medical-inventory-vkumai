@@ -135,6 +135,26 @@ RLSポリシーの棚卸し（`pg_policies`を見る、または`CREATE POLICY`�
 
 ## エージェント/hook運用層
 
+### CI・hook が npm レジストリに毎回依存する（`npm install` / `npx -y tsx`）
+
+**チェック内容:** `.github/workflows/*.yml` の install ステップは `npm ci`（`npm install` は使わない）。
+hook スクリプト（`scripts/*.sh`）から TypeScript / ESM を実行するときは `npx` を使わず
+`node --experimental-strip-types`（.ts）/ `node --experimental-detect-module`（.js）で直接実行し、
+その import 連鎖の相対 import には拡張子（`.ts` / `.js`）を付ける。
+`scripts/check-no-registry-fetch.test.sh`（CI `hooks-test`）が 3 点とも機械検査する。
+
+**なぜ再発したか（2026-09-04）:** CI が平常時の 4〜8 倍かかった。ジョブ内訳を取ると本体の
+実行時間は不変で、(1) `npm install` が 15 秒 → 300 秒（キャッシュ命中でもロックがあっても
+依存解決でレジストリへ行く）、(2) hooks-test の月次チェック回帰が 51 秒 → 425 秒（`npx -y tsx`
+が tsx を毎回ダウンロード。tsx は devDependencies に無く、hooks-test は node_modules 無しで走る）。
+レジストリが遅い日にだけ露出するため、コード変更と無関係に「CI が急に遅い」として現れる。
+同じ `npx -y tsx` は 6 本の hook スクリプトに散在していた（1 本直しても残りで再発する）。
+
+**副次的に見つかったこと:** `npm ci` に切り替えた初回 CI で「ロックファイルに
+`@emnapi/runtime` / `@emnapi/core` が無い」と失敗した。`npm install` はこの不整合を黙って補って
+いたため、それまで検知されなかった。`npm ci` の失敗は正しい検知なので、`npm install` に戻さず
+ロックを直す（`npm install --package-lock-only`。CI と同じ npm の版で行う）。
+
 ### hookから`claude -p`を起動する際のsettings.json/hooks継承漏れ
 
 **チェック内容:** Stop/PreToolUse等のhookスクリプトが検証・裏取り目的で`claude -p`

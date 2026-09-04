@@ -31,4 +31,6 @@ if [[ "$LOG_FILE_GIVEN" -eq 0 ]]; then
   ARGS=(--log-file "$(resolve_log_dir)/agent-progress.jsonl" "${ARGS[@]}")
 fi
 
-npx -y tsx "$SCRIPT_DIR/lib/verify-agent-progress-transcript.ts" "${ARGS[@]}"
+# WHY: npx tsx はレジストリ依存で遅い日に数分かかる（harvest-journal-events.sh のコメント参照）。
+#      Node 標準の型除去で直接実行する
+node --experimental-strip-types --no-warnings "$SCRIPT_DIR/lib/verify-agent-progress-transcript.ts" "${ARGS[@]}"

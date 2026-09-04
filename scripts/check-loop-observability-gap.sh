@@ -36,4 +36,6 @@ fi
 
 ACTUAL_COUNT=$(( AFTER_COUNT - BEFORE_COUNT ))
 
-npx -y tsx "$SCRIPT_DIR/../.claude/workflows/lib/loop-observability-gap.js" --actual "$ACTUAL_COUNT" --expected "$EXPECTED_COUNT"
+# WHY: npx tsx はレジストリ依存で遅い日に数分かかる（harvest-journal-events.sh のコメント参照）。
+#      実体は .js（ESM）なので node で直接実行する
+node --experimental-detect-module --no-warnings "$SCRIPT_DIR/../.claude/workflows/lib/loop-observability-gap.js" --actual "$ACTUAL_COUNT" --expected "$EXPECTED_COUNT"
