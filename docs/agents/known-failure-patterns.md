@@ -308,3 +308,15 @@ DELETE、RPC関数）をレビューする際は、以下を**攻撃者視点**�
 `@emnapi/core` が無い」と失敗した。悪意ではなく `npm install` が黙って補っていた不整合だったが、
 「lockfile に見覚えのない名前が出た」ときに **出所（レジストリ URL・公開者・integrity）と起点
 （`npm explain`）を確認して判断する** 手順の実演になった。
+
+### ロックファイルをローカルの npm で更新すると CI の npm と食い違う（2026-09-04）
+
+**チェック内容:** package-lock.json を更新するときは、**CI ランナーと同じ npm の版**で行う
+（`npx -y npm@<CI の npm 版> install --package-lock-only`。CI の版は setup-node のログ
+「Environment details」に出る）。ローカルの Node に同梱された npm（例: 24.11 の 11.6）と CI の
+Node 24 最新（例: 24.20 の 11.19）は版が違い、新しい npm はロックに要求する項目が多い。
+
+**なぜ再発したか:** 同日に 2 回起きた。1 回目は既存ロックの欠落、2 回目は 11.19 で直したロックを
+ローカルの 11.6 で `npm install next@… --package-lock-only` した際に、11.6 が `@emnapi/*` の項目を
+「不要」と判断して落とした。ローカルの `npm ci --dry-run` は 11.6 なので通り、CI の 11.19 だけが
+落ちる。**ローカルで通ったことは CI で通る証拠にならない**（版が違う）。
