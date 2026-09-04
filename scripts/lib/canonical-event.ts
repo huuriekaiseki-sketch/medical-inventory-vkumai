@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { loadJournalResults, pairAgentFiles, parseAgentTranscriptLines } from './reconstruct-loop-observability'
+import { loadJournalResults, pairAgentFiles, parseAgentTranscriptLines } from './reconstruct-loop-observability.ts'
 
 export type EventSource = 'subagent-skeleton' | 'journal' | 'agent-progress' | 'loop-observability'
 export type EventStatus = 'pass' | 'fail' | 'blocked' | 'done' | 'failed' | 'running' | 'starting' | 'waiting'

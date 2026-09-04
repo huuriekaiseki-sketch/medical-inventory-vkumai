@@ -53,6 +53,10 @@ if [[ ${#PROJECT_DIRS[@]} -eq 0 ]]; then
   exit 1
 fi
 
+# WHY: 以前は `npx -y tsx` で実行していたが、tsx は devDependencies に無く npx が毎回 npm レジストリへ
+#      取りに行く。CI の hooks-test（node_modules 無し）ではレジストリが遅い日に 1 回 7 分かかった
+#      （2026-09-04 実測。平常時 51 秒 → 425 秒）。Node 22.6+ / 24 標準の型除去で直接実行し、
+#      ネットワーク依存を無くす。ランナー既定の Node 22 では警告が出るため --no-warnings を付ける。
 for project_dir in "${PROJECT_DIRS[@]}"; do
-  npx -y tsx "$SCRIPT_DIR/lib/harvest-journal-events.ts" --output "$OUTPUT_FILE" --project-dir "$project_dir"
+  node --experimental-strip-types --no-warnings "$SCRIPT_DIR/lib/harvest-journal-events.ts" --output "$OUTPUT_FILE" --project-dir "$project_dir"
 done

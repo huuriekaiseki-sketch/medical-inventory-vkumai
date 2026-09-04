@@ -45,7 +45,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci   # ロックファイルどおりに展開（依存解決を省く。node-check.yml のコメント参照）
 
       - uses: supabase/setup-cli@v3
         with:
