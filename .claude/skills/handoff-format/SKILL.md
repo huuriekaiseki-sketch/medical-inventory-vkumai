@@ -30,6 +30,11 @@ description: 作業完了時（PR本文・セッション終了報告・docs/ses
 - 対象外（今回あえて触らない）:
 - 作業中に見つけた別件:（スコープ外の問題を見つけたら、その場で直さずissue化し、
   番号をここにリンクする。「このPRが原因の問題」と「元から別に存在した問題」を混同させない）
+- 依存の変更:（package.json / package-lock.json に触れた場合は必須。触れていなければ「なし」。
+  追加・更新・削除したパッケージごとに、用途 / 代替案（既存の依存・標準 API で足りない理由）/
+  権限・環境変数・DB への影響 / 固定した版と出所（registry.npmjs.org）/ `npm ci` と
+  `npm audit --omit=dev --audit-level=high` の結果 / 失敗時のロールバック方法。
+  Stop hook（`scripts/check-handoff-format.sh`）が package.json 変更 PR でこの見出しの有無を警告する）
 
 ## 01 画面がどう変わったか（UI証拠）
 - 実際のスクリーンショットか、実装前のモック/サンプルかを明記する

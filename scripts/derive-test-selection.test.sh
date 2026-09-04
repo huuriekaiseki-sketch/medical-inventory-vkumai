@@ -101,6 +101,15 @@ assert_contains "$(keys_of "$OUT" not_required)" "idempotency" "テストファ�
 assert_contains "$(keys_of "$OUT" not_required)" "concurrency" "テストファイル名の order では同時実行を要求しない"
 assert_contains "$(keys_of "$OUT" required)" "rls-idor-integration" "高リスクパス（migrations 配下）としての RLS/IDOR 統合は引き続き required"
 
+echo "=== scenario 8c: package.json / package-lock.json 変更 → 依存差分レビューが required、触れなければ not_required ==="
+run --files package.json,package-lock.json
+assert_contains "$(keys_of "$OUT" required)" "dependency-diff-review" "依存差分レビューが required"
+assert_contains "$(printf '%s' "$OUT" | jq -r '.required[] | select(.key=="dependency-diff-review") | .commands[]')" "npm audit --omit=dev --audit-level=high" "監査コマンドが出る"
+assert_contains "$(keys_of "$OUT" required)" "dependency-audit" "依存監査は毎回 required"
+assert_contains "$(keys_of "$OUT" required)" "lockfile-integrity" "ロック出所は毎回 required"
+run --files src/components/Foo.tsx
+assert_contains "$(keys_of "$OUT" not_required)" "dependency-diff-review" "依存ファイルに触れなければ not_required"
+
 echo "=== scenario 9: e2e/ 変更 → 節目の E2E がローカル実行として昇格 ==="
 run --files e2e/smoke.spec.ts
 assert_contains "$(keys_of "$OUT" required)" "e2e" "E2E が required"

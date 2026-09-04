@@ -54,6 +54,7 @@ BRANCH="feature/test-branch"
 
 # フェイクgh: `gh pr list ...`が呼ばれたら $PR_RESPONSE_FILE の中身をそのまま返す。
 # ファイルが存在しない場合は空配列を返す（PR未検出を模す）。
+PR_FILES_FILE="$WORK_DIR/pr-files.txt"
 cat > "$FAKE_GH" <<'EOF'
 #!/bin/bash
 if [ "$1" = "pr" ] && [ "$2" = "list" ]; then
@@ -64,10 +65,20 @@ if [ "$1" = "pr" ] && [ "$2" = "list" ]; then
   fi
   exit 0
 fi
+# `gh pr view N --json files --jq '.files[].path'` の模擬: 1行1パスのファイルをそのまま返す
+if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
+  if [ -f "$PR_FILES_FILE" ]; then
+    cat "$PR_FILES_FILE"
+  fi
+  exit 0
+fi
 exit 1
 EOF
 chmod +x "$FAKE_GH"
-export PR_RESPONSE_FILE
+export PR_RESPONSE_FILE PR_FILES_FILE
+set_pr_files() { # 引数: 変更ファイルパス…
+  printf '%s\n' "$@" > "$PR_FILES_FILE"
+}
 
 pr_command_transcript() {
   printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"gh pr create --title x --body y"}}]}}\n' > "$TRANSCRIPT"
@@ -93,7 +104,7 @@ run_hook() {
 }
 
 reset_env() {
-  rm -f "$MARKER" "$PR_RESPONSE_FILE"
+  rm -f "$MARKER" "$PR_RESPONSE_FILE" "$PR_FILES_FILE"
 }
 
 echo "=== scenario 1: PR作成/更新コマンドの形跡が無い → 沈黙 ==="
@@ -181,6 +192,32 @@ pr_command_transcript
 set_pr_response 106 $'## 30秒サマリー\n内容\n\n## 04 どう確認したか\n- 問題→原因仮説→修正→確認結果\n\n## 05\n内容'
 run_hook
 assert_empty "$OUT" "表が無ければ4値検知は発火しない"
+
+echo "=== scenario 12: package.json を変更した PR に「依存の変更」が無い → 警告 ==="
+reset_env
+pr_command_transcript
+set_pr_response 107 $'## 30秒サマリー\n内容\n\n## 04 どう確認したか\n| 種別（test-matrix.md の行） | 状態 | 結果・証跡 |\n| --- | --- | --- |\n| 型検査 | ✅ 実施 | パス |\n\n## 05\n内容'
+set_pr_files "src/app/page.tsx" "package.json" "package-lock.json"
+run_hook
+assert_eq "$EXIT_CODE" "0" "exit 0（block不可）"
+assert_contains "$OUT" "依存の変更" "依存の変更への言及がある"
+assert_contains "$OUT" "package.json" "変更された依存ファイルを名指しする"
+
+echo "=== scenario 13: package.json を変更した PR に「依存の変更」がある → 沈黙 ==="
+reset_env
+pr_command_transcript
+set_pr_response 108 $'## 30秒サマリー\n内容\n\n## 00 目的\n- 依存の変更: lodash 4.17.21 を追加（用途…）\n\n## 04 どう確認したか\n| 種別（test-matrix.md の行） | 状態 | 結果・証跡 |\n| --- | --- | --- |\n| 型検査 | ✅ 実施 | パス |\n\n## 05\n内容'
+set_pr_files "package.json" "package-lock.json"
+run_hook
+assert_empty "$OUT" "記述があれば沈黙する"
+
+echo "=== scenario 14: package.json に触れていない PR は「依存の変更」が無くても沈黙 ==="
+reset_env
+pr_command_transcript
+set_pr_response 109 $'## 30秒サマリー\n内容\n\n## 04 どう確認したか\n| 種別（test-matrix.md の行） | 状態 | 結果・証跡 |\n| --- | --- | --- |\n| 型検査 | ✅ 実施 | パス |\n\n## 05\n内容'
+set_pr_files "src/app/page.tsx" "docs/packages.md"
+run_hook
+assert_empty "$OUT" "依存ファイルに触れていなければ沈黙する"
 
 echo "=== scenario 8: transcriptが読めない → 沈黙（fail-open） ==="
 reset_env

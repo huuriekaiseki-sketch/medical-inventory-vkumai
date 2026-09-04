@@ -56,8 +56,26 @@ export const RULES = [
     },
   },
   { key: 'auth-file-leak', label: '認証ファイル漏洩チェック', timing: 'always', commands: ['git ls-files e2e/.auth'] },
+  { key: 'dependency-audit', label: '依存監査（既知脆弱性）', timing: 'always', commands: ['npm audit --omit=dev --audit-level=high'] },
+  { key: 'lockfile-integrity', label: 'ロックファイルの出所', timing: 'always', commands: ['bash scripts/check-lockfile-integrity.test.sh'] },
 
   // ---- 変更時 ----
+  {
+    key: 'dependency-diff-review',
+    label: '依存差分レビュー',
+    timing: 'on-change',
+    trigger: ctx => {
+      const hits = ctx.files.filter(f => /(^|\/)package(-lock)?\.json$/.test(f))
+      return { hit: hits.length > 0, why: `依存関係ファイルに触れた: ${hits.join(', ')}` }
+    },
+    notRequiredReason: 'package.json / package-lock.json に触れていない',
+    commands: [
+      'git diff origin/main -- package.json',
+      'npm ci --dry-run',
+      'npm audit --omit=dev --audit-level=high',
+      '(手動) 追加・更新した各パッケージの用途・代替案・権限/環境変数/DB への影響・固定版と出所・ロールバックを 00 欄「依存の変更」に書く。見覚えのない間接依存は npm explain <pkg> で起点を辿る',
+    ],
+  },
   {
     key: 'rls-idor-integration',
     label: 'RLS/IDOR 統合（実 DB）',

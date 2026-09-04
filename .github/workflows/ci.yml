@@ -55,6 +55,23 @@ jobs:
   # 派生リポジトリ(riff-gear)で実証済みのhooks-testジョブを逆輸入して全件を機械実行する。
   # Codex設定分離の検証(codex-config-separation.test.sh等、対応スクリプトを持たない
   # 設定検証テスト)もこのジョブで初めて機械化される。
+  # WHY: 本番依存（--omit=dev）に high 以上の既知脆弱性が無いことを毎 PR で固定する（2026-09-04、
+  # docs/agents/known-failure-patterns.md「依存関係層」）。npm audit が緑でも「安全の証明」ではなく
+  # 公開済み脆弱性に当たっていないことの確認に過ぎない。依存追加の理由は PreToolUse hook
+  # （check-dependency-change.sh）と引き継ぎメモ 00「依存の変更」が別途担う。
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
   hooks-test:
     runs-on: ubuntu-latest
     steps:

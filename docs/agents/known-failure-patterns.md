@@ -270,3 +270,53 @@ DELETE、RPC関数）をレビューする際は、以下を**攻撃者視点**�
 
 引き継ぎメモの「検証済み」欄には、他テナントIDでのアクセス確認結果を明示する
 （詳細は [`common.md`](./common.md#引き継ぎフォーマット) 参照）。
+
+## 依存関係層（npm サプライチェーン）
+
+### npm パッケージの追加を「部品を増やす作業」として通してしまう（2026-09-04）
+
+**チェック内容:** package.json / package-lock.json に触れる変更では、追加・更新・削除した
+パッケージごとに **用途 / 代替案（既存の依存・標準 API で足りない理由）/ 権限・環境変数・DB への
+影響 / 固定した版と出所（registry.npmjs.org）/ `npm ci` と `npm audit --omit=dev --audit-level=high`
+の結果 / ロールバック方法** を引き継ぎメモ 00 欄「依存の変更」に書く。見覚えのない間接依存は
+`npm explain <pkg>` で起点を辿る。npm audit が緑でも「安全の証明」ではない（公開済み脆弱性に
+当たっていないことしか分からない）。
+
+**なぜ気づきにくいか:** 悪意ある部品が入ってもアプリは普通に動き、追加分は大量の lockfile 差分や
+間接依存に紛れる。lockfile に見覚えのない名前が多いこと自体は異常ではないので、名前だけでは
+判断できない。混入経路は「AI / 共同作業者が用途を説明できない直接依存を足す」「正規パッケージの
+保守者アカウント乗っ取り」「正規パッケージの間接依存の侵害」の 3 つで、事後のスキャンは 3 つ目
+しか見ない。
+
+**機械検知（検査名ごとに見つけられる事故が違う。ひとまとめに「テスト済み」と報告しない）:**
+
+| 検査 | 実体 | 分かること | 分からないこと |
+| --- | --- | --- | --- |
+| 追加の瞬間の人間確認 | PreToolUse `scripts/check-dependency-change.sh`（ask。Codex は deny） | AI が無確認に依存を足す・package.json を書き換える | 人が承認した依存の内部 |
+| 依存差分レビュー | Stop `scripts/check-handoff-format.sh`（package.json 変更 PR に「依存の変更」が無ければ警告） | 説明の無い依存変更 PR | 記述の中身の妥当性 |
+| クリーンインストール | CI 全ジョブの `npm ci`（`npm install` は `scripts/check-no-registry-fetch.test.sh` で禁止） | package.json と lockfile の不整合、PC だけで動く依存状態 | lockfile に既に入った悪意ある部品 |
+| ロックファイルの出所 | `scripts/check-lockfile-integrity.test.sh`（hooks-test） | レジストリ外の出所、integrity 欠落、git / file / http 指定 | レジストリ上の正規パッケージ内部の悪意 |
+| 既知脆弱性 | CI `dependency-audit` ジョブ（`npm audit --omit=dev --audit-level=high`） | 公開済み脆弱性 | 未公表の攻撃、登録されていない悪意あるコード |
+| Dependabot | `.github/dependabot.yml`（weekly） | 古い版の放置 | 新版そのものの侵害 |
+
+**入ってしまったら:** 疑いのある変更を含むデプロイを止め、安全だったコミットへ戻し、侵害期間中に
+読まれた可能性のある認証情報（GitHub・Supabase・DB・外部 API）をローテーションし、信頼できる
+コミットからクリーン環境で `npm ci` して再ビルドする。パッケージを消すだけでは、既に読まれた
+認証情報は取り戻せない。
+
+**実例（2026-09-04）:** `npm ci` へ切り替えた初回 CI が「lockfile に `@emnapi/runtime` /
+`@emnapi/core` が無い」と失敗した。悪意ではなく `npm install` が黙って補っていた不整合だったが、
+「lockfile に見覚えのない名前が出た」ときに **出所（レジストリ URL・公開者・integrity）と起点
+（`npm explain`）を確認して判断する** 手順の実演になった。
+
+### ロックファイルをローカルの npm で更新すると CI の npm と食い違う（2026-09-04）
+
+**チェック内容:** package-lock.json を更新するときは、**CI ランナーと同じ npm の版**で行う
+（`npx -y npm@<CI の npm 版> install --package-lock-only`。CI の版は setup-node のログ
+「Environment details」に出る）。ローカルの Node に同梱された npm（例: 24.11 の 11.6）と CI の
+Node 24 最新（例: 24.20 の 11.19）は版が違い、新しい npm はロックに要求する項目が多い。
+
+**なぜ再発したか:** 同日に 2 回起きた。1 回目は既存ロックの欠落、2 回目は 11.19 で直したロックを
+ローカルの 11.6 で `npm install next@… --package-lock-only` した際に、11.6 が `@emnapi/*` の項目を
+「不要」と判断して落とした。ローカルの `npm ci --dry-run` は 11.6 なので通り、CI の 11.19 だけが
+落ちる。**ローカルで通ったことは CI で通る証拠にならない**（版が違う）。
