@@ -34,3 +34,8 @@ await close()
 `openMock()`はiframeの領域を特定してクリップ撮影する`shoot(name)`を返す。クリック・待機の
 組み立てはモックごとに異なるため、この短いスクリプトを都度書く（実装で使う必要は無く、
 実装前モック撮影のためだけの使い捨てスクリプトでよい）。
+
+**Before/Afterを1つのキャンバスに複数artboardで並べた場合は要注意**: iframeが複数になり、
+DOM順が`canvas.json`のartboards配列の順と一致するとは限らない。`openMock(path, {artboardIndex: N})`
+で対象を明示し（0始まり）、`shoot()`で撮った画像を必ず目視で確認してから使う（違うartboardを
+撮っていても気づかずに進めてしまった実例があるため）。

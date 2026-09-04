@@ -15,6 +15,12 @@ description: 調査結果から機能仕様書を生成する。新機能の実�
   - **インタラクティブなモック**（クリックで状態遷移するUX等）: `.dc.html`のartboardはsandboxed iframe内に描画されるため`screenshot.sh`では撮れない。`e2e-runner`スキル同梱の`mock-capture.mjs`の`openMock()`でシード済みファイルを開き、`frame.getByText(...).click()`等で状態を進めながら`shoot(name)`で状態ごとに撮影する（実装例は同スキルのSKILL.md参照）。
   撮影した画像は`screenshots/`に保存し、Part 1に埋め込む。
 
+  **Before/Afterを1つのキャンバスに並べる場合**（`design`スキル使用）:
+  - `Before.dc.html`(現状)と`Main.dc.html`(変更後)の2artboardを作り、`canvas.json`で横に並べる。`Main.dc.html`という名前は変えない（キャンバスを開いた時の既定フォーカス先という特別な意味があるため）。表示上「After」と見せたい場合は`canvas.json`の該当artboardに`"title": "After"`を足す（ファイル名はそのまま、見出しだけ変わる）
+  - クリックで実際に状態が変わるようにしたいartboardには`"is_interactive": true`を付ける
+  - **一覧の各行を独立して操作可能にする場合、状態を単一の`phase`で持たない**（1行しか動かなくなる、実際にやってしまった失敗）。`renderVals()`で行ごとの状態オブジェクト（`row1`/`row2`/`row3`等）を返し、テンプレート側は`{{row1.isIdle}}`のようにドット区切りで参照する
+  - 撮影は`mock-capture.mjs`の`artboardIndex`で対象artboardを明示し、`shoot()`の画像を必ず目視確認する（複数artboardがあるとDOM順が`canvas.json`の並び順と一致するとは限らないため、狙いと違うartboardを撮っていても気づかず進めてしまうことがある）
+
 ## Part 2 — 実装計画（AI用・レビュー不要）
 - 実装セット一覧（依存順）/ 各セットのテスト観点 / 型・データアクセス層の方針
 - 並列グループ宣言：各セットが**触るファイル**を書き、互いに別ファイルだけのセットを同じ「波」（同時実装可）にまとめる。共有ファイルを触る結線は波にせず統合ゲートへ。

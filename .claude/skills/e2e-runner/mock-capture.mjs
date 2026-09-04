@@ -6,13 +6,20 @@ import { chromium } from 'playwright'
 import path from 'node:path'
 import fs from 'node:fs'
 
-export async function openMock(seededHtmlPath, { outDir = 'screenshots', viewport = { width: 1280, height: 900 } } = {}) {
+export async function openMock(seededHtmlPath, { outDir = 'screenshots', viewport = { width: 1280, height: 900 }, artboardIndex = 0 } = {}) {
   fs.mkdirSync(outDir, { recursive: true })
   const browser = await chromium.launch()
   const page = await browser.newPage({ viewport })
   await page.goto(`file://${path.resolve(seededHtmlPath)}`)
-  const frame = page.frameLocator('iframe').first()
-  const iframeHandle = await page.locator('iframe').first().elementHandle()
+
+  // WHY: canvas.jsonで複数artboardを並べたキャンバスではiframeが複数存在し、
+  //      DOM順は必ずしもartboards配列の順と一致しない。誤って違うartboardを掴んで
+  //      撮影してしまった実例があるため、呼び出し側にartboardIndexを明示させ、
+  //      shoot()の結果を必ず目視確認することを前提にする（iframeCountを返す）
+  const iframeCount = await page.locator('iframe').count()
+  const targetLocator = page.locator('iframe').nth(artboardIndex)
+  const frame = page.frameLocator('iframe').nth(artboardIndex)
+  const iframeHandle = await targetLocator.elementHandle()
 
   async function shoot(name) {
     // WHY: iframeのbounding boxは撮影のたびに再取得する。状態遷移でartboard自体の
@@ -27,5 +34,5 @@ export async function openMock(seededHtmlPath, { outDir = 'screenshots', viewpor
     await browser.close()
   }
 
-  return { page, frame, shoot, close }
+  return { page, frame, shoot, close, iframeCount }
 }
