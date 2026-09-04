@@ -58,6 +58,9 @@ description: 作業完了時（PR本文・セッション終了報告・docs/ses
 - 状態は4値のみ。✅ 実施（`(手動)` か `(自動テスト: パス)` かを書き分ける）/
   ➖ 今回不要（理由必須。触っていない層なら「変更なし」で足りる）/ 🟡 一部（何を残したか）/
   ⬜ 未実施（必要なのに未実施。理由必須。原則マージ不可）
+- 行と「➖ 今回不要」の理由は自分で考えず、`bash scripts/derive-test-selection.sh origin/main --format table`
+  （リスク申告があれば `--risk authz_change,retry_possible,contention,external_side_effect` のうち該当するもの）の
+  出力を貼り、「⬜ 未実施」の行を実施結果に応じて ✅ / 🟡 に書き換える。⬜ のまま残す行には理由を書く
 - 行は [`../../docs/agents/test-matrix.md`](../../docs/agents/test-matrix.md) の「毎回」「変更時」の
   種別に揃える。該当しない「節目」の行は削ってよい
 - この変更に直接対応するテスト（テスト名で。`npm run ai:check` の実行有無を含む）
