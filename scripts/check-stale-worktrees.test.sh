@@ -45,10 +45,11 @@ WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$FAKE_BIN" "$WORK_DIR"' EXIT
 BASH_BIN="$(command -v bash)"
 
-# git worktree list --porcelain / git branch -vv の両方をフェイクgitで切り替える。
-# gh pr list --state all --json state --limit 5 の応答は $1 の内容次第で固定JSONを返す。
+# git worktree list --porcelain / git branch -vv / git for-each-ref をフェイクgitで切り替える。
+# gh pr list は --head の有無で「worktreeごとのPR確認」（gh_json）と
+# 「放置ブランチ検知用の全件取得」（all_prs_json、既定は空配列）を切り替えて返す。
 setup_fakes() {
-  local worktree_porcelain="$1" branch_vv="$2" gh_json="$3"
+  local worktree_porcelain="$1" branch_vv="$2" gh_json="$3" branch_refs="${4:-}" all_prs_json="${5:-[]}"
 
   cat > "$FAKE_BIN/git" <<EOF
 #!/bin/bash
@@ -64,13 +65,25 @@ $branch_vv
 BR_EOF
   exit 0
 fi
+if [ "\$1" = "for-each-ref" ]; then
+  cat <<'FER_EOF'
+$branch_refs
+FER_EOF
+  exit 0
+fi
 exit 0
 EOF
   chmod +x "$FAKE_BIN/git"
 
   cat > "$FAKE_BIN/gh" <<EOF
 #!/bin/bash
-echo '$gh_json'
+for arg in "\$@"; do
+  if [ "\$arg" = "--head" ]; then
+    echo '$gh_json'
+    exit 0
+  fi
+done
+echo '$all_prs_json'
 EOF
   chmod +x "$FAKE_BIN/gh"
 }
@@ -81,6 +94,7 @@ run_hook() {
   OUT="$(cd "$WORK_DIR" && STALE_WORKTREES_SESSION_ID="$session_id" \
     STALE_WORKTREES_MARKER_FILE="$WORK_DIR/.aidd/marker.json" \
     STALE_WORKTREES_MAX_CHECK=10 STALE_WORKTREES_GONE_THRESHOLD=10 \
+    STALE_BRANCHES_AGE_DAYS=21 STALE_BRANCHES_ORPHAN_THRESHOLD=5 \
     PATH="$FAKE_BIN:$PATH" "$BASH_BIN" "$SCRIPT" < /dev/null)"
   EXIT_CODE=$?
   set -e
@@ -177,6 +191,65 @@ EXIT_CODE=$?
 set -e
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_empty "$OUT" "出力が空である"
+
+OLD_TIME=$(( $(date +%s) - 30 * 86400 ))
+NEW_TIME=$(( $(date +%s) - 1 * 86400 ))
+ORPHAN_REFS_5="orphan1||${OLD_TIME}
+orphan2||${OLD_TIME}
+orphan3||${OLD_TIME}
+orphan4||${OLD_TIME}
+orphan5||${OLD_TIME}"
+ORPHAN_REFS_2="orphan1||${OLD_TIME}
+orphan2||${OLD_TIME}"
+
+echo "=== scenario 7: PR未作成・upstream未設定・古いブランチが閾値以上 → 警告を出す ==="
+setup_fakes "$WT_NONE" "$BR_NONE" '[]' "$ORPHAN_REFS_5" '[]'
+run_hook "session-8"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" "issue #708" "issue番号が含まれる"
+assert_contains "$OUT" "5件" "放置ブランチ件数が含まれる"
+
+echo "=== scenario 8: 該当ブランチが閾値未満 → 警告を出さない ==="
+setup_fakes "$WT_NONE" "$BR_NONE" '[]' "$ORPHAN_REFS_2" '[]'
+run_hook "session-9"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "出力が空である"
+
+echo "=== scenario 9: 同名ブランチのPRが実在する → 放置扱いしない ==="
+setup_fakes "$WT_NONE" "$BR_NONE" '[]' "$ORPHAN_REFS_5" '[{"headRefName":"orphan1"},{"headRefName":"orphan2"},{"headRefName":"orphan3"},{"headRefName":"orphan4"},{"headRefName":"orphan5"}]'
+run_hook "session-10"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "出力が空である"
+
+echo "=== scenario 10: 最終コミットが閾値日数より新しい → 放置扱いしない ==="
+NEW_REFS_5="new1||${NEW_TIME}
+new2||${NEW_TIME}
+new3||${NEW_TIME}
+new4||${NEW_TIME}
+new5||${NEW_TIME}"
+setup_fakes "$WT_NONE" "$BR_NONE" '[]' "$NEW_REFS_5" '[]'
+run_hook "session-11"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "出力が空である"
+
+echo "=== scenario 11: worktreeでチェックアウト中のブランチは対象外 ==="
+WT_WITH_ORPHAN="worktree /repo
+HEAD abc123
+branch refs/heads/main
+
+worktree /repo/.claude/worktrees/orphan1
+HEAD def456
+branch refs/heads/orphan1"
+ORPHAN_REFS_WITH_CHECKOUT="orphan1||${OLD_TIME}
+orphan2||${OLD_TIME}
+orphan3||${OLD_TIME}
+orphan4||${OLD_TIME}
+orphan5||${OLD_TIME}
+orphan6||${OLD_TIME}"
+setup_fakes "$WT_WITH_ORPHAN" "$BR_NONE" '[]' "$ORPHAN_REFS_WITH_CHECKOUT" '[]'
+run_hook "session-12"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" "5件" "チェックアウト中のorphan1を除いた5件が警告される"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

@@ -29,11 +29,20 @@ command -v gh >/dev/null 2>&1 || exit 0
 # - 全経路 exit 0（blockしない）。是正（worktree削除・ブランチ削除）の実行は完全に人間の
 #   裁量に委ねる（worktree/ブランチの削除は不可逆に近い操作のため機械強制しない）
 #
+# WHY: issue #708。2026-09-05の棚卸しで、worktreeに紐づいてすらいない・PRを一度も
+# 作らずに放置されたローカルブランチが32本見つかった。上記1・2はworktree保有ブランチと
+# goneブランチしか見ておらず、この種の「そもそもPRを作らず古いまま放置」は検知対象外
+# だった。判定はupstream未設定（未push）かつ最終コミットが一定日数より古いブランチに絞り、
+# gh pr listを1回だけ呼んで（ブランチ数ぶんAPIを叩かない）該当ブランチのPRが一度も
+# 存在しないことを確認する。
+#
 # 環境変数（テスト用の注入ポイント）:
 #   STALE_WORKTREES_SESSION_ID     hook stdinのsession_idの代替
 #   STALE_WORKTREES_MARKER_FILE    警告済みマーカー（既定 .aidd/check-stale-worktrees-warning-shown.json）
 #   STALE_WORKTREES_MAX_CHECK      PR状態を確認するworktree数の上限（既定10、API呼び出し抑制）
 #   STALE_WORKTREES_GONE_THRESHOLD goneブランチ数の警告閾値（既定10）
+#   STALE_BRANCHES_AGE_DAYS        放置ブランチ判定の経過日数閾値（既定21）
+#   STALE_BRANCHES_ORPHAN_THRESHOLD 放置ブランチ数の警告閾値（既定5）
 
 cd "$(dirname "$0")/.."
 
@@ -98,8 +107,50 @@ GONE_COUNT="$(git branch -vv 2>/dev/null | grep -c ': gone\]')"
 set -e
 [ -z "$GONE_COUNT" ] && GONE_COUNT=0
 
-# どちらも該当なしなら何も出さず終了
-if [ "$STALE_WORKTREE_COUNT" -eq 0 ] 2>/dev/null && [ "$GONE_COUNT" -lt "$GONE_THRESHOLD" ] 2>/dev/null; then
+# 3. upstream未設定（未push）かつ最終コミットが一定日数より古い、PRを一度も作っていない
+#    放置ブランチの数（issue #708）。
+#    - worktreeでチェックアウト中のブランチは対象外（作業中の可能性があるため）
+#    - gh pr listは1回だけ呼び、ローカルで突き合わせる（ブランチ数ぶんAPIを叩かない）
+AGE_DAYS="${STALE_BRANCHES_AGE_DAYS:-21}"
+ORPHAN_THRESHOLD="${STALE_BRANCHES_ORPHAN_THRESHOLD:-5}"
+NOW_EPOCH="$(date +%s)"
+AGE_CUTOFF=$((NOW_EPOCH - AGE_DAYS * 86400))
+
+CHECKED_OUT_BRANCHES="$(printf '%s\n' "$WORKTREE_LIST" | sed -n 's/^branch refs\/heads\///p')"
+
+set +e
+ALL_PRS_JSON="$(gh pr list --state all --limit 300 --json headRefName 2>/dev/null)"
+set -e
+[ -z "$ALL_PRS_JSON" ] && ALL_PRS_JSON='[]'
+
+ORPHAN_BRANCH_COUNT=0
+set +e
+BRANCH_REFS="$(git for-each-ref --format='%(refname:short)|%(upstream)|%(committerdate:unix)' refs/heads/ 2>/dev/null)"
+set -e
+while IFS='|' read -r BNAME BUPSTREAM BCTIME; do
+  [ -z "$BNAME" ] && continue
+  [ "$BNAME" = "main" ] && continue
+  [ "$BNAME" = "master" ] && continue
+  [ -n "$BUPSTREAM" ] && continue
+  if printf '%s\n' "$CHECKED_OUT_BRANCHES" | grep -qxF "$BNAME"; then
+    continue
+  fi
+  [ -z "$BCTIME" ] && continue
+  if [ "$BCTIME" -ge "$AGE_CUTOFF" ] 2>/dev/null; then
+    continue
+  fi
+  HAS_PR="$(printf '%s' "$ALL_PRS_JSON" | jq --arg b "$BNAME" '[.[] | select(.headRefName == $b)] | length' 2>/dev/null)"
+  if [ -z "$HAS_PR" ] || [ "$HAS_PR" = "0" ]; then
+    ORPHAN_BRANCH_COUNT=$((ORPHAN_BRANCH_COUNT + 1))
+  fi
+done <<EOF
+$BRANCH_REFS
+EOF
+
+# いずれも該当なしなら何も出さず終了
+if [ "$STALE_WORKTREE_COUNT" -eq 0 ] 2>/dev/null \
+  && [ "$GONE_COUNT" -lt "$GONE_THRESHOLD" ] 2>/dev/null \
+  && [ "$ORPHAN_BRANCH_COUNT" -lt "$ORPHAN_THRESHOLD" ] 2>/dev/null; then
   exit 0
 fi
 
@@ -124,6 +175,10 @@ if [ "$STALE_WORKTREE_COUNT" -gt 0 ] 2>/dev/null; then
 fi
 if [ "$GONE_COUNT" -ge "$GONE_THRESHOLD" ] 2>/dev/null; then
   LINES="${LINES}- リモート追跡先が削除済み（gone）のローカルブランチが${GONE_COUNT}件あります。\`git branch -vv | grep gone\`で確認し、不要なら\`git branch -D\`で削除してください。
+"
+fi
+if [ "$ORPHAN_BRANCH_COUNT" -ge "$ORPHAN_THRESHOLD" ] 2>/dev/null; then
+  LINES="${LINES}- PRを一度も作らず${AGE_DAYS}日以上放置されているローカルブランチ（未push）が${ORPHAN_BRANCH_COUNT}件あります。不要なら\`git branch -D\`で削除してください（issue #708）。
 "
 fi
 
