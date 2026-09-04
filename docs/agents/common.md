@@ -69,6 +69,19 @@ Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、Pr
 インライン複製との同期は`.claude/workflows/lib/__tests__/router-risk-sync.test.js`が検証する
 （`npm test`に含まれる。他のプロンプト同期テストと同型のガード）。
 
+## 依存関係の変更ルール（2026-09-04）
+
+npm パッケージの追加・更新・削除は「実行する第三者コードと依存関係を増やす設計判断」として扱う。
+`npm install <pkg>` 等のパッケージ名を伴うコマンドと package.json / package-lock.json への書き込みは
+PreToolUse hook（`scripts/check-dependency-change.sh`）が **ask** で止めるので、実行前に用途・代替案・
+権限/環境変数/DB への影響・固定する版と出所を報告して承認を得る。実行後は引き継ぎメモ 00 欄
+「依存の変更」に差分・`npm ci`・`npm audit --omit=dev --audit-level=high` の結果・ロールバックを書く
+（Stop hook が記述の有無を警告する）。CI は `npm ci` のみを使い（`npm install` は構造テストで禁止）、
+`dependency-audit` ジョブとロック出所の検査（`scripts/check-lockfile-integrity.test.sh`）が毎 PR で
+回る。検査名ごとに分かること・分からないことは
+[`known-failure-patterns.md`「依存関係層」](./known-failure-patterns.md#依存関係層npm-サプライチェーン)
+を参照。
+
 ## テスト環境・データ衛生ルール
 
 `e2e/`配下のファイルをRead/Editする際にのみ [`.claude/rules/e2e-test-hygiene.md`](../../.claude/rules/e2e-test-hygiene.md) が自動ロードされる（issue #445）。

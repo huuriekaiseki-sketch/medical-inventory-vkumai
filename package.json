@@ -22,7 +22,7 @@
     "@next/env": "16.2.12",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
-    "next": "16.2.9",
+    "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -37,7 +37,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.5",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "16.3.4",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "typescript": "^5",

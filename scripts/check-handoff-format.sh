@@ -39,6 +39,11 @@ command -v jq >/dev/null 2>&1 || exit 0
 #    block すると書く側が行を削って合図が消える。列ずれ・4値外は「フォーマットに収まらない
 #    約束が出た」合図として人が見る）
 #
+# 6. （2026-09-04、docs/agents/known-failure-patterns.md「依存関係層」）PR の変更ファイルに
+#    package.json / package-lock.json が含まれるのに、本文に「依存の変更」の記述が無ければ警告する。
+#    依存追加は第三者コードを増やす設計判断であり、用途・代替案・影響・監査結果を本文に残す
+#    （`gh pr view --json files` で変更ファイルを取る。取れなければ沈黙 = fail-open）
+#
 # 既知の限界:
 # - セッション終了報告・docs/sessions/への記録のみで完結し、PRを一切作らない作業フローは
 #   検知対象外（この警告はPR本文経由の引き継ぎのみをカバーする）
@@ -125,7 +130,17 @@ if [ "$HAS_VERIFIED" -eq 1 ]; then
     }' 2>/dev/null || true)"
 fi
 
-if [ "$HAS_SUMMARY" -eq 1 ] && [ "$HAS_VERIFIED" -eq 1 ] && [ -z "$FOUR_STATE_ISSUES" ]; then
+# 依存の変更（package.json / package-lock.json を触った PR に「依存の変更」の記述があるか）。
+# 変更ファイル一覧が取れない場合は判定しない（fail-open）
+DEP_ISSUE=""
+PR_FILES="$("$GH_CMD" pr view "$PR_NUMBER" --json files --jq '.files[].path' 2>/dev/null || true)"
+if printf '%s\n' "$PR_FILES" | grep -qxE '(.*/)?package(-lock)?\.json'; then
+  if ! printf '%s' "$PR_BODY" | grep -qF '依存の変更'; then
+    DEP_ISSUE="$(printf '%s\n' "$PR_FILES" | grep -E '(.*/)?package(-lock)?\.json' | tr '\n' ' ')"
+  fi
+fi
+
+if [ "$HAS_SUMMARY" -eq 1 ] && [ "$HAS_VERIFIED" -eq 1 ] && [ -z "$FOUR_STATE_ISSUES" ] && [ -z "$DEP_ISSUE" ]; then
   exit 0
 fi
 
@@ -142,7 +157,9 @@ set +e
 write_marker
 set -e
 
-if [ "$HAS_SUMMARY" -eq 1 ] && [ "$HAS_VERIFIED" -eq 1 ]; then
+if [ "$HAS_SUMMARY" -eq 1 ] && [ "$HAS_VERIFIED" -eq 1 ] && [ -z "$FOUR_STATE_ISSUES" ]; then
+  MSG="PR #${PR_NUMBER} は依存関係ファイル（${DEP_ISSUE}）を変更していますが、本文に「依存の変更」の記述がありません。追加・更新・削除したパッケージごとに、用途 / 代替案 / 権限・環境変数・DB への影響 / 固定した版と出所 / npm ci と npm audit --omit=dev --audit-level=high の結果 / ロールバック方法を 00 欄「依存の変更」に書いてください（依存追加は第三者コードを増やす設計判断。docs/agents/known-failure-patterns.md「依存関係層」。この警告はこのPRにつき1回のみ表示されます）。"
+elif [ "$HAS_SUMMARY" -eq 1 ] && [ "$HAS_VERIFIED" -eq 1 ]; then
   MSG="PR #${PR_NUMBER} の「04 どう確認したか」に、4値（✅ 実施 / ➖ 今回不要 / 🟡 一部 / ⬜ 未実施）に収まらない行があります: ${FOUR_STATE_ISSUES}。フォーマットに収まらない行は「書き方の問題」か「一覧（docs/agents/test-matrix.md）に無い種類の確認が出てきた」かのどちらかです。前者なら bash scripts/derive-test-selection.sh origin/main --format table の出力に揃え、後者なら一覧と derive ルールへの追加を検討してください（この警告はこのPRにつき1回のみ表示されます）。"
 else
   MSG="PR #${PR_NUMBER} の本文に、docs/agents/common.md「引き継ぎフォーマット」の必須見出し（30秒サマリー / どう確認したか）が見当たりません。作業完了報告には引き継ぎフォーマット（30秒サマリー・00〜05の証拠・後任AIへの注意）を含めてください（この警告はこのPRにつき1回のみ表示されます）。"

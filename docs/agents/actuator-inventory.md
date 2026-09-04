@@ -22,6 +22,8 @@
 |---|---|---|---|
 | PreToolUse (Bash/mcp DDL) | `check-direct-ddl-execution.sh` | **block** | 直接DDL実行を拒否 |
 | PreToolUse (Write/Edit/MultiEdit skipマーカー) | `check-skip-marker-write.sh` | **ask** | verify-claimsのエスケープハッチ書き込みに人間確認を要求 |
+| PreToolUse (Bash/Write/Edit/MultiEdit 依存変更) | `check-dependency-change.sh` | **ask** | `npm install <pkg>` / `yarn add` / `pnpm add` 等のパッケージ名を伴う依存変更コマンドと、package.json / package-lock.json への書き込みに人間確認を要求（2026-09-04。依存追加は第三者コードを増やす設計判断として、用途・代替案・影響の報告を挟む）。`npm ci` / 引数なしの `npm install` / 読み取り系は対象外。jq 不在時は fail-closed |
+| PreToolUse (Codex側・Bash/Write/Edit/MultiEdit 依存変更) | `codex-dependency-change-deny.sh` | **deny**（Codex側のみ） | `check-dependency-change.sh`（Claude側ask）のCodex用ラッパー。ask未対応のためdenyへ読み替え、判定は共有正本に委譲 |
 | PreToolUse (Write/Edit/MultiEdit 高リスクパス) | `check-run-manifest-presence.sh` | warning-only | `permissionDecision: "allow"` + `additionalContext`。blockしない設計（issue #444、意図的） |
 | SessionStart | `check-workflow-interruption.sh` | **自動復旧（queue）** | Workflow中断を検知し`workflow-interrupted`としてqueue登録（issue #534） |
 | SessionStart | `check-recovery-queue.sh` | 自動復旧（queue、表示側） | pendingエントリのcontext注入＋surfaced放置エントリのエスカレーション表示（issue #523・#579）。是正の実行そのものはこのhookの範囲外 |
@@ -38,6 +40,7 @@
 | Stop | `check-gap-check-state.sh` | **自動復旧（queue）** | gap check警告を`gap-check-followup`としてqueue登録（issue #488・#523） |
 | Stop | `check-domain-decisions-suggest.sh` | warning-only | 高リスクドメイン変更時のドキュメント反映漏れ提案。**issue #685でagent型からcommand型へ置き換えた**（agent版は抑止条件に該当する場面でも毎ターンサブエージェントを起動し、「何も返さない」指示に反して判定理由を返し続けていた）。重複抑止はマーカーファイルで決定的に行い、「設計判断かどうか」の判断だけをメインループへ委ねる。**これによりagent型hookは0本になった** |
 | Stop | `ai-check-suggest.sh` | warning-only | `npm run ai:check`実行有無の警告 |
+| Stop | `check-handoff-format.sh` | warning-only | PR本文の引き継ぎフォーマット必須見出し（issue #524）、04表の4値（PR②）、package.json変更PRの「依存の変更」記述（2026-09-04）の欠如を警告。行・ファイルを名指しし、blockしない（blockすると書く側が行を削って合図が消えるため） |
 | Stop | `verify-claims.sh` | **block**（retry上限3回のエスケープ付き） | 未解消の指摘があれば`emit_block`で`exit 2`しStopをブロックする。3回試行しても解消しなければ人間介入待ちのメッセージでブロックし続ける |
 | Stop | `gate-effectiveness-monthly-check.sh` | warning-only | 品質ゲート月次サマリの提示 |
 | Stop | `check-aidd-stats-recorded.sh` | warning-only | AIDD stats `start`呼び忘れの警告（issue #495） |

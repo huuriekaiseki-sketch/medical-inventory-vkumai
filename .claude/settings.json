@@ -78,6 +78,9 @@
       "Bash(bash scripts/verify-claims.test.sh*)",
       "Bash(scripts/check-skip-marker-write.sh *)",
       "Bash(bash scripts/check-skip-marker-write.test.sh*)",
+      "Bash(scripts/check-dependency-change.sh *)",
+      "Bash(bash scripts/check-dependency-change.test.sh*)",
+      "Bash(bash scripts/check-lockfile-integrity.test.sh*)",
       "Bash(scripts/check-run-manifest-presence.sh *)",
       "Bash(bash scripts/check-run-manifest-presence.test.sh*)",
       "Bash(scripts/check-direct-ddl-execution.sh *)",
@@ -212,6 +215,12 @@
         "matcher": "Bash|Write|Edit|MultiEdit",
         "hooks": [
           { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-skip-marker-write.sh", "timeout": 5 }
+        ]
+      },
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-dependency-change.sh", "timeout": 5 }
         ]
       },
       {

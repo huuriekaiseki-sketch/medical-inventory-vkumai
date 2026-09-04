@@ -22,6 +22,11 @@ function LoginForm() {
       if (access_token && refresh_token) {
         const supabase = createSupabaseBrowserClient()
         supabase.auth.setSession({ access_token, refresh_token }).then(({ error }) => {
+          // WHY: setSession が書いた認証 cookie を proxy.ts（middleware）に読ませるため、
+          //      クライアント遷移（router.push）ではなく意図的にフルリロードで '/' へ入り直す。
+          //      eslint-config-next 16.3 で追加されたルールはクライアント遷移を推奨するが、
+          //      ここでは cookie 反映後のサーバー側判定を確実にする方を優先する。
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           if (!error) window.location.href = '/'
         })
       }
