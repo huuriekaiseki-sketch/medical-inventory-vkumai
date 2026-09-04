@@ -17,7 +17,8 @@ import {
   type SeedLoanReturnsRlsIdorFixtures,
 } from './helpers/seed-rls-idor'
 
-describe('loan_returns RLS/IDOR', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-010 他施設は読めない / P-012 RPC に他施設 id は forbidden / P-015 自施設は通る（対照）/ P-050 返却は 1 件まで
+describe('loan_returns RLS/IDOR [P-010 P-012 P-015]', () => {
   let fixtures: SeedLoanReturnsRlsIdorFixtures
 
   beforeAll(async () => {
@@ -84,7 +85,7 @@ describe('loan_returns RLS/IDOR', () => {
   //  同一loan_order_idへの2回目の返却登録が実際にDBレベルで拒否されることを、
   //  静的SQL検証（migrations/__tests__）ではなく本物のローカルSupabaseへの
   //  RPC呼び出しで確認する。
-  describe('loan_order_id の重複登録防止 (issue #675)', () => {
+  describe('loan_order_id の重複登録防止 (issue #675) [P-050]', () => {
     async function createLoanOrderForFacilityA(): Promise<string> {
       const { data, error } = await fixtures.userA.client.rpc('create_loan_order_atomic', {
         p_facility_id: fixtures.facilityA.id,

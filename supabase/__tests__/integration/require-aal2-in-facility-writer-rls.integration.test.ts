@@ -40,7 +40,8 @@ function createAnonClient(): SupabaseClient {
   })
 }
 
-describe('facility_writer_or_adminポリシーはRPCを経由しない直接書き込みにもaal2を要求する(issue #623)', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-031 RPC 非経由の直接 INSERT にも aal2
+describe('facility_writer_or_adminポリシーはRPCを経由しない直接書き込みにもaal2を要求する(issue #623) [P-031]', () => {
   const runId = randomUUID()
   const serviceClient = createServiceRoleClient()
   const email = `require-aal2-rls-${runId}@example.test`

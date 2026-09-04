@@ -44,6 +44,8 @@ description: 作業完了時（PR本文・セッション終了報告・docs/ses
 - 他テナントのIDでアクセスし、弾かれることを確認したか:（RLS/facility境界に
   触れた場合は必須。Issue #24再発防止。チェック観点は
   [`../../docs/agents/known-failure-patterns.md`](../../docs/agents/known-failure-patterns.md) 参照）
+- 該当する約束（[`../../docs/agents/promise-catalog.md`](../../docs/agents/promise-catalog.md) の `P-xxx`）:
+  触れた約束の ID を列挙する。新しい約束を作ったらカタログに行を足し、守るテストの `describe` 名に ID を含める
 
 ## 04 どう確認したか（テスト・検証）
 | 種別（test-matrix.md の行） | 状態 | 結果・証跡 |

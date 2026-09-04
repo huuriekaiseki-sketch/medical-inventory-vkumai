@@ -13,7 +13,8 @@ import {
 
 const fixtures = readCrossFacilityFixtures()
 
-test.describe('施設間クロスアクセス境界（issue #321）', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-016 画面経由でも施設境界
+test.describe('施設間クロスアクセス境界（issue #321） [P-016]', () => {
   test.skip(!fixtures, 'cross-facilityフィクスチャが生成されていない（SUPABASE_SERVICE_ROLE_KEY等が未設定）')
 
   test('ユーザーAは自分の施設Aのloan-orders一覧で、シードした発注を閲覧できる', async ({ browser }) => {

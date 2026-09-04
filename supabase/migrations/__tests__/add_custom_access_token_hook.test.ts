@@ -24,7 +24,8 @@ function findMigrationFile(): string | undefined {
     .at(-1)
 }
 
-describe('*_add_custom_access_token_hook.sql', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-022 user_role クレーム
+describe('*_add_custom_access_token_hook.sql [P-022]', () => {
   const fileName = findMigrationFile()
 
   it('ファイルが存在する', () => {

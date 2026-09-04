@@ -18,7 +18,8 @@ import {
   type SeedHospitalPricesRlsIdorFixtures,
 } from './helpers/seed-rls-idor'
 
-describe('hospital_prices RLS/IDOR', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-010 他施設は読めない / P-011 更新・削除・作成できない / P-015 自施設は通る（対照）
+describe('hospital_prices RLS/IDOR [P-010 P-011 P-015]', () => {
   let fixtures: SeedHospitalPricesRlsIdorFixtures
 
   beforeAll(async () => {

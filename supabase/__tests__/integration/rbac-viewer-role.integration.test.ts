@@ -61,7 +61,8 @@ async function createSignedInClient(
   return client
 }
 
-describe('viewerロールは書き込み不可・閲覧のみ(issue: RBAC拡張)', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-020 viewer は閲覧のみ
+describe('viewerロールは書き込み不可・閲覧のみ(issue: RBAC拡張) [P-020]', () => {
   const runId = randomUUID()
   const serviceClient = createServiceRoleClient()
 

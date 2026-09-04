@@ -24,7 +24,8 @@ import {
   type SeedPriceHistoriesFixtures,
 } from './helpers/seed-rls-idor'
 
-describe('price_histories RLS/IDOR・DB制約', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-010 他施設は読めない / P-015 自施設は通る（対照）/ P-051 書き込みはトリガーのみ
+describe('price_histories RLS/IDOR・DB制約 [P-010 P-015 P-051]', () => {
   let fixtures: SeedPriceHistoriesFixtures
 
   beforeAll(async () => {

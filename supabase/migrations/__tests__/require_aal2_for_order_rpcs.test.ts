@@ -22,7 +22,8 @@ function findMigrationFile(): string | undefined {
     .at(-1)
 }
 
-describe('*_require_aal2_for_order_rpcs.sql', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-030 aal2 要求 / P-032 aal2 チェックは所属チェックの後 / P-041 search_path=''
+describe('*_require_aal2_for_order_rpcs.sql [P-030 P-032 P-041]', () => {
   const fileName = findMigrationFile()
 
   it('ファイルが存在する', () => {

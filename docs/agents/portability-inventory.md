@@ -26,6 +26,7 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 | テスト一覧の形式（列・状態4値・実施タイミング4語）と構造テスト | `docs/agents/test-matrix.md`の列構成、`scripts/check-test-matrix.test.sh` | riff-gear → kojigyo → vkumai と3回持ち回った。行の中身は固有（下表） |
 | derive のエンジン（入力解析・classifyRoute 呼び出し・required/not_required/milestone の評価・04 表出力） | `scripts/lib/derive-test-selection.mjs`、`scripts/derive-test-selection.sh` | パス表を一切持たない。派生先はルール表だけを書き換える設計（2026-09-04） |
 | 引き継ぎメモ 04 の4値検知（Stop hook の行名指し警告） | `scripts/check-handoff-format.sh` | 「どう確認したか」節の表行の状態列を見るだけで、種別名には依存しない |
+| 約束カタログの形式（9 列・`P-`3 桁・番号帯）と双方向の構造テスト | `docs/agents/promise-catalog.md`の列構成、`scripts/check-promise-catalog.test.sh` | 「ID が守るテストのファイル内に実在」「孤児 ID 禁止」の検査は言語・フレームワークに依存しない（検索対象の拡張子だけ差し替える） |
 
 ## このリポジトリ・スタック固有と考えられる部分
 
@@ -40,6 +41,7 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 | `.env.local`/`.env.test`分離と`scripts/create-worktree.sh`の自動コピー | `docs/agents/common.md`「ブランチ運用ルール」 | Next.js/Supabaseの環境変数運用に特化 |
 | テスト一覧の行（種別・トリガー・証跡・コマンド） | `docs/agents/test-matrix.md`の各行 | RLS/IDOR 統合・スキーマドリフト等は Supabase 前提。kojigyo（RAG）には golden set・資料鮮度など vkumai に無い行があり、それらは vkumai を経由せず RAG 系の派生先へ持っていく |
 | derive のルール表（derive キー・trigger・not_required の理由・コマンド） | `scripts/lib/derive-test-selection.rules.mjs` | 一覧の行と 1:1。高リスク判定は `router-risk.js` を参照するため、そちらの語彙にも依存する |
+| 約束カタログの行（施設境界・AAL2・admin 境界の各約束） | `docs/agents/promise-catalog.md`の各行 | facility / is_facility_member / has_aal2 等はこのリポジトリの認可設計に固有。kojigyo（corpus の閲覧区分）とは中身が全く違う |
 
 ## 判断が難しい・要検証の部分
 

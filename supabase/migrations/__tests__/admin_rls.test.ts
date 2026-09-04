@@ -49,7 +49,8 @@ describe('20260628010000_add_role_to_user_facilities.sql', () => {
   })
 })
 
-describe('20260628010001_update_rls_admin.sql', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-021 マスタの書き込みは admin だけ（is_admin() の導入）
+describe('20260628010001_update_rls_admin.sql [P-021]', () => {
   it('ファイルが存在する', () => {
     expect(existsSync(RLS_FILE)).toBe(true)
   })

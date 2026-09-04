@@ -37,7 +37,8 @@ const ITEMS_TABLES = [
   'loan_return_items',
 ]
 
-describe('*_require_aal2_in_facility_writer_rls.sql', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-031 直接 INSERT にも aal2
+describe('*_require_aal2_in_facility_writer_rls.sql [P-031]', () => {
   const fileName = findMigrationFile()
 
   it('ファイルが存在する', () => {

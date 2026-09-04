@@ -10,7 +10,8 @@ import {
   type SeedCaseOrdersRlsIdorFixtures,
 } from './helpers/seed-rls-idor'
 
-describe('case_orders RLS/IDOR (issue #315)', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-010 他施設は読めない / P-012 RPC に他施設 id は forbidden / P-015 自施設は通る（対照）
+describe('case_orders RLS/IDOR (issue #315) [P-010 P-012 P-015]', () => {
   let fixtures: SeedCaseOrdersRlsIdorFixtures
 
   beforeAll(async () => {

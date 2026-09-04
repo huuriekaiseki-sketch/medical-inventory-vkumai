@@ -14,7 +14,8 @@ import {
   type SeedOrdersRlsIdorFixtures,
 } from './helpers/seed-rls-idor'
 
-describe('orders（横断発注履歴） RLS/IDOR (issue #20)', () => {
+// 約束カタログ（docs/agents/promise-catalog.md）: P-010 他施設は読めない / P-014 横断履歴も施設境界
+describe('orders（横断発注履歴） RLS/IDOR (issue #20) [P-010 P-014]', () => {
   let fixtures: SeedOrdersRlsIdorFixtures
 
   beforeAll(async () => {
