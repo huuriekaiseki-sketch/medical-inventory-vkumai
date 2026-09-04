@@ -11,3 +11,6 @@ allowed-tools: Read, Write, Bash(npx playwright *), Bash(${CLAUDE_SKILL_DIR}/scr
 （screenshot.sh はこのスキルフォルダに同梱。`${CLAUDE_SKILL_DIR}` は実行時にスキルフォルダの
 絶対パスへ展開され、frontmatterの`allowed-tools`の許可ルールと同じ文字列になるため
 確認プロンプトなしで実行できる）
+
+`<url>`にはローカルの`file://`パスも渡せる。feature-specスキルでUI変更のモック（Claude Design
+の`.dc.html`等）を実装前に撮影する用途にも同じスクリプトを使う（新規スクリプト不要）。

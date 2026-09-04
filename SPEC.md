@@ -1,111 +1,73 @@
-# SPEC: AAL2要件の統合テストを追加する（issue #684）
+# SPEC: UI変更を伴う機能には「実装前モック作成」を必須にする
 
 ## Part 1 — 仕様（★人間がレビューする部分）
 
-### 何ができるようになるか
+### 何ができるようになるか（利用者目線）
 
-MFA（多要素認証）を有効化したユーザーが、二段階認証（TOTP）を完了しないまま発注・返却・価格変更などの重要操作を行おうとしたとき、システムが実際に拒否することを、本物のSupabase環境を使って自動的に確認できるようになります。
+UI変更を伴う機能を提案するとき、これまでは文章だけで「画面イメージ」を仕様書に書いていました。今後は、**UI変更が絡む機能では、文章の代わりに実装前にClaude Designでモック（画面の下書き）を作ることが必須**になります。ここでいう「UI変更」は見た目のレイアウトだけでなく、**クライアント側の挙動（JavaScript/UX）の変化**も含みます（例: ボタン押下後の処理中表示、非同期処理の完了・失敗時の見え方、モーダルの開閉、入力バリデーションの表示タイミングなど、見た目のHTML構造は同じでも状態遷移・操作フローが変わるもの）。DB/API/バックエンドロジックのみの変更で、画面にも操作感にも変化が無い機能では、これまで通りモックは不要・対象外です。
 
-これは新しい機能を追加するものではなく、**既にDB側に実装されている防御（AAL2要求）が、将来コードが変更されても壊れずに効き続けることを自動チェックする「見張り番」を増やす**作業です。
+これにより、レビュー時に「文章では伝わらなかったレイアウト・配置・状態遷移のズレ」を、実装が始まる前の段階で発見できるようになります。UIが変わらないのに毎回同じような画面を出させられる、という無駄は発生しません。
+
+これは新しいエンドユーザー向け機能ではなく、**仕様書を書くときのワークフロー改善**です。UIそのものへの変更はありません。
 
 ### 背景（なぜ必要か）
 
-- すでに「二段階認証を完了していないと発注できない」という制限はデータベース側に実装済みです（PR #612, #619, #623）。
-- しかし、その制限が正しく効いているかを検証するテストは、対象になっているはずの機能のうち**一部（発注の一種類、価格の一部）にしか存在しません**。
-- 今回の調査で、残りの機能（消耗品の発注・器械の貸出発注・貸出返却・消耗品カタログの編集、およびそれぞれの明細）については、制限が正しく効いているかどうかがまだ**一度も自動確認されていない**ことが判明しました。
-- 将来誰かが誤ってこの制限を緩めるコード変更をしてしまっても、テストが無ければ気づけません。今回追加するテストが、その「事故に気づく仕組み」になります。
+- 姉妹リポジトリ(riff-gear)で、UI変更を伴う仕様書に「文章での画面イメージ記述」と「Claude Designでのモック作成」の両方を選べる状態にしたところ、フレッシュエージェントによる検証（2回）で**ほぼ確実に文章側（楽な方）が選ばれ、モックが作られなかった**ことが実測で判明した。オプトアウトを残すと機能しない、というのが実測での結論。
+- vkumaiのfeature-specスキル（[.claude/skills/feature-spec/SKILL.md](.claude/skills/feature-spec/SKILL.md)）にも同様の「画面イメージ／操作の流れ」という文章欄があり、同じ問題（レイアウト・配置・状態遷移がテキストでは一意に定まらず、実装AIが恣意的に解釈する）を抱えている。
+- ユーザー判断: 「UIが変わらない機能にまでモックを求めても無意味だが、UI（見た目に限らずJavaScript/UXの挙動も含む）が変わるなら毎回必ず作る」という運用にする。riff-gearの結論をそのまま採用し、いきなり必須化する。
 
-### やること（対象範囲）
+### 今回のスコープ
 
-以下の操作について、「二段階認証を完了していない状態では拒否され、完了した状態では成功する」ことを確認するテストを追加します。
+- feature-specスキルに「**UI変更（見た目・挙動どちらも含む）が絡む場合、Claude Designでのモック作成を必須**」と明記する。Part 3のセルフチェック項目にも追加し、レビュー提示前に確認させる
+- モック撮影は新規スクリプトを作らず、**既存のe2e-runner`screenshot.sh`をローカルのモックHTML（`file://`パス）に向けて使う**（新規スクリプト不要。既存の`<url> <name>`インターフェースがそのまま使える）
+- UI変更を伴わない機能（DB/API/バックエンドロジックのみ）は今回の対象外。従来通り文章のみでよい
 
-📸 このタスクはUI変更を伴わないため、スクリーンショット撮影ポイントはありません。テスト実行結果（全件green）が成果物です。
+### 操作の流れ
 
-**テーブルへの直接書き込みチェック（画面を経由しない不正な抜け道が塞がっているかの確認）**
-- 消耗品発注・器械貸出発注・貸出返却・消耗品カタログ、およびそれぞれの明細データ
-
-**発注操作（RPC）そのもののチェック**
-- 症例発注・消耗品発注・貸出返却の3操作（器械貸出発注は既にテスト済みのため対象外）
+1. feature-specでPart 1を書く際、UI変更（見た目・挙動どちらか一方でも）が絡む機能なら、Claude Designでモックを作成する（文章のみでの代替は不可）
+2. モック作成後、`e2e-runner`スキルの`screenshot.sh file:///<絶対パス> mock-<name>`で撮影し、既存の`screenshots/`に保存する
+3. SPEC.mdのPart 1にモック画像を埋め込み、通常通り人間レビュー（停止①）に提示する
+4. UI変更を伴わない機能では、このステップは丸ごとスキップする（Part 3のセルフチェックで「対象外」と明記すればよい）
 
 ### 受け入れ条件（チェックリスト）
 
-- [ ] 二段階認証を完了していないセッションで、上記の各操作を試みると拒否される
-- [ ] 二段階認証を完了したセッションで、同じ操作を試みると成功する（「常に拒否されているだけ」ではないことの対照確認）
-- [ ] 二段階認証そのものを一度も設定していないユーザーは、これまで通り操作できる（既存ユーザーへの影響がないことの回帰確認）
-- [ ] 既存の2つのテストファイル（症例発注・貸出発注の既存テスト、施設名更新の対象外確認）が、変更後も壊れずに通り続ける
-- [ ] `npm run test:integration` をローカル実行し、全件成功することを確認する
+- [ ] feature-specスキルのPart 1に「UI変更（見た目・JS挙動どちらも含む）時はモック作成が必須」と明記されている
+- [ ] feature-specスキルのPart 3セルフチェックに「UI変更が絡む仕様書で、モックを作らず文章のみで済ませていないか」の確認項目が追加されている
+- [ ] feature-specスキルから、モック撮影に既存の`e2e-runner`の`screenshot.sh`を`file://`パスで使えることが参照できる 📸
+- [ ] UI変更を伴わない機能ではこのステップが不要であることが、スキル文書上で明確に区別されている
 
-### 影響範囲
+### スクショ撮影ポイント
 
-- 本番のアプリの挙動・画面には一切変更がありません（テストコードの追加・整理のみ）
-- 対象はテスト用のローカルSupabase環境のみで、本番データには触れません
+該当なし（今回はワークフロー自体の変更であり、エンドユーザー向けUIの変更を伴わないため、STEP 7のe2e-runnerでの撮影対象はなし）
 
 ---
 
 ## Part 2 — 実装計画（AI用・レビュー不要）
 
-### 現状（Phase1調査で確認済み）
-
-- `supabase/__tests__/integration/require-aal2-in-facility-writer-rls.integration.test.ts`（PR #624）: RLS直接書き込みaal1拒否/aal2成功を`case_orders`・`hospital_prices`のみ確認。`facilities`は対象外の回帰確認あり。
-- `supabase/__tests__/integration/require-aal2-for-order-rpcs.integration.test.ts`（PR #612）: RPC呼び出しaal1拒否/aal2成功を`create_loan_order_atomic`のみ確認。
-- 両ファイルとも`base32Decode()`/`generateTotp()`（RFC 6238準拠、Node組み込み`crypto`のみ）を独立に重複実装している。
-- `supabase/__tests__/integration/helpers/seed-rls-idor.ts`の`createSeededUser`にTOTP関連ロジックはない。
-
 ### 実装セット一覧（依存順）
 
-#### Set A: TOTPヘルパーの共通化
-- **触るファイル**:
-  - 新規: `supabase/__tests__/integration/helpers/mfa-totp.ts`
-  - 変更: `supabase/__tests__/integration/require-aal2-in-facility-writer-rls.integration.test.ts`（自前実装を削除し共通ヘルパーに置き換え）
-  - 変更: `supabase/__tests__/integration/require-aal2-for-order-rpcs.integration.test.ts`（同上）
-- **内容**: `base32Decode`/`generateTotp`/`enrollAndVerifyTotp(client): Promise<{factorId, secret}>`/`signInAtAal1(email, password): Promise<SupabaseClient>`/`stepUpToAal2(client, factorId, secret): Promise<void>`をエクスポートする関数として`mfa-totp.ts`に集約する。既存2ファイルはこれをimportして使う形にリファクタし、**既存のテストケース・アサーションの意味は変更しない**（回帰防止）。
-- **テスト観点**: 既存2ファイルの全テストケースが、リファクタ後も同じ結果（pass/fail）になること。`npm run test:integration`をこのセット完了時点で一度実行し、緑を確認してから次に進む。
+**Set A: feature-specスキルへの必須化記述の追記**（依存なし）
+- 触るファイル: `.claude/skills/feature-spec/SKILL.md`
+- 内容: Part 1の「画面イメージ」欄を、UI変更（見た目・JS挙動どちらも含む）時はモック作成**必須**（文章のみでの代替不可）と明記し、`design`スキルでモックを作り`e2e-runner`の`screenshot.sh`で撮影する手順を追記。Part 3のセルフチェックにも「UI変更が絡む仕様書でモック未作成のまま文章のみで済ませていないか」の項目を追加する
+- テスト観点: 文書レビューのみ（構造テスト対象外）
 
-#### Set B: RLS直接書き込みテストの拡充
-- **触るファイル**: `supabase/__tests__/integration/require-aal2-in-facility-writer-rls.integration.test.ts`（Set A完了後、同ファイルへの追記）
-- **内容**: 既存の`describe`ブロック内に、以下のテーブルへの直接`.insert()`について「aal1で拒否」「aal2で成功」の対を追加する。
-  - `consumable_orders`（列: `facility_id`のみ。他はデフォルト）
-  - `loan_orders`（列: `facility_id`, `procedure_name`, `maker`）
-  - `loan_returns`（列: `facility_id`, `return_datetime`。`loan_order_id`はNULL許容なので省略可）
-  - `consumables`（列: `facility_id`, `jan`, `name`, `purpose`。jan一意制約に注意し`runId`でユニーク化）
-  - 明細4テーブル（親レコードをservice_roleで先に作成してから、明細への直接insertでaal1拒否/aal2成功を確認）:
-    - `case_order_items`（親`case_orders`必要。列: `case_order_id`, `jan`, `lot`, `ubd`, `quantity`）
-    - `consumable_order_items`（親`consumable_orders`と`consumables`必要。列: `consumable_order_id`, `consumable_id`, `quantity`）
-    - `loan_order_items`（親`loan_orders`必要。列: `loan_order_id`, `jan`, `name`, `quantity`）
-    - `loan_return_items`（親`loan_returns`必要。列: `loan_return_id`, `jan`, `lot`, `ubd`, `quantity`）
-- **テスト観点**: 各テーブルにつき最低2ケース（aal1拒否／aal2成功）。明細テーブルの親レコードはservice_roleクライアントで作成し、RLSの影響を受けないようにする（既存の`hospital_prices`テストの`products`/`categories`/`distributor_products`作成パターンを踏襲）。
-
-#### Set C: RPC呼び出しテストの拡充
-- **触るファイル**: `supabase/__tests__/integration/require-aal2-for-order-rpcs.integration.test.ts`（Set A完了後、同ファイルへの追記）
-- **内容**: 既存の`describe`ブロックと同じ構造で、以下3RPCについて「MFA未登録は成功（回帰なし）」「aal1は拒否（forbidden: aal2 required）」「aal2は成功」の3ケースを追加する。
-  - `create_case_order_atomic(p_facility_id, p_case_datetime, p_procedure_name, p_patient_id, p_patient_initials, p_gender, p_doctor_name, p_items)`
-  - `create_consumable_order_atomic(p_facility_id, p_items)`（`p_items`は空配列`[]`でよい）
-  - `create_loan_return_atomic(p_header, p_items)`（`p_header`は`{facility_id, return_datetime}`のJSONB。`p_items`は空配列でよい）
-- **テスト観点**: 既存の`create_loan_order_atomic`向けテストと同一パターン（enroll→aal1拒否→aal2成功）。3RPCそれぞれ独立した`describe`または既存の1つの`describe`内にテストケースを追加する形でよい（新規ユーザー・施設を都度作るか共有するかは既存の`beforeAll`構造に合わせる）。
+**Set B: e2e-runnerスキルへの一言追記**（依存なし。Set Aと同時実装可）
+- 触るファイル: `.claude/skills/e2e-runner/SKILL.md`
+- 内容: `screenshot.sh`が`file://`ローカルパスでも動く（実装前モックの撮影にも使える）ことを一言追記する。スクリプト本体（`screenshot.sh`）は無変更（既に汎用的なため）
+- テスト観点: 文書レビューのみ
 
 ### 並列グループ宣言
 
-- **波1（単独）**: Set A — 他の2セットの前提となる共通ヘルパー抽出。単独で先行実装し、`npm run test:integration`で既存回帰がないことを確認してから波2へ進む。
-- **波2（並列可）**: Set B と Set C — 互いに別ファイル（`require-aal2-in-facility-writer-rls...`と`require-aal2-for-order-rpcs...`）のみを触るため同時実装可能。どちらもSet Aが作る`mfa-totp.ts`をimportするのみで、Set Aのファイル自体は編集しない。
-- **統合ゲート**: 波2完了後、両ファイルを合わせて`npm run test:integration`を実行し、全件成功を確認する。DBスキーマ変更は伴わないため、`docs/agents/db-schema.md`の直接DDL実行系ルールは非該当（migrationファイル自体の変更なし）。
+- **波1（同時実装可）**: Set A・Set B は互いに別ファイルのみを触るため、同じ波でよい
+- 共有ファイルを触る結線なし。統合ゲート不要
 
-### 型・データアクセス層の方針
+### 今回のTRI/RISK判定
 
-- 新規のプロダクションコード（`src/`配下）・migrationの変更は無い。純粋にテストコードの追加・リファクタのみ。
-- `mfa-totp.ts`の関数シグネチャ:
-  ```ts
-  export function generateTotp(secretBase32: string): string
-  export async function enrollAndVerifyTotp(client: SupabaseClient): Promise<{ factorId: string; secret: string }>
-  export async function signInAtAal1(client: SupabaseClient, email: string, password: string): Promise<void>
-  export async function stepUpToAal2(client: SupabaseClient, factorId: string, secret: string): Promise<void>
-  ```
-  （`base32Decode`は`generateTotp`内部のプライベート実装のままでよく、exportは不要）
+- 変更対象は`.claude/skills/`配下のみ。プロダクトコード（`src/`・`supabase/migrations/`等）・DB・RLS・auth/facility等の高リスク領域には一切触れない
+- → `docs/agents/common.md`の「第5カテゴリ: パイプライン自体のメタ改修」に該当し、Sレーン（軽量レーン）扱いでよい
 
 ---
 
 ## Part 3 — 仕様レビュー前セルフチェック（AI用・レビュー不要）
 
-- **判定基準の欠落**: 新しい型・enum・statusフィールドは導入しないため非該当。
-- **下流の反応の欠落**: 非該当（既存の`has_aal2()`の判定ロジックはPart2で一切変更しない。テストは既存実装の外部観測のみ）。
-- **列挙の自己矛盾**: 対象テーブル一覧を数え直した — 発注/返却4テーブル(consumable_orders, case_orders, loan_orders, loan_returns) + 価格・カタログ2テーブル(hospital_prices, consumables) + 明細4テーブル(case_order_items, consumable_order_items, loan_order_items, loan_return_items) = 計10テーブル。うち`case_orders`/`hospital_prices`は既存テスト済みのため、Set Bで新規追加するのは残り8テーブル（consumable_orders, loan_orders, loan_returns, consumables + 明細4件）。migrationファイル（20260806000002_...sql）内のポリシー定義10件と一致することを確認済み。RPCは4件のうちcreate_loan_order_atomicが既存テスト済み、Set Cで追加するのは残り3件。migrationファイル（20260806000001_...sql）内の関数定義4件と一致することを確認済み。
-- **信号の意味変更**: 既存の判定ロジック（`has_aal2()`のSQL、`aal1`/`aal2`文字列比較）は一切変更しない。テスト追加のみ。
+新しい型・enum・statusフィールドは今回導入しないため、Part 3の4項目（判定基準の欠落／下流の反応の欠落／列挙の自己矛盾／信号の意味変更）はいずれも該当なし。
