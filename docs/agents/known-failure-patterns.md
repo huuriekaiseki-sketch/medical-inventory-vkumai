@@ -400,3 +400,10 @@ Node 24 最新（例: 24.20 の 11.19）は版が違い、新しい npm はロ�
 ローカルの 11.6 で `npm install next@… --package-lock-only` した際に、11.6 が `@emnapi/*` の項目を
 「不要」と判断して落とした。ローカルの `npm ci --dry-run` は 11.6 なので通り、CI の 11.19 だけが
 落ちる。**ローカルで通ったことは CI で通る証拠にならない**（版が違う）。
+
+**再発（3 回目、2026-09-05）:** `npm audit fix` でも同じ。ローカル 11.6 で実行すると脆弱性は直るが
+`@emnapi/*` 2 項目を落とし、差分が 147 行に膨らんだ。直後に `npx -y npm@11.19.0 install
+--package-lock-only` を掛けると項目が戻り差分は版更新のみ（66 行）になった。**`npm audit fix` /
+`npm update` / `npm install` のどれであれ、lock を書き換えた後は必ず CI と同じ版で
+`install --package-lock-only` を掛け直し、`npx -y npm@<CI 版> ci --dry-run` で確認する。**
+CI の版は Actions の setup-node ログ「Environment details」で確認する（2026-09-05 時点 11.19.0）。
