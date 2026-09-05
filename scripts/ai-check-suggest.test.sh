@@ -43,8 +43,10 @@ trap cleanup EXIT
 # 一時gitリポジトリを作り、scripts/ai-check-suggest.shをコピーして配置する。
 setup_sandbox_repo() {
   local sandbox="$1"
-  mkdir -p "$sandbox/scripts"
+  mkdir -p "$sandbox/scripts/lib"
   cp "$SCRIPT" "$sandbox/scripts/ai-check-suggest.sh"
+  # 設定読み取りの共通関数も一緒に置く（無ければ fail-open で既定の npm 判定になる）
+  cp "$SCRIPT_DIR/lib/aidd-config.sh" "$sandbox/scripts/lib/aidd-config.sh"
   (
     cd "$sandbox"
     git init -q
@@ -110,6 +112,30 @@ OUT1="$(run_hook "$SANDBOX4" "session-repeat" "$TRANSCRIPT4")"
 OUT2="$(run_hook "$SANDBOX4" "session-repeat" "$TRANSCRIPT4")"
 assert_not_contains "$OUT1" '"systemMessage": ""' "1回目: 警告が出る"
 assert_not_contains "$OUT2" '"systemMessage": ""' "2回目(未実行のまま再Stop): 依然として警告が出る(自己抑制されない)"
+
+echo "=== scenario 5: 実行済み判定のコマンドは aidd.config.json の commands から作る（issue #420 v1 セット B2） ==="
+SANDBOX5="$WORKDIR/sandbox5"
+setup_sandbox_repo "$SANDBOX5"
+printf '{"commands":{"check":"make check","test":"pytest"}}\n' > "$SANDBOX5/aidd.config.json"
+TRANSCRIPT5A="$WORKDIR/transcript_pytest.jsonl"
+cat > "$TRANSCRIPT5A" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"pytest -q"}}]}}
+EOF
+OUT="$(run_hook "$SANDBOX5" "session-cfg-a" "$TRANSCRIPT5A")"
+if [ -z "$OUT" ]; then echo "  OK: 設定のコマンド（pytest）を実行済みと判定"; else echo "  NG: 設定のコマンドが効かない(actual=$OUT)"; fail=1; fi
+TRANSCRIPT5B="$WORKDIR/transcript_npm_under_cfg.jsonl"
+cat > "$TRANSCRIPT5B" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"npm run test"}}]}}
+EOF
+OUT="$(run_hook "$SANDBOX5" "session-cfg-b" "$TRANSCRIPT5B")"
+assert_contains "$OUT" "make check" "設定があれば npm は実行済み扱いにならず、警告文は設定の check コマンドを指す"
+
+echo "=== scenario 6: 設定が \"npm test\" でも \"npm run test\" を実行済み扱いにする（npm run X ≡ npm X） ==="
+SANDBOX6="$WORKDIR/sandbox6"
+setup_sandbox_repo "$SANDBOX6"
+printf '{"commands":{"test":"npm test"}}\n' > "$SANDBOX6/aidd.config.json"
+OUT="$(run_hook "$SANDBOX6" "session-npm-alias" "$TRANSCRIPT3")"
+if [ -z "$OUT" ]; then echo "  OK: npm run test を npm test の別表記として実行済みと判定"; else echo "  NG: 別表記が効かない(actual=$OUT)"; fail=1; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

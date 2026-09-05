@@ -264,6 +264,7 @@ AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p
 | `scripts/create-worktree.sh` | worktree作成 + `.env.local`/`.env.test`自動コピー（「ブランチ運用ルール」参照） |
 | [`docs/agents/run-manifest.md`](./run-manifest.md) | AIDDフローのspecHash/baseCommit突合用Run Manifestのスキーマ |
 | `scripts/log-agent-progress.sh` / `scripts/show-agent-status.sh` | サブエージェント進捗の記録・一覧表示（issue #18） |
+| `aidd.config.json` / `scripts/lib/aidd-config.schema.json` / `scripts/lib/aidd-config.sh` | 導入先アダプター設定（issue #420 v1 セット B）。TRI/RISK の固有語彙・読み取り専用ロール名・検査コマンド・追記先 docs をリポジトリ固有の値として持つ。判定エンジン（`router-risk.js`）と hook 4 本（readonly-bash / run-manifest-presence / ai-check-suggest / domain-decisions-suggest）が読む。値は汎用既定値に足すだけで消せない |
 | `scripts/lib/resolve-log-dir.sh` | `logs/`の書き込み先をworktree横断で単一のディレクトリ（メインworktree直下）に解決する。全`log-*.sh`/`check-*.sh`/`summarize-*.sh`が参照する（issue #546。従来は各worktreeが起動時のカレントディレクトリ相対で別々の`logs/`に書き込み、観測記録の約半数が死蔵していた） |
 | `scripts/lib/canonical-event.ts` | hook/journal/agent-progress/loop-observabilityの4ログを正規化する読み取り専用Adapter層（issue #569） |
 | `scripts/harvest-journal-events.sh` / `scripts/lib/harvest-journal-events.ts` | Workflow journal(wf_*)をtranscript cleanupで消える前に`logs/journal-harvest.jsonl`へ収穫（Stop hook契機・source+agentIdで重複排除。issue #642） |

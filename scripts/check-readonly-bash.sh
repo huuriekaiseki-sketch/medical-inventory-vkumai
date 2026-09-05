@@ -44,7 +44,18 @@ set -euo pipefail
 
 command -v jq >/dev/null 2>&1 || { echo "jq not found: check-readonly-bash.sh cannot run" >&2; exit 2; }
 
-READONLY_AGENT_TYPES="${READONLY_AGENT_TYPES:-sweep-ui sweep-data sweep-db sweep-types reviewer completeness-critic adversarial-verify judge-panel}"
+# 対象ロールの優先順: 環境変数 READONLY_AGENT_TYPES → aidd.config.json の readonlyAgentTypes
+# （issue #420 v1 セット B2。ロール名はエージェント構成に依存する固有値なので設定ファイルへ）
+# → 既定（設定が無い環境でも従来どおり動く）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/lib/aidd-config.sh" ]; then
+  source "$SCRIPT_DIR/lib/aidd-config.sh"
+else
+  aidd_config_query() { printf '%s' "${2:-}"; }
+fi
+DEFAULT_READONLY_AGENT_TYPES='sweep-ui sweep-data sweep-db sweep-types reviewer completeness-critic adversarial-verify judge-panel'
+CONFIG_READONLY_AGENT_TYPES="$(aidd_config_query '.readonlyAgentTypes // [] | join(" ")' '')"
+READONLY_AGENT_TYPES="${READONLY_AGENT_TYPES:-${CONFIG_READONLY_AGENT_TYPES:-$DEFAULT_READONLY_AGENT_TYPES}}"
 READONLY_CMDS='cat head tail less more grep egrep fgrep rg find ls wc awk cut sort uniq tr diff stat file jq echo printf true false test [ which type man env printenv pwd cd basename dirname realpath readlink date tree du df column comm paste fold nl od xxd strings shasum sha256sum md5sum md5 sed'
 GIT_READONLY_SUBCMDS='status log diff show ls-files rev-parse grep blame branch describe cat-file rev-list shortlog remote tag worktree check-ignore ls-tree name-rev merge-base'
 

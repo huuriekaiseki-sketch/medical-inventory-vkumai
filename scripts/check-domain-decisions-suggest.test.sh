@@ -110,6 +110,22 @@ echo "== 7. ファイル名にドメイン語を含む場合も対象 =="
 setup_fake_git "src/lib/facilities/repository.ts"
 assert_contains "$(run_hook hooktest-domainword)" "高リスクドメイン" "facility を含むパス → 通知"
 
+echo "== 8. aidd.config.json が無ければ汎用既定値だけで判定する（issue #420 v1 セット B2） =="
+NO_CFG="$FAKE_BIN/none.json"
+setup_fake_git "src/lib/facilities/repository.ts"
+assert_silent "$(AIDD_CONFIG_FILE="$NO_CFG" run_hook hooktest-nocfg-facility)" "設定無しでは facility（固有語）は対象外"
+setup_fake_git "src/lib/auth/session.ts"
+out8="$(AIDD_CONFIG_FILE="$NO_CFG" run_hook hooktest-nocfg-auth)"
+assert_contains "$out8" "高リスクドメイン" "設定無しでも auth（汎用既定）は通知"
+assert_contains "$out8" "docs/agents/decisions.md" "追記先も既定値"
+
+echo "== 9. 導入先の設定で語彙と追記先を差し替えられる =="
+printf '{"risk":{"domainKeywords":["corpus"]},"docs":{"domain":"docs/glossary.md","decisions":"docs/adr/README.md"}}\n' > "$FAKE_BIN/custom.json"
+setup_fake_git "src/corpus/loader.ts"
+out9="$(AIDD_CONFIG_FILE="$FAKE_BIN/custom.json" run_hook hooktest-custom)"
+assert_contains "$out9" "corpus" "設定の domainKeywords で通知"
+assert_contains "$out9" "docs/adr/README.md" "追記先が設定の値になる"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
