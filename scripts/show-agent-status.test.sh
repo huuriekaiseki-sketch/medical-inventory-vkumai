@@ -82,6 +82,29 @@ echo "=== test: stale-seconds未満のrunningは「止まってる？」にな�
 assert_not_contains "$OUTPUT" "sweep-types：止まってる？" "sweep-typesは2分経過のみなので止まってる扱いにならない"
 assert_contains "$OUTPUT" "sweep-types：型調査中..." "sweep-typesは通常の進捗表示のまま"
 
+echo "=== test: max-age-seconds(既定7日)より古い最終報告は表示せず、非表示件数を末尾に出す ==="
+# WHY: 追記のみのログに残った数週間前の running が「止まってる？（数百万秒応答なし）」として
+#      再注入（issue #712）のたびに混ざっていた。過去フローの残骸は既定で落とす。
+OLD_LOG="$WORKDIR/agent-progress-old.jsonl"
+printf '{"timestamp":"%s","agent":"implementer-old","feature":"f0","status":"running","note":"40日前の残骸"}\n' "$(epoch_to_iso $((BASE_EPOCH - 3456000)))" >> "$OLD_LOG"
+printf '{"timestamp":"%s","agent":"reviewer-old","feature":"f0","status":"done","note":"40日前の完了"}\n' "$(epoch_to_iso $((BASE_EPOCH - 3456000)))" >> "$OLD_LOG"
+printf '{"timestamp":"%s","agent":"sweep-6days","feature":"f1","status":"done","note":"6日前の完了"}\n' "$(epoch_to_iso $((BASE_EPOCH - 518400)))" >> "$OLD_LOG"
+printf '{"timestamp":"%s","agent":"sweep-now","feature":"f1","status":"running","note":"進行中"}\n' "$(epoch_to_iso $((BASE_EPOCH - 60)))" >> "$OLD_LOG"
+OLD_OUTPUT="$(bash "$SHOW_AGENT_STATUS" --log-file "$OLD_LOG" --now-epoch "$BASE_EPOCH")"
+assert_not_contains "$OLD_OUTPUT" "implementer-old" "40日前のrunningは表示しない（止まってる？にもならない）"
+assert_not_contains "$OLD_OUTPUT" "reviewer-old" "40日前のdoneも表示しない"
+assert_contains "$OLD_OUTPUT" "sweep-6days：6日前の完了 ✓" "7日未満のdoneは表示する"
+assert_contains "$OLD_OUTPUT" "sweep-now：進行中" "現在進行中は表示する"
+assert_contains "$OLD_OUTPUT" "（他 2 件は最終報告が 604800 秒（7 日）より前のため非表示" "非表示件数を末尾に出す"
+
+echo "=== test: --max-age-seconds 0 なら全件表示する（従来挙動） ==="
+ALL_OUTPUT="$(bash "$SHOW_AGENT_STATUS" --log-file "$OLD_LOG" --now-epoch "$BASE_EPOCH" --max-age-seconds 0)"
+assert_contains "$ALL_OUTPUT" "implementer-old：止まってる？（3456000秒応答なし）" "0指定で古いrunningも止まってる？として出る"
+assert_not_contains "$ALL_OUTPUT" "非表示" "0指定では非表示の案内を出さない"
+
+echo "=== test: 非表示が0件なら末尾の案内を出さない ==="
+assert_not_contains "$OUTPUT" "非表示" "全件が新しい場合は案内なし"
+
 echo "=== test: ログファイルが存在しない場合はエラーにならず案内文を返す ==="
 NO_LOG_OUTPUT="$(bash "$SHOW_AGENT_STATUS" --log-file "$WORKDIR/no-such-file.jsonl")"
 assert_contains "$NO_LOG_OUTPUT" "進捗ログがありません" "ログ未生成時は案内文を返す"
