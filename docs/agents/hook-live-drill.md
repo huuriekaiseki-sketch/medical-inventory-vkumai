@@ -85,6 +85,7 @@ PreToolUse の deny / ask は、止めるべき入力の JSON（`tool_name` / `t
 | SessionStart | check-stale-worktrees | 警告あり（残骸 2 件、正しい） | |
 | SessionStart | check-empty-session-report | 正常（未コミットの sessions 無し） | |
 | SessionStart(compact) | reinject-aidd-run-state | 実 compaction で発火確認（#712） | 40 日前の残骸混入 → PR #727 |
+| Setup(maintenance) | maintenance-digest | `claude -p --maintenance --debug` で発火確認（debug ログに `Hook Setup:maintenance (Setup) success` とダイジェスト本文。1 ターン約 $0.21） | 同時に個人プラグイン claude-mem 10.6.3 の Setup hook が `setup.sh: No such file` を出す（リポジトリ外） |
 | PreToolUse | check-skip-marker-write | RED: Write / cwd 相対 touch とも ask | |
 | PreToolUse | check-dependency-change | 実機で ask 確認（`npm install foo`、別セッション） | |
 | PreToolUse | check-run-manifest-presence | 高リスクパス編集で警告発火を確認（fixture 編集時） | |
@@ -114,3 +115,9 @@ PreToolUse の deny / ask は、止めるべき入力の JSON（`tool_name` / `t
 - `.claude/settings.json` の hooks を追加・変更したとき（その hook のみ）
 - Claude Code 本体のメジャー更新後（transcript / `wf_*.json` の形式が変わりうる）
 - プラグイン v1 の切り出し前と、各バージョンのリリース前（全件）
+
+## 次回実施予定日
+
+2026-12-05（四半期後の目安。v1 の切り出し前は予定日を待たず全件実施する。実施後に手動で書き換える。
+期限は `scripts/maintenance-digest.sh`（`claude -p --maintenance`、issue #741）が他の定期作業と
+まとめて表示する）

@@ -12,7 +12,8 @@ SessionStart hook（`scripts/check-upstream-docs-review-staleness.sh`）が監�
 ## 次回実施予定日
 
 2026-10-05（月 1 の目安。Claude Code のマイナー版が 10 個以上進んだとき、または v1 の各バージョン前は
-予定日を待たず実施する。実施後に手動で書き換える）
+予定日を待たず実施する。実施後に手動で書き換える。期限は SessionStart の個別警告に加え、
+`claude -p --maintenance`（`scripts/maintenance-digest.sh`、issue #741）で他の定期作業とまとめて確認できる）
 
 ## 最後に確認した版
 
