@@ -78,6 +78,7 @@ PreToolUse の deny / ask は、止めるべき入力の JSON（`tool_name` / `t
 | SessionStart | check-automode-config | 警告あり。**文言の参照先が移動済み** → 修正 | |
 | SessionStart | check-blocked-issues-staleness | 正常（blocked 1 件、90 日未満） | |
 | SessionStart | check-fault-injection-drill-staleness | 正常（次回予定日前） | |
+| SessionStart | check-upstream-docs-review-staleness | 導入時（2026-09-05）に実態ファイルで沈黙・過去日 fixture で警告を確認 | 公式 docs 差分確認の期限監視 |
 | SessionStart | check-workflow-interruption | 正常。killed 記録を注入すると復旧キューへ登録 | 表示は recovery-queue 側 |
 | SessionStart | check-recovery-queue | 正常（キュー無し） | |
 | SessionStart | check-claude-md-size | 起動時に発火確認（上限内） | |
