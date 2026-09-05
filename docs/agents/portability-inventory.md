@@ -27,6 +27,7 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 | derive のエンジン（入力解析・classifyRoute 呼び出し・required/not_required/milestone の評価・04 表出力） | `scripts/lib/derive-test-selection.mjs`、`scripts/derive-test-selection.sh` | パス表を一切持たない。派生先はルール表だけを書き換える設計（2026-09-04） |
 | 引き継ぎメモ 04 の4値検知（Stop hook の行名指し警告） | `scripts/check-handoff-format.sh` | 「どう確認したか」節の表行の状態列を見るだけで、種別名には依存しない |
 | 約束カタログの形式（9 列・`P-`3 桁・番号帯）と双方向の構造テスト | `docs/agents/promise-catalog.md`の列構成、`scripts/check-promise-catalog.test.sh` | 「ID が守るテストのファイル内に実在」「孤児 ID 禁止」の検査は言語・フレームワークに依存しない（検索対象の拡張子だけ差し替える） |
+| グラフマニフェストのスキーマ（nodes / edges / humanGates / budgets、blocked エッジは returnsTo 必須）と同期テスト・生成図の仕組み | `.claude/workflows/graph/aidd-graph.mjs`、`.claude/workflows/lib/__tests__/graph-manifest-sync.test.js`、`scripts/lib/render-aidd-graph.mjs` | issue #710。スキーマと「JS から静的抽出して突合する」方式は汎用。nodes / edges の中身（sweep 4 軸・Review 4 観点・予算値）はリポジトリ固有 |
 
 ## このリポジトリ・スタック固有と考えられる部分
 

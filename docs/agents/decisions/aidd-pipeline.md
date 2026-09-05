@@ -690,3 +690,45 @@ ai-config-map への寄せ）は issue #711 のコメントに列挙し、1 件�
 skill / paths 付き rules / 参照ドキュメントへ移す。切り出した節は compaction 後に再注入
 されなくなるので、フロー実行に必須のものは `scripts/reinject-aidd-run-state.sh`（issue #712）の
 ポインタに載せる。
+
+## なぜ AIDD パイプラインの配線を宣言的マニフェストにし、実行エンジンは導入せず「同期テスト＋生成図」に留めたか（issue #710）
+
+**結論: `.claude/workflows/graph/aidd-graph.mjs` に 4 Workflow（router / phase1 / deep-task /
+phase2）のノード・エッジ・人間ゲート・予算を宣言し、`graph-manifest-sync.test.js` が各 JS と
+の一致（phase 名・agentType・blockedAt・予算定数・fan-out 数）を `npm test` で検査、
+`scripts/lib/render-aidd-graph.mjs` が `docs/aidd-pipeline.html` と `docs/agents/aidd-graph.md`
+（Mermaid）を生成し、鮮度を `check-aidd-graph-rendered.test.sh` が CI で検査する。
+LangGraph 等の実行エンジンは導入しない。**
+
+2026 年 7 月以降のグラフエンジニアリング（ノード・エッジ・共有状態をバージョン管理された
+成果物にする）の要点は「配線を読めるようにし、拒否権・復帰先・予算を明示すること」であり、
+エンジンの導入ではない（「ハイプに複雑さで応答しない」）。vkumai は既に Workflow DSL 上で
+deny-by-default ゲート・retry・budget-guard を持っており、欠けていたのは配線の可視化だけだった。
+
+**なぜ JSON でなく .mjs にしたか:** 数値に `2_500_000` の区切りを使い、コメントで各項目の意味を
+書けるため。vitest と renderer は ESM import で読む。Workflow DSL 側からは読まない（require 不可）
+ので、マニフェストは「実装を駆動する」のではなく「実装を写す」正本であり、乖離は同期テストが止める。
+
+**同期テストが見るもの・見ないもの:** phase('X')・agentType・blockedAt（`tokenCapReturn('X')` は
+`Token Cap (before X)` に展開）・`const NAME = 数値` の予算定数・`REVIEW_DIMENSIONS` /
+`FINDERS` / `PROPOSERS` の要素数は静的抽出で突合する。エッジの**条件**（どの status で
+どこへ進むか）は JS の制御フローそのものなので静的には突合できず、マニフェスト側の記述が
+正しいかは人間レビューと fault injection 訓練（`docs/agents/fault-injection-drill.md`）に依存する。
+これは意図的な限界で、マニフェストの edges は「読める配線図」であり「実行の証明」ではない。
+
+**blocked の復帰先を必須にした理由:** phase2 だけで 10 の blocked 出口（7 ゲート + 3 token cap）が
+あり、「停止①に戻る（Spec/Manifest Check）」「停止②へ渡す（Review）」「人間が detail を読む
+（Contract+DB / Implement / Coverage / Integrate）」「resumeFromRunId（token cap）」の 4 種に
+分かれる。従来は recovery-queue.md と issue コメントにしか無く、同期テストが `returnsTo` 欠落を
+拒否することで「出口を増やしたら復帰先も書く」を強制する。
+
+**ai-config-map.md の effort/model 対応表を生成に切り替えなかった理由:** 表は「frontmatter が
+効く経路か」「意図的に frontmatter と違う値を使っている理由」という判断を含み、マニフェストの
+nodes（model / effort の値）だけからは生成できない。列の一部（agentType 経由か、インライン
+指定の値）はマニフェストから読めるので、将来表を作り直すときの材料にはなる。
+
+**How to apply:** Workflow に phase / agentType / blocked 出口 / 予算定数を足したら、
+同じ PR でマニフェストを更新し `node scripts/lib/render-aidd-graph.mjs` で図を再生成する
+（テストが RED になったら片方だけ直した合図）。図は手で直さない。issue #420（Plugin 化）で
+可搬にする「共通部分」はこのマニフェストの**スキーマ**であり、nodes / edges の中身は
+リポジトリ固有（`docs/agents/portability-inventory.md`）。
