@@ -17,8 +17,11 @@ command -v jq >/dev/null 2>&1 || exit 0
 # 設計: docs/agents/common.md「検知手段のないルールの棚卸し（issue #339）」表の
 # 「ブランチ運用ルール」行を参照。
 
-# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
-cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため、hook 起動時の cwd
+# （両ツールとも作業対象のリポジトリ）の git ルートを優先する。Claude / Codex 共有ガードなので
+# Claude 専用の環境変数には依存しない（共存の構造テスト codex-config-separation 原則2）。
+# git ルートが取れない場合（手動実行・テスト）は従来どおりスクリプト位置基準
+cd "$(git rev-parse --show-toplevel 2>/dev/null || echo "$(dirname "$0")/..")"
 
 BRANCH="$(git branch --show-current 2>/dev/null || true)"
 
