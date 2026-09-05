@@ -1,0 +1,35 @@
+# WHY: issue #714。docs/agents/ 等「AI エージェントが毎回読む知識庫」のリンク切れ・アンカー不一致・
+# 削除済みスクリプトへの言及を PR ごとに機械検知する。ci.yml は docs/** と CLAUDE.md / AGENTS.md を
+# paths-ignore しており、docs だけを変えた PR では hooks-test（scripts/*.test.sh 一括実行）が
+# 回らないため、docs 側の変更を起点にする軽量な単独 workflow を置く（eval-runs-freshness-check.yml
+# と同型）。コード側の変更で回る hooks-test と合わせて、実質すべての PR で検査される。
+# 意味的な陳腐化（LLM 判定）やクローズ済み issue への言及は対象外（issue #714 の 3 番、未実装）。
+
+name: Docs Integrity Check
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+      - '.claude/rules/**'
+      - '.claude/skills/**'
+      - '.agents/skills/**'
+      - 'scripts/lib/check-docs-integrity.mjs'
+      - 'scripts/check-docs-integrity.test.sh'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-integrity-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check docs integrity (links / anchors / path mentions)
+        run: bash scripts/check-docs-integrity.test.sh

@@ -82,7 +82,7 @@ Secretsやリモートのステータス源を新設せずに済む。
 
 **結論: grepベースの単語一致(偽陽性が多い)を、transcript自己検査によるセッション内自己検査型のagent hookに置き換えた。**
 
-`scripts/doc-suggest-check.sh`（Stop hook）は`git diff HEAD`の内容に`facility|tenant|RLS`等の
+`scripts/doc-suggest-check.sh`（Stop hook。削除済み、PR #424）は`git diff HEAD`の内容に`facility|tenant|RLS`等の
 キーワードが含まれるかのgrep判定で、単語一致だけで発火するため偽陽性が多かった（例:
 コメント中に`RLS`という単語があるだけの変更でも発火する）。issue #418で、Claude Codeの
 `type: "agent"` hook（Read/Grep/Globを持つサブエージェントが意味レベルで判定する、

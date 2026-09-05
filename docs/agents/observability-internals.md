@@ -75,7 +75,7 @@ bashスクリプト（`check-loop-observability-gap.sh`等）・ログ書き込�
 pass/failしか集計できず、`blocked`状態（Spec Check/Manifest Check等が返す）は集計から常に欠落
 していた（月次品質ゲートサマリ、issue #412、が実際にこの欠落を持ったまま運用されていた）。
 `scripts/lib/gate-effectiveness-summary.ts`が`journalAdapter`経由でWorkflow journal.jsonlの
-`blocked`件数をagentType別に集計し、`scripts/summarize-gate-blocked.sh`→
+`blocked`件数をagentType別に集計し、`scripts/summarize-gate-blocked.sh`（統合済み、issue #642）→
 `scripts/gate-effectiveness-monthly-check.sh`の順で月次サマリへ追記されるようにした。
 （追記・issue #642: その後、agent別のpass/fail集計自体もjournalベースへ移行した。journal＝
 wf_*ディレクトリはtranscript cleanupで消えるため、Stop hook契機で毎回

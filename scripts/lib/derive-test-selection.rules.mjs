@@ -58,6 +58,7 @@ export const RULES = [
   { key: 'auth-file-leak', label: '認証ファイル漏洩チェック', timing: 'always', commands: ['git ls-files e2e/.auth'] },
   { key: 'dependency-audit', label: '依存監査（既知脆弱性）', timing: 'always', commands: ['npm audit --omit=dev --audit-level=high'] },
   { key: 'lockfile-integrity', label: 'ロックファイルの出所', timing: 'always', commands: ['bash scripts/check-lockfile-integrity.test.sh'] },
+  { key: 'docs-integrity', label: 'docs 整合性', timing: 'always', commands: ['node scripts/lib/check-docs-integrity.mjs'] },
 
   // ---- 変更時 ----
   {
