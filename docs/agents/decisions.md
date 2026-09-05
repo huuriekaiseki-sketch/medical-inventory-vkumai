@@ -382,3 +382,32 @@ transcript 形式の変化で無音死していた別件も見つかった。[`k
 `npm run eval:workflows <set>`（sweep 系は `scripts/eval-sweep-recall.sh <layer>`）を回して
 eval-runs.jsonl の追記をコミットに含める。eval が意味を持たない変更なら PR 本文に
 `eval-skip: <理由>` を書く。免除を多用し始めたら、それは fixture セットの不足の合図として扱う。
+
+## なぜ TRI/RISK 判定の語彙を router-risk.js から aidd.config.json へ移し、既定値は「足すだけで消せない」形にしたか（issue #420 v1 セット B、2026-09-05）
+
+プラグイン v1（[`docs/specs/plugin-v1/SPEC.md`](../specs/plugin-v1/SPEC.md)）の最重要原則は
+「vkumai 専用設定をそのまま汎用プラグインにしない」。判定エンジン `router-risk.js` は 7 月試作で
+そのままコピーされ、`facility` / `inventory` / `supabase/migrations/` といった語が共通側に残る形に
+なっていた。エンジン（4 分岐のロジック）と語彙（どの語を高リスクとみなすか）を分け、語彙を
+リポジトリ直下の `aidd.config.json`（導入先アダプター）へ移した。
+
+**既定値を汎用語だけに絞る代わりに、設定は既定値に「足す」だけにした理由:** 設定で既定値を上書き
+（置換）できる形にすると、導入先が `domainKeywords: ["corpus"]` と書いた瞬間に `auth` / `rls` /
+`policy` が消え、TRI/RISK の「迷ったら高リスク側」が設定ミス 1 つで破れる。和集合にしておけば、
+設定が空でも・壊れていても・キーを間違えても、判定は緩まない（緩む方向の失敗モードを構造的に
+無くす）。`migration` を既定の domainKeywords に入れたのは、`supabase/migrations/` のような接頭辞は
+スタック固有で既定にできない一方、パスに migration を含む変更はどのスタックでもスキーマ変更である
+可能性が高いため。
+
+**インライン複製を残した理由:** `aidd-phase1-router.js` は Workflow DSL でファイルを読めない
+（[`load-bearing-workarounds.md`](./load-bearing-workarounds.md)）。そのため同じ値を
+`LOCAL_RISK_CONFIG` としてインラインで持ち、`aidd.config.json` との一致を
+`aidd-config.test.js` が検証する。`@aidd-local-config:begin/end` マーカーで囲んであるのは、
+プラグイン生成時にその区間だけを空に置き換えるため（導入先は `args.riskConfig` で渡す）。
+
+**代替案（却下）:** 既定値に vkumai の値を残し、導入先が上書きする。共通側に固有語が残るため
+原則に反し、禁止語の構造テスト（`aidd-config.test.js`）で機械的に弾く形にした。
+
+**How to apply:** 高リスクの語・パスを足すときは `aidd.config.json` の `risk` と
+`aidd-phase1-router.js` の `LOCAL_RISK_CONFIG` の両方を直す（片方だけだとテストが RED）。
+汎用語を足すときだけ `router-risk.js` の `DEFAULT_RISK_CONFIG` を直す（禁止語に注意）。

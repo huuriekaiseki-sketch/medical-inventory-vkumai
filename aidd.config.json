@@ -1,0 +1,32 @@
+{
+  "$schema": "./scripts/lib/aidd-config.schema.json",
+  "_comment": "導入先アダプター（issue #420 v1 仕様 Part 2 セット B）。このリポジトリ固有の値だけを書く。判定エンジン（.claude/workflows/lib/router-risk.js）の汎用既定値（auth / rls / policy / migration）はここに書かなくても常に含まれる（安全側に倒すため、既定値は消せない・足すだけ）。risk の値は aidd-phase1-router.js の LOCAL_RISK_CONFIG と同期テストで突き合わせる。",
+  "risk": {
+    "keywords": [
+      "migrations", "migration", "マイグレーション", "スキーマ",
+      "src/lib/supabase", "middleware.ts", "proxy.ts", "ミドルウェア",
+      "auth", "認証", "ログイン",
+      "facility", "施設",
+      "tenant", "テナント",
+      "organization", "組織",
+      "inventory", "在庫",
+      "rls", "policy", "ポリシー"
+    ],
+    "pathPrefixes": ["supabase/migrations/", "src/lib/supabase/"],
+    "domainKeywords": ["auth", "facility", "tenant", "organization", "inventory", "rls", "policy"]
+  },
+  "readonlyAgentTypes": [
+    "sweep-ui", "sweep-data", "sweep-db", "sweep-types",
+    "reviewer", "completeness-critic", "adversarial-verify", "judge-panel"
+  ],
+  "commands": {
+    "check": "npm run ai:check",
+    "test": "npm test",
+    "lint": "npm run lint",
+    "typecheck": "npm run typecheck"
+  },
+  "docs": {
+    "domain": "docs/agents/domain.md",
+    "decisions": "docs/agents/decisions.md"
+  }
+}

@@ -52,8 +52,16 @@ function stringLiterals(declSource) {
 
 describe('TRI/RISK 機械判定基準の AGENTS.md / common.md と router-risk.js の同期（issue #715）', () => {
   const libSource = readFileSync(LIB_FILE, 'utf-8')
-  const pathPrefixes = stringLiterals(extractDeclaration(libSource, 'RISK_PATH_PREFIXES'))
-  const domainKeywords = stringLiterals(extractDeclaration(libSource, 'RISK_DOMAIN_KEYWORDS'))
+  // issue #420 v1 セット B: 固有語彙は aidd.config.json（導入先アダプター）へ移った。docs に
+  // 書くべき基準は「汎用既定値（router-risk.js の DEFAULT_RISK_CONFIG）＋ vkumai の設定」の和。
+  // 'migration' は既定の domainKeywords にあるが docs の基準本文は `supabase/migrations/` 接頭辞で
+  // 表現しているため、docs 側の照合は設定ファイルの値で行い、既定値は存在確認のみにする
+  const riskConfig = JSON.parse(readFileSync(path.join(REPO_ROOT, 'aidd.config.json'), 'utf-8')).risk
+  const pathPrefixes = riskConfig.pathPrefixes
+  const domainKeywords = riskConfig.domainKeywords
+  const defaultDomainKeywords = stringLiterals(
+    extractDeclaration(libSource, 'DEFAULT_RISK_CONFIG').match(/domainKeywords:\s*\[[^\]]*\]/)[0]
+  )
   const fileNameRules = ['middleware.ts', 'proxy.ts']
 
   it('正本から接頭辞・ドメイン語を取り出せる（テスト自身の前提）', () => {
@@ -61,6 +69,12 @@ describe('TRI/RISK 機械判定基準の AGENTS.md / common.md と router-risk.j
     expect(domainKeywords.length).toBeGreaterThan(0)
     const isHighRiskPath = extractDeclaration(libSource, 'isHighRiskPath')
     for (const f of fileNameRules) expect(isHighRiskPath).toContain(f)
+  })
+
+  it('汎用既定値のドメイン語（migration を除く）は vkumai の設定にも含まれる（設定が既定値を狭めない）', () => {
+    for (const kw of defaultDomainKeywords.filter(k => k !== 'migration')) {
+      expect(domainKeywords).toContain(kw)
+    }
   })
 
   const sections = {}

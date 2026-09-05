@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { classifyRisk, classifyRoute } from '../router-risk.js'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
+import * as lib from '../router-risk.js'
+
+// issue #420 v1 セット B: エンジンの既定値は汎用語のみになり、facility / supabase 等の
+// vkumai 固有語は aidd.config.json から渡す。以下の既存テストは「vkumai の設定で従来と同じ
+// 判定になる」ことの回帰テストとして、設定を固定で渡すラッパー経由に置き換えた。
+// 汎用既定値のみでの挙動は aidd-config.test.js が検証する。
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const VKUMAI_RISK = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../aidd.config.json'), 'utf-8')).risk
+const classifyRisk = (taskDescription, changedFiles) => lib.classifyRisk(taskDescription, changedFiles, VKUMAI_RISK)
+const classifyRoute = (taskDescription, changedFiles) => lib.classifyRoute(taskDescription, changedFiles, VKUMAI_RISK)
 
 describe('classifyRisk', () => {
   it('taskDescriptionにキーワードがあれば高リスク（後方互換）', () => {

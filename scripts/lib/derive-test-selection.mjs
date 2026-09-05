@@ -28,6 +28,18 @@ const { classifyRoute } = await import(
   pathToFileURL(path.join(REPO_ROOT, '.claude/workflows/lib/router-risk.js')).href
 )
 
+// issue #420 v1 セット B: 高リスク判定の固有語彙（facility / supabase 配下等）はリポジトリ直下の
+// aidd.config.json（導入先アダプター）にある。無ければ汎用既定値のみで判定する（緩むのではなく
+// 固有語が足されないだけ。既定の auth / rls / policy / migration は常に効く）。
+function loadRiskConfig() {
+  try {
+    return JSON.parse(readFileSync(path.join(REPO_ROOT, 'aidd.config.json'), 'utf8')).risk ?? {}
+  } catch {
+    return {}
+  }
+}
+const RISK_CONFIG = loadRiskConfig()
+
 function parseArgs(argv) {
   const opts = { format: 'json', risks: [], files: null, listKeys: false, listRules: false, listRisks: false }
   for (let i = 0; i < argv.length; i++) {
@@ -68,7 +80,7 @@ export function derive(files, risks = []) {
   if (unknownRisks.length > 0) throw new Error(`unknown risk key: ${unknownRisks.join(', ')}`)
 
   const normalized = [...new Set(files.map(normalize))]
-  const route = classifyRoute('', normalized)
+  const route = classifyRoute('', normalized, RISK_CONFIG)
   const ctx = { files: normalized, route, risks }
 
   const required = []
