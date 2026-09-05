@@ -19,11 +19,11 @@
         "metaPathPrefixes": { "$ref": "#/$defs/stringList", "description": "全変更がこの接頭辞配下のみならメタ改修ルート。通常は既定値（.claude/workflows/ .claude/agents/ docs/agents/）のままでよい" }
       }
     },
-    "readonlyAgentTypes": { "$ref": "#/$defs/stringList", "description": "PreToolUse で書き込み系 Bash を deny する読み取り専用ロール名（check-readonly-bash.sh）。セット B2 で消費" },
+    "readonlyAgentTypes": { "$ref": "#/$defs/stringList", "description": "PreToolUse で書き込み系 Bash を deny する読み取り専用ロール名（check-readonly-bash.sh）。hook は scripts/lib/aidd-config.sh 経由で読む" },
     "commands": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Stop hook の実行痕跡検知（ai-check-suggest.sh）と引き継ぎメモが参照するコマンド。セット B2 で消費",
+      "description": "Stop hook の実行痕跡検知（ai-check-suggest.sh）と引き継ぎメモが参照するコマンド。hook は scripts/lib/aidd-config.sh 経由で読む",
       "properties": {
         "check": { "type": "string" },
         "test": { "type": "string" },
@@ -34,7 +34,7 @@
     "docs": {
       "type": "object",
       "additionalProperties": false,
-      "description": "高リスク変更時に追記を促すドキュメントの場所（check-domain-decisions-suggest.sh）。セット B2 で消費",
+      "description": "高リスク変更時に追記を促すドキュメントの場所（check-domain-decisions-suggest.sh）。hook は scripts/lib/aidd-config.sh 経由で読む",
       "properties": {
         "domain": { "type": "string" },
         "decisions": { "type": "string" }

@@ -28,7 +28,31 @@ command -v jq >/dev/null 2>&1 || exit 0
 # 対象ツール: Write / Edit / MultiEdit（tool_input.file_pathに書き込み先が現れる）。
 # .claude/settings.jsonのmatcherと本スクリプトのcase文の両方を揃える必要がある。
 
-HIGH_RISK_PATTERN='(^|/)supabase/migrations/|(^|/)src/lib/supabase/|(^|/)middleware\.ts$|(^|/)proxy\.ts$|[Aa]uth|[Ff]acility|[Tt]enant|[Oo]rganization|[Ii]nventory|[Rr][Ll][Ss]|[Pp]olicy'
+# 高リスクパスの判定は router-risk.js の DEFAULT_RISK_CONFIG（汎用: auth / rls / policy / migration と
+# middleware.ts / proxy.ts）に、aidd.config.json の risk.pathPrefixes / risk.domainKeywords（固有:
+# supabase/migrations/ 等）を足して作る（issue #420 v1 セット B2）。設定が無ければ汎用分だけで判定する
+# （緩むのではなく固有語が足されないだけ）。大文字小文字は grep -i で吸収する。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/lib/aidd-config.sh" ]; then
+  source "$SCRIPT_DIR/lib/aidd-config.sh"
+else
+  aidd_config_query() { printf '%s' "${2:-}"; }
+fi
+DEFAULT_HIGH_RISK_PATTERN='(^|/)middleware\.ts$|(^|/)proxy\.ts$|auth|rls|policy|migration'
+build_high_risk_pattern() {
+  local root_hint="$1" extra
+  # pathPrefixes は (^|/)接頭辞、domainKeywords は語の部分一致。正規表現の特殊文字はエスケープする
+  extra="$(aidd_config_query '
+    def esc: gsub("[.^$*+?()\\[\\]{}|\\\\]"; "\\\\" + .);
+    [ ((.risk.pathPrefixes // [])[] | "(^|/)" + esc),
+      ((.risk.domainKeywords // [])[] | esc) ]
+    | join("|")' '' "$root_hint")"
+  if [ -n "$extra" ]; then
+    printf '%s|%s' "$DEFAULT_HIGH_RISK_PATTERN" "$extra"
+  else
+    printf '%s' "$DEFAULT_HIGH_RISK_PATTERN"
+  fi
+}
 
 INPUT="$(cat)"
 TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')"
@@ -79,7 +103,8 @@ print(rel)
 ' "$TARGET" "$REPO_ROOT")" || exit 0
 fi
 
-if ! [[ "$RELATIVE_TARGET" =~ $HIGH_RISK_PATTERN ]]; then
+HIGH_RISK_PATTERN="$(build_high_risk_pattern "$REPO_ROOT")"
+if ! printf '%s' "$RELATIVE_TARGET" | grep -qiE "$HIGH_RISK_PATTERN"; then
   exit 0
 fi
 

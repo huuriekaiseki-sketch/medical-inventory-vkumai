@@ -51,24 +51,42 @@ if [ -z "$CHANGED_FILES" ]; then
   silent
 fi
 
-# docs/agents/common.md「TRI/RISK 機械判定基準」の高リスクパスに合わせる
-MATCHED="$(printf '%s' "$CHANGED_FILES" | grep -E \
-  -e '^supabase/migrations/' \
-  -e '^src/lib/supabase/' \
-  -e '(^|/)middleware\.ts$' \
-  -e '(^|/)proxy\.ts$' \
-  -e '(facilit|tenant|organization|inventor|rls|polic|auth)' || true)"
+# 高リスクパスは docs/agents/common.md「TRI/RISK 機械判定基準」＝ router-risk.js の汎用既定値
+# （auth / rls / policy / migration、middleware.ts / proxy.ts）に aidd.config.json の risk
+# （固有: supabase/migrations/ 等）を足したもの（issue #420 v1 セット B2）。
 # WHY: 語尾変化を拾うため語幹で照合する。`facility` と書くと `facilities/` に一致せず
-#      取りこぼす（テストで検出）。`polic`→policy/policies、`inventor`→inventory/inventories
+#      取りこぼす（テストで検出）。`polic`→policy/policies、`inventor`→inventory/inventories。
+#      語幹化は「末尾の y を落とす」だけの機械規則にし、設定側は普通の語（facility）で書けるようにする。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/lib/aidd-config.sh" ]; then
+  source "$SCRIPT_DIR/lib/aidd-config.sh"
+else
+  aidd_config_query() { printf '%s' "${2:-}"; }
+fi
+DEFAULT_RISK_PATTERN='(^|/)middleware\.ts$|(^|/)proxy\.ts$|(auth|rls|polic|migration)'
+EXTRA_RISK_PATTERN="$(aidd_config_query '
+  def esc: gsub("[.^$*+?()\\[\\]{}|\\\\]"; "\\\\" + .);
+  def stem: sub("y$"; "");
+  [ ((.risk.pathPrefixes // [])[] | "^" + esc),
+    ((.risk.domainKeywords // [])[] | stem | esc) ]
+  | join("|")' '')"
+RISK_PATTERN="$DEFAULT_RISK_PATTERN"
+if [ -n "$EXTRA_RISK_PATTERN" ]; then
+  RISK_PATTERN="${DEFAULT_RISK_PATTERN}|${EXTRA_RISK_PATTERN}"
+fi
+MATCHED="$(printf '%s' "$CHANGED_FILES" | grep -iE "$RISK_PATTERN" || true)"
 
 if [ -z "$MATCHED" ]; then
   silent
 fi
 
 FILE_LIST="$(printf '%s' "$MATCHED" | sort -u | head -10 | tr '\n' ' ')"
+DOMAIN_WORDS="$(aidd_config_query '(.risk.domainKeywords // []) | join("/")' 'auth/rls/policy')"
+DOMAIN_DOC="$(aidd_config_query '.docs.domain // empty' 'docs/agents/domain.md')"
+DECISIONS_DOC="$(aidd_config_query '.docs.decisions // empty' 'docs/agents/decisions.md')"
 
-MSG="このセッションは高リスクドメイン（facility/tenant/RLS等）のファイルに触れています: ${FILE_LIST}
-その変更が、単なるコメント修正・タイポ・変数名変更ではなく、後戻りしづらい／記録がないと後から理由が分からなくなる／本当にトレードオフがあった設計判断（RLSポリシーの方針、権限境界の変更、DBスキーマ変更の理由など）を含むなら、docs/agents/domain.md（新しいドメイン用語）と docs/agents/decisions.md（設計判断）への追記を検討してください。該当しなければ対応は不要です。"
+MSG="このセッションは高リスクドメイン（${DOMAIN_WORDS} 等）のファイルに触れています: ${FILE_LIST}
+その変更が、単なるコメント修正・タイポ・変数名変更ではなく、後戻りしづらい／記録がないと後から理由が分からなくなる／本当にトレードオフがあった設計判断（RLSポリシーの方針、権限境界の変更、DBスキーマ変更の理由など）を含むなら、${DOMAIN_DOC}（新しいドメイン用語）と ${DECISIONS_DOC}（設計判断）への追記を検討してください。該当しなければ対応は不要です。"
 
 touch "$STATE_FILE"
 jq -n --arg msg "$MSG" '{systemMessage: $msg}'

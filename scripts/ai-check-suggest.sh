@@ -50,13 +50,37 @@ fi
 # だけを対象にすることで、警告文自体・会話中の言及（実行を伴わない）の両方を除外する。
 EXECUTED_COMMANDS="$(jq -r 'select(.message.content? != null) | .message.content[]? | select(.type=="tool_use" and .name=="Bash") | .input.command' "$TRANSCRIPT" 2>/dev/null || true)"
 
-if printf '%s' "$EXECUTED_COMMANDS" | grep -qE 'npm run (ai:check|typecheck|lint|test)\b'; then
+# 実行済みとみなすコマンドは aidd.config.json の commands（check / test / lint / typecheck）から作る
+# （issue #420 v1 セット B2。コマンド体系はスタック固有）。設定が無ければ従来の npm 既定で判定する。
+# `npm run X` と `npm X` は同じ意味なので両方を許す（"npm test" 設定でも "npm run test" を実行済み扱い）。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/lib/aidd-config.sh" ]; then
+  source "$SCRIPT_DIR/lib/aidd-config.sh"
+else
+  aidd_config_query() { printf '%s' "${2:-}"; }
+fi
+DEFAULT_CHECK_PATTERN='npm run (ai:check|typecheck|lint|test)\b'
+CHECK_PATTERN="$(aidd_config_query '
+  def esc: gsub("[.^$*+?()\\[\\]{}|\\\\]"; "\\\\" + .);
+  def variants: if test("^npm run ") then [., sub("^npm run "; "npm ")]
+                elif test("^npm ") then [., sub("^npm "; "npm run ")]
+                else [.] end;
+  [ (.commands // {}) | to_entries[] | .value | select(type == "string" and length > 0) | variants[] | esc ]
+  | unique | join("|")' '')"
+if [ -n "$CHECK_PATTERN" ]; then
+  CHECK_PATTERN="(${CHECK_PATTERN})\\b"
+else
+  CHECK_PATTERN="$DEFAULT_CHECK_PATTERN"
+fi
+CHECK_LABEL="$(aidd_config_query '.commands.check // empty' 'npm run ai:check')"
+
+if printf '%s' "$EXECUTED_COMMANDS" | grep -qE "$CHECK_PATTERN"; then
   # WHY: 状態ハッシュは「実行済みと確認できた場合のみ」書き込む（issue #635）。
   # 未実行のまま書き込むと、同一diff状態での再Stopが30行目の早期returnで
   # 無条件にスキップされ、警告が最大1回しか出なくなってしまう。
   echo "$CURRENT_HASH" > "$STATE_FILE"
   :  # 報告事項なし。公式仕様では表示しないなら systemMessage を省略する（issue #737。以前は空文字を出していた）
 else
-  MSG="ソースコード変更（.ts/.tsx/.sql）があるにもかかわらず、このセッションで npm run ai:check 相当のコマンド（typecheck/lint/test）が実行された痕跡が見当たりません。実行を検討してください。"
+  MSG="ソースコード変更（.ts/.tsx/.sql）があるにもかかわらず、このセッションで ${CHECK_LABEL} 相当のコマンド（typecheck/lint/test）が実行された痕跡が見当たりません。実行を検討してください。"
   jq -n --arg msg "$MSG" '{systemMessage: $msg}'
 fi

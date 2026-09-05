@@ -139,6 +139,37 @@ assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_empty "$OUT" "出力が空である(リポジトリ外への書き込みは対象外)"
 rm -rf "$(dirname "$OUTSIDE_FILE")"
 
+echo "=== scenario 7e: aidd.config.json が無い環境 → 汎用既定値（auth 等）だけで判定し、facility は対象外（issue #420 v1 セット B2） ==="
+input="$(jq -n --arg cwd "$NO_MANIFEST_REPO" '{tool_name: "Write", tool_input: {file_path: "src/components/FacilitySelector.tsx", content: "x"}, cwd: $cwd}')"
+set +e
+OUT="$(printf '%s' "$input" | AIDD_CONFIG_FILE="$NO_MANIFEST_REPO/none.json" bash "$SCRIPT")"
+set -e
+assert_empty "$OUT" "設定無しでは facility（固有語）は高リスクにならない"
+input="$(jq -n --arg cwd "$NO_MANIFEST_REPO" '{tool_name: "Write", tool_input: {file_path: "src/lib/auth/session.ts", content: "x"}, cwd: $cwd}')"
+set +e
+OUT="$(printf '%s' "$input" | AIDD_CONFIG_FILE="$NO_MANIFEST_REPO/none.json" bash "$SCRIPT")"
+set -e
+assert_contains "$OUT" '"permissionDecision": "allow"' "設定無しでも auth（汎用既定）は高リスク"
+input="$(jq -n --arg cwd "$NO_MANIFEST_REPO" '{tool_name: "Write", tool_input: {file_path: "db/migrations/001.sql", content: "x"}, cwd: $cwd}')"
+set +e
+OUT="$(printf '%s' "$input" | AIDD_CONFIG_FILE="$NO_MANIFEST_REPO/none.json" bash "$SCRIPT")"
+set -e
+assert_contains "$OUT" '"permissionDecision": "allow"' "設定無しでも migration を含むパス（汎用既定）は高リスク"
+
+echo "=== scenario 7f: 導入先の設定（ルートヒント＝hook の cwd 直下）から固有語を足せる ==="
+printf '{"risk":{"domainKeywords":["corpus"],"pathPrefixes":["ingest/"]}}\n' > "$NO_MANIFEST_REPO/aidd.config.json"
+input="$(jq -n --arg cwd "$NO_MANIFEST_REPO" '{tool_name: "Write", tool_input: {file_path: "src/corpus/loader.ts", content: "x"}, cwd: $cwd}')"
+set +e
+OUT="$(printf '%s' "$input" | env -u AIDD_CONFIG_FILE bash "$SCRIPT")"
+set -e
+assert_contains "$OUT" '"permissionDecision": "allow"' "cwd 直下の設定の domainKeywords が効く"
+input="$(jq -n --arg cwd "$NO_MANIFEST_REPO" '{tool_name: "Write", tool_input: {file_path: "ingest/run.ts", content: "x"}, cwd: $cwd}')"
+set +e
+OUT="$(printf '%s' "$input" | env -u AIDD_CONFIG_FILE bash "$SCRIPT")"
+set -e
+assert_contains "$OUT" '"permissionDecision": "allow"' "cwd 直下の設定の pathPrefixes が効く"
+rm -f "$NO_MANIFEST_REPO/aidd.config.json"
+
 echo "=== scenario 8: Bashツールは対象外(matcherに含まれない) → 何も出力しない ==="
 input="$(jq -n --arg cwd "$NO_MANIFEST_REPO" '{tool_name: "Bash", tool_input: {command: "cat src/lib/supabase/client.ts"}, cwd: $cwd}')"
 run_hook "$input"

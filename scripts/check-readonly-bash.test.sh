@@ -101,6 +101,19 @@ done
 OUT="$(READONLY_AGENT_TYPES="custom-role" run 'rm -rf /tmp/x' "custom-role")"
 if printf '%s' "$OUT" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1; then echo "  OK: READONLY_AGENT_TYPES で対象ロールを差し替えられる"; else echo "  NG: 環境変数での差し替えが効かない"; fail=1; fi
 
+echo "=== scenario 2c: 対象ロールは aidd.config.json の readonlyAgentTypes から読む（issue #420 v1 セット B2） ==="
+CFG_DIR="$(mktemp -d)"
+printf '{"readonlyAgentTypes":["custom-role"]}\n' > "$CFG_DIR/aidd.config.json"
+OUT="$(printf '{"tool_name":"Bash","agent_id":"a1","agent_type":"custom-role","tool_input":{"command":"rm -rf /tmp/x"}}' | AIDD_CONFIG_FILE="$CFG_DIR/aidd.config.json" bash "$SCRIPT")"
+if printf '%s' "$OUT" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1; then echo "  OK: 設定のロールが deny 対象になる"; else echo "  NG: 設定のロールが効かない"; fail=1; fi
+OUT="$(printf '{"tool_name":"Bash","agent_id":"a1","agent_type":"sweep-ui","tool_input":{"command":"rm -rf /tmp/x"}}' | AIDD_CONFIG_FILE="$CFG_DIR/aidd.config.json" bash "$SCRIPT")"
+if [ -z "$OUT" ]; then echo "  OK: 設定に無いロール（sweep-ui）は設定があるとき対象外"; else echo "  NG: 設定があるのに既定ロールが残っている"; fail=1; fi
+OUT="$(printf '{"tool_name":"Bash","agent_id":"a1","agent_type":"sweep-ui","tool_input":{"command":"rm -rf /tmp/x"}}' | AIDD_CONFIG_FILE="$CFG_DIR/none.json" bash "$SCRIPT")"
+if printf '%s' "$OUT" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1; then echo "  OK: 設定ファイルが無ければ既定ロールで deny"; else echo "  NG: 設定無しで既定ロールが効かない"; fail=1; fi
+OUT="$(printf '{"tool_name":"Bash","agent_id":"a1","agent_type":"env-role","tool_input":{"command":"rm -rf /tmp/x"}}' | AIDD_CONFIG_FILE="$CFG_DIR/aidd.config.json" READONLY_AGENT_TYPES="env-role" bash "$SCRIPT")"
+if printf '%s' "$OUT" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1; then echo "  OK: 環境変数は設定ファイルより優先"; else echo "  NG: 環境変数の優先が崩れた"; fail=1; fi
+rm -rf "$CFG_DIR"
+
 echo "=== scenario 3: Bash 以外のツール・空コマンドは何もしない ==="
 OUT="$(printf '{"tool_name":"Read","tool_input":{"file_path":"x"}}' | bash "$SCRIPT")"
 if [ -z "$OUT" ]; then echo "  OK: Read は対象外"; else echo "  NG: Read で出力あり"; fail=1; fi
