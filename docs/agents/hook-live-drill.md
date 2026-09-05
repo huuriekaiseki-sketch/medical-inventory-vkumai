@@ -93,6 +93,7 @@ PreToolUse の deny / ask は、止めるべき入力の JSON（`tool_name` / `t
 | PreToolUse | check-direct-ddl-execution | RED: 素の `db push` / MCP execute_sql は deny、`--local` は通過 | |
 | PreToolUse | check-readonly-bash | 実機 deny 確認済み（#713） | |
 | SubagentStart/Stop | log-subagent-hook-skeleton | 記録あり。**app 内部の subagent（agentType 空）も記録される** | 集計側は wf_ パスで絞るため影響なし |
+| InstructionsLoaded | log-instructions-loaded | 導入時（2026-09-05、2.1.258）に `claude -p` で実発火を確認。3 件（個人 CLAUDE.md=session_start / CLAUDE.md=session_start / common.md=**include**）。project 配下 22,975 文字は `check-claude-md-size.sh` の自前計算と完全一致。**`memory_type` の実値は docs の `instructions` でなく `User` / `Project`**（docs 差分） | 記録専用（公式仕様で出力は全て無視される）。paths 付き rules は起動時に来ない（設計どおり） |
 | Stop | check-domain-decisions-suggest | 空 systemMessage | 害は未確認（下記） |
 | Stop | ai-check-suggest | 空 systemMessage | 同上 |
 | Stop | verify-claims | 観測ログが当日更新 → 生存 | 実走は課金のため省略 |
