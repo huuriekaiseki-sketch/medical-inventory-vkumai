@@ -16,6 +16,15 @@
   },
   "forbiddenWords": ["vkumai", "medical", "facility", "tenant", "organization", "inventory", "supabase", "npm", "next.js", "playwright", "医療"],
   "forbiddenWordsAllowPhrases": ["actuator-inventory", "portability-inventory", "undetectable-rules-inventory"],
+  "forbiddenWordsSkipPaths": ["COMPATIBILITY.md", "CHANGELOG.md", "KNOWN-LIMITS.md", "MIGRATION.md", "BREAKING.md", "evidence/", "templates/"],
+  "releaseDocs": {
+    "_comment": "各バージョンで残す 7 項目（SPEC Part 1 の 3.）。正本は docs/plugin/。両プラグインのルートへコピーする。禁止語検査の対象外（中心リポジトリ名を書く必要があるため）",
+    "sourceDir": "docs/plugin",
+    "files": ["COMPATIBILITY.md", "CHANGELOG.md", "KNOWN-LIMITS.md", "MIGRATION.md", "BREAKING.md"],
+    "dirs": ["evidence"]
+  },
+  "schema": { "lib/aidd-config.schema.json": "aidd-core" },
+  "templates": { "docs/plugin/templates/consumer": "aidd-core" },
   "agents": {
     "reviewer": "aidd-core",
     "adversarial-verify": "aidd-core",

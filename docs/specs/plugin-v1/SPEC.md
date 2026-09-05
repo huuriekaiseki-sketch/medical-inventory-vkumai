@@ -37,7 +37,7 @@ medical・facility・Supabase・npm の語を 1 つも残さない**（構造テ
 | # | 項目 | 置き場所（プラグインリポジトリ内） | 正本の出どころ |
 |---|---|---|---|
 | 1 | 対応する Claude Code・Codex のバージョン | `COMPATIBILITY.md` | vkumai の `docs/agents/upstream-docs-review.md`「最後に確認した版」 |
-| 2 | プラグインの設定スキーマ | `schema/aidd.config.schema.json` | 本仕様 Part 2 の設定項目一覧 |
+| 2 | プラグインの設定スキーマ | `schema/aidd-config.schema.json`（正本は中心リポジトリの `scripts/lib/aidd-config.schema.json`） | 本仕様 Part 2 の設定項目一覧 |
 | 3 | v1→v2 の移行手順 | `MIGRATION.md`（v1 では「v0（手コピー）→ v1」を書く） | 実際に riff-gear / cardiosearch を移行して書く |
 | 4 | 互換性を壊す変更の一覧 | `BREAKING.md` | 列・ID 規約・設定キーの変更はすべて破壊的変更扱い（`user_format_is_the_key`） |
 | 5 | 共通 fixture による回帰テスト | `tests/`（構造テスト `*.test.sh`・vitest・eval fixture・fault-injection fixture） | vkumai の `scripts/*.test.sh`・`.claude/workflows/lib/__tests__/`・`scripts/eval-fixtures/` |
@@ -87,11 +87,16 @@ v2 以降で「プラグインが正本、vkumai も消費者」へ反転する�
       （空リポジトリのため自己申告 `blockedCount: 4`）。1 セッション $0.41（haiku 4 体込み）
 - [ ] 同じ検証用リポジトリで、`hook-live-drill.md` の手順で共通 hook を全件実走し、無音死が 0 件
 - [ ] fault-injection 訓練 4 シナリオがプラグイン経由でも `blocked` を返す
-- [ ] vkumai 本体で `npm test`・`hooks-test` CI が無変更で green（本体の既存フローが動き続ける）
-- [ ] 共通プラグイン内に vkumai / medical / facility / supabase / npm の語が無いことを構造テストが保証
-- [ ] 7 項目のファイルがすべて存在し、`COMPATIBILITY.md` の版が vkumai の「最後に確認した版」と一致
-- [ ] 生成スクリプトを 2 回続けて実行しても差分が出ない（決定的）
-- [ ] 導入先設定 `aidd.config.json` を空にしても共通プラグインが安全側（高リスク扱い）で動く
+- [x] vkumai 本体で `npm test`・`hooks-test` CI が無変更で green（本体の既存フローが動き続ける）
+      → PR #749 / #750 / #752 とも CI 全 green。本体の `.claude/settings.json` の hooks は変更なし
+- [x] 共通プラグイン内に vkumai / medical / facility / supabase / npm の語が無いことを構造テストが保証
+      → 生成スクリプトの禁止語検査（コメント込み、`plugin-layout.json` の forbiddenWords）。違反があれば出力しない
+- [x] 7 項目のファイルがすべて存在し、`COMPATIBILITY.md` の版が vkumai の「最後に確認した版」と一致
+      → 2026-09-05: 正本 `docs/plugin/`（5 文書＋`evidence/`＋`templates/consumer/`）を生成スクリプトが
+      両プラグインのルートへコピー。版の一致は `scripts/build-plugin.test.sh` scenario 4b が機械検査
+- [x] 生成スクリプトを 2 回続けて実行しても差分が出ない（決定的） → 同 scenario 1
+- [x] 導入先設定 `aidd.config.json` を空にしても共通プラグインが安全側（高リスク扱い）で動く
+      → `aidd-config.test.js`（設定が空でも auth / rls / policy / migration は deep）と hook 4 本のテスト（設定無し→汎用既定）
 
 ### 7. 配布形態（2026-09-05 ユーザー決定済み）
 
