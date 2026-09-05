@@ -215,7 +215,7 @@ export const RISK_KEYS = ['authz_change', 'retry_possible', 'contention', 'exter
 // どのルールにも触れず、かつ製品コード・テスト・文書として素性が分かるパス以外は
 // 「未分類」として人に見せる（新しい層が増えたのにルールが無い、を気づかせるため）
 export const CLASSIFIED_PATH_PATTERNS = [
-  /^src\//, /^supabase\//, /^e2e\//, /^scripts\//, /^docs\//, /^\.claude\//, /^\.codex\//,
+  /^src\//, /^supabase\//, /^e2e\//, /^scripts\//, /^docs\//, /^\.claude\//, /^\.codex\//, /^\.agents\//,
   /^\.github\//, /^public\//, /^(package|package-lock|tsconfig[^/]*|vitest[^/]*|playwright[^/]*|eslint[^/]*|next[^/]*)\.(json|ts|js|mjs|cjs)$/,
   /^(CLAUDE|AGENTS|README)\.md$/, /^\.gitignore$/, /^\.env\.example$/,
 ]

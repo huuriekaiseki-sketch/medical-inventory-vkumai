@@ -30,6 +30,11 @@ description: 作業完了時（PR本文・セッション終了報告・docs/ses
 - 対象外（今回あえて触らない）:
 - 作業中に見つけた別件:（スコープ外の問題を見つけたら、その場で直さずissue化し、
   番号をここにリンクする。「このPRが原因の問題」と「元から別に存在した問題」を混同させない）
+- 依存の変更:（package.json / package-lock.json に触れた場合は必須。触れていなければ「なし」。
+  追加・更新・削除したパッケージごとに、用途 / 代替案（既存の依存・標準 API で足りない理由）/
+  権限・環境変数・DB への影響 / 固定した版と出所（registry.npmjs.org）/ `npm ci` と
+  `npm audit --omit=dev --audit-level=high` の結果 / 失敗時のロールバック方法。
+  Stop hook（`scripts/check-handoff-format.sh`）が package.json 変更 PR でこの見出しの有無を警告する）
 
 ## 01 画面がどう変わったか（UI証拠）
 - 実際のスクリーンショットか、実装前のモック/サンプルかを明記する
@@ -44,8 +49,27 @@ description: 作業完了時（PR本文・セッション終了報告・docs/ses
 - 他テナントのIDでアクセスし、弾かれることを確認したか:（RLS/facility境界に
   触れた場合は必須。Issue #24再発防止。チェック観点は
   [`../../docs/agents/known-failure-patterns.md`](../../docs/agents/known-failure-patterns.md) 参照）
+- 該当する約束（[`../../docs/agents/promise-catalog.md`](../../docs/agents/promise-catalog.md) の `P-xxx`）:
+  触れた約束の ID を列挙する。新しい約束を作ったらカタログに行を足し、守るテストの `describe` 名に ID を含める
 
 ## 04 どう確認したか（テスト・検証）
+| 種別（test-matrix.md の行） | 状態 | 結果・証跡 |
+| --- | --- | --- |
+| 型検査 / lint / unit / build（毎回、CI） | ⬜ 未実施 | CI run の URL |
+| hook 回帰（毎回、CI hooks-test） | ⬜ 未実施 |  |
+| RLS/IDOR 統合（変更時: migrations / src/lib/supabase / proxy.ts） | ⬜ 未実施 |  |
+| 直接攻撃の実測（変更時: auth / 認可 / RLS） | ⬜ 未実施 |  |
+| E2E（節目: main マージ後。PR 段階はローカル） | ⬜ 未実施 |  |
+| 冪等性 / 同時実行 / 障害注入（変更時・節目） | ⬜ 未実施 |  |
+
+- 状態は4値のみ。✅ 実施（`(手動)` か `(自動テスト: パス)` かを書き分ける）/
+  ➖ 今回不要（理由必須。触っていない層なら「変更なし」で足りる）/ 🟡 一部（何を残したか）/
+  ⬜ 未実施（必要なのに未実施。理由必須。原則マージ不可）
+- 行と「➖ 今回不要」の理由は自分で考えず、`bash scripts/derive-test-selection.sh origin/main --format table`
+  （リスク申告があれば `--risk authz_change,retry_possible,contention,external_side_effect` のうち該当するもの）の
+  出力を貼り、「⬜ 未実施」の行を実施結果に応じて ✅ / 🟡 に書き換える。⬜ のまま残す行には理由を書く
+- 行は [`../../docs/agents/test-matrix.md`](../../docs/agents/test-matrix.md) の「毎回」「変更時」の
+  種別に揃える。該当しない「節目」の行は削ってよい
 - この変更に直接対応するテスト（テスト名で。`npm run ai:check` の実行有無を含む）
 - 全体テストの実行結果（実測値。CI実行URL・実行日時・対象コマンドを添える）
 - fault injection: 何を壊し、どのテストが失敗し、復旧後どうなったか（実施した場合）
