@@ -33,7 +33,7 @@ if [ "$HAS_HARD_DENY" = "true" ]; then
   exit 0
 fi
 
-MSG="autoMode(hard_deny)による医療データ外部送信・RLS無効化の無条件ブロックが、個人設定(${SETTINGS_PATH})に見当たりません。プロジェクト側の設定ファイルでは強制できない仕様のため、有効化したい場合は docs/agents/common.md の推奨autoMode設定を各自の ~/.claude/settings.json に追加してください（任意、issue #439）。"
+MSG="autoMode(hard_deny)による医療データ外部送信・RLS無効化の無条件ブロックが、個人設定(${SETTINGS_PATH})に見当たりません。プロジェクト側の設定ファイルでは強制できない仕様のため、有効化したい場合は docs/agents/tooling-decisions.md「autoMode(hard_deny)は個人設定のみ有効・設定し忘れ検知はSessionStart hookで」の推奨設定を各自の ~/.claude/settings.json に追加してください（任意、issue #439。以前は common.md を指していたが issue #486 の圧縮で節が移動した）。"
 
 jq -n --arg msg "$MSG" '{
   systemMessage: $msg,
