@@ -23,6 +23,11 @@ set -euo pipefail
 #      MEMORY.md（auto memory、先頭200行/25KB）と SessionStart hook の出力は、hook自身から
 #      安全に測れない（前者は $HOME 配下の個人ファイル、後者は自己再帰）ため対象外。
 #      それらを含めた実測値は issue #711 のコメントを参照。
+#      この自前計算が「実際に読まれたもの」と一致しているかは、InstructionsLoaded hook の記録
+#      （scripts/log-instructions-loaded.sh → logs/instructions-loaded.jsonl、issue #742）を
+#      scripts/summarize-instructions-loaded.sh で集計して突き合わせる。差があれば自前計算側の穴。
+#      判定自体をそちらへ移さないのは、InstructionsLoaded が SessionStart より後に来る上に
+#      出力が全て無視される（記録専用）ため、起動時の警告には使えないから。
 #
 # 閾値は環境変数で上書き可能:
 #   CLAUDE_MD_LINE_LIMIT（既定200）/ COMMON_MD_LINE_LIMIT（既定300）

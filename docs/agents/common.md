@@ -279,6 +279,7 @@ AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p
 | [`docs/agents/hook-live-drill.md`](./hook-live-drill.md) | 全 hook を現在セッションの実データで実走し、fail-open の無音死を見つけるランブックと実施記録（2026-09-05 初回で 7 件発見。プラグイン v1 前の必須作業） |
 | [`docs/agents/upstream-docs-review.md`](./upstream-docs-review.md) | Claude Code / Anthropic / Codex の公式ドキュメント差分を月 1 で確認する手順・実施記録・「最後に確認した版」（v1 の対応バージョンの正本）。期限は `scripts/check-upstream-docs-review-staleness.sh` が SessionStart で警告 |
 | `scripts/maintenance-digest.sh` | 定期作業 3 つ（fault-injection 訓練・hook 実走ドリル・docs 差分確認）の期限を一括表示。`claude -p --maintenance`（Setup hook）または手動実行（issue #741） |
+| `scripts/log-instructions-loaded.sh` / `scripts/summarize-instructions-loaded.sh` | InstructionsLoaded hook で実際に context へ読み込まれた CLAUDE.md / rules をファイル単位で `logs/instructions-loaded.jsonl` に記録し、直近セッションの常時ロード量（文字数）と rules 別ロード回数を集計する（issue #742。`check-claude-md-size.sh` の自前計算との突き合わせ用。月次サマリにも載る） |
 | `scripts/check-subagent-model-force.sh` | `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` が設定されていると AIDD のモデル階層（agent ごとの model 指定）が黙って無効化されるため、SessionStart で警告する（issue #743） |
 | `scripts/aidd-fault-injection-setup.sh` / `scripts/aidd-fault-injection-teardown.sh` | fault injection訓練用の`.aidd/run-manifest.json`差し替え・復元（issue #395） |
 | `scripts/eval-workflow-prompts.sh` / `scripts/eval-fixtures/` | AIDDワークフロープロンプトのeval基盤（issue #391） |

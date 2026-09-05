@@ -53,6 +53,9 @@ fi
 
 SUMMARY="$(bash scripts/summarize-loop-observability.sh --log-file "$LOG_FILE" 2>/dev/null || true)"
 PASSFAIL_SUMMARY="$(bash "$SCRIPT_DIR/summarize-gate-passfail.sh" 2>/dev/null || true)"
+# issue #742: InstructionsLoaded hook の記録から「どの rules がどの頻度で読まれたか」を同じ月次で出す
+# （読まれない paths 付き rules は削除候補）。記録が無ければ「記録なし」の 1 行になる。fail-open
+INSTRUCTIONS_SUMMARY="$(bash "$SCRIPT_DIR/summarize-instructions-loaded.sh" --days "$INTERVAL_DAYS" 2>/dev/null || true)"
 touch "$STATE_FILE"
 
 if [ -z "$SUMMARY" ] && [ -z "$PASSFAIL_SUMMARY" ]; then
@@ -66,6 +69,8 @@ MSG="品質ゲート月次サマリ（issue #412）:
 ${PASSFAIL_SUMMARY:-（取得できませんでした。npx/tsxが利用できない可能性があります）}
 
 ## feature別・コスト集計（loop-observability.jsonlベース＝自己申告。記録漏れによる欠落があり得るため、件数ゼロを「発火ゼロ」と読まないこと）
-${SUMMARY}"
+${SUMMARY}
+
+${INSTRUCTIONS_SUMMARY}"
 
 jq -n --arg msg "$MSG" '{systemMessage: $msg}'
