@@ -54,6 +54,20 @@ if grep -q "scripts/log-agent-progress.sh" "$WORK/a/aidd-core/agents/reviewer.md
 echo "=== scenario 4: コミット済みの dist/plugins/ が最新（--check） ==="
 if node "$BUILD" --check >/dev/null 2>"$WORK/check.err"; then ok "dist/plugins/ は最新"; else ng "dist/plugins/ が古い（bash scripts/build-plugin.sh で更新）" "$(head -5 "$WORK/check.err")"; fi
 
+echo "=== scenario 4b: 7 項目のファイル・スキーマ・ひな形が生成物にある（SPEC Part 1 の 3.） ==="
+for p in aidd-core aidd-vkumai; do
+  for f in COMPATIBILITY.md CHANGELOG.md KNOWN-LIMITS.md MIGRATION.md BREAKING.md; do
+    [ -f "$WORK/a/$p/$f" ] || ng "$p に $f が無い"
+  done
+  [ -n "$(ls "$WORK/a/$p/evidence" 2>/dev/null)" ] || ng "$p に evidence/ が無い"
+done
+ok "両プラグインに 5 文書と evidence/ がある（欠落があれば上に NG）"
+[ -f "$WORK/a/aidd-core/schema/aidd-config.schema.json" ] && ok "設定スキーマが aidd-core/schema/ にある" || ng "スキーマが無い"
+[ -f "$WORK/a/aidd-core/templates/consumer/aidd.config.json" ] && ok "導入先ひな形が aidd-core/templates/ にある" || ng "ひな形が無い"
+# COMPATIBILITY.md の版は docs/agents/upstream-docs-review.md「最後に確認した版」（正本）と一致する
+REVIEWED="$(grep -o -E 'Claude Code \| [0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/docs/agents/upstream-docs-review.md" | head -n1 | grep -o -E '[0-9]+\.[0-9]+\.[0-9]+' || true)"
+if [ -n "$REVIEWED" ] && grep -q "$REVIEWED" "$WORK/a/aidd-core/COMPATIBILITY.md"; then ok "COMPATIBILITY.md が docs 確認版 $REVIEWED を含む"; else ng "COMPATIBILITY.md の版が upstream-docs-review と食い違う（reviewed=$REVIEWED）"; fi
+
 echo "=== scenario 5: RED 方向（fixture のミニリポジトリ） ==="
 FX="$WORK/fixture"
 mkdir -p "$FX/.claude/agents" "$FX/.claude/workflows" "$FX/scripts/lib"

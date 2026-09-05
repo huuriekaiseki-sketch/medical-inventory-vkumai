@@ -208,14 +208,43 @@ function build(outRoot) {
   for (const [name, plugin] of Object.entries(layout.bin ?? {})) {
     copyText(plugin, `scripts/${name}`, `bin/${name}`, null, 0o755)
   }
+  // 7 項目のファイル（対応版・変更履歴・既知の制約・移行手順・破壊的変更・実証結果）を両プラグインの
+  // ルートへ。設定スキーマは schema/、導入先ひな形は templates/ へ（いずれも共通側）
+  const rd = layout.releaseDocs
+  if (rd) {
+    for (const plugin of pluginNames) {
+      for (const f of rd.files ?? []) copyText(plugin, `${rd.sourceDir}/${f}`, f)
+      for (const d of rd.dirs ?? []) {
+        const dir = path.join(SOURCE, rd.sourceDir, d)
+        if (!existsSync(dir)) { fail(`${plugin}: releaseDocs のディレクトリが無い: ${rd.sourceDir}/${d}`); continue }
+        for (const f of listFiles(dir)) copyText(plugin, `${rd.sourceDir}/${d}/${rel(f, dir)}`, `${d}/${rel(f, dir)}`)
+      }
+    }
+  }
+  for (const [name, plugin] of Object.entries(layout.schema ?? {})) {
+    copyText(plugin, `scripts/${name}`, `schema/${path.basename(name)}`)
+  }
+  for (const [srcDir, plugin] of Object.entries(layout.templates ?? {})) {
+    const dir = path.join(SOURCE, srcDir)
+    if (!existsSync(dir)) { fail(`${plugin}: templates のディレクトリが無い: ${srcDir}`); continue }
+    for (const f of listFiles(dir)) {
+      const r = rel(f, dir)
+      const dst = `templates/${path.basename(srcDir)}/${r}`
+      if (isText(f)) copyText(plugin, `${srcDir}/${r}`, dst)
+      else put(plugin, dst, readFileSync(f))
+    }
+  }
 
   // ---- 検査 ----
   // 1. 禁止語（共通側。コメント込み、大文字小文字不問）
   for (const plugin of pluginNames) {
     if (!layout.plugins[plugin].forbiddenWords) continue
+    const skip = layout.forbiddenWordsSkipPaths ?? []
     for (const r of written[plugin] ?? []) {
       const p = path.join(outRoot, plugin, r)
       if (!isText(p)) continue
+      // 7 項目のファイル・ひな形は中心リポジトリ名を書く必要があるため対象外（実行されないドキュメント）
+      if (skip.some(s => r === s || r.startsWith(s))) continue
       // 許容句（docs のファイル名 actuator-inventory.md 等。ファイル名の語の誤一致は既知の型）は先に消す
       let text = readFileSync(p, 'utf8').toLowerCase()
       for (const phrase of layout.forbiddenWordsAllowPhrases ?? []) text = text.replaceAll(phrase.toLowerCase(), '')
@@ -224,8 +253,10 @@ function build(outRoot) {
       }
     }
   }
-  // 2. 同梱閉包: 参照先が同じプラグイン内にあること
+  // 2. 同梱閉包: 参照先が同じプラグイン内にあること（7 項目のファイル・ひな形は対象外。
+  //    導入先の手順として中心リポジトリのパスを書くため）
   const allowed = layout.allowUnresolvedReferences ?? {}
+  const closureSkip = layout.forbiddenWordsSkipPaths ?? []
   // bin/ はどのプラグインのものも Bash の PATH に足されるため、プラグインを跨いで参照してよい
   const allBin = new Set(Object.keys(layout.bin ?? {}).map(b => `bin/${b}`))
   for (const plugin of pluginNames) {
@@ -233,6 +264,7 @@ function build(outRoot) {
     for (const r of written[plugin] ?? []) {
       const p = path.join(outRoot, plugin, r)
       if (!isText(p)) continue
+      if (closureSkip.some(s => r === s || r.startsWith(s))) continue
       const text = readFileSync(p, 'utf8')
       const refs = new Set()
       for (const m of text.matchAll(/scripts\/((?:lib\/)?[A-Za-z0-9_.-]+\.(?:sh|mjs|ts|jq|py))/g)) refs.add(`scripts/${m[1]}`)

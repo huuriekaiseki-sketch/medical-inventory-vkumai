@@ -1,0 +1,19 @@
+{
+  "_comment": "導入先アダプター設定のひな形。値は共通側の汎用既定値（auth / rls / policy / migration）に足されるだけで、既定値を消すことはできない。スキーマ: aidd-core/schema/aidd-config.schema.json",
+  "risk": {
+    "keywords": ["<説明文に含まれていれば高リスク候補とする語>"],
+    "pathPrefixes": ["<この接頭辞で始まる変更パスは高リスク。例: db/migrations/>"],
+    "domainKeywords": ["<変更パスに含まれていれば高リスクとする語>"]
+  },
+  "readonlyAgentTypes": ["sweep-ui", "sweep-data", "sweep-db", "sweep-types", "reviewer", "completeness-critic", "adversarial-verify", "judge-panel"],
+  "commands": {
+    "check": "<一括検査コマンド>",
+    "test": "<テストコマンド>",
+    "lint": "<lint コマンド>",
+    "typecheck": "<型検査コマンド>"
+  },
+  "docs": {
+    "domain": "docs/agents/domain.md",
+    "decisions": "docs/agents/decisions.md"
+  }
+}
