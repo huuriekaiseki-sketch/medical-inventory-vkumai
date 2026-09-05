@@ -136,7 +136,7 @@ issue #440は「公式のsecurity-guidance機能を導入し、`known-failure-pa
 - 3層構成: ①per-edit正規表現/部分文字列検知（LLM呼び出しなし・無料）②ターン末diffレビュー
   （モデル呼び出しあり）③commit/push時レビュー（より深いエージェントレビュー、20/時間の上限）
 - 設定ファイルは`.claude/claude-security-guidance.md`（自然言語ガイダンス、特定の見出し構造
-  不要）+ `.claude/security-patterns.yaml`または`.json`（パターン定義）。YAML形式は
+  不要）+ `.claude/security-patterns.json`（パターン定義。プラグインはYAML形式 `security-patterns.yaml` も受け付ける）。YAML形式は
   PyYAMLへの依存が生じるため、外部依存を増やさないよう本プロジェクトでは**JSON形式**を採用した
 - `security-patterns.json`のスキーマ: パターンごとに`rule_name`・`regex`または
   `substrings`・`paths`（任意、globパターン）・`exclude_paths`（任意）・`reminder`

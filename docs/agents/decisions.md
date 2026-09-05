@@ -41,7 +41,7 @@ test/lint/RLSいずれのCI jobも、PR画面にfailing checkとして表示す�
 
 **結論: エントリ・分野が少ないうちは単一ファイルで始め、分野が3つ以上に増えたタイミングで分割する前提にした（issue #491で実際に分割した）。**
 
-grill-with-docsスキルの `CONTEXT.md` + `docs/adr/`（分野別に分割するパターン）も検討したが、
+grill-with-docsスキルの `CONTEXT.md` + `docs/adr/`（未採用。分野別に分割するパターン）も検討したが、
 用語・決定候補がまだ少ない段階（各6〜7件程度）で分割すると、1ファイルに数行しかない
 「空気を運ぶだけのファイル」が増えるだけだった。
 
@@ -129,7 +129,7 @@ warning-onlyだった。検知hookの本数だけを見るとループが充実�
 
 ## なぜseed.sqlを新規作成せず、既存のテストヘルパー方式を正式設計として採用するか（issue #647）
 
-**結論: `supabase db reset`後のテストデータ投入は、新たに`supabase/seed.sql`を作らず、
+**結論: `supabase db reset`後のテストデータ投入は、新たに`supabase/seed.sql`（未採用）を作らず、
 `supabase/__tests__/integration/helpers/seed-rls-idor.ts`のテストヘルパー関数方式を正式な設計
 として採用し続ける。**
 
@@ -278,3 +278,34 @@ kojigyo で「❌ 無い」と書いた行が「失敗・問題あり」と読�
 - 検査名ごとに「分かること / 分からないこと」を `known-failure-patterns.md` に表で書いた理由:
   npm audit が緑＝安全、と読まれるのを防ぐ。役割の違う検査をひとまとめに「テスト済み」と
   報告させない
+
+## なぜ docs の整合性検査を「リンク・アンカー・パス言及」の3種に限定し、削除済みパスの言及には歴史的マーカーを要求するか（issue #714）
+
+OpenAI の Harness engineering 事例（2026-02）は、AGENTS.md を「地図」、docs/ を「エージェント可読の
+知識庫」とし、ドキュメントの腐敗を CI で機械的に抑えることを重視している。vkumai の docs/agents/ は
+21 ファイル・約 300KB に達していたが、リンク切れ・言及スクリプトの不在を検査する仕組みが無く、
+圧縮（issue #486・#542）も人手だった。2026-09-05 の初回実行では 9 件の違反が出て、うち 2 件は
+実際のドリフト（`.claude/security-patterns.yaml`（存在しない）と書かれていたが実体は `.json`、
+`decisions.md` へのアンカーが見出しの記号・空白の扱いを誤っていた）だった。
+
+**検査を3種に限定した理由:** 意味的な陳腐化（「issue #NNN で対応済み」の状態変化など）は LLM か
+`gh` が必要で、CI の hooks-test（checkout のみ・認証なし）では回せない。まず機械的に判定できる
+ものだけを CI に載せ、クローズ済み issue の言及は未実装のまま issue #714 に残した。
+
+**削除済みパスに歴史的マーカーを要求する理由:** decisions や observability-internals は「かつて
+あった `scripts/x.sh`（削除済み）を置き換えた」という経緯を書く場所であり、言及そのものは正当。しかし
+読み手（後任 AI）にとって「今も存在するか」が本文から読めないのは同じく腐敗である。同じ行に
+`削除済み` / `統合済み` / `未採用` 等の語があれば違反にしない、という規約にすることで、検査を
+通すための修正がそのまま読み手への注記になる（`HISTORICAL_MARKERS`、
+`scripts/lib/check-docs-integrity.mjs`）。
+
+**docs だけの PR で回す経路:** `ci.yml` は docs/** と CLAUDE.md / AGENTS.md を paths-ignore して
+いる（Actions 無料枠対応）ため、hooks-test だけでは docs のみの PR で検査が回らない。
+`.github/workflows/docs-integrity-check.yml`（eval-runs-freshness-check.yml と同型の軽量単独
+workflow）を docs 側の paths で起動し、コード側の変更で回る hooks-test と合わせて実質すべての PR を
+カバーする。paths-ignore 自体を外して ci.yml 全体を回す案は、docs 1 行の修正で build まで回り
+無料枠を食うため採らなかった。
+
+**How to apply:** ファイルを削除・改名したら、`node scripts/lib/check-docs-integrity.mjs` を
+実行して言及箇所を洗い出し、残す言及には歴史的マーカーを添える。新しい見出しへリンクする
+ときはアンカーを手で書かず、`slugify`（同スクリプト）の出力を使う。

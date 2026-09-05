@@ -2,7 +2,7 @@
 
 守る約束の正本。1行 = 1約束。テストはこの行を写して書き、テスト名（`describe` / `it` / `test` の
 文字列）に ID `P-xxx` を含める。範囲は **auth / RLS / facility 境界 / admin 境界 / AAL2 / RPC 契約** に
-限定する（PR③。設計判断は [`decisions.md`](./decisions.md#なぜ約束カタログをauth--rls--facility-境界に限定しidをテスト側に書いて逆方向で検査するか)）。
+限定する（PR③。設計判断は [`decisions.md`](./decisions.md#なぜ約束カタログを-auth--rls--facility-境界に限定しid-をテスト側に書いて逆方向で検査するかpr2026-09-04)）。
 UI や取込などそれ以外の層は [テスト一覧](./test-matrix.md) の種別として扱い、ここには載せない。
 
 ## 更新ルール
