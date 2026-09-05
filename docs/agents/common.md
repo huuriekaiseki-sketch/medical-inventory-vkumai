@@ -149,7 +149,7 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 `--status` は `starting|running|waiting|done|failed` のいずれか。`feature`名が
 呼び出し元から与えられていない場合は `unknown` を使う。
 
-現在の状態は `scripts/show-agent-status.sh` で一覧できる（`--stale-seconds`未満は既定180秒＝3分。`running`/`waiting`のまま既定180秒以上更新がないエージェントは「止まってる？」として表示される）。
+現在の状態は `scripts/show-agent-status.sh` で一覧できる（`--stale-seconds`未満は既定180秒＝3分。`running`/`waiting`のまま既定180秒以上更新がないエージェントは「止まってる？」として表示される）。最終報告が`--max-age-seconds`（既定604800秒＝7日）より古いエージェントは過去フローの残骸として表示せず、末尾に非表示件数だけ出す（`0`で全件表示。ログは追記のみで消えないため、数週間前の`running`が「止まってる？（数百万秒応答なし）」としてcompaction後の再注入（issue #712）に毎回混ざっていた対策）。
 
 記録漏れ検知の手順はloop-observabilityと共通のgap check state方式（上記[「loop-observabilityログの記録漏れ検知」](#loop-observabilityログの記録漏れ検知)参照。フロー完了後に `scripts/record-gap-check-state.sh expected --agent-progress <値>` を呼ぶ）。記録内容の正しさは `scripts/verify-agent-progress-transcript.sh` が自己申告とtranscriptを機械比較する。両者の判定ロジック・既知の限界（agent-progress.jsonlの構造的限界、mismatches/lowOverlapDetailsの仕組み等）は [`observability-internals.md`](./observability-internals.md#agent-progress記録の構造的限界記録内容検証の詳細) を参照。
 
