@@ -317,3 +317,33 @@ workflow）を docs 側の paths で起動し、コード側の変更で回る h
 違反にしない」という規則は**リポジトリの `.gitignore`** にしか依存できないので、
 `.claude/settings.local.json` を `.gitignore` に明示した。ローカル green・CI red の典型で、
 グローバル ignore に頼ったパスは他にも同じ形で壊れうる。
+
+## なぜ TRI/RISK 基準の AGENTS.md / common.md 重複を残し、router-risk.js を正本にした同期テストで固定したか（issue #715）
+
+**結論: AGENTS.md（Codex が読む）と docs/agents/common.md（Claude Code が CLAUDE.md から
+@import で読む）の「TRI/RISK 機械判定基準」節は両方に本文として残す。正本は
+`.claude/workflows/lib/router-risk.js` とし、`.claude/workflows/lib/__tests__/tri-risk-docs-sync.test.js`
+が「正本の全パス接頭辞・middleware.ts・proxy.ts・全ドメイン語が両節に含まれる」ことと
+「両節の基準本体が一字一句一致する」ことを `npm test` で検査する。**
+
+3 案を比較した。
+
+- **案A（AGENTS.md をポインタ化）:** 重複は消えるが、Codex は起動時に AGENTS.md しか読まない
+  ため、常時効かせたい高リスク判定が「必要なら common.md を読め」という間接参照になる。
+  [`parallel-agent-work.md`](./parallel-agent-work.md) の「2つのコピーが食い違ったとき必ずバグに
+  なるものだけを共有する」原則は、まさにこの基準を**両方に本文として持ち、機械で同期する**
+  ことを想定している。共存テンプレートの原則 10（並行作業禁止を AGENTS.md / CLAUDE.md の
+  両方に明文化）と同じ扱いにするのが筋。却下。
+- **案B（重複を残し同期テスト）:** 採用。既存の prompt-sync / router-risk-sync と同型で、
+  基準を変える PR は正本・両 doc の 3 箇所を同時に直さないと RED になる。
+- **案C（CLAUDE.md に @AGENTS.md）:** 公式推奨だが、常時ロード量が約 3,600 文字増え
+  （issue #711 の実測で既に公式例の約 6 倍）、かつ AGENTS.md には Codex 固有の節
+  （`.codex/` 設定・ask 未対応のラッパー）があり Claude に読ませる意味が無い。却下。
+
+**Codex 実機確認を省いた理由:** AGENTS.md の本文を変えていないため、Codex 側の読み込み結果は
+変わらない。案A を採る場合にのみ `codex --ask-for-approval never "Summarize current instructions."`
+での確認が必要だった。
+
+**How to apply:** TRI/RISK 基準（高リスクパス・ドメイン語・ファイル名規則）を変えるときは
+`router-risk.js` → `AGENTS.md` → `common.md` の順に 3 箇所を同時に直す。テストが RED に
+なったら「片方だけ直した」合図。基準本体の文言を整えるときも両 doc を同じ文字列に揃える。
