@@ -143,6 +143,23 @@ run_hook
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_empty "$OUT" "判定不能時は沈黙する"
 
+echo "=== scenario 8b: transcript先頭行がtimestamp無しのbridge-sessionレコード → 2行目の時刻で判定し警告する ==="
+# WHY: 8/28 の deep-task セッション（verifiedCount=61）で警告が出なかった実原因。1 行目決め打ちだと沈黙する
+reset_env
+write_wf_with_precision "wf_a.json" 3
+printf '{"type":"bridge-session","sessionId":"%s"}\n{"type":"user","timestamp":"%s"}\n' "$SESSION" "$SESSION_START_ISO" > "$TRANSCRIPT"
+run_hook
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" "systemMessage" "bridge-session行を読み飛ばして警告する"
+
+echo "=== scenario 8c: transcriptのどの行にもtimestampが無い → 沈黙（fail-open） ==="
+reset_env
+write_wf_with_precision "wf_a.json" 3
+printf '{"type":"bridge-session","sessionId":"%s"}\n' "$SESSION" > "$TRANSCRIPT"
+run_hook
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "開始時刻が取れなければ沈黙する"
+
 echo "=== scenario 9: マーカーが書き込めない環境 → クラッシュせず警告は出す（exit 0） ==="
 reset_env
 write_wf_with_precision "wf_a.json" 3

@@ -120,7 +120,10 @@ fi
 # check-aidd-stats-recorded.shと同一パターン）
 SESSION_START_EPOCH=""
 if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
-  FIRST_TS="$(head -1 "$TRANSCRIPT_PATH" 2>/dev/null | jq -r '.timestamp // empty' 2>/dev/null || true)"
+  # WHY: transcript の 1 行目は timestamp を持たない {"type":"bridge-session"} レコードで始まる
+  #      ことがある（Remote Control 連携時。2026-09-05 実測）。先頭行決め打ちだと開始時刻が取れず
+  #      fail-open で沈黙するため、先頭 50 行のうち最初に timestamp を持つ行を採用する
+  FIRST_TS="$(head -n 50 "$TRANSCRIPT_PATH" 2>/dev/null | jq -R -r 'fromjson? | .timestamp // empty' 2>/dev/null | head -n 1 || true)"
   case "$FIRST_TS" in
     *Z)
       SESSION_START_EPOCH="$(python3 -c "
