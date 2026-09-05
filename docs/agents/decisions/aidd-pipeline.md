@@ -656,3 +656,37 @@ context に入るかは、Claude Code 本体の挙動であり shell テスト�
 **How to apply:** SessionStart hook を新設するときは必ず matcher を付ける（構造テストが
 無指定を拒否する）。compact 時に必要なものは reinject スクリプトのセクションとして足し、
 別 hook を compact に登録しない。
+
+## なぜ常時ロード量の閾値を行数ではなく「CLAUDE.md + @import + unscoped rules の合計文字数」にし、既定を実測 +10% のラチェットにしたか（issue #711）
+
+**結論: `scripts/check-claude-md-size.sh` は行数（従来）に加え、起動時に全量ロードされる
+指示ファイル群の合計文字数を計測し、既定 24,000 文字（2026-09-05 実測 21,790 の約 +10%）
+超過で警告する。**
+
+公式ドキュメント（memory / context-window）の要点は 3 つ。CLAUDE.md は 1 ファイル 200 行以下、
+`@import` は整理には効くがコンテキストは減らない、paths 無しの `.claude/rules/` も毎セッション
+ロードされる。従来の hook は CLAUDE.md と common.md の**行数**しか見ておらず、import 先や
+rules へ移した分が計測から漏れる構造だった。
+
+**実測（2026-09-05）:** プロジェクト CLAUDE.md 3,694 文字 + common.md 18,097 文字 = 21,790 文字、
+概算 11,400 トークン（非ASCII 1 文字≈1、ASCII 4 文字≈1 の近似）。公式の可視化例
+（CLAUDE.md ≈ 1,800 トークン）の約 6 倍で、8 割が common.md。ユーザー CLAUDE.md・MEMORY.md・
+hook 出力を足すと約 18,400 トークン。詳細表は issue #711 のコメント。
+
+**文字数にした理由:** バイト数は日本語 1 文字 3 バイトでトークンの指標にならず（issue #716 で
+誤認した実例）、API の count_tokens は hook 環境から使えない。文字数なら tokenizer に依存せず、
+概算トークンは近似係数で添えられる。
+
+**閾値をラチェットにした理由:** 「何トークンまでなら adherence が保てるか」の実測データは無く、
+先に目標値を決めると根拠の無い数字になる。実測 +10% に置けば、次に誰かが common.md を
+1 節増やした瞬間に鳴り、「増やすなら何かを切り出す」判断を強制できる。減らす方向の候補
+（AIDD stats ルールのスキル化、依存変更ルールの paths 付き rules 化、重要ファイル表の
+ai-config-map への寄せ）は issue #711 のコメントに列挙し、1 件ずつ別 PR にする。
+
+**対象外にしたもの:** MEMORY.md（$HOME 配下の個人ファイルで、プロジェクト hook が読むべきで
+ない）と SessionStart hook 自身の出力（自己再帰になる）。どちらも issue コメントの手動実測で代替。
+
+**How to apply:** 常時ロード量の警告が出たら閾値を上げるのではなく、切り出し候補から 1 つを
+skill / paths 付き rules / 参照ドキュメントへ移す。切り出した節は compaction 後に再注入
+されなくなるので、フロー実行に必須のものは `scripts/reinject-aidd-run-state.sh`（issue #712）の
+ポインタに載せる。
