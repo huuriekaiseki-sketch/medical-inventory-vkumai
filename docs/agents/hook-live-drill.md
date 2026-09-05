@@ -124,8 +124,8 @@ PreToolUse の deny / ask は、止めるべき入力の JSON（`tool_name` / `t
 | hook 15 本の `cd "$(dirname "$0")/.."` | 配布形態の変化 | プラグインではスクリプト位置がプラグインルートになり、Stop hook の状態ファイル・`resolve_log_dir` の解決先が導入先でなくなる（月次サマリが中心リポジトリの `logs/` を読んでいた） | `cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"`（hook は CLAUDE_PROJECT_DIR を受け取る。無ければ従来どおり） |
 
 修正後の再実走で確認できた範囲: SessionStart 13 本（core）＋ automode（vkumai）、Stop 8 本、
-InstructionsLoaded、SubagentStart/Stop（phase1 実走時）。状態ファイルは検証リポジトリの
-`.claude/.ai-check-suggest-state/` 等、ログは同 `logs/` に書かれた。PreToolUse 5 本（run-manifest /
+InstructionsLoaded、SubagentStart/Stop（phase1 実走時）。状態ファイル（ai-check-suggest / domain-decisions-suggest / verify-claims の各 state ディレクトリ）と
+ログは検証リポジトリ側に書かれた。PreToolUse 5 本（run-manifest /
 skip-marker / readonly-bash / dependency-change / direct-ddl）は検証リポジトリで Write / Bash を伴う
 操作をしていないため未実走（構造テストと中心リポジトリでの実機 deny 確認のみ）。
 
