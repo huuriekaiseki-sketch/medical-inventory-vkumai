@@ -14,7 +14,8 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 | 項目 | 所在 | 備考 |
 |---|---|---|
 | Phase骨格（調査→仕様→実装→統合→検証、停止①②） | ルート`CLAUDE.md`「フロー（骨格）」 | フェーズの区切り方・人間レビューを挟む位置という設計思想自体はドメイン非依存 |
-| TRI/RISK分類エンジンの構造（`classifyRoute`の4分岐: meta/confirm/deep/light、パスベース優先ロジック） | `.claude/workflows/lib/router-risk.js` | ロジック（changedFilesがあればパス優先、無ければキーワードフォールバック＋confirm、メタ改修は先に判定）は汎用。中身の`RISK_KEYWORDS`はドメイン固有（下記「判断が難しい部分」参照） |
+| TRI/RISK分類エンジンの構造（`classifyRoute`の4分岐: meta/confirm/deep/light、パスベース優先ロジック） | `.claude/workflows/lib/router-risk.js` | ロジック（changedFilesがあればパス優先、無ければキーワードフォールバック＋confirm、メタ改修は先に判定）は汎用。2026-09-05（issue #420 v1 セット B）に語彙を分離し、エンジンの既定値`DEFAULT_RISK_CONFIG`は汎用語（auth / rls / policy / migration）のみ。固有語は`aidd.config.json`へ（下表） |
+| 導入先アダプター設定の形（`aidd.config.json` と `scripts/lib/aidd-config.schema.json`。risk / readonlyAgentTypes / commands / docs の 4 キー、配列は既定値に足すだけで消せない） | `aidd.config.json`、`scripts/lib/aidd-config.schema.json`、`.claude/workflows/lib/__tests__/aidd-config.test.js` | issue #420 v1 セット B。形式・スキーマ・「既定値を狭めない」検査は汎用。値は固有（下表）。Workflow DSL はファイルを読めないため `aidd-phase1-router.js` は同じ値を `LOCAL_RISK_CONFIG` としてインラインで持ち、同期テストで突き合わせる |
 | gap check方式（before/expected件数の事前記録→事後突合というパターン） | `scripts/record-gap-check-state.sh`・`scripts/check-gap-check-state.sh` | 「記録漏れを期待値と実測値の突合で機械検知する」という方式自体は汎用 |
 | subagent役割分担パターン（sweep-* / reviewer / implementer / judge-panel / proposer / adversarial-verify / completeness-critic / contract-writer） | `.claude/agents/*.md` | 役割名・責務の切り方（発見/実装/レビュー/統合を分離する）は汎用。sweep-db/sweep-uiのような軸の中身はスタック依存 |
 | canonical eventのAdapterパターン（複数の自己申告ログを1つの正規化型へ変換して統合参照する設計） | `scripts/lib/canonical-event.ts`（issue #569） | 「書き込み側は無改修のまま読み取り側だけ統合する」という設計判断自体は汎用 |
@@ -41,7 +42,7 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 |---|---|---|
 | `npm test` / `npm run lint`コマンド体系 | ルート`CLAUDE.md`「プロジェクト設定」 | Node/npmプロジェクト前提。他言語スタックでは丸ごと差し替えが必要 |
 | Supabase RLS/migration概念、`supabase db diff`等のCLI呼び出し | `supabase/migrations/`・`.claude/rules/db-schema.md` | DBがSupabase(PostgreSQL)であることに強く依存 |
-| facility/tenant/organization/inventory等のドメインキーワード | `.claude/workflows/lib/router-risk.js`の`RISK_KEYWORDS`一部 | 医療在庫管理ドメイン固有の語彙 |
+| facility/tenant/organization/inventory等のドメインキーワードと`supabase/migrations/`・`src/lib/supabase/`接頭辞 | `aidd.config.json`の`risk`（2026-09-05 に`router-risk.js`の`RISK_KEYWORDS`等から移動）、`aidd-phase1-router.js`の`LOCAL_RISK_CONFIG`（インライン複製） | 医療在庫管理ドメインと Supabase スタック固有の語彙。プラグイン生成時は`@aidd-local-config`マーカー区間を空にする |
 | GitHub issue/PR連携（`gh`コマンド依存） | `docs/agents/common.md`各所、`scripts/check-branch-pr-status.sh`等 | GitHub以外のissue tracker（Linear等）を使うリポジトリでは差し替えが必要 |
 | Next.js App Router固有の構造（`src/app/`・`proxy.ts`/旧`middleware.ts`） | ルート`CLAUDE.md`「プロジェクト設定」 | フレームワーク固有のディレクトリ規約 |
 | e2e/env-guard.ts・Playwright認証状態（`--isolated --storage-state`） | `e2e/`配下、`.claude/rules/e2e-test-hygiene.md` | Playwright前提。本番Supabase分離の実装もこのスタック向け |

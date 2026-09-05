@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aidd.config.schema.json",
+  "title": "AIDD 導入先アダプター設定（issue #420 v1）",
+  "description": "リポジトリ直下の aidd.config.json の形。共通プラグイン（判定エンジン・hook）が読む、リポジトリ固有の値だけを持つ。配列は共通側の汎用既定値に「足される」（既定値は消せない）。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "_comment": { "type": "string" },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "TRI/RISK 判定（router-risk.js の classifyRoute）に足す固有語彙",
+      "properties": {
+        "keywords": { "$ref": "#/$defs/stringList", "description": "taskDescription（説明文）に含まれていれば高リスク候補とする語。changedFiles が空のときの補助判定にのみ使う" },
+        "pathPrefixes": { "$ref": "#/$defs/stringList", "description": "この接頭辞で始まる変更パスは高リスク（例: supabase/migrations/）" },
+        "domainKeywords": { "$ref": "#/$defs/stringList", "description": "変更パス・ファイル名に含まれていれば高リスクとする語（小文字比較）" },
+        "metaPathPrefixes": { "$ref": "#/$defs/stringList", "description": "全変更がこの接頭辞配下のみならメタ改修ルート。通常は既定値（.claude/workflows/ .claude/agents/ docs/agents/）のままでよい" }
+      }
+    },
+    "readonlyAgentTypes": { "$ref": "#/$defs/stringList", "description": "PreToolUse で書き込み系 Bash を deny する読み取り専用ロール名（check-readonly-bash.sh）。セット B2 で消費" },
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Stop hook の実行痕跡検知（ai-check-suggest.sh）と引き継ぎメモが参照するコマンド。セット B2 で消費",
+      "properties": {
+        "check": { "type": "string" },
+        "test": { "type": "string" },
+        "lint": { "type": "string" },
+        "typecheck": { "type": "string" }
+      }
+    },
+    "docs": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "高リスク変更時に追記を促すドキュメントの場所（check-domain-decisions-suggest.sh）。セット B2 で消費",
+      "properties": {
+        "domain": { "type": "string" },
+        "decisions": { "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "stringList": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    }
+  }
+}

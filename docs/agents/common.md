@@ -68,6 +68,13 @@ Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、Pr
 正本は`.claude/workflows/lib/router-risk.js`（`classifyRoute`）、`aidd-phase1-router.js`側の
 インライン複製との同期は`.claude/workflows/lib/__tests__/router-risk-sync.test.js`が検証する
 （`npm test`に含まれる。他のプロンプト同期テストと同型のガード）。
+判定エンジンと語彙は分離してある（issue #420 v1 セット B、2026-09-05）: エンジンの既定値は
+どのリポジトリでも高リスクと言える汎用語（auth / rls / policy / migration とファイル名規則）のみで、
+上記のリポジトリ固有の値（`supabase/migrations/`・`src/lib/supabase/`・facility / tenant /
+organization / inventory）はリポジトリ直下の`aidd.config.json`（導入先アダプター）にある。
+`aidd-phase1-router.js`は Workflow DSL でファイルを読めないため同じ値を`LOCAL_RISK_CONFIG`として
+インラインで持ち、両者の一致は`.claude/workflows/lib/__tests__/aidd-config.test.js`が検証する。
+設定は既定値に「足す」だけで、既定値を消す手段は無い（迷ったら高リスク側）。
 
 ## 依存関係の変更ルール（2026-09-04）
 

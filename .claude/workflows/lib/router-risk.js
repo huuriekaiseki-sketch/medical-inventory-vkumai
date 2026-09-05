@@ -8,8 +8,17 @@
 // このファイルはvitestでの単体テスト用の正本。同期は
 // .claude/workflows/lib/__tests__/router-risk-sync.test.js が検証する（issue #457）。
 //
+// 【issue #420 v1 セット B】エンジン（判定ロジック）と語彙（リポジトリ固有の値）を分離した。
+// このファイルに残る既定値 DEFAULT_RISK_CONFIG は、どのリポジトリでも高リスクと言える汎用語
+// （auth / rls / policy / migration とファイル名規則）だけにし、リポジトリ固有の語
+// （施設・テナント等のドメイン語、DB クライアント配下のようなスタック固有パス）はリポジトリ直下の
+// aidd.config.json（導入先アダプター）へ移した。呼び出し側は classifyRoute の第3引数で
+// 設定を渡す（derive は aidd.config.json を読んで渡す。aidd-phase1-router.js は Workflow DSL
+// でファイルを読めないため、LOCAL_RISK_CONFIG をインラインで持ち、args.riskConfig で上書きできる）。
+// 設定は既定値に「足す」だけで、既定値を消すことはできない（迷ったら高リスク側）。
+//
 // 【issue #457】パイプライン自体のメタ改修（.claude/workflows/・.claude/agents/・
-// docs/agents/配下のみの変更）は、プロダクトコード向けのTRI/RISK基準（RISK_KEYWORDSの
+// docs/agents/配下のみの変更）は、プロダクトコード向けのTRI/RISK基準（keywords の
 // 単純文字列一致）にかけると2つの問題が起きていた:
 //   1. taskDescriptionに「DB/RLS/authには触れない」という否定文を書いても"auth"等の単語が
 //      キーワード一致し、changedFilesが実際は高リスク領域に一切該当しないのに深掘り調査へ
@@ -19,7 +28,7 @@
 //   2. 軽量Sweepの4軸（UI/データ/DB/型）はプロダクトコード向けの分類軸であり、
 //      ツール層の変更に対してはui/data/types軸が「対象コードが無いので当然指摘なし」を
 //      返すだけの無駄な実行になる（issue #456では未解決。issue #457のスコープ）
-// 対応: 「changedFilesが全てツール層(META_PATH_PREFIXES配下)のみ」という条件を、
+// 対応: 「changedFilesが全てツール層(metaPathPrefixes配下)のみ」という条件を、
 // classifyRisk（issue #456で改修済み）による判定より「先に」評価し、Sweep自体を一切
 // 起動しない専用ルートへ振り分ける。この条件を満たさない限り従来のisHighRiskPath/
 // matchTaskKeywords/classifyRisk判定には一切影響しない（プロダクトコード向けの
@@ -29,65 +38,82 @@
 // false positive（軽微なタスクが深掘りに回る＝時間コスト増）は許容し、
 // false negative（高リスク変更を軽量版で見逃す）は許容しない。
 
-const RISK_KEYWORDS = [
-  // パス由来
-  'migrations', 'migration', 'マイグレーション', 'スキーマ',
-  'src/lib/supabase', 'middleware.ts', 'proxy.ts', 'ミドルウェア',
-  // ドメイン由来（common.md TRI/RISK基準）
-  'auth', '認証', 'ログイン',
-  'facility', '施設',
-  'tenant', 'テナント',
-  'organization', '組織',
-  'inventory', '在庫',
-  'rls', 'policy', 'ポリシー',
-]
+// 汎用既定値。リポジトリ・スタック・ドメインに依存しない語だけを置く（共通プラグイン側の正本）。
+// 'migration' は path 判定（domainKeywords）にも入れる: '<db ツール名>/migrations/' のような
+// 接頭辞はスタック固有なので既定にできないが、パスに migration を含む変更はどのスタックでも
+// スキーマ変更である可能性が高い。
+const DEFAULT_RISK_CONFIG = {
+  keywords: [
+    'migrations', 'migration', 'マイグレーション', 'スキーマ',
+    'middleware.ts', 'proxy.ts', 'ミドルウェア',
+    'auth', '認証', 'ログイン',
+    'rls', 'policy', 'ポリシー',
+  ],
+  pathPrefixes: [],
+  domainKeywords: ['auth', 'rls', 'policy', 'migration'],
+  // issue #457: パイプライン自体のメタ改修パス（AIDDワークフロー定義・エージェント定義・
+  // エージェント向けドキュメント）。プロダクトコードの判定とは別カテゴリであり、
+  // 意図的にこの3つのみに限定する（安全側に倒すため、対象を広げない）。
+  metaPathPrefixes: ['.claude/workflows/', '.claude/agents/', 'docs/agents/'],
+}
 
-// common.md記載のパスベース基準: supabase/migrations/ 配下、src/lib/supabase/ 配下
-const RISK_PATH_PREFIXES = ['supabase/migrations/', 'src/lib/supabase/']
+// overrides（aidd.config.json の risk、または args.riskConfig）を base に「足す」。
+// 配列は和集合（base の順を先に保ち、重複は除く）。base を省略すると汎用既定値。
+// 既定値を消す手段は意図的に用意しない（迷ったら高リスク側）。
+function resolveRiskConfig(overrides, base) {
+  const b = base ?? DEFAULT_RISK_CONFIG
+  const o = overrides ?? {}
+  const union = (key) => {
+    const merged = [...(b[key] ?? [])]
+    for (const v of (Array.isArray(o[key]) ? o[key] : [])) {
+      if (typeof v === 'string' && v !== '' && !merged.includes(v)) merged.push(v)
+    }
+    return merged
+  }
+  return {
+    keywords: union('keywords'),
+    pathPrefixes: union('pathPrefixes'),
+    domainKeywords: union('domainKeywords'),
+    metaPathPrefixes: union('metaPathPrefixes'),
+  }
+}
 
-// common.md記載のドメインキーワード（ファイルパス・ファイル名に含まれるかで判定）
-const RISK_DOMAIN_KEYWORDS = ['auth', 'facility', 'tenant', 'organization', 'inventory', 'rls', 'policy']
-
-function isHighRiskPath(filePath) {
+function isHighRiskPath(filePath, config) {
   const normalized = String(filePath).toLowerCase().replace(/\\/g, '/')
-  if (RISK_PATH_PREFIXES.some(prefix => normalized.startsWith(prefix))) return true
+  if (config.pathPrefixes.some(prefix => normalized.startsWith(prefix.toLowerCase()))) return true
   // middleware.ts / proxy.ts はプロジェクト内のすべてが対象（common.md）。
   // proxy.tsはNext.js 16でmiddleware.tsから改名された同一ファイル規約（issue #681）。
   // 移行前後どちらのブランチでも高リスク判定が抜け落ちないよう両方を判定する
   // （middleware.tsの削除は当issueのスコープ外・恒久的に併存させる方針）。
   if (normalized === 'middleware.ts' || normalized.endsWith('/middleware.ts')) return true
   if (normalized === 'proxy.ts' || normalized.endsWith('/proxy.ts')) return true
-  return RISK_DOMAIN_KEYWORDS.some(kw => normalized.includes(kw))
+  return config.domainKeywords.some(kw => normalized.includes(kw.toLowerCase()))
 }
 
-function matchTaskKeywords(taskDescription) {
+function matchTaskKeywords(taskDescription, config) {
   const lower = String(taskDescription ?? '').toLowerCase()
-  return RISK_KEYWORDS.filter(kw => lower.includes(kw.toLowerCase()))
+  return config.keywords.filter(kw => lower.includes(kw.toLowerCase()))
 }
 
-// issue #457: パイプライン自体のメタ改修パス（AIDDワークフロー定義・エージェント定義・
-// エージェント向けドキュメント）。プロダクトコードのRISK_PATH_PREFIXES/RISK_DOMAIN_KEYWORDS
-// とは別カテゴリであり、意図的にこの3つのみに限定する（安全側に倒すため、対象を広げない）。
-const META_PATH_PREFIXES = ['.claude/workflows/', '.claude/agents/', 'docs/agents/']
-
-function isMetaPipelinePath(filePath) {
+function isMetaPipelinePath(filePath, config) {
   const normalized = String(filePath).toLowerCase().replace(/\\/g, '/').replace(/^\.\//, '')
-  return META_PATH_PREFIXES.some(prefix => normalized.startsWith(prefix))
+  return config.metaPathPrefixes.some(prefix => normalized.startsWith(prefix.toLowerCase()))
 }
 
-// changedFilesが1件以上あり、かつ全件がMETA_PATH_PREFIXES配下の場合のみtrue。
+// changedFilesが1件以上あり、かつ全件がmetaPathPrefixes配下の場合のみtrue。
 // changedFilesが空（未指定）の場合は「メタ改修と確認できない」としてfalseを返し、
 // 既存のtaskDescription/パスベース判定（isHighRiskPath・matchTaskKeywords）に委ねる。
-function isMetaPipelineOnlyChange(changedFiles) {
+function isMetaPipelineOnlyChange(changedFiles, config) {
   const files = changedFiles ?? []
   if (files.length === 0) return false
-  return files.every(isMetaPipelinePath)
+  return files.every(f => isMetaPipelinePath(f, config))
 }
 
 // taskDescription: 人間が書いた説明文（補助判定、後方互換のため残す）
 // changedFiles: 変更対象ファイルパスの配列（優先判定。Workflowスクリプト自体はgit diffを
 //               実行できない[filesystem/Node.js API access無し]ため、呼び出し側がgit diff等で
 //               取得して渡す）
+// riskConfig: 導入先の固有語彙（省略時は汎用既定値のみ。resolveRiskConfig で既定値に足す）
 // 戻り値: { isHighRisk, matchedKeywords, matchedPaths }
 //
 // changedFilesが1件以上渡されている場合はmatchedPaths（パスベース判定）のみでisHighRiskを
@@ -99,9 +125,10 @@ function isMetaPipelineOnlyChange(changedFiles) {
 // changedFilesが空（未指定含む）の場合は、パスベース判定ができないため、後方互換として
 // キーワード一致のみで判定する（issue #286時点の挙動を維持）。
 // matchedKeywordsはisHighRiskの判定に使われない場合でも、補助情報としてそのまま返す。
-function classifyRisk(taskDescription, changedFiles = []) {
-  const matchedKeywords = matchTaskKeywords(taskDescription)
-  const matchedPaths = (changedFiles ?? []).filter(isHighRiskPath)
+function classifyRisk(taskDescription, changedFiles = [], riskConfig) {
+  const config = resolveRiskConfig(riskConfig)
+  const matchedKeywords = matchTaskKeywords(taskDescription, config)
+  const matchedPaths = (changedFiles ?? []).filter(f => isHighRiskPath(f, config))
   const hasChangedFiles = (changedFiles ?? []).length > 0
   const isHighRisk = hasChangedFiles ? matchedPaths.length > 0 : matchedKeywords.length > 0
   return { isHighRisk, matchedKeywords, matchedPaths }
@@ -123,11 +150,12 @@ function classifyRisk(taskDescription, changedFiles = []) {
 // 参照）。changedFilesが1件以上ある場合（パスベース判定が効く場合）はこの分岐を通らず、
 // 従来通りmatchedPathsのみでisHighRiskが決まる（issue #456の修正は変更しない）。
 // 戻り値: { route: 'meta'|'confirm'|'deep'|'light', isHighRisk, isMetaChange, matchedKeywords, matchedPaths }
-export function classifyRoute(taskDescription, changedFiles = []) {
-  if (isMetaPipelineOnlyChange(changedFiles)) {
+function classifyRoute(taskDescription, changedFiles = [], riskConfig) {
+  const config = resolveRiskConfig(riskConfig)
+  if (isMetaPipelineOnlyChange(changedFiles, config)) {
     return { route: 'meta', isHighRisk: false, isMetaChange: true, matchedKeywords: [], matchedPaths: [] }
   }
-  const { isHighRisk, matchedKeywords, matchedPaths } = classifyRisk(taskDescription, changedFiles)
+  const { isHighRisk, matchedKeywords, matchedPaths } = classifyRisk(taskDescription, changedFiles, config)
   const hasChangedFiles = (changedFiles ?? []).length > 0
   if (!hasChangedFiles && matchedKeywords.length > 0) {
     return { route: 'confirm', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths }
@@ -136,4 +164,7 @@ export function classifyRoute(taskDescription, changedFiles = []) {
 }
 
 // 後方互換用に従来のclassifyRiskもexportしたまま維持する（既存テスト・呼び出し元との互換性）。
-export { classifyRisk }
+// export は末尾でまとめる: 宣言本体を aidd-phase1-router.js のインライン複製と一字一句同じに
+// 保つため（同期テストは `export ` の有無だけを正規化する。宣言ごとに export を付けても
+// 動くが、末尾集約のほうが生成スクリプト（プラグイン化）での差し替えが単純になる）。
+export { DEFAULT_RISK_CONFIG, resolveRiskConfig, classifyRisk, classifyRoute }

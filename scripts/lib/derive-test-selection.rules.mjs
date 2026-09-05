@@ -218,4 +218,8 @@ export const CLASSIFIED_PATH_PATTERNS = [
   /^src\//, /^supabase\//, /^e2e\//, /^scripts\//, /^docs\//, /^\.claude\//, /^\.codex\//, /^\.agents\//,
   /^\.github\//, /^public\//, /^(package|package-lock|tsconfig[^/]*|vitest[^/]*|playwright[^/]*|eslint[^/]*|next[^/]*)\.(json|ts|js|mjs|cjs)$/,
   /^(CLAUDE|AGENTS|README)\.md$/, /^\.gitignore$/, /^\.env\.example$/,
+  // 導入先アダプター設定（issue #420 v1 セット B）。TRI/RISK 語彙・ロール名・コマンドを持つ。
+  // 変更時は「ワークフロー同期テスト」（aidd-config.test.js が LOCAL_RISK_CONFIG との一致を検査）が
+  // 毎回 required なので、専用の種別は設けない
+  /^aidd\.config\.json$/,
 ]
