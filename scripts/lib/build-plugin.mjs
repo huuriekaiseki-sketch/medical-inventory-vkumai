@@ -206,8 +206,18 @@ function build(outRoot) {
       copyText(plugin, `scripts/${name}`, `scripts/${name}`, null, name.endsWith('.sh') ? 0o755 : undefined)
     }
   }
+  // bin/ に置くスクリプトは scripts/ から 1 階層ずれるため、スクリプト位置基準の参照を書き換える
+  // （2026-09-05 プラグイン経由の fault-injection 実走で `bin/lib/resolve-log-dir.sh: No such file` を発見）。
+  // .claude/workflows/lib/ の純粋関数は scripts/workflow-lib/ へ同梱し、そちらを指す
+  const rewriteBin = (text) => text
+    .replaceAll('"$SCRIPT_DIR/lib/', '"$SCRIPT_DIR/../scripts/lib/')
+    .replaceAll('"$SCRIPT_DIR/../.claude/workflows/lib/', '"$SCRIPT_DIR/../scripts/workflow-lib/')
   for (const [name, plugin] of Object.entries(layout.bin ?? {})) {
-    copyText(plugin, `scripts/${name}`, `bin/${name}`, null, 0o755)
+    copyText(plugin, `scripts/${name}`, `bin/${name}`, rewriteBin, 0o755)
+  }
+  for (const [name, plugin] of Object.entries(layout.workflowLib ?? {})) {
+    if (name.startsWith('_')) continue
+    copyText(plugin, `.claude/workflows/lib/${name}`, `scripts/workflow-lib/${name}`)
   }
   // 7 項目のファイル（対応版・変更履歴・既知の制約・移行手順・破壊的変更・実証結果）を両プラグインの
   // ルートへ。設定スキーマは schema/、導入先ひな形は templates/ へ（いずれも共通側）
@@ -269,15 +279,28 @@ function build(outRoot) {
       const text = readFileSync(p, 'utf8')
       const refs = new Set()
       for (const m of text.matchAll(/scripts\/((?:lib\/)?[A-Za-z0-9_.-]+\.(?:sh|mjs|ts|jq|py))/g)) refs.add(`scripts/${m[1]}`)
-      for (const m of text.matchAll(/\$SCRIPT_DIR\/((?:lib\/)?[A-Za-z0-9_.-]+\.(?:sh|mjs|ts|jq|py))/g)) refs.add(`scripts/${m[1]}`)
-      if (/\.(ts|mjs)$/.test(p)) {
-        for (const m of text.matchAll(/from\s+['"]\.\/([A-Za-z0-9_.-]+)['"]/g)) refs.add(`scripts/lib/${m[1]}`)
+      // $SCRIPT_DIR 基準の参照は、置き場所に応じて実体の位置へ解決する（bin/ は書き換え後の
+      // `$SCRIPT_DIR/../scripts/...` を bin 基準で、scripts/ 配下は従来どおり scripts 基準で解決。
+      // lib/ の中の使い方コメント「$SCRIPT_DIR/lib/…」は hook から見た書き方なので scripts 基準でよい）
+      const selfDir = r.startsWith('bin/') ? 'bin' : 'scripts'
+      for (const m of text.matchAll(/\$SCRIPT_DIR\/((?:\.\.\/)*(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:sh|mjs|ts|jq|py|js))/g)) {
+        refs.add(path.posix.normalize(`${selfDir}/${m[1]}`))
+      }
+      // シェルからの .claude/workflows/lib/ 直接参照（node で呼ぶ。同梱されていなければ導入先で落ちる）。
+      // workflow / mjs のコメント内の「正本は .claude/workflows/lib/…」は実行時参照ではないため対象外
+      if (r.endsWith('.sh')) {
+        for (const m of text.matchAll(/\.claude\/workflows\/lib\/([A-Za-z0-9_.-]+\.js)/g)) refs.add(`scripts/workflow-lib/${m[1]}`)
+      }
+      if (/\.(ts|mjs|js)$/.test(p) && !r.startsWith('workflows/')) {
+        for (const m of text.matchAll(/from\s+['"]\.\/([A-Za-z0-9_.-]+)['"]/g)) refs.add(`${path.posix.dirname(r)}/${m[1]}`)
       }
       for (const ref of refs) {
         const asScript = ref
         const asBin = `bin/${ref.replace(/^scripts\//, '')}`
         if (have.has(asScript) || have.has(asBin) || allBin.has(asBin)) continue
         if (allowed[ref]) continue
+        // 同梱前の元パス表記（scripts/lib/x）で allow に書かれているものは、置き場所違いでも許容
+        if (allowed[`scripts/${ref.replace(/^scripts\/workflow-lib\//, 'lib/')}`]) continue
         fail(`${plugin}/${r}: 参照先 ${ref} が同じプラグインに同梱されていない（層の表に足すか allowUnresolvedReferences に理由を書く）`)
       }
     }
