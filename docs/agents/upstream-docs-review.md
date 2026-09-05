@@ -58,6 +58,11 @@ SessionStart hook（`scripts/check-upstream-docs-review-staleness.sh`）が監�
 - `Setup` hook（`claude -p --maintenance`）を定期作業の入口にする → issue #741
 - `InstructionsLoaded` hook で常時ロード量を実測に置き換える → issue #742（同日実装。実測で docs との差を 1 件確認:
   `memory_type` の実値は docs の `instructions` でなく `User` / `Project`（2.1.258）。次回の差分確認で docs 側が追従したか見る）
+- プラグイン v1 の要検証 5 件を実機確認（`docs/specs/plugin-v1/SPEC.md` Part 2）。docs との差をもう 1 件確認:
+  plugins-reference は「`InstructionsLoaded` hook で `${CLAUDE_PLUGIN_ROOT}/instructions.md` を cat すれば
+  文脈に注入できる」例を載せているが、hooks docs の「このイベントの出力は全て無視される」が正しい
+  （2.1.258 実測: additionalContext / systemMessage とも文脈に現れない）。Workflow 名もプラグイン名で
+  修飾される（`plugin:workflow`）ことは docs に明記がなく実測で確定
 - `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` が AIDD のモデル階層を無効化するため検知する → issue #743
 - `/skill-doctor`（2.1.261）で未使用スキルと context コストを 1 回測る（手動）
 - `subagentPromptCacheTtl` / frontmatter `experimental.cacheTtl`（1h）は `/cost` の cache miss 原因を見てから判断
