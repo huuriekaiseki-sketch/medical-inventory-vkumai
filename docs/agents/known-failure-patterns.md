@@ -272,6 +272,42 @@ transcript は `{"type":"bridge-session",...}`（timestamp 無し）で始まる
 `logs/*.jsonl` の**最終更新日が伸びているか**（記録が止まっていたら hook か記録経路が死んでいる）
 を節目で見るしかない（本件は `docs/agents/eval-runs.jsonl` の記録停止を追った副産物として発覚）。
 
+### eval fixture がコード内コメントで自分の正体を明かし、エージェントが指摘から外す（issue #731）
+
+**チェック内容:** 検出力（recall）を測る fixture のコード（`scripts/eval-fixtures/*/case-*/files/` 配下）に、
+「ベンチマーク用 fixture」「○○を意図的に再現」「issue #431」のような、読む側に「これは評価用の
+仕込みで本物の欠陥ではない」と教える語を書いていないか確認する。fixture の設計意図は case
+ディレクトリ直下の `NOTES.md`（clone 先へコピーされない）に書く。
+
+**なぜ再発したか:** 2026-09-05、7/17 以来初めて sweep recall ベンチマーク（issue #431）を再実行したところ
+sweep-data が 0/1 になった。生出力は `{"detail":"指摘なし"}`、別の実行では「すべての API ルート
+（**eval-fixture-recall を除く**）に requireAuth が実装されている」と書いており、エージェントは
+欠陥に**気づいた上で**、fixture 先頭の「issue #431 の recall ベンチマーク用 fixture。認可チェック欠落を
+意図的に再現」というコメントを読んで「意図的なもの」として指摘から外していた。7/17 時点のエージェント
+定義でも同じ挙動で、コメントを外すと同じ定義・同じモデル（haiku）で 1/1 に戻った。
+6 fixture すべてが同じ形の自己申告コメントを持っており、sweep-types も同日に 0/1 と 1/1 の両方を
+出していた（1/1 の回も出力は「既知の意図的不一致」と格下げ）。7/17 の 1/1 は偶然通っていただけで、
+ベンチマークは「欠陥を見つけるか」ではなく「コメントを無視するか」を測っていた。
+
+**機械検知:** `scripts/check-eval-fixtures-neutral.test.sh`（CI `hooks-test`）が `files/` 配下に
+自己申告語（fixture / ベンチマーク / 意図的 / recall / issue #431 / 再現 等）が無いこと、各 case に
+`NOTES.md` があることを検査する。ファイル名の `eval-fixture-recall` は識別子として本文に必ず現れるため
+対象外（実測ではファイル名だけなら HIT した）。
+
+**同時に見つかった 2 つ目の穴（ハーネス側）:** 中立化した fixture で sweep-types を再実行すると、
+エージェントは欠陥を見つけて報告しているのに 0/1 になった。`--json-schema` を渡しても haiku が
+Markdown の素テキストで返すことがあり、`jq -r '.detail'` が失敗して判定対象が空文字になっていた。
+`scripts/eval-sweep-recall.sh` は JSON として読めなければ生出力全体を判定対象にする fallback を
+持ち、`scripts/eval-sweep-recall.test.sh`（モック応答、実課金なし）が JSON / 素テキスト / 素テキストで
+未検出の 3 シナリオで固定する。**recall が落ちたとき「エージェントが見落とした」と結論する前に、
+生出力（`EVAL_SWEEP_RECALL_DEBUG_DIR`）を必ず読む。** 本件では 2 件の MISS の原因が fixture 側と
+ハーネス側で別々だった。さらにその後の再実行では、エージェントが層をまたぐ欠陥を**型定義側の
+ファイル**（fixture 内の `types/eval-fixture-recall.ts`）を指して正しく報告したのに、期待パスが
+`repository.ts` 固定だったため 3 度目の MISS になった。判定器は `expectedFilePathContains` の
+配列（いずれか一致）を受け付けるようにし、2 ファイルにまたがる fixture は両方を書く。
+**「MISS = 見落とし」ではない。判定器・fixture・エージェントの 3 者のどれが原因かを生出力で
+毎回切り分ける。**
+
 ## RLS/テナント分離層
 
 ### 「動いたからOK」でfacility_idフィルタ漏れ・RLS未設定を見逃す（issue #24再発防止）

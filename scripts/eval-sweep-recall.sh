@@ -173,7 +173,15 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
   fi
 
   DETAIL_FILE="$(mktemp)"
-  printf '%s' "$AGENT_OUTPUT" | jq -r '.detail // ""' > "$DETAIL_FILE" 2>/dev/null || echo -n "" > "$DETAIL_FILE"
+  # WHY(issue #731): --json-schema を渡しても、モデル（特に haiku）が JSON でなく素のテキストで返す
+  #      ことがある。その場合 jq が失敗して detail が空になり、エージェントが欠陥を正しく報告して
+  #      いても MISS になっていた（2026-09-05 実測: 生出力に期待パスとキーワードの両方があるのに 0/1）。
+  #      JSON として読めなければ生出力全体を判定対象にする（判定は部分文字列一致なので過検出は
+  #      増えない。status の取得は諦める）
+  if ! printf '%s' "$AGENT_OUTPUT" | jq -r '.detail // ""' > "$DETAIL_FILE" 2>/dev/null; then
+    printf '%s' "$AGENT_OUTPUT" > "$DETAIL_FILE"
+    echo "[$case_name] 注意: エージェント出力が JSON ではないため生出力全体を判定対象にしました" >&2
+  fi
   IS_HIT="$(EXPECTED_FILE="$expected_file" DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py")"
   rm -f "$DETAIL_FILE"
 
