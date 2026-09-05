@@ -91,15 +91,16 @@ v2 以降で「プラグインが正本、vkumai も消費者」へ反転する�
 - [ ] 生成スクリプトを 2 回続けて実行しても差分が出ない（決定的）
 - [ ] 導入先設定 `aidd.config.json` を空にしても共通プラグインが安全側（高リスク扱い）で動く
 
-### 7. 配布形態（ユーザーの判断が必要な点）
+### 7. 配布形態（2026-09-05 ユーザー決定済み）
 
-v1 の配布は次のどちらかで、**事業判断のため実装前に決めてほしい**。
+- **最終形は (a) 非公開 git リポジトリ `aidd-plugins`**（marketplace.json 同梱、
+  `claude plugin install aidd-core@aidd-plugins`）。導入先が vkumai 本体（医療在庫の製品コード）を
+  clone せずに済み、移行手順・互換性を壊す変更・変更履歴を版に紐づけて管理できる
+- **受け入れ条件が通るまでの検証は (b) vkumai 内 `dist/plugins/`** に生成物を置き、
+  `claude --plugin-dir` で読む。生成スクリプトの出力先を変えるだけで (a) へ移せる
+- リポジトリ作成（GitHub 上の操作）はユーザー側の作業。受け入れ条件が通った時点で依頼する
 
-- (a) 非公開 git リポジトリ `aidd-plugins`（marketplace.json 同梱、`claude plugin install aidd-core@aidd-plugins`）
-- (b) vkumai リポジトリ内の `dist/plugins/`（生成物をコミット、`claude --plugin-dir` で読む）
-
-推奨は (a)。理由: 導入先が vkumai 本体（医療在庫の製品コード）を clone せずに済む。
-(b) は最初の 1〜2 週間の検証だけなら手軽。
+**仕様承認**: 2026-09-05 ユーザー承認（停止①通過）。
 
 ### 8. 既知の制約（KNOWN-LIMITS.md の初期内容）
 
