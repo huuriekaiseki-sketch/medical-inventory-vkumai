@@ -595,3 +595,25 @@ lint scriptの`--max-warnings=0`追加のみをまとめて行った。
 **How to apply:** 新しいWorkflowスクリプトに反復構造（ループ・リトライ）や台数可変の
 フェーズを追加する際は、`isDefaultCapExceeded`をインライン複製し（`budget-guard-sync.test.js`の
 `WORKFLOW_FILES`にも追加）、workflow固有の`DEFAULT_TOKEN_CAP`を根拠コメント付きで定める。
+
+## なぜスキル本文（SKILL.md）のサイズをトークンではなく「文字数5,000」で構造テストするか（issue #716）
+
+Claude Code は compaction 後に起動済みスキル本文を再注入するが、1スキル 5,000 トークン・合計
+25,000 トークンで打ち切る（先頭を残し末尾を捨てる）。`handoff-format` のように作業終盤で使う
+スキルは compaction 後に呼ばれやすく、末尾の 4 値規約や必須見出しが切れると Stop hook
+（`check-handoff-format.sh`）の警告を誘発する。
+
+2026-09-05 の実測では、バイト数（6.7KB）を見て「上限付近」と誤認していたが、文字数は 3,248 で
+最悪ケース（1文字=1トークン）でも上限の 65% だった。日本語は 1 文字 3 バイトのため、バイト数は
+トークンの指標にならない。API の count_tokens はセッション環境から使えない（API キー参照が
+auto mode classifier に拒否される）ため、tokenizer に依存しない「文字数 ≤ 5,000」を上限に置いた。
+実トークンは日本語 1〜2 文字/トークン・ASCII 3〜4 文字/トークンなので、この閾値は安全側に倒れる。
+
+正本は `scripts/check-skill-size.test.sh`（CI `hooks-test`）。対象は `.claude/skills/` と Codex 側
+ミラー `.agents/skills/` の両方。文字数は `jq -Rs 'length'`（コードポイント数）で数える
+（`wc -m` はロケールが C だとバイト数を返す環境があるため使わない）。
+
+**How to apply:** テストが RED になったスキルは、Stop hook が検知する見出しや 4 値規約などの
+最重要指示を SKILL.md の冒頭へ寄せ、事例・経緯は `references/` へ分離する（agentskills.io の
+progressive disclosure: name+description → 本文 → 参照ファイルの 3 層）。閾値を上げる場合は
+公式 compaction 仕様の変更を確認してからにする。
