@@ -183,6 +183,16 @@ run_hook
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_empty "$OUT" "UTC(Z)以外の形式は信頼せず沈黙する"
 
+echo "=== scenario 13b: transcript先頭行がtimestamp無しのbridge-sessionレコード → 2行目の時刻で判定し警告する ==="
+# WHY: Remote Control 連携セッションの transcript は timestamp 無しの bridge-session 行で始まる（2026-09-05 実測）。
+#      1 行目決め打ちだと開始時刻が取れず、この hook が無音で死ぬ
+reset_env
+write_wf_result "wf_a.json" "phase1"
+printf '{"type":"bridge-session","sessionId":"%s"}\n{"type":"user","timestamp":"%s"}\n' "$SESSION" "$SESSION_START_ISO" > "$TRANSCRIPT"
+run_hook
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" "systemMessage" "bridge-session行を読み飛ばして警告する"
+
 echo "=== scenario 14: マーカーが書き込めない環境 → クラッシュせず警告は出す（exit 0） ==="
 reset_env
 write_wf_result "wf_a.json" "phase1"

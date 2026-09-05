@@ -248,6 +248,30 @@ issue化を検討）。
 
 詳細: [`tooling-decisions.md`](./tooling-decisions.md#subagent-frontmatterのskillsプリロードpermissionmode-planは見送りmaxturnsは延期issue-652)
 
+### fail-open の warning-only hook が、入力形式の変化で無音のまま死ぬ（2026-09-05）
+
+**チェック内容:** 「判定材料が取れなければ沈黙する（fail-open）」設計の hook を書く・触るときは、
+沈黙の入口ごとに「その材料が取れなくなる現実的な形式変化」を 1 つ挙げ、**その形式のfixtureで
+警告が出る RED テスト**を持っているか確認する。特に Claude Code 本体が生成するファイル
+（transcript `*.jsonl`・`wf_*.json`・`agent-*.meta.json`）の「先頭行」「特定キー」を決め打ちで
+読んでいる箇所は、本体更新で形式が変わっても hook 側にエラーが出ない。
+
+**なぜ再発したか:** `check-find-av-precision-recorded.sh`（issue #522）・`check-aidd-stats-recorded.sh`
+（#495）・`check-aidd-phase-stats-recorded.sh`（#524）の 3 本は、セッション開始時刻を
+transcript の **1 行目**の `timestamp` から取っていた。Remote Control 連携で始まるセッションの
+transcript は `{"type":"bridge-session",...}`（timestamp 無し）で始まるため、3 本とも「開始時刻
+不明 → 沈黙」で無音のまま死んでいた。2026-08-28 に deep-task が `verifiedCount=61` で完走した
+セッションでも警告は出ず、`logs/find-av-precision.jsonl` は 0 件のまま、誰も気づかなかった。
+既存テストには「先頭行に timestamp が無い → 沈黙」というシナリオまであり、**バグの挙動を
+仕様として固定していた**。warning-only かつ fail-open の hook は「壊れても何も起きない」ので、
+壊れたことに気づく手段が hook 自身には無い。
+
+**機械検知:** 3 本とも「先頭 50 行のうち最初に timestamp を持つ行」を採用するよう修正し、
+各 `*.test.sh` に「1 行目が bridge-session でも警告する」RED シナリオを追加した。ただし
+「次に来る未知の形式変化」は同じ手段では検知できない。fail-open hook が本当に生きているかは、
+`logs/*.jsonl` の**最終更新日が伸びているか**（記録が止まっていたら hook か記録経路が死んでいる）
+を節目で見るしかない（本件は `docs/agents/eval-runs.jsonl` の記録停止を追った副産物として発覚）。
+
 ## RLS/テナント分離層
 
 ### 「動いたからOK」でfacility_idフィルタ漏れ・RLS未設定を見逃す（issue #24再発防止）
