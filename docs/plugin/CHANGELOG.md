@@ -14,3 +14,5 @@
 - 実証: クリーンリポジトリで sweep 4 体が実起動（`evidence/` 参照）
 - 同日修正: manifest に `hooks` を書かない（自動読み込みと重複して load 失敗）。hook 15 本の作業ディレクトリを
   `CLAUDE_PROJECT_DIR` 優先に（スクリプト位置基準だとプラグインでは導入先を指さない）
+- 2026-09-06: `bin/` のスクリプトの `$SCRIPT_DIR/lib/` 参照を `../scripts/lib/` へ書き換え、gap 判定の JS を
+  `scripts/workflow-lib/` に同梱。derive（04 表の機械導出）は同梱対象から外した（KNOWN-LIMITS）

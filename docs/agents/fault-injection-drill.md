@@ -64,6 +64,7 @@ Issue作成後、この実施記録欄に対応Issue番号を記入する。
 | 2026-07-16 | implementer (Claude Sonnet 5) | 未実測（fixture/スクリプト動作のみ確認） | 未実測（同左） | 未実測（同左） | 未実測（同左） | - |
 | 2026-07-16 | orchestrator (Claude Sonnet 5、Workflowツール経由で4シナリオ全て実測完了) | **不一致**: 期待`Spec Check`、実際`Manifest Check`（後述の原因により） | 一致（`Manifest Check`、正しい理由） | 一致（`Manifest Check`、正しい理由。フィクスチャ固有の詳細も正確に言及） | 一致（`Manifest Check`、正しい理由。正しいファイルの実ハッシュ`69ce73d4...`で比較） | **#399** |
 | 2026-07-16 | orchestrator（PR #402マージ後の再検証、SPEC.md欠如シナリオのみ再実施） | **不一致（継続）**: 期待`Spec Check`、実際`Manifest Check`。ただし原因はPR #402が対処した非対称バグとは別物と判明（後述） | 未実施 | 未実施 | 未実施 | **#399（追記コメント）** |
+| 2026-09-06 | orchestrator（Claude Fable 5.1。**プラグイン v1 の生成物経由**: クリーンな検証リポジトリに `--plugin-dir` で読み込み、`claude -p` から `Workflow({name:'aidd-vkumai:aidd-phase2'})`、Claude Code 2.1.258） | 一致（`Spec Check`。指定 specPath の絶対パスを読んで「存在しない」。**#399 の args.specPath 無視は再現せず**） | 一致（`Manifest Check`、「Run Manifestが存在しません」） | 一致（`Manifest Check`、approval 無しを正しく指摘） | 一致（`Manifest Check`、manifest の 0000… と実ハッシュ `69ce73d4…` を両方明記） | - |
 
 > **注記（2026-07-16、1回目=implementer実施分）**: fixture・setup/teardownスクリプトの動作
 > （`.aidd/run-manifest.json`の上書き・バックアップ・復元・`specPath`出力・未知シナリオでの
@@ -115,9 +116,16 @@ Issue作成後、この実施記録欄に対応Issue番号を記入する。
 > そもそも成立しなかった）。このセッション固有の環境要因（Workflowツールのバージョン・実行環境等）
 > の可能性があるため、別セッション・別環境での再検証を推奨する。詳細はissue #399に追記コメント。
 
+> **注記（2026-09-06、プラグイン経由）**: 訓練の手順は中心リポジトリ内の setup/teardown スクリプトを
+> 前提にしているが、プラグイン経由では fixture を検証リポジトリへコピーし、`.aidd/run-manifest.json` を
+> 手で置き換えて実施した（4 シナリオで合計約 $0.8）。副産物として、Workflow 内のエージェントが
+> `log-agent-progress.sh` を見つけられない（プラグインの `bin/` は Workflow エージェントの Bash の PATH に
+> 無い）ことと、`bin/` のスクリプトが `$SCRIPT_DIR/lib/` を参照して壊れていたことを発見し、後者は
+> 生成スクリプトで修正した（前者は `docs/plugin/KNOWN-LIMITS.md`）。
+
 ## 次回実施予定日
 
-2026-10-16（四半期後の目安。日付自体は手動で書き換える。ただし期限超過の検知は
+2026-12-06（プラグイン経由で 4 シナリオ実施済みのため四半期後へ更新。日付自体は手動で書き換える。ただし期限超過の検知は
 `scripts/check-fault-injection-drill-staleness.sh`がSessionStart hookとして機械化済み
 （issue #443・`.claude/settings.json`のSessionStart配列に配線）で、期限を過ぎてもこのファイルが
 更新されなければ警告が出る）
