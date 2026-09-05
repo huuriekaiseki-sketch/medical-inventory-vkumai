@@ -28,6 +28,12 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 | 引き継ぎメモ 04 の4値検知（Stop hook の行名指し警告） | `scripts/check-handoff-format.sh` | 「どう確認したか」節の表行の状態列を見るだけで、種別名には依存しない |
 | 約束カタログの形式（9 列・`P-`3 桁・番号帯）と双方向の構造テスト | `docs/agents/promise-catalog.md`の列構成、`scripts/check-promise-catalog.test.sh` | 「ID が守るテストのファイル内に実在」「孤児 ID 禁止」の検査は言語・フレームワークに依存しない（検索対象の拡張子だけ差し替える） |
 | グラフマニフェストのスキーマ（nodes / edges / humanGates / budgets、blocked エッジは returnsTo 必須）と同期テスト・生成図の仕組み | `.claude/workflows/graph/aidd-graph.mjs`、`.claude/workflows/lib/__tests__/graph-manifest-sync.test.js`、`scripts/lib/render-aidd-graph.mjs` | issue #710。スキーマと「JS から静的抽出して突合する」方式は汎用。nodes / edges の中身（sweep 4 軸・Review 4 観点・予算値）はリポジトリ固有 |
+| 常時ロード量の予算（CLAUDE.md + `@import` 連鎖 + 非スコープ rules の文字数上限）とスキル本文の文字数上限 | `scripts/check-claude-md-size.sh`、`scripts/check-skill-size.test.sh` | issue #711・#716。「起動時に必ず読まれる文字数を測って上限で止める」方式は汎用。上限値（24,000 / 5,000 文字）は各リポジトリの実測で決め直す |
+| compaction 後の状態再注入（SessionStart `compact` matcher で実行状態だけを再注入し、警告系 hook は startup に限定） | `scripts/reinject-aidd-run-state.sh`、`.claude/settings.json` の SessionStart 2 エントリ、`scripts/check-session-start-matchers.test.sh` | issue #712。「要約で消える状態をディスクから読み直す」設計は汎用。再注入する内容（run-manifest / agent-progress / recovery-queue）はこのリポジトリの観測ファイルに依存 |
+| 読み取り専用ロールの Bash ガード（settings.json の PreToolUse で `agent_type` を見て書き込み系コマンドを deny） | `scripts/check-readonly-bash.sh`、`READONLY_AGENT_TYPES` | issue #713。「ロール名の集合 × コマンド分類」で deny する方式は汎用。ロール名一覧（sweep-* / reviewer 等）はエージェント構成に依存 |
+| docs 整合性検査（相対リンク・見出しアンカー・パス言及の実在、歴史的マーカー付きは免除） | `scripts/lib/check-docs-integrity.mjs`、`.github/workflows/docs-integrity-check.yml` | issue #714。検査の 3 種と GitHub の slug 規則は汎用。`PATH_MENTION_PREFIXES`（`scripts/` `supabase/` 等）と歴史的マーカー語（削除済み・廃止済み等）はリポジトリ固有 |
+| eval fixture の中立性検査（fixture コードに「ベンチマーク用・意図的」等の自己申告語を書かせない）と、recall 判定器の「非 JSON 応答は生出力で判定」「期待パスの配列（いずれか一致）」 | `scripts/check-eval-fixtures-neutral.test.sh`、`scripts/eval-sweep-recall.sh`、`scripts/lib/judge-sweep-recall.py` | issue #731。「評価対象に正解を教えない」「MISS = 見落としではない、判定器・fixture・エージェントを生出力で切り分ける」という原則は LLM 評価一般に通用する。禁止語の一覧は日本語運用固有 |
+| 実行痕跡の鮮度チェックを warning でなく失敗にし、免除は PR 本文の申告（`eval-skip: <理由>`）に限定する運用 | `scripts/check-eval-runs-freshness.sh`、`.github/workflows/eval-runs-freshness-check.yml` | issue #496。「`::warning::` は run を開かないと見えず 3 PR で無視された」という教訓と、本文申告による免除の形は汎用 |
 
 ## このリポジトリ・スタック固有と考えられる部分
 
@@ -43,6 +49,8 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 | テスト一覧の行（種別・トリガー・証跡・コマンド） | `docs/agents/test-matrix.md`の各行 | RLS/IDOR 統合・スキーマドリフト等は Supabase 前提。kojigyo（RAG）には golden set・資料鮮度など vkumai に無い行があり、それらは vkumai を経由せず RAG 系の派生先へ持っていく |
 | derive のルール表（derive キー・trigger・not_required の理由・コマンド） | `scripts/lib/derive-test-selection.rules.mjs` | 一覧の行と 1:1。高リスク判定は `router-risk.js` を参照するため、そちらの語彙にも依存する |
 | 約束カタログの行（施設境界・AAL2・admin 境界の各約束） | `docs/agents/promise-catalog.md`の各行 | facility / is_facility_member / has_aal2 等はこのリポジトリの認可設計に固有。kojigyo（corpus の閲覧区分）とは中身が全く違う |
+| Claude / Codex の二重管理（`.claude/skills` と `.agents/skills` のミラー、parity テストのスキルごとの同期単位、AGENTS.md / common.md の TRI/RISK 節の同期テスト） | `scripts/lib/claude-codex-skills-parity.test.ts`、`.claude/workflows/lib/__tests__/tri-risk-docs-sync.test.js` | issue #715・#719。Codex を併用しないリポジトリには不要。併用する場合も「どのスキルを完全一致にするか」は運用判断 |
+| Stop hook が transcript から「セッション開始時刻」を取る方法（先頭 50 行のうち最初に `timestamp` を持つ行。`bridge-session` 行を読み飛ばす） | `scripts/check-aidd-stats-recorded.sh`、`scripts/check-aidd-phase-stats-recorded.sh`、`scripts/check-find-av-precision-recorded.sh` | Claude Code 本体の transcript 形式（`*.jsonl`、Remote Control 時の先頭行）に依存。本体更新で無音死しうるため、fail-open hook の生存確認（`logs/*.jsonl` の最終更新日）を節目で見る運用とセット |
 
 ## 判断が難しい・要検証の部分
 
@@ -53,9 +61,23 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 | `~/write_aidd_stats.sh`・`~/.claude/pending_issues.jsonl`等、リポジトリ外（ホームディレクトリ）に置かれた個人スクリプト・設定 | ルート`CLAUDE.md`「AIDD stats 書き出しルール」等 | リポジトリに含まれないため「移植」の対象なのかどうか自体が論点（ユーザー個人の運用習慣なのか、フレームワークの一部なのか） |
 | sweep-db/sweep-ui/sweep-types/sweep-dataという4軸分類 | `.claude/agents/sweep-*.md` | 「UI/データ/DB/型」という軸自体はNext.js+Supabase構成に最適化されており、他スタック（例: モバイルアプリ、バッチ処理基盤）でも同じ4軸が意味を持つかは未検証 |
 
+## 2026-09-05 時点の所見（issue #535 のレビュー用）
+
+- 起票時の前提「移植先候補は未定」は変わった。riff-gear（EC）・cardiosearch（Codex 版）へ移植済みで、
+  派生側からの逆輸入（hooks-test CI、マイグレーション番号衝突検知、`-- ROLLBACK:` 規約）も始まっている
+  （issue #535 コメント 2026-08-24）。論点は「汎用化する価値があるか」から「本家⇔派生の双方向同期を
+  どう設計するか（Plugin 化 #420 を含む）」へ移っている
+- 2026-09-01〜05 に入った仕組み（上表の #710〜#731）は、いずれも「構造・検査方式は汎用、しきい値・
+  語彙・ロール名は固有」という同じ切り口に収まった。分離の粒度は「エンジン（共通）とルール表（固有）」
+  （derive の設計）で統一できる見込み
+- 派生側で判明した差分（ドメインキーワード・コマンド・スタック依存部分）の反映は、riff-gear /
+  cardiosearch がこの Mac のホーム直下に無いため未着手。両リポジトリの場所が分かり次第、上表の
+  「固有」列を派生側の実値と突き合わせる
+
 ## 次にやること
 
 - 通常のAIDD作業（Phase 1-5・issue対応）を進める中で、新しく追加/変更したファイルがどの区分に
   当たるかをこの3表に追記していく
-- 1週間分たまったら、issue #535のレビュー基準（汎用プラグイン化に着手する価値があるか、移植先候補
-  リポジトリの目星がついたか）に沿って判断する
+- riff-gear / cardiosearch の実移植で判明した差分で「固有」列を更新する（場所の特定が先）
+- issue #420（Plugin 化）に着手する際、上表の「汎用」列をそのままプラグイン本体、「固有」列を
+  リポジトリ側設定として切り出す
