@@ -35,7 +35,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 command -v git >/dev/null 2>&1 || exit 0
 
-PROJECT_DIR="${EMPTY_SESSION_REPORT_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+PROJECT_DIR="${EMPTY_SESSION_REPORT_PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}}"
 cd "$PROJECT_DIR" 2>/dev/null || exit 0
 
 [ -d docs/sessions ] || exit 0

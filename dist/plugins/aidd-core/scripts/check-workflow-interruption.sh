@@ -50,7 +50,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 #   WORKFLOW_INTERRUPTION_SEEN_MAX     seen fileの無制限肥大化を防ぐ保持件数上限（既定500）
 #   RECOVERY_QUEUE_FILE                queue-recovery-task.shへそのまま渡す
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 command -v jq >/dev/null 2>&1 || exit 0
 

@@ -67,7 +67,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 #   HANDOFF_CHECK_GH_CMD           `gh`コマンドの代替（テスト用フェイク）
 #   HANDOFF_CHECK_GIT_BRANCH       現在ブランチの代替
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MARKER_FILE="${HANDOFF_CHECK_MARKER_FILE:-.aidd/handoff-format-warning-shown.json}"

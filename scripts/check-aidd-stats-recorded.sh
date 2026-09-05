@@ -47,7 +47,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 #   AIDD_STATS_CHECK_STATS_DIR        statsディレクトリ（既定 ~/.claude/aidd-session-stats）
 #   AIDD_STATS_CHECK_MARKER_FILE      警告済みマーカー（既定 .aidd/aidd-stats-warning-shown.json）
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 SKELETON_LOG="${AIDD_STATS_CHECK_SKELETON_LOG:-logs/subagent-skeleton.jsonl}"
 MARKER_FILE="${AIDD_STATS_CHECK_MARKER_FILE:-.aidd/aidd-stats-warning-shown.json}"

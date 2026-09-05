@@ -12,3 +12,5 @@
   automode・direct-ddl）、derive
 - 導入先アダプター設定 `aidd.config.json`（スキーマ `schema/aidd-config.schema.json`）
 - 実証: クリーンリポジトリで sweep 4 体が実起動（`evidence/` 参照）
+- 同日修正: manifest に `hooks` を書かない（自動読み込みと重複して load 失敗）。hook 15 本の作業ディレクトリを
+  `CLAUDE_PROJECT_DIR` 優先に（スクリプト位置基準だとプラグインでは導入先を指さない）

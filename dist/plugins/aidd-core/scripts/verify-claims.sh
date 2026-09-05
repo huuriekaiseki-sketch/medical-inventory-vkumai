@@ -39,7 +39,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
 
-REPO_DIR="${VERIFY_CLAIMS_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+REPO_DIR="${VERIFY_CLAIMS_REPO_DIR:-${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
 cd "$REPO_DIR"
 
 STATE_DIR="${VERIFY_CLAIMS_STATE_DIR:-.claude/.verify-state}"

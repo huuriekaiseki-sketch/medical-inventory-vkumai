@@ -15,7 +15,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 # 「起動し忘れても気づける」形にする、という issue #430・issue #411原則への対応。
 # OTelを有効化していない（デフォルト）環境では何もしない。
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 if [ "${CLAUDE_CODE_ENABLE_TELEMETRY:-}" != "1" ]; then
   exit 0

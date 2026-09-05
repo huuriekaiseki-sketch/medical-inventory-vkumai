@@ -174,7 +174,8 @@ function build(outRoot) {
       version: meta.version,
       description: meta.description,
       dependencies: meta.dependencies ?? [],
-      hooks: './hooks/hooks.json',
+      // hooks/hooks.json は自動で読まれる。manifest に "hooks" を書くと重複扱いで
+      // "Hook load failed: Duplicate hooks file" になる（2026-09-05 プラグイン経由の実走ドリルで発見）
       generatedBy: 'AIDD plugin build (issue #420). 生成物なので手で編集しない。正本は中心リポジトリの .claude/ と scripts/',
     }, null, 2) + '\n')
     put(plugin, 'hooks/hooks.json', JSON.stringify(buildHooksJson(settings, plugin), null, 2) + '\n')

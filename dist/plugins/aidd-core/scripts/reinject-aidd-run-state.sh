@@ -33,7 +33,8 @@ set -euo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$SCRIPT_DIR/..}"
 
 INPUT="$(cat 2>/dev/null || true)"
 if [ "${REINJECT_FORCE:-0}" != "1" ] && [ -n "$INPUT" ]; then

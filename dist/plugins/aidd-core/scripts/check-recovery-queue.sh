@@ -34,7 +34,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 #   RECOVERY_QUEUE_FILE         キューファイルパス（既定 .aidd/recovery-queue.jsonl）
 #   RECOVERY_QUEUE_STALE_HOURS  surfaced放置とみなす経過時間（既定72）
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 QUEUE_FILE="${RECOVERY_QUEUE_FILE:-.aidd/recovery-queue.jsonl}"
 STALE_HOURS="${RECOVERY_QUEUE_STALE_HOURS:-72}"

@@ -8,6 +8,5 @@
       "version": "^0.1.0"
     }
   ],
-  "hooks": "./hooks/hooks.json",
   "generatedBy": "AIDD plugin build (issue #420). 生成物なので手で編集しない。正本は中心リポジトリの .claude/ と scripts/"
 }

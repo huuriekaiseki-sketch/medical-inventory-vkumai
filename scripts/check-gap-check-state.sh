@@ -36,7 +36,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 #   GAP_CHECK_STALE_SECONDS  残骸判定の閾値秒（既定86400）
 #   GAP_CHECK_NOW_EPOCH      現在時刻epoch秒の上書き
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 STATE_FILE="${GAP_CHECK_STATE_FILE:-.aidd/gap-check-state.json}"
 # WHY（issue #420 v1）: 既定を cwd 相対（scripts/…）から自スクリプト相対に変えた。プラグインとして

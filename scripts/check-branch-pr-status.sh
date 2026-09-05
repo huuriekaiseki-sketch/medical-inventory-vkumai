@@ -17,7 +17,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 # 設計: docs/agents/common.md「検知手段のないルールの棚卸し（issue #339）」表の
 # 「ブランチ運用ルール」行を参照。
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 BRANCH="$(git branch --show-current 2>/dev/null || true)"
 
