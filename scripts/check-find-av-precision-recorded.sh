@@ -41,7 +41,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 #   FIND_AV_PRECISION_CHECK_LOG_FILE         find-av-precisionログの代替（既定 logs/find-av-precision.jsonl）
 #   FIND_AV_PRECISION_CHECK_MARKER_FILE      警告済みマーカー（既定 .aidd/find-av-precision-warning-shown.json）
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 command -v jq >/dev/null 2>&1 || exit 0
 command -v python3 >/dev/null 2>&1 || exit 0

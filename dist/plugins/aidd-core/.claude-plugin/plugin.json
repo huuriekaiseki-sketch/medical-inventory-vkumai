@@ -3,6 +3,5 @@
   "version": "0.1.0",
   "description": "AIDD パイプラインの共通機構: 検知 hook・証跡の記録・判定エンジン・汎用エージェント/スキル（中心リポジトリから機械生成。issue #420 v1）",
   "dependencies": [],
-  "hooks": "./hooks/hooks.json",
   "generatedBy": "AIDD plugin build (issue #420). 生成物なので手で編集しない。正本は中心リポジトリの .claude/ と scripts/"
 }

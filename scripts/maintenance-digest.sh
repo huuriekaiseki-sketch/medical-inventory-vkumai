@@ -21,7 +21,8 @@ set -euo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
 command -v python3 >/dev/null 2>&1 || exit 0
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 # stdin（hook 入力）は読み捨てる。setup_type は maintenance 前提（settings.json の matcher で絞る）
 cat >/dev/null 2>&1 || true

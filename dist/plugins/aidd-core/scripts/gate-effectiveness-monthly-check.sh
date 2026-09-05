@@ -24,7 +24,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
-cd "$SCRIPT_DIR/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$SCRIPT_DIR/..}"
 
 # 収穫は通知の30日間引きより前に毎回行う（journalが消える前に確保することが目的のため、
 # 通知が出ない回でも収穫だけは進める。issue #642 Stage 1）

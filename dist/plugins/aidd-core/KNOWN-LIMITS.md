@@ -36,4 +36,5 @@
 
 - `dependencies` の解決順（`--plugin-dir` 2 つ同時指定では検証不能。marketplace 経由で確認する）
 - fault-injection 4 シナリオのプラグイン経由での実測（受け入れ条件 3 件目）
-- 共通 hook 全件の実走ドリル（プラグイン経由）
+- PreToolUse hook 5 本のプラグイン経由での RED 確認（SessionStart / Stop / InstructionsLoaded /
+  SubagentStart・Stop はプラグイン経由で発火と成否を確認済み）

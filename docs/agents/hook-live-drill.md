@@ -112,6 +112,23 @@ PreToolUse の deny / ask は、止めるべき入力の JSON（`tool_name` / `t
   （state ファイルの mtime）より新しいファイルを `wf_*` 配下に持つ dir だけ node を起動する形にし、
   収穫 0 件の dir は出力しない
 
+## 2026-09-05 プラグイン経由の実走（issue #420 v1 受け入れ条件）
+
+生成物（`dist/plugins/aidd-core` / `aidd-vkumai`）を検証リポジトリ（git init 直後）に `--plugin-dir` で
+読み込み、`claude -p --debug` 1 ターン（$0.11）と `aidd-vkumai:aidd-phase1` 実走（$0.41）で確認した。
+リポジトリ内で GREEN だった hook が、配布形態が変わると無音死する型が 2 件出た。
+
+| 発見 | 種別 | 症状 | 修正 |
+|---|---|---|---|
+| 生成した plugin.json の `hooks: "./hooks/hooks.json"` | 配布形態の変化 | `hooks/hooks.json` は自動で読まれるため「Duplicate hooks file detected → Hook load failed」。hook 自体は発火していたが plugin が load-failed 扱い | manifest から `hooks` を外す（build-plugin.mjs） |
+| hook 15 本の `cd "$(dirname "$0")/.."` | 配布形態の変化 | プラグインではスクリプト位置がプラグインルートになり、Stop hook の状態ファイル・`resolve_log_dir` の解決先が導入先でなくなる（月次サマリが中心リポジトリの `logs/` を読んでいた） | `cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"`（hook は CLAUDE_PROJECT_DIR を受け取る。無ければ従来どおり） |
+
+修正後の再実走で確認できた範囲: SessionStart 13 本（core）＋ automode（vkumai）、Stop 8 本、
+InstructionsLoaded、SubagentStart/Stop（phase1 実走時）。状態ファイル（ai-check-suggest / domain-decisions-suggest / verify-claims の各 state ディレクトリ）と
+ログは検証リポジトリ側に書かれた。PreToolUse 5 本（run-manifest /
+skip-marker / readonly-bash / dependency-change / direct-ddl）は検証リポジトリで Write / Bash を伴う
+操作をしていないため未実走（構造テストと中心リポジトリでの実機 deny 確認のみ）。
+
 ## 次回実施の目安
 
 - `.claude/settings.json` の hooks を追加・変更したとき（その hook のみ）

@@ -44,7 +44,8 @@ command -v gh >/dev/null 2>&1 || exit 0
 #   STALE_BRANCHES_AGE_DAYS        放置ブランチ判定の経過日数閾値（既定21）
 #   STALE_BRANCHES_ORPHAN_THRESHOLD 放置ブランチ数の警告閾値（既定5）
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 MARKER_FILE="${STALE_WORKTREES_MARKER_FILE:-.aidd/check-stale-worktrees-warning-shown.json}"
 MAX_CHECK="${STALE_WORKTREES_MAX_CHECK:-10}"

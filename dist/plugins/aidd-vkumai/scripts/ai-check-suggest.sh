@@ -6,7 +6,8 @@ set -euo pipefail
 # systemMessageで警告する（Claude本体のBashツールを経由しないため、非対話環境の
 # 許可プロンプト制約を受けない）。
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 INPUT="$(cat)"
 SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // "unknown"')"

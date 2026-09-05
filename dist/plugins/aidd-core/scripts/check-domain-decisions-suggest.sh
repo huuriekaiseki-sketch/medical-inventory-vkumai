@@ -23,7 +23,8 @@ set -euo pipefail
 # 見ないため、無関係なパスに置かれたドメイン変更は拾えない（偽陰性）。
 # その代わり偽陽性（毎ターンの空振り）を無くし、通知が読まれる状態を保つ方を優先した。
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 INPUT="$(cat)"
 SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // "unknown"')"

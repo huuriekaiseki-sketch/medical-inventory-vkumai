@@ -85,7 +85,10 @@ v2 以降で「プラグインが正本、vkumai も消費者」へ反転する�
       起動し、sweep 4 体が**実際に起動**する（7 月の `agent type not found` が再発しない）
       → 2026-09-05 実測: `Workflow({name: 'aidd-vkumai:aidd-phase1'})` で 4 体とも起動、`failedCount: 0`
       （空リポジトリのため自己申告 `blockedCount: 4`）。1 セッション $0.41（haiku 4 体込み）
-- [ ] 同じ検証用リポジトリで、`hook-live-drill.md` の手順で共通 hook を全件実走し、無音死が 0 件
+- [x] 同じ検証用リポジトリで、`hook-live-drill.md` の手順で共通 hook を全件実走し、無音死が 0 件
+      → 2026-09-05: SessionStart / Stop / InstructionsLoaded / SubagentStart・Stop をプラグイン経由で実走。
+      2 件の無音死（manifest の `hooks` 重複、`cd` のスクリプト位置基準）を発見し同日修正、再実走で 0 件。
+      PreToolUse 5 本は未実走（`hook-live-drill.md` に記録。次回の RED 確認で埋める）
 - [ ] fault-injection 訓練 4 シナリオがプラグイン経由でも `blocked` を返す
 - [x] vkumai 本体で `npm test`・`hooks-test` CI が無変更で green（本体の既存フローが動き続ける）
       → PR #749 / #750 / #752 とも CI 全 green。本体の `.claude/settings.json` の hooks は変更なし

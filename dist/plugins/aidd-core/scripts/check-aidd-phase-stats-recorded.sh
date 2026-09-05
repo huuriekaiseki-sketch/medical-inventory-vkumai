@@ -55,7 +55,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 #   AIDD_PHASE_STATS_CHECK_STATS_DIR        statsディレクトリ（既定 ~/.claude/aidd-session-stats）
 #   AIDD_PHASE_STATS_CHECK_MARKER_FILE      警告済みマーカー（既定 .aidd/aidd-phase-stats-warning-shown.json）
 
-cd "$(dirname "$0")/.."
+# WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 command -v jq >/dev/null 2>&1 || exit 0
 command -v python3 >/dev/null 2>&1 || exit 0
