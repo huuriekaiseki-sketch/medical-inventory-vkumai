@@ -347,3 +347,38 @@ workflow）を docs 側の paths で起動し、コード側の変更で回る h
 **How to apply:** TRI/RISK 基準（高リスクパス・ドメイン語・ファイル名規則）を変えるときは
 `router-risk.js` → `AGENTS.md` → `common.md` の順に 3 箇所を同時に直す。テストが RED に
 なったら「片方だけ直した」合図。基準本体の文言を整えるときも両 doc を同じ文字列に揃える。
+
+## なぜ eval-runs 鮮度チェックを warning から失敗（exit 1）に変え、免除は PR 本文の `eval-skip: <理由>` にしたか（2026-09-05）
+
+**結論: `.github/workflows/eval-runs-freshness-check.yml` は `.claude/workflows/*.js` を変えた PR で
+`docs/agents/eval-runs.jsonl` が未更新なら `::error::` を出して失敗する。eval が不要な変更は PR 本文の
+行頭に `eval-skip: <理由>` と書けば `::notice::` で通る。理由が空なら失敗。**
+
+2026-07-23 の導入時（issue #496）は「まずは warning で開始」とした。その後 `.claude/workflows` を変えた
+PR は 3 件（#627 #679 #693）あり、いずれの run にも警告は正しく出ていたが、`::warning::` は Actions の
+run を開かないと見えず、ジョブ自体は緑のため誰も気づかずマージされた。結果、eval-runs.jsonl の記録は
+導入日で止まり、`docs/agents/eval-runs.jsonl` の停止を追って初めて発覚した（同日、Stop hook 3 本が
+transcript 形式の変化で無音死していた別件も見つかった。[`known-failure-patterns.md`](./known-failure-patterns.md#fail-open-の-warning-only-hook-が入力形式の変化で無音のまま死ぬ2026-09-05)）。
+「検知は動いているが届いていない」状態であり、届く形に変える必要があった。
+
+2 案を比較した。
+
+- **PR コメントを投稿する:** `pull-requests: write` 権限と重複投稿の抑止が要り、push のたびに
+  コメントが積もる。得られるのは「見える化」だけで、赤 check と同じ効果。却下
+- **ジョブを失敗させる（採用）:** PR の checks 一覧と `gh pr checks` に赤で出る。マージ前に
+  `gh pr checks` を見る運用と噛み合う。derive が `.claude/workflows` 変更時に「ワークフロープロンプト
+  eval」を必須行として出すのとも整合し、CI と 04 表の基準が揃う
+
+**免除を本文申告にした理由:** eval は実エージェントを呼びコストがかかる。コメント修正・定数変更・
+配線のみの PR に毎回 eval を強いるのは過剰で、かといって無条件の免除は元の warning と同じになる。
+理由を本文に書かせれば、後から「なぜ飛ばしたか」を追える。本文はシェルに展開せず `env` 経由で
+スクリプトに渡す（workflow injection 対策）。
+
+**限界:** vkumai は Free プランで required check を設定できないため、赤でもマージボタンは物理的には
+止まらない（[前掲](#なぜci品質ゲートの失敗が赤バツ表示止まりでマージボタン自体は止められないか)）。
+最後の防波堤は「赤い check を見た人」であり、warning より確実に届く、という改善に留まる。
+
+**How to apply:** `.claude/workflows/*.js` を触る PR は、対応する fixture セットで
+`npm run eval:workflows <set>`（sweep 系は `scripts/eval-sweep-recall.sh <layer>`）を回して
+eval-runs.jsonl の追記をコミットに含める。eval が意味を持たない変更なら PR 本文に
+`eval-skip: <理由>` を書く。免除を多用し始めたら、それは fixture セットの不足の合図として扱う。
