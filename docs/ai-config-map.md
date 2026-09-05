@@ -219,6 +219,8 @@ Phase 5: 検証 [agent: reviewer × 並列 4観点]  ← aidd-phase2.js
 | `.claude/workflows/aidd-phase1-router.js` | Phase 1 正式入口。TRI/RISK自動振り分け（argsのJSON.parse防御理由はdecisions.md参照） |
 | `.claude/workflows/aidd-phase1.js` | Phase 1 軽量Sweepワークフロー実装（routerから呼ばれる） |
 | `.claude/workflows/aidd-phase2.js` | Phase 3-5 ワークフロー実装（args・完了後手順） |
+| `.claude/workflows/graph/aidd-graph.mjs` | AIDD パイプラインのグラフマニフェスト（ノード・エッジ・人間ゲート・予算の正本。issue #710）。各 Workflow との一致は `.claude/workflows/lib/__tests__/graph-manifest-sync.test.js` が `npm test` で検査 |
+| `docs/agents/aidd-graph.md` / `docs/aidd-pipeline.html` | マニフェストから `scripts/lib/render-aidd-graph.mjs` で生成する配線図（Mermaid / HTML）。手編集禁止。鮮度は `scripts/check-aidd-graph-rendered.test.sh` が CI で検査 |
 | `.claude/workflows/aidd-1-1-deep-task.js` | 深掘り調査ワークフロー（オンデマンド） |
 | `docs/agents/common.md` | 全AIエージェント共通の毎セッション必須ルール（TRI/RISK判定・DBスキーマ変更・ブランチ運用・引き継ぎフォーマット等） |
 | `docs/agents/observability-internals.md` | 観測・Eval基盤（loop-observability/agent-progress/journal.jsonl/OTel/eval）の実装詳細・既知の限界（common.mdから分離、issue #486） |

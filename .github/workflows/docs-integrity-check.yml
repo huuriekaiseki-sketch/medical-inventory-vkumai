@@ -18,6 +18,9 @@ on:
       - '.agents/skills/**'
       - 'scripts/lib/check-docs-integrity.mjs'
       - 'scripts/check-docs-integrity.test.sh'
+      - '.claude/workflows/graph/**'
+      - 'scripts/lib/render-aidd-graph.mjs'
+      - 'scripts/check-aidd-graph-rendered.test.sh'
 
 permissions:
   contents: read
@@ -33,3 +36,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check docs integrity (links / anchors / path mentions)
         run: bash scripts/check-docs-integrity.test.sh
+      # WHY: docs/aidd-pipeline.html と docs/agents/aidd-graph.md はグラフマニフェストからの生成物
+      # （issue #710）。docs のみの PR で手編集された場合も止める
+      - name: Check AIDD graph renderings are up to date
+        run: bash scripts/check-aidd-graph-rendered.test.sh
