@@ -309,3 +309,11 @@ workflow）を docs 側の paths で起動し、コード側の変更で回る h
 **How to apply:** ファイルを削除・改名したら、`node scripts/lib/check-docs-integrity.mjs` を
 実行して言及箇所を洗い出し、残す言及には歴史的マーカーを添える。新しい見出しへリンクする
 ときはアンカーを手で書かず、`slugify`（同スクリプト）の出力を使う。
+
+**初回 CI で判明した落とし穴（2026-09-05）:** ローカルでは GREEN だった検査が CI では
+`.claude/settings.local.json` の言及 3 件で RED になった。原因は、このファイルが各自の
+グローバル `~/.config/git/ignore` でしか ignore されておらず、CI の checkout では
+`git check-ignore` が「ignore 対象ではない」と答えたこと。「git ignore 対象は実在しなくても
+違反にしない」という規則は**リポジトリの `.gitignore`** にしか依存できないので、
+`.claude/settings.local.json` を `.gitignore` に明示した。ローカル green・CI red の典型で、
+グローバル ignore に頼ったパスは他にも同じ形で壊れうる。

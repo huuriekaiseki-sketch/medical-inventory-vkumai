@@ -55,6 +55,11 @@ session-report-*.html
 /.claude/worktrees/
 .playwright-mcp/
 
+# Claude Codeの個人用ローカル設定（従来は各自の ~/.config/git/ignore に依存していたが、
+# CI の checkout では ignore 扱いにならず scripts/lib/check-docs-integrity.mjs が
+# 「言及されたパスが存在しない」と誤検知したため、リポジトリ側で明示する。issue #714）
+/.claude/settings.local.json
+
 # Stop hookのセッション内重複提案抑止用の一時状態（ローカル専用）
 /.claude/.ai-check-suggest-state/
 /.claude/.domain-decisions-suggest-state/
