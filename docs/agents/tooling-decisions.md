@@ -449,3 +449,25 @@ PR 本文ではないため効果が無い。isolation: worktree は `.env.local
 エージェントが回避策を探すのではなく blocked を返す設計になっている。subagent frontmatter の
 `hooks:` を使いたくなったら、必ず Agent tool 経由の実機 RED（書き込みコマンドが本当に止まるか）を
 先に取る。
+
+## スキルミラー（.claude/skills ↔ .agents/skills）の同期単位をスキルごとに宣言する（issue #719）
+
+**結論: `scripts/lib/claude-codex-skills-parity.test.ts` の `SYNC_POLICY` で、スキルごとに
+「本文完全一致（exact）」か「見出し集合一致（headings）」かを宣言し、新スキルは登録しないと
+テストが RED になる。**
+
+2026-09-05、`.agents/skills/handoff-format/SKILL.md`（Codex 側）が Claude 側より 3 世代古く、
+「依存の変更」「promise-catalog」「04 表の 4 値規約」が欠けていた。既存の parity テストは
+ファイル一覧の一致しか見ておらず（PR #676）、本文のドリフトは検知されなかった。
+Codex 側で書かれた引き継ぎメモは Claude 側の Stop hook（`check-handoff-format.sh`）に
+そのまま引っかかるため、実害がある。
+
+**同期単位を 2 種にした理由:** handoff-format / structured-review は Claude 固有の記法を
+含まないので完全一致でよい。feature-spec は `design` スキル（Claude Design canvas）依存部分を
+Codex 向けに書き換えており、e2e-runner は `${CLAUDE_SKILL_DIR}` と `allowed-tools` が
+Claude 固有。これらは見出し（## 以上）の集合一致に留め、本文は意図的差分を許容する。
+Stop hook が検知する見出し・4 値は、両ミラーに含まれることを別途検査する。
+
+**How to apply:** スキルを足したら `SYNC_POLICY` に登録する。Claude 固有記法を使わないなら
+`exact`。handoff-format を変えたら `.agents/skills/handoff-format/SKILL.md` にもコピーする
+（`cp` で足りる。テストが差分を止める）。
