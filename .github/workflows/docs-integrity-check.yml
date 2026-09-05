@@ -3,7 +3,8 @@
 # paths-ignore しており、docs だけを変えた PR では hooks-test（scripts/*.test.sh 一括実行）が
 # 回らないため、docs 側の変更を起点にする軽量な単独 workflow を置く（eval-runs-freshness-check.yml
 # と同型）。コード側の変更で回る hooks-test と合わせて、実質すべての PR で検査される。
-# 意味的な陳腐化（LLM 判定）やクローズ済み issue への言及は対象外（issue #714 の 3 番、未実装）。
+# 意味的な陳腐化（LLM 判定）は対象外。クローズ済み issue への言及は「保留・未対応」文脈のものだけを
+# warning-only で扱う（scripts/lib/check-docs-issue-refs.mjs）。
 
 name: Docs Integrity Check
 
@@ -24,6 +25,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
 
 concurrency:
   group: docs-integrity-${{ github.workflow }}-${{ github.ref }}
@@ -40,3 +42,10 @@ jobs:
       # （issue #710）。docs のみの PR で手編集された場合も止める
       - name: Check AIDD graph renderings are up to date
         run: bash scripts/check-aidd-graph-rendered.test.sh
+      # WHY: 「保留・未対応」の文脈で参照している issue が CLOSED なら warning（issue #714 の残項目）。
+      # gh 依存のため hooks-test では回さず、ここで warning-only（continue-on-error）にする
+      - name: Warn on closed issues referenced as pending
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/lib/check-docs-issue-refs.mjs

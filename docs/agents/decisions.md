@@ -290,7 +290,7 @@ OpenAI の Harness engineering 事例（2026-02）は、AGENTS.md を「地図�
 
 **検査を3種に限定した理由:** 意味的な陳腐化（「issue #NNN で対応済み」の状態変化など）は LLM か
 `gh` が必要で、CI の hooks-test（checkout のみ・認証なし）では回せない。まず機械的に判定できる
-ものだけを CI に載せ、クローズ済み issue の言及は未実装のまま issue #714 に残した。
+ものだけを CI に載せた。クローズ済み issue の言及は、その後「保留・未対応の文脈で参照している issue が CLOSED」の場合だけを `scripts/lib/check-docs-issue-refs.mjs` が warning-only で出す（docs-integrity-check.yml、gh 依存。全参照を見ると数百件の履歴記述が鳴るため文脈で絞った）。
 
 **削除済みパスに歴史的マーカーを要求する理由:** decisions や observability-internals は「かつて
 あった `scripts/x.sh`（削除済み）を置き換えた」という経緯を書く場所であり、言及そのものは正当。しかし
