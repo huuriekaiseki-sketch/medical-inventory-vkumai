@@ -81,8 +81,10 @@ v2 以降で「プラグインが正本、vkumai も消費者」へ反転する�
 
 ### 6. 受け入れ条件（チェックリスト）
 
-- [ ] クリーンな検証用リポジトリ（git init 直後）で `claude --plugin-dir <生成物> -p` から `aidd-phase1` を
+- [x] クリーンな検証用リポジトリ（git init 直後）で `claude --plugin-dir <生成物> -p` から `aidd-phase1` を
       起動し、sweep 4 体が**実際に起動**する（7 月の `agent type not found` が再発しない）
+      → 2026-09-05 実測: `Workflow({name: 'aidd-vkumai:aidd-phase1'})` で 4 体とも起動、`failedCount: 0`
+      （空リポジトリのため自己申告 `blockedCount: 4`）。1 セッション $0.41（haiku 4 体込み）
 - [ ] 同じ検証用リポジトリで、`hook-live-drill.md` の手順で共通 hook を全件実走し、無音死が 0 件
 - [ ] fault-injection 訓練 4 シナリオがプラグイン経由でも `blocked` を返す
 - [ ] vkumai 本体で `npm test`・`hooks-test` CI が無変更で green（本体の既存フローが動き続ける）
@@ -117,6 +119,17 @@ v2 以降で「プラグインが正本、vkumai も消費者」へ反転する�
 ---
 
 ## Part 2 — 実装計画（AI 用・レビュー不要）
+
+### 層の切り方の修正（2026-09-05、ユーザー承認）
+
+実測で「Workflow 5 本・エージェント 11 体を共通側に」は v1.0 では成立しないと分かった（sweep 4 軸と
+implementer 系 7 体はスタック固有語を含み、Workflow はそれらを名前で呼ぶ。名前空間はプラグイン単位なので
+共通が固有側を参照する逆依存になる）。v1.0 は**機構を共通側**にする: 共通 = hook 一式・共通関数・
+判定エンジン・固有語の無いエージェント 4 体（reviewer / adversarial-verify / completeness-critic /
+judge-panel）・スキル 2 つ。Workflow 5 本と残り 7 体、e2e-runner / handoff-format、Supabase・npm・
+医療向けの hook 5 本は vkumai アダプター。層の表は `scripts/lib/plugin-layout.json` が正本で、
+共通側に固有語が 1 つでもあれば生成が失敗する。Workflow とエージェントの共通化は、プロンプト本文の
+汎用化（eval の結果が変わる）として v1.x で 1 本ずつ移す。
 
 ### 実装セット一覧（依存順）
 

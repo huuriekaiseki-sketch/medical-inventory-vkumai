@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // git worktrees used by parallel agents
     ".claude/worktrees/**",
+    // プラグイン v1 の生成物（issue #420）。正本は .claude/ と scripts/ で、そちらが lint 対象
+    "dist/**",
   ]),
 ]);
 

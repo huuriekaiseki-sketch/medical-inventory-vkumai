@@ -1,0 +1,13 @@
+{
+  "name": "aidd-vkumai",
+  "version": "0.1.0",
+  "description": "vkumai アダプター: Next.js + Supabase 向けの Workflow・4 軸 Sweep・実装系エージェント・Supabase ガード（aidd-core に依存）",
+  "dependencies": [
+    {
+      "name": "aidd-core",
+      "version": "^0.1.0"
+    }
+  ],
+  "hooks": "./hooks/hooks.json",
+  "generatedBy": "AIDD plugin build (issue #420). 生成物なので手で編集しない。正本は中心リポジトリの .claude/ と scripts/"
+}
