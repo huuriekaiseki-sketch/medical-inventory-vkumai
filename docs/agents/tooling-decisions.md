@@ -391,3 +391,61 @@ baseline化は未整備。
 **再開条件:** `scripts/snapshot-agent-baseline.sh`にエージェントタイプ別の典型ターン数が
 記録されるようになった後、実測の最大値に十分な余裕を持たせた`maxTurns`値を設計する
 （issue #654の低優先バックログに次点として記載済み）。
+
+## なぜ読み取り専用ロールの Bash を settings.json の PreToolUse（agent_type 判定・deny）で機械強制し、subagent frontmatter の hooks や maxTurns / memory / skills / isolation は入れなかったか（issue #713）
+
+**結論: `.claude/settings.json` の PreToolUse（matcher: Bash）に `scripts/check-readonly-bash.sh` を
+登録し、hook 入力の `agent_type` が sweep-ui / sweep-data / sweep-db / sweep-types / reviewer /
+completeness-critic / adversarial-verify / judge-panel のときだけ、許可リスト外のコマンドを deny する。
+subagent frontmatter の `hooks:` は実機で効かなかったため使わない。他の frontmatter 機能は
+issue #652 の判断（skills 見送り・permissionMode 見送り・maxTurns 延期）を維持し、memory と
+isolation は理由を記して見送る。**
+
+**背景:** 「読み取り専用」は `tools: Read, Bash` と自然言語指示に依存していた。issue #652 で
+`permissionMode: plan` を実機検証したが書き込み系 Bash を止められなかった。グラフエンジニアリングで
+言う「各ノードができる操作のホワイトリスト化」を、deny 型の PreToolUse hook で実現する。判定は
+許可リスト方式（安全と証明されない限り拒否）で、進捗記録（`scripts/log-agent-progress.sh` 等）・
+`npm test`・`git` の読み取り系は許可、リダイレクト・`sed -i`・`rm`・`git checkout`・`node -e` 等は
+deny。難読化や許可スクリプト自体の副作用は対象外（「うっかり」を止めるゲート）。
+
+**frontmatter hooks を使わなかった理由（2026-09-05 実測）:** 最初は 8 ロールの frontmatter に
+`hooks.PreToolUse` を付けた。shell テストは green だったが、sweep-ui を Agent tool
+（Claude Code 2.1.258、デスクトップアプリ）で起動して mkdir / リダイレクト / sed -i を実行させると
+**すべて素通りし、実体ファイルも作成された**（transcript に本スクリプトの痕跡なし）。公式仕様には
+「project subagent の frontmatter hooks は workspace trust 承認までスキップされ、debug log にだけ
+エラーが出る」とあるが、このフォルダは `~/.claude.json` 上 trust 済みで、セッションの debug log も
+存在せず、原因は未特定。原因が何であれ「設定したのに黙って効かない」経路は採用できない
+（known-failure-patterns「green テストでも修正が効いていない」型そのもの）。公式に「settings
+ファイルの hook はサブエージェント内でも発火し、入力に `agent_id` / `agent_type` が入る」と
+明記されている経路へ切り替え、同じ手順で再実測して deny を確認した（mkdir / リダイレクト /
+sed -i が deny、rg / git status / 進捗記録スクリプトが allow）。
+
+**効く経路の限定:** `agent_type` は agentType 経由の呼び出しでのみ入る（frontmatter と同じ制約、
+issue #433）。`aidd-phase1.js` の sweep-* と `aidd-phase2.js` の reviewer には効く。
+`aidd-1-1-deep-task.js` の adversarial-verify / judge-panel / completeness-critic 2 回目は
+インライン指定のため `agent_type` が入らず効かない（Agent tool 直接呼び出しのみ）。Workflow DSL の
+agent() opts に hooks 相当は無い。
+
+**maxTurns を入れなかった理由:** issue #652 の延期判断を維持。sweep 系の決定的探索手順が途中で
+打ち切られると「指摘なし」と区別できない静かな見逃しになる。エージェントタイプ別の典型ターン数は
+`logs/subagent-skeleton.jsonl` から transcript を辿れば集計できるが、transcript は
+`cleanupPeriodDays` で消えるため、集計は baseline スナップショット（`scripts/snapshot-agent-baseline.sh`）
+に組み込む必要があり別 issue とする。
+
+**memory を入れなかった理由:** `memory: project` は `.claude/agent-memory/<name>/` に書き込み、
+コミット対象のディレクトリで reviewer の書き換えが無関係な PR に混ざる。`local` は gitignore 前提で、
+worktree を多用するこのリポジトリでは worktree ごとに分断されて学習が溜まらない。`user` は
+`~/.claude/agent-memory/reviewer/` で worktree 横断だが他リポジトリの reviewer と混ざり、
+ドメイン混同のリスクがある。共有ディレクトリを指定できるようになるまで見送る。
+
+**skills / isolation を入れなかった理由:** skills は issue #652 で見送り済み。implementer への
+handoff-format プリロードは、implementer の完了報告が Workflow の AgentResult schema であり
+PR 本文ではないため効果が無い。isolation: worktree は `.env.local` 未コピー問題（common.md
+ブランチ運用ルール）があり、`scripts/create-worktree.sh` 相当の初期化が必要。別 issue。
+
+**How to apply:** 読み取り専用ロールを新設したら `check-readonly-bash.sh` の `READONLY_AGENT_TYPES`
+既定値と test の scenario 2b に足す。許可コマンドを増やすときは許可リストと test の scenario 1 に
+同時に足す。deny 理由に「書き込みが必要なら status: blocked で親に報告」と書いてあるので、
+エージェントが回避策を探すのではなく blocked を返す設計になっている。subagent frontmatter の
+`hooks:` を使いたくなったら、必ず Agent tool 経由の実機 RED（書き込みコマンドが本当に止まるか）を
+先に取る。

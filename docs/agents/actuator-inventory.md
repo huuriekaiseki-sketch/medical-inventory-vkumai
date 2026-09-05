@@ -21,6 +21,7 @@
 | Hookイベント | スクリプト | 分類 | 備考 |
 |---|---|---|---|
 | PreToolUse (Bash/mcp DDL) | `check-direct-ddl-execution.sh` | **block** | 直接DDL実行を拒否 |
+| PreToolUse (Bash、`agent_type` が読み取り専用ロールのときのみ) | `check-readonly-bash.sh` | **deny** | sweep-ui / sweep-data / sweep-db / sweep-types / reviewer / completeness-critic / adversarial-verify / judge-panel のサブエージェント内で、許可リスト外の Bash（リダイレクト・`sed -i`・`rm`・`git checkout`・`node -e` 等）を拒否する（issue #713）。subagent frontmatter の `hooks:` は実機で効かなかったため settings.json 側に置く。agentType 経由で呼ばれた場合のみ `agent_type` が入るため、aidd-1-1-deep-task.js のインライン指定ロールには効かない |
 | PreToolUse (Write/Edit/MultiEdit skipマーカー) | `check-skip-marker-write.sh` | **ask** | verify-claimsのエスケープハッチ書き込みに人間確認を要求 |
 | PreToolUse (Bash/Write/Edit/MultiEdit 依存変更) | `check-dependency-change.sh` | **ask** | `npm install <pkg>` / `yarn add` / `pnpm add` 等のパッケージ名を伴う依存変更コマンドと、package.json / package-lock.json への書き込みに人間確認を要求（2026-09-04。依存追加は第三者コードを増やす設計判断として、用途・代替案・影響の報告を挟む）。`npm ci` / 引数なしの `npm install` / 読み取り系は対象外。jq 不在時は fail-closed |
 | PreToolUse (Codex側・Bash/Write/Edit/MultiEdit 依存変更) | `codex-dependency-change-deny.sh` | **deny**（Codex側のみ） | `check-dependency-change.sh`（Claude側ask）のCodex用ラッパー。ask未対応のためdenyへ読み替え、判定は共有正本に委譲 |
@@ -57,7 +58,7 @@
 
 ## 集計と評価
 
-- block: 2件（うち1件はretry上限付きエスケープあり）
+- block: 3件（うち1件はretry上限付きエスケープあり。`check-readonly-bash.sh` は読み取り専用ロールのサブエージェント内のみ、issue #713）
 - ask: 1件
 - 自動復旧（queue、うち登録側）: 2件（`check-workflow-interruption.sh`・`check-gap-check-state.sh`）
 - 自動復旧（queue、表示側）: 1件（`check-recovery-queue.sh`）
