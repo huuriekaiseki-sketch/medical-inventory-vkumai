@@ -28,18 +28,18 @@ if [ -f "$STATE_FILE" ]; then
 fi
 
 if [ "$CURRENT_HASH" = "$PREV_HASH" ]; then
-  echo '{"systemMessage": ""}'
+  :  # 報告事項なし。公式仕様では表示しないなら systemMessage を省略する（issue #737。以前は空文字を出していた）
   exit 0
 fi
 
 # ソースコード変更（ドキュメント・設定のみの変更は対象外）がなければチェック不要
 if ! printf '%s' "$CHANGED_FILES" | grep -qE '\.(ts|tsx|sql)$'; then
-  echo '{"systemMessage": ""}'
+  :  # 報告事項なし。公式仕様では表示しないなら systemMessage を省略する（issue #737。以前は空文字を出していた）
   exit 0
 fi
 
 if [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ]; then
-  echo '{"systemMessage": ""}'
+  :  # 報告事項なし。公式仕様では表示しないなら systemMessage を省略する（issue #737。以前は空文字を出していた）
   exit 0
 fi
 
@@ -55,7 +55,7 @@ if printf '%s' "$EXECUTED_COMMANDS" | grep -qE 'npm run (ai:check|typecheck|lint
   # 未実行のまま書き込むと、同一diff状態での再Stopが30行目の早期returnで
   # 無条件にスキップされ、警告が最大1回しか出なくなってしまう。
   echo "$CURRENT_HASH" > "$STATE_FILE"
-  echo '{"systemMessage": ""}'
+  :  # 報告事項なし。公式仕様では表示しないなら systemMessage を省略する（issue #737。以前は空文字を出していた）
 else
   MSG="ソースコード変更（.ts/.tsx/.sql）があるにもかかわらず、このセッションで npm run ai:check 相当のコマンド（typecheck/lint/test）が実行された痕跡が見当たりません。実行を検討してください。"
   jq -n --arg msg "$MSG" '{systemMessage: $msg}'

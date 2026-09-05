@@ -32,7 +32,7 @@ bash "$SCRIPT_DIR/harvest-journal-events.sh" >/dev/null 2>&1 || true
 
 LOG_FILE="$(resolve_log_dir)/loop-observability.jsonl"
 if [ ! -f "$LOG_FILE" ]; then
-  echo '{"systemMessage": ""}'
+  :  # 報告事項なし。公式仕様では表示しないなら systemMessage を省略する（issue #737。以前は空文字を出していた）
   exit 0
 fi
 
@@ -46,7 +46,7 @@ if [ -f "$STATE_FILE" ]; then
   # find -mtime +N は「N日より古い」判定。該当すればstdoutに1行出る
   STALE="$(find "$STATE_FILE" -mtime "+${INTERVAL_DAYS}" 2>/dev/null || true)"
   if [ -z "$STALE" ]; then
-    echo '{"systemMessage": ""}'
+    :  # 報告事項なし。公式仕様では表示しないなら systemMessage を省略する（issue #737。以前は空文字を出していた）
     exit 0
   fi
 fi
@@ -56,7 +56,7 @@ PASSFAIL_SUMMARY="$(bash "$SCRIPT_DIR/summarize-gate-passfail.sh" 2>/dev/null ||
 touch "$STATE_FILE"
 
 if [ -z "$SUMMARY" ] && [ -z "$PASSFAIL_SUMMARY" ]; then
-  echo '{"systemMessage": ""}'
+  :  # 報告事項なし。公式仕様では表示しないなら systemMessage を省略する（issue #737。以前は空文字を出していた）
   exit 0
 fi
 

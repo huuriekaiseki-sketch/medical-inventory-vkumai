@@ -22,9 +22,9 @@ assert_contains() {
 }
 assert_empty_system_message() {
   local actual="$1" label="$2"
-  local msg
-  msg="$(printf '%s' "$actual" | jq -r '.systemMessage')"
-  if [ -z "$msg" ]; then
+  # WHY(issue #737): 報告事項なしは無出力（公式仕様では表示しないなら systemMessage を省略する）。
+  #      以前は空文字の systemMessage を出していたため、無出力のみを沈黙として認める
+  if [ -z "$(printf '%s' "$actual" | tr -d '[:space:]')" ]; then
     echo "  OK: $label"
   else
     echo "  NG: $label (systemMessage=$msg)"

@@ -29,7 +29,7 @@ INPUT="$(cat)"
 SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // "unknown"')"
 
 silent() {
-  echo '{"systemMessage": ""}'
+  :  # 報告事項なし。公式仕様では表示しないなら systemMessage を省略する（issue #737。以前は空文字を出していた）
   exit 0
 }
 

@@ -101,11 +101,12 @@ PreToolUse の deny / ask は、止めるべき入力の JSON（`tool_name` / `t
 | Stop | check-find-av-precision-recorded | **bridge-session で無音死** → PR #728 | |
 | Stop | harvest-journal-events | 正常。ただし project dir 43 件を毎回走査（2.8 秒・node 43 起動） | 改善候補 |
 
-未解決の観察（バグかどうか未確定）:
-- 3 つの Stop hook が `{"systemMessage": ""}` を返す。Claude Code が空文字をどう扱うか未確認。
-  害が無ければ現状維持、あれば「何も出力しない」に揃える
-- `harvest-journal-events.sh` は全 worktree の project dir を毎 Stop で走査する。mtime で絞れば
-  短縮できるが、正しさの問題ではない
+同日中に対応した観察（issue #737 / #738）:
+- 3 つの Stop hook が `{"systemMessage": ""}` を返していた。公式仕様は「表示しないなら systemMessage を
+  省略する」で、空文字の扱いは未定義だったため、報告事項なしは無出力に揃えた（他の Stop hook と同じ）
+- `harvest-journal-events.sh` は全 worktree の project dir（43 件）を毎 Stop で走査していた。前回収穫
+  （state ファイルの mtime）より新しいファイルを `wf_*` 配下に持つ dir だけ node を起動する形にし、
+  収穫 0 件の dir は出力しない
 
 ## 次回実施の目安
 

@@ -30,8 +30,9 @@ assert_contains() {
 }
 assert_silent() {
   local actual="$1" label="$2"
-  # 沈黙は systemMessage が空文字であること（Stop hookの出力契約）
-  if [ "$(printf '%s' "$actual" | tr -d '[:space:]')" = '{"systemMessage":""}' ]; then
+  # 沈黙は無出力であること（issue #737。公式仕様では表示しないなら systemMessage を省略する。
+  # 以前は空文字の systemMessage を出力契約としていた）
+  if [ -z "$(printf '%s' "$actual" | tr -d '[:space:]')" ]; then
     echo "  OK: $label"
   else
     echo "  NG: $label (actual=$actual)"

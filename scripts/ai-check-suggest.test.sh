@@ -96,7 +96,8 @@ cat > "$TRANSCRIPT3" <<'EOF'
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"npm run test"}}]}}
 EOF
 OUT="$(run_hook "$SANDBOX3" "session-executed" "$TRANSCRIPT3")"
-assert_contains "$OUT" '"systemMessage": ""' "空文字列である(実行済みのため警告なし)"
+# WHY(issue #737): 報告事項なしは無出力（公式仕様では表示しないなら systemMessage を省略する）。以前は空文字を出していた
+if [ -z "$OUT" ]; then echo "  OK: 無出力である(実行済みのため警告なし)"; else echo "  NG: 無出力でない(actual=$OUT)"; fail=1; fi
 
 echo "=== scenario 4: 未実行のまま同一sessionで再Stop → 状態ハッシュが書かれていないため再度警告が出る(issue #635) ==="
 SANDBOX4="$WORKDIR/sandbox4"
