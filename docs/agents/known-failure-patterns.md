@@ -272,6 +272,15 @@ transcript は `{"type":"bridge-session",...}`（timestamp 無し）で始まる
 `logs/*.jsonl` の**最終更新日が伸びているか**（記録が止まっていたら hook か記録経路が死んでいる）
 を節目で見るしかない（本件は `docs/agents/eval-runs.jsonl` の記録停止を追った副産物として発覚）。
 
+**再発（同日、`check-handoff-format.sh`）:** 同じ日に全 Stop hook を本セッションの実データで
+実走したところ、handoff 形式検知が「Stop 時点の現在ブランチ」で `gh pr list --head` を引いていた。
+PR を作って CI を待ち、マージして main へ戻ってから Stop する運用ではブランチが main になり、
+PR が見つからず沈黙する。1 セッションで 14 本の PR を作ったのに 1 本も評価されていなかった。
+修正は transcript の `gh pr create` の tool_result（PR URL）と `gh pr edit N` から PR 番号を取る形
+（`scripts/lib/pr-numbers-from-transcript.jq`）。**「入力形式の変化」だけでなく「運用手順の変化
+（マージ後に main へ戻る）」でも fail-open hook は無音死する。** 検知 hook を書くときは、
+判定材料が「いつ・どこにある」前提かを 1 行書き、その前提が崩れる運用を 1 つ挙げて RED を持つ。
+
 ### eval fixture がコード内コメントで自分の正体を明かし、エージェントが指摘から外す（issue #731）
 
 **チェック内容:** 検出力（recall）を測る fixture のコード（`scripts/eval-fixtures/*/case-*/files/` 配下）に、

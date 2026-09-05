@@ -65,10 +65,17 @@ if [ "$1" = "pr" ] && [ "$2" = "list" ]; then
   fi
   exit 0
 fi
-# `gh pr view N --json files --jq '.files[].path'` の模擬: 1行1パスのファイルをそのまま返す
+# `gh pr view N --json files --jq '.files[].path'` の模擬: 1行1パスのファイルをそのまま返す。
+# `gh pr view N --json body --jq .body` の模擬: $PR_RESPONSE_FILE（配列）から number==N の body を返す
 if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
-  if [ -f "$PR_FILES_FILE" ]; then
-    cat "$PR_FILES_FILE"
+  if [ "$4" = "--json" ] && [ "$5" = "files" ]; then
+    if [ -f "$PR_FILES_FILE" ]; then
+      cat "$PR_FILES_FILE"
+    fi
+    exit 0
+  fi
+  if [ -f "$PR_RESPONSE_FILE" ]; then
+    jq -r --argjson n "$3" '.[] | select(.number == $n) | .body // ""' "$PR_RESPONSE_FILE"
   fi
   exit 0
 fi
@@ -89,6 +96,23 @@ no_pr_command_transcript() {
 set_pr_response() {
   # $1: PR番号, $2: PR本文
   jq -n --argjson num "$1" --arg body "$2" '[{number: $num, body: $body}]' > "$PR_RESPONSE_FILE"
+}
+add_pr_response() {
+  # 既存の配列に $1: PR番号, $2: PR本文 を追加する（複数 PR のシナリオ用）
+  jq --argjson num "$1" --arg body "$2" '. + [{number: $num, body: $body}]' "$PR_RESPONSE_FILE" > "$PR_RESPONSE_FILE.tmp"
+  mv "$PR_RESPONSE_FILE.tmp" "$PR_RESPONSE_FILE"
+}
+# 実 transcript と同じ形: gh pr create の tool_use（id 付き）と、それに対応する tool_result（PR URL を含む）。
+# 引数: PR番号…（複数可）。gh pr create → マージ → main へ戻る運用を模し、ブランチ側の pr list は空にする
+pr_create_with_result_transcript() {
+  : > "$TRANSCRIPT"
+  local n i=0
+  for n in "$@"; do
+    i=$((i + 1))
+    printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_%s","name":"Bash","input":{"command":"gh pr create --title x --body-file y"}}]}}\n' "$i" >> "$TRANSCRIPT"
+    printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_%s","content":"https://github.com/o/r/pull/%s\\n"}]}}\n' "$i" "$n" >> "$TRANSCRIPT"
+    printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_m%s","name":"Bash","input":{"command":"gh pr merge %s --squash --delete-branch"}}]}}\n' "$i" "$n" >> "$TRANSCRIPT"
+  done
 }
 
 run_hook() {
@@ -218,6 +242,54 @@ set_pr_response 109 $'## 30秒サマリー\n内容\n\n## 04 どう確認した�
 set_pr_files "src/app/page.tsx" "docs/packages.md"
 run_hook
 assert_empty "$OUT" "依存ファイルに触れていなければ沈黙する"
+
+echo "=== scenario 15: PR を作ってマージし main へ戻った後の Stop（ブランチに PR 無し）でも transcript の tool_result から PR を特定して警告する ==="
+# WHY(2026-09-05): 従来は現在ブランチの pr list だけを見ていたため、この運用では 1 本も評価されず無音だった
+reset_env
+pr_create_with_result_transcript 201
+set_pr_response 201 'Summary only'
+rm -f "$PR_RESPONSE_FILE.branch"
+BRANCH="main"
+run_hook
+BRANCH="feature/test-branch"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" "PR #201" "ブランチに依存せず transcript 由来の PR 番号で警告する"
+
+echo "=== scenario 16: 同一セッションで複数 PR を作った → 問題のある PR をすべて名指しし、マーカーは全件保持 ==="
+reset_env
+pr_create_with_result_transcript 202 203 204
+set_pr_response 202 'no headings'
+add_pr_response 203 $'## 30秒サマリー\n内容\n\n## 04 どう確認したか\n| 種別（test-matrix.md の行） | 状態 | 結果・証跡 |\n| --- | --- | --- |\n| 型検査 | ✅ 実施 | パス |\n\n## 05\n内容'
+add_pr_response 204 'no headings either'
+run_hook
+assert_contains "$OUT" "PR #202" "1 本目の問題 PR を名指し"
+assert_contains "$OUT" "PR #204" "3 本目の問題 PR を名指し"
+if printf '%s' "$OUT" | grep -qF 'PR #203'; then
+  echo "  NG: 正常な PR #203 が名指しされている"; fail=1
+else
+  echo "  OK: 正常な PR #203 は名指しされない"
+fi
+MARKER_KEYS="$(jq -r '.keys | length' "$MARKER")"
+assert_eq "$MARKER_KEYS" "2" "マーカーに警告済み 2 件を保持"
+run_hook
+assert_empty "$OUT" "2 回目は両方とも抑止される"
+
+echo "=== scenario 17: gh pr edit N の形跡 → N を対象にする（tool_result 無しでも番号はコマンドから取れる） ==="
+reset_env
+printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_e","name":"Bash","input":{"command":"gh pr edit 205 --body-file x"}}]}}\n' > "$TRANSCRIPT"
+set_pr_response 205 'Summary only'
+BRANCH="main"
+run_hook
+BRANCH="feature/test-branch"
+assert_contains "$OUT" "PR #205" "gh pr edit の番号で警告する"
+
+echo "=== scenario 18: 旧形式マーカー {key: ...} でも抑止が効く（後方互換） ==="
+reset_env
+pr_create_with_result_transcript 206
+set_pr_response 206 'Summary only'
+jq -n --arg key "${SESSION}:206" '{key: $key}' > "$MARKER"
+run_hook
+assert_empty "$OUT" "旧形式マーカーの key でも沈黙する"
 
 echo "=== scenario 8: transcriptが読めない → 沈黙（fail-open） ==="
 reset_env
