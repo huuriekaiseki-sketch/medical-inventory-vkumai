@@ -1,0 +1,742 @@
+export const meta = {
+  name: 'aidd-phase2',
+  description: 'Phase 3-5: contract-first並列実装 → 統合ゲート → 4観点並列検証。仕様書承認後（停止①の後）に実行。',
+  whenToUse: '人間が仕様書（SPEC.md）を承認した後、Phase 3 実装に入るときに使う。aidd-1-1-deep-task.jsの後続として使う。',
+  phases: [
+    { title: 'Spec Check',     detail: 'SPEC.md存在チェック（欠如時は後続の全エージェントを起動せず中断）' },
+    { title: 'Manifest Check', detail: 'Run Manifestのspecハッシュ突合（レビュー後のSPEC.md改変を検知）' },
+    { title: 'Contract + DB', detail: 'contract-writer（型定義）とdb-impl（migrations）を並列実行' },
+    { title: 'Implement',     detail: 'data-impl / api-impl / ui-impl を並列実行' },
+    { title: 'Coverage Check', detail: '5ロール全員が担当外と判断し実ファイル変更が無かった場合のみ、汎用implementerで実装漏れを埋める（issue #508）' },
+    { title: 'Integrate',     detail: '統合ゲート：マイグレーション確認・結線・テスト・lint' },
+    { title: 'Review',        detail: '4観点並列reviewer（読み取り専用）' },
+  ],
+}
+
+// args: { specPath: string }
+// specPath: 承認済みSPEC.mdのパス（feature-specスキルはリポジトリルートに出力する）。
+//   相対パス（例: "SPEC.md"）でも動作するが、issue #507のSpec Check誤blocked事例を踏まえ、
+//   絶対パスでの指定を推奨する
+//
+// ── 前提条件（呼び出し前に人間が確認すること）──────────────────────────
+// 1. SPEC.md Part 2 に以下が明記されていること
+//    - 実装セット一覧（依存順）
+//    - 並列グループ宣言（触るファイルを明記）
+//    - data-impl が提供する関数名・シグネチャ（api-impl が参照する）
+// 2. 停止①（人間承認）が完了していること
+//
+// ── 完了後の手順（Claude が実行すること）──────────────────────────────
+// 1. 【停止②】ユーザーに /structured-review の実行を促して停止する
+//    （structured-review は Claude から勝手に呼ばない）
+// ────────────────────────────────────────────────────────────────────
+
+// Workflowツール実行系のargsがverbatimでなく文字列化されて渡ってくる既知の不具合への回避策
+// （.claude/workflows/aidd-phase1-router.js・.claude/workflows/lib/resolve-workflow-args.js
+// と同一パターン。issue #399: このガードが無かったため、Spec Checkが常にデフォルト値
+// 'SPEC.md'を対象にしてしまい、指定specPathにファイルが存在しない異常系を検知できなかった）。
+const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
+const specPath = parsedArgs?.specPath ?? 'SPEC.md'
+// feature名が呼び出し元から与えられていない場合は'unknown'を使う（write_aidd_stats.sh等の
+// 既存の自己申告系と同じフォールバック規約。docs/agents/common.md「サブエージェント進捗の
+// 可視化」参照）。
+const feature = parsedArgs?.feature ?? 'unknown'
+
+// issue #423ステップ3（issue #480でmain最新に合わせて再実装）: feature/attemptを
+// 「モデルの自己申告」ではなく「コードが決定的に埋め込む構造化データ」に変える。agent()の
+// opts.labelはSubagentStop hookのペイロードに含まれない（issue #423ステップ1の実験で確認済み）
+// ため、プロンプト本文の先頭に規約行を埋め込み、hookがagent_transcript_path経由でtranscript
+// を読んだ際に正規表現で復元できるようにする。既存のprompt文字列（db-implプロンプトの
+// sync test対象を含む）の中身は一切変更せず、外側から文字列連結するだけなので
+// workflow-prompt-sync.test.js / spec-check-prompt-sync.test.js には影響しない
+// （extractTemplateLiteralContainingはテンプレートリテラルの中身のみをマーカー文字列で
+// 検索するため、外側のラップ関数呼び出しの有無を区別しない）。
+function withIntent(label, prompt) {
+  return `INTENT: ${label} feature=${feature}\n\n${prompt}`
+}
+
+// docs/agents/agent-result-schema.md 参照。実装/統合/レビュー系はpass/fail/blockedの3値。
+// findingsはfail時の重大度分類（severity.js参照）。Sweep/Draft/Adversarial Verify
+// （aidd-1-1-deep-task.js FINDING_SCHEMA）と同じcritical/important/minorを使い、
+// 実装後ゲート（Contract+DB/Implement/Integrate/Review）にも重大度の概念を展開する。
+const AGENT_RESULT_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['pass', 'fail', 'blocked'] },
+    detail: { type: 'string' },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          severity: { type: 'string', enum: ['critical', 'important', 'minor'] },
+          description: { type: 'string' },
+        },
+        required: ['severity', 'description'],
+      },
+    },
+  },
+  required: ['status', 'detail'],
+}
+
+// 重大度判定（.claude/workflows/lib/severity.js の isMinorOnlyFailure と同一発想）。
+// Workflow DSLはrequire不可のためインライン複製している。ロジックの正本・テストはlib側。
+function isMinorOnlyFailure(result) {
+  if (result?.status !== 'fail') return false
+  if (!Array.isArray(result.findings) || result.findings.length === 0) return false
+  return result.findings.every(f => f?.severity === 'minor')
+}
+
+function shouldBlock(results) {
+  if (results.length === 0) return false
+  return !results.every(r => r?.status === 'pass' || isMinorOnlyFailure(r))
+}
+
+// 単発タスクの総量サーキットブレーカー（2026-08-06 mentor評価）。正本・単体テストは
+// .claude/workflows/lib/budget-guard.js。Workflow DSLはrequire不可のためインライン複製し、
+// 同期は budget-guard-sync.test.js が検証する。budget.total（明示予算）が未設定のときのみ
+// DEFAULT_TOKEN_CAPを代替上限として適用し、原因を問わず量で止める。
+// 上限値はこのworkflow固有の仮置き値: phase2は実装5体+統合+レビュー4体×最大4ラウンド+
+// 差し戻しimplementerを起動するためdeep-taskより高めの2_500_000を選んだ。実測の裏付けは
+// 薄く、運用しながら再調整する前提（deep-task側DEFAULT_TOKEN_CAPと同じ位置づけ）。
+const DEFAULT_TOKEN_CAP = 2_500_000
+function isDefaultCapExceeded(budget, defaultCap) {
+  if (!budget || typeof budget.spent !== 'function') return false
+  if (budget.total) return false
+  return budget.spent() >= defaultCap
+}
+
+// フェーズ境界でのサーキットブレーカー判定と、blocked相当の共通return生成。
+// 既存の品質ゲート（shouldBlock）と同じ「止めて人間に引き渡す」流儀に合わせる
+function tokenCapReturn(blockedAt, partialResults) {
+  log(`サーキットブレーカー: 累計${budget.spent()}トークンがデフォルト上限${DEFAULT_TOKEN_CAP}を超過したため中断（${blockedAt}へは進みません）`)
+  return {
+    done: false,
+    ...partialResults,
+    blocked: true,
+    blockedAt: `Token Cap (before ${blockedAt})`,
+    tokenCapExceeded: true,
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: `Token Cap (before ${blockedAt})`, expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
+  }
+}
+
+// ログ記録漏れ検知（.claude/workflows/lib/loop-observability-expectation.js の
+// isLoggableAgentType と同一ロジック。Workflow DSLはrequire不可のためインライン複製）。
+// reviewer/implementer/judge-panelのみ log-loop-observability.sh 呼び出し指示を
+// システムプロンプトに持つ（.claude/agents/*.md参照）。この件数を「期待される記録件数」として
+// 返し、フロー完了後に check-loop-observability-gap.sh で実際のログ行数と突き合わせる。
+const LOGGABLE_AGENT_TYPES = new Set(['reviewer', 'implementer', 'judge-panel'])
+let loggableAgentCount = 0
+function countLoggable(agentType) {
+  if (LOGGABLE_AGENT_TYPES.has(agentType)) loggableAgentCount++
+}
+
+// agent-progress記録漏れ検知（.claude/workflows/lib/agent-progress-expectation.js の
+// isProgressLoggableAgentType と同一ロジック。Workflow DSLはrequire不可のためインライン複製）。
+// docs/agents/common.md「サブエージェント進捗の可視化（issue #18）」に列挙されたagentTypeは
+// log-agent-progress.sh 呼び出し指示を持つ想定。この件数を「期待される記録件数」として
+// 返し、フロー完了後に check-agent-progress-gap.sh で実際のログと突き合わせる。
+const PROGRESS_LOGGABLE_AGENT_TYPES = new Set([
+  'sweep-db', 'sweep-ui', 'sweep-types', 'sweep-data', 'implementer', 'reviewer',
+  'integrator', 'judge-panel', 'proposer', 'adversarial-verify', 'completeness-critic', 'contract-writer',
+])
+let progressLoggableAgentCount = 0
+function countProgressLoggable(agentType) {
+  if (PROGRESS_LOGGABLE_AGENT_TYPES.has(agentType)) progressLoggableAgentCount++
+}
+
+function logMinorOnlyPassThrough(label, results) {
+  const minorOnly = results.filter(isMinorOnlyFailure)
+  if (minorOnly.length > 0) {
+    log(`品質ゲート: ${label}でminor指摘のみのfailが${minorOnly.length}件あったが通過扱い（critical/important指摘なし）`)
+  }
+}
+
+const guide = (pass, fail, blocked) => `
+
+## 出力形式
+status と detail を返すこと。
+- pass: ${pass}
+- fail: ${fail}
+- blocked: ${blocked}
+
+failの場合はfindings配列（{ severity: critical/important/minor, description }）で指摘ごとに
+重大度を明記すること。findings全件がminorならこのゲートは通過扱いになる。
+findingsを省略した場合、またはcritical/important指摘が1件でもあれば差し戻し対象になる
+（severity不明・欠損はcritical扱い。fail-open防止）。`
+
+// ─── Phase -1: Spec Check ────────────────────────────────────────────
+// issue #313: 2026-07-10時点の分析で「20回のreviewer呼び出しのうち9回はSPECファイル欠如で
+// 失敗し、145万トークン・$81.25を浪費した」ことが判明していた。その後の品質ゲート強化で
+// SPEC欠如時はblocked判定されるようになったが、それは「まず各エージェントを起動し、
+// エージェント自身がSPECファイルを読めずに気づいてblockedを自己申告する」方式のままだった。
+// Workflow DSLはfilesystem APIを持たないため fs.existsSync 等は使えず、Manifest Checkと
+// 同じパターン（軽量な単一エージェントによるReadツール確認）で最初にSPEC.mdの存在だけを
+// 確認し、無ければ後続の全エージェント（Manifest Check以降）を一切起動せず即座に返す。
+phase('Spec Check')
+
+const SPEC_CHECK_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['pass', 'blocked'] },
+    detail: { type: 'string' },
+    actualPath: { type: 'string' },
+  },
+  required: ['status', 'detail', 'actualPath'],
+}
+
+// issue #507: 除外指示の具体例（旧「リポジトリルート直下の別のSPEC.md」）が、specPathが
+// 実際に'SPEC.md'の場合に対象ファイル自身と衝突し、エージェントが誤ってblockedを返す事例が
+// 実測された。具体的なファイル名の例示を排除し、${specPath}変数への相対表現のみで除外を
+// 指示する（正本: .claude/workflows/lib/prompts/spec-check.js。同期は
+// spec-check-prompt-sync.test.js が検証する）。
+const specCheck = await agent(
+  withIntent('spec-check', `Readツールで ${specPath} が存在し読み込めるか確認してください。今回読むべき対象は ${specPath} のみです。他の場所に同じファイル名の別ファイルが見つかったとしても、${specPath} 以外は絶対に読まないでください。それ以外は何もしないでください。\n\n完了報告のactualPathフィールドに、実際にReadツールへ渡した絶対パスを（今回指定された ${specPath} をそのまま解決したもので）必ず記載してください。${guide(
+    `${specPath}が存在し読み込めた`,
+    '（未使用: このエージェントはpass/blockedの2値のみ返す）',
+    `${specPath}が存在しない、または読み込めない`
+  )}`),
+  { label: 'spec-check', phase: 'Spec Check', agentType: 'aidd-core:reviewer', schema: SPEC_CHECK_SCHEMA }
+)
+
+countLoggable('reviewer')
+// issue #509: Spec Checkのプロンプトは「それ以外は何もしないでください」と明示しており、
+// log-agent-progress.sh呼び出し（Bash実行）と構造的に矛盾するため、agent-progress側の
+// 期待件数（countProgressLoggable）からは除外する。loop-observability側（countLoggable）は
+// 実測でSpec Checkが記録できていることを確認済みのため対象外にしない（issue #509参照）。
+log(`Spec Check完了: status=${specCheck?.status ?? 'なし'}, actualPath=${specCheck?.actualPath ?? 'なし'}`)
+
+// issue #399: Workflowツール側の非対称バグにより、最初のagent()呼び出し（Spec Check）だけが
+// 指定specPathを無視しデフォルト値'SPEC.md'を対象にしてしまう事象が実測で確認されている。
+// 根本原因はWorkflowツール側にある可能性が高く本スクリプトでは修正できないため、当面の防御として
+// 「実際にReadした絶対パス」を自己申告させ、指定specPathとの文字列一致をここで機械検証する。
+// 判定ロジックの正本・テストは .claude/workflows/lib/spec-check.js の isSpecCheckPathMismatch。
+// Workflow DSLはrequire不可のためインライン複製している（判定ロジックを変更した場合は
+// spec-check.js側も手動で追従させること。自動では同期されない）。
+// issue #548: 単純なendsWithだと'DRAFT-SPEC.md'.endsWith('SPEC.md')のようなファイル名の部分
+// 一致まで「一致」と誤判定するため、一致箇所の直前がパス区切り('/')であることまで確認する。
+let specCheckPathMismatch = false
+if (specCheck?.status === 'pass' && typeof specCheck?.actualPath === 'string') {
+  const actualPath = specCheck.actualPath
+  if (actualPath !== specPath) {
+    specCheckPathMismatch = !actualPath.endsWith(specPath)
+      || actualPath.charAt(actualPath.length - specPath.length - 1) !== '/'
+  }
+}
+
+if (specCheckPathMismatch) {
+  log(`品質ゲート: Spec Checkが指定specPath(${specPath})ではなく別ファイル(${specCheck.actualPath})を読んだため中断（issue #399）`)
+  return {
+    done: false,
+    specCheck,
+    blocked: true,
+    blockedAt: 'Spec Check',
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Spec Check', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
+  }
+}
+
+if (shouldBlock([specCheck])) {
+  log(`品質ゲート: ${specPath}が存在しないため中断（Manifest Check以降のエージェントは起動しません）`)
+  return {
+    done: false,
+    specCheck,
+    blocked: true,
+    blockedAt: 'Spec Check',
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Spec Check', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
+  }
+}
+
+// ─── Phase 0: Manifest Check ─────────────────────────────────────────
+// issue #44/#294: docs/agents/run-manifest.md にPhase 2開始時のspecHash突合が
+// 設計として定義されているが、実行コードには存在しなかった。レビュー後にSPEC.mdが
+// 改変されるケースを検知できないまま実装が進んでしまう。
+// Workflow DSL自体はfilesystem/Node.js APIアクセスが無いため、Read/Bashツールを持つ
+// エージェントにマニフェスト読み込み・ハッシュ再計算・突合を行わせる。
+// issue #316: 下記プロンプトの1〜4の判定テーブルは .claude/workflows/lib/manifest-check.js の
+// classifyManifestCheck にテスト可能な形で文書化している。ただし実行パス自体はプロンプト依存の
+// ままであり（Workflow DSLの制約上、実際のmanifest読込・ハッシュ計算はエージェントに委譲する
+// 必要がある）、このプロンプト文言を変更した場合はmanifest-check.js側も手動で追従させること
+// （自動では同期されない）。
+phase('Manifest Check')
+
+const MANIFEST_CHECK_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['pass', 'blocked'] },
+    detail: { type: 'string' },
+  },
+  required: ['status', 'detail'],
+}
+
+const manifestCheck = await agent(
+  withIntent('manifest-check', `.aidd/run-manifest.json を Read ツールで読んでください（docs/agents/run-manifest.md にスキーマの説明があります）。\n\n以下を順に確認してください。\n1. .aidd/run-manifest.json が存在しない → blocked。detailに「Run Manifestが存在しません」と書く。\n2. manifest.approval（approvedBy/approvedAt）が無い → blocked。detailに「停止①の承認が記録されていません」と書く。\n3. manifest.specHash が無い → blocked。detailに「specHashが記録されていません」と書く。\n4. 上記が揃っていれば、${specPath} の現在の内容からsha256ハッシュを計算し（Bashツールで shasum -a 256 ${specPath} 等を使ってよい）、manifest.specHash と比較する。\n   - 一致すれば pass。detailに「specHash一致（承認後にSPEC.mdの変更なし）」と書く。\n   - 不一致であれば blocked。detailに「specHash不一致: レビュー承認後にSPEC.mdが変更された可能性があります（manifestの値と実際の値の両方を明記）」と書く。${guide(
+    'specHashが一致し、承認記録も揃っている',
+    '（未使用: このエージェントはpass/blockedの2値のみ返す）',
+    'manifestが存在しない、承認記録が無い、またはspecHashが不一致'
+  )}`),
+  { label: 'manifest-check', phase: 'Manifest Check', agentType: 'aidd-core:reviewer', schema: MANIFEST_CHECK_SCHEMA }
+)
+
+countLoggable('reviewer')
+countProgressLoggable('reviewer')
+log(`Manifest Check完了: status=${manifestCheck?.status ?? 'なし'}`)
+
+// 品質ゲート: deny-by-default（.claude/workflows/lib/quality-gate.js shouldBlockと同一発想）
+if (manifestCheck?.status !== 'pass') {
+  log(`品質ゲート: Run Manifestのspec Hash突合に失敗したため中断（${manifestCheck?.detail ?? '詳細不明'}）`)
+  return {
+    done: false,
+    manifestCheck,
+    blocked: true,
+    blockedAt: 'Manifest Check',
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Manifest Check', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
+  }
+}
+
+// ─── Phase A: Contract Write + DB（並列）─────────────────────────────
+// contract-writer: src/types/ の型定義を確定（implementerの「契約」）
+// db-impl: supabase/migrations/ を実装（SPEC.mdから直接、contract-writerと並行）
+if (isDefaultCapExceeded(budget, DEFAULT_TOKEN_CAP)) {
+  return tokenCapReturn('Contract + DB', { specCheck, manifestCheck })
+}
+phase('Contract + DB')
+
+const [contractResult, dbResult] = await parallel([
+  () => agent(
+    withIntent('contract-writer', `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに src/types/ の型定義・APIインターフェース型を確定させてください。${guide(
+      '型定義・APIインターフェース型を確定できた',
+      '型定義を試みたが不完全・矛盾がある',
+      'SPEC.mdが存在しない/読めない'
+    )}`),
+    { label: 'contract-writer', phase: 'Contract + DB', agentType: 'aidd-vkumai:contract-writer', schema: AGENT_RESULT_SCHEMA }
+  ),
+  // db-implプロンプトの正本は .claude/workflows/lib/prompts/db-impl.js（buildDbImplPrompt）。
+  // Workflow DSLはrequire不可のためここに同一内容をインライン複製している。
+  // 一字一句の同期は .claude/workflows/lib/__tests__/workflow-prompt-sync.test.js が検証する
+  // （npm testに含まれる。乖離時は即座にテスト失敗する。issue #391）。
+  () => agent(
+    withIntent('db-impl', `まず ${specPath} を Read ツールで読んでください。\nPart 2（実装計画）をもとに supabase/migrations/ のマイグレーションファイルを実装してください。src/types/ / src/lib/ / src/app/ は触らないこと。\nPart 2にDBスキーマ変更が不要と明記されている場合（例:「該当なし」「DB変更なし」）は、何も実装せずstatus: passでdetailにその旨（不要と判断した根拠）を書いて報告すること。これはblocked（着手不能）ではない。\nDBスキーマ変更が必要そうだが、対象テーブル名・カラム設計・facilityスコープ（RLS）等をPart2や既存の型契約（src/types/）から安全に確定できない場合も、推測でマイグレーションを実装しようとせずstatus: blockedで不足している情報を具体的に書いて報告すること。これはfail（実装エラー・矛盾）ではなくblocked（着手に必要な情報が足りない）として扱う。${guide(
+      'マイグレーション実装が完了した、またはPart2にDBスキーマ変更が不要と明記されており対応不要と判断した',
+      'マイグレーションの実装を試みたがSQLの構文誤り・既存スキーマとの矛盾等の実装エラーが生じた',
+      'SPEC.mdが存在しない、Part2にDB変更の要否自体を判断できる記載が無い、またはDB変更は必要そうだが対象テーブル・カラム設計・facilityスコープを安全に確定できるだけの情報が無い'
+    )}`),
+    { label: 'db-impl', phase: 'Contract + DB', agentType: 'aidd-vkumai:implementer', schema: AGENT_RESULT_SCHEMA }
+  ),
+])
+
+countLoggable('contract-writer')
+countLoggable('implementer')
+countProgressLoggable('contract-writer')
+countProgressLoggable('implementer')
+log('Contract + DB完了')
+
+// 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック
+// （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
+// deny-by-default: 全員がpass（またはfindings全件minorのfail）でない限り止める
+// （fail/blockedはもちろんnull・未知の値も止める。issue #289）
+if (shouldBlock([contractResult, dbResult])) {
+  log('品質ゲート: Contract + DBでfail/blockedを検知したため中断（Implement以降へは進みません）')
+  return {
+    done: false,
+    contractResult,
+    dbResult,
+    blocked: true,
+    blockedAt: 'Contract + DB',
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Contract + DB', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
+  }
+}
+logMinorOnlyPassThrough('Contract + DB', [contractResult, dbResult])
+
+if (isDefaultCapExceeded(budget, DEFAULT_TOKEN_CAP)) {
+  return tokenCapReturn('Implement', { manifestCheck, contractResult, dbResult })
+}
+
+// ─── Phase B: data / api / ui（並列）─────────────────────────────────
+// 3グループは contract-writer の出力（src/types/）を契約として参照する
+// api-impl は SPEC.md Part 2 記載の関数シグネチャに従って呼び出すだけ（data-impl の完了を待たない）
+// db-impl の完了報告も渡す（スキーマ変更があった場合に追従できるよう）
+phase('Implement')
+
+const implGuide = guide(
+  '担当範囲の実装を完了できた',
+  '実装したが明らかに不完全、またはcontract-writer/db-implの結果と矛盾する',
+  'SPEC.mdが見つからない、またはcontract-writer/db-implの完了報告が空で着手できなかった'
+)
+
+const [dataResult, apiResult, uiResult] = await parallel([
+  () => agent(
+    withIntent('data-impl', `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/lib/supabase/ のデータアクセス関数を実装してください。\n型定義（src/types/）は確定済みです。\n触ってよいファイル: src/lib/supabase/ と src/lib/*/repository.ts。\n\n## contract-writer完了報告\n${contractResult?.detail}\n\n## db-impl完了報告\n${dbResult?.detail}${implGuide}`),
+    { label: 'data-impl', phase: 'Implement', agentType: 'aidd-vkumai:implementer', schema: AGENT_RESULT_SCHEMA }
+  ),
+  () => agent(
+    withIntent('api-impl', `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/app/**/route.ts（/api配下に限らない）を実装してください。\n型定義（src/types/）は確定済みです。\nPart 2 に記載の関数シグネチャに従って src/lib/ の関数を呼ぶこと（実装がまだでも名前・型が確定していれば前進可）。\n触ってよいファイル: src/app/**/route.ts のみ。\n\n## contract-writer完了報告\n${contractResult?.detail}\n\n## db-impl完了報告\n${dbResult?.detail}${implGuide}`),
+    { label: 'api-impl', phase: 'Implement', agentType: 'aidd-vkumai:implementer', schema: AGENT_RESULT_SCHEMA }
+  ),
+  () => agent(
+    withIntent('ui-impl', `まず ${specPath} を Read ツールで読んでください。\nPart 2をもとに src/app/(pages)/ と src/components/ のUIを実装してください。\n型定義（src/types/）は確定済みです。\n触ってよいファイル: src/app/(pages)/ と src/components/ のみ。\n\n## contract-writer完了報告\n${contractResult?.detail}${implGuide}`),
+    { label: 'ui-impl', phase: 'Implement', agentType: 'aidd-vkumai:implementer', schema: AGENT_RESULT_SCHEMA }
+  ),
+])
+
+countLoggable('implementer')
+countLoggable('implementer')
+countLoggable('implementer')
+countProgressLoggable('implementer')
+countProgressLoggable('implementer')
+countProgressLoggable('implementer')
+log('Implement完了')
+
+// 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック（deny-by-default）
+if (shouldBlock([dataResult, apiResult, uiResult])) {
+  log('品質ゲート: Implementでfail/blockedを検知したため中断（統合ゲートへは進みません）')
+  return {
+    done: false,
+    contractResult,
+    dbResult,
+    dataResult,
+    apiResult,
+    uiResult,
+    blocked: true,
+    blockedAt: 'Implement',
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Implement', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
+  }
+}
+logMinorOnlyPassThrough('Implement', [dataResult, apiResult, uiResult])
+
+// ─── Phase B.5: Coverage Check（issue #508）───────────────────────────
+// 背景: issue #493の実行（wf_b3c491ac-c45）で、SPECの変更対象がscripts/lib/等、
+// 既存5ロール（contract-writer/db-impl/data-impl/api-impl/ui-impl）のどのパスにも
+// 該当しない場合、全員が「担当範囲外」と判断してpass（無実装）を返し、誰もSPEC本文の
+// 実コード変更を実装しないという抜け漏れが実測された。当時はintegratorが結線作業の
+// 延長として非公式に代行実装したが、integrator自身がこれを「既存5ロール分類に収まらない
+// 変更対象では同じ抜け漏れが再発しうる」重要な申し送り事項として報告している。
+// 対策: 各エージェントの自己申告（detail文字列）はNLP的に信頼できないため使わず、
+// 「baseCommit以降にリポジトリへの実ファイル変更が1件でもあったか」という機械的事実
+// （git status / git diff）だけで判定する。1件も無ければ、5ロールのパス制限に縛られない
+// 汎用implementerを追加起動しSPEC全体を直接実装させる。baseCommitが不明な場合は判定
+// 不能として何もせず従来通りIntegrateへ進む（false positiveでIntegrateを阻害しない）。
+phase('Coverage Check')
+
+const COVERAGE_CHECK_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['pass', 'blocked'] },
+    detail: { type: 'string' },
+    hasChanges: { type: 'boolean' },
+  },
+  required: ['status', 'detail'],
+}
+
+const coverageCheck = await agent(
+  withIntent('coverage-check', `まず .aidd/run-manifest.json をReadツールで読み、baseCommitフィールドを確認してください。\n\nbaseCommitが取得できない場合: status: blocked、detailに「baseCommit不明のため判定不可」と書いて終了してください（これは異常事態ではなく、単に本チェックをスキップする合図です）。\n\nbaseCommitが取得できた場合: Bashツールで \`git status --porcelain\` と \`git diff --name-only ${'${baseCommit}'}\`（baseCommitは実際の値に置き換える）の両方を実行し、直前のContract + DB / Implementフェーズが起動してからリポジトリに1件でもファイル変更（新規・変更・削除）があったか確認してください。\n\n1件でも変更があれば status: pass、hasChanges: true、detailに変更ファイル数を書いてください。\n1件も変更が無ければ status: pass、hasChanges: false、detailに「変更ファイルなし」と書いてください。これはエラーではなく、SPEC.mdの実装対象が既存5ロールのどの担当パスにも該当しなかった場合に起こり得る正常系です。${guide(
+    '判定できた（hasChangesの値に関わらずpass）',
+    '（未使用: このエージェントはpass/blockedの2値のみ返す）',
+    'baseCommitが不明で判定できない'
+  )}`),
+  { label: 'coverage-check', phase: 'Coverage Check', agentType: 'aidd-core:reviewer', schema: COVERAGE_CHECK_SCHEMA }
+)
+
+countLoggable('reviewer')
+countProgressLoggable('reviewer')
+log(`Coverage Check完了: status=${coverageCheck?.status ?? 'なし'}, hasChanges=${coverageCheck?.hasChanges ?? '不明'}`)
+
+let groupImplResult = null
+const needsGroupImplementer = coverageCheck?.status === 'pass' && coverageCheck?.hasChanges === false
+
+if (needsGroupImplementer) {
+  log('品質ゲート: 5ロール全員が担当範囲外と判断し実ファイル変更が無かったため、汎用implementerを追加起動します（issue #508）')
+
+  groupImplResult = await agent(
+    withIntent('group-implementer', `まず ${specPath} を Read ツールで読んでください。\n直前のContract + DB / Implementフェーズ（contract-writer/db-impl/data-impl/api-impl/ui-impl）は全員「担当範囲外」と判断し、実際のファイル変更を1件も行いませんでした。これはこのSPECの実装対象が既存5ロールのいずれの担当パス（src/types/・supabase/migrations/・src/lib/supabase/・src/lib/*/repository.ts・src/app/**/route.ts・src/app/(pages)/・src/components/）にも該当しないことを意味します。\nPart 2（実装計画）に記載されている変更を、上記5ロールのパス制限に縛られず直接実装してください。\n\n## 各ロールの完了報告（参考。いずれも「担当外」の判断根拠）\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${guide(
+      'Part 2記載の変更を実装できた',
+      '実装を試みたが不完全・矛盾がある',
+      'SPEC.mdが見つからない、またはPart 2から実装対象を安全に特定できない'
+    )}`),
+    { label: 'group-implementer', phase: 'Coverage Check', agentType: 'aidd-vkumai:implementer', schema: AGENT_RESULT_SCHEMA }
+  )
+  countLoggable('implementer')
+  countProgressLoggable('implementer')
+  log('汎用implementer完了')
+
+  if (shouldBlock([groupImplResult])) {
+    log('品質ゲート: 汎用implementerでfail/blockedを検知したため中断（統合ゲートへは進みません）')
+    return {
+      done: false,
+      contractResult,
+      dbResult,
+      dataResult,
+      apiResult,
+      uiResult,
+      coverageCheck,
+      groupImplResult,
+      blocked: true,
+      blockedAt: 'Coverage Check',
+      stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Coverage Check', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
+    }
+  }
+  logMinorOnlyPassThrough('Coverage Check', [groupImplResult])
+}
+
+// ─── Phase C: 統合ゲート ──────────────────────────────────────────────
+// issue #316: 手順7のchangedFiles上書き（「他フィールドは変更しないこと」）は
+// .claude/workflows/lib/manifest-check.js の applyChangedFiles にテスト可能な形で
+// 文書化している。こちらもプロンプト依存の実行パス自体は変わらない（上記Manifest Check参照）。
+phase('Integrate')
+
+const integrationResult = await agent(
+  withIntent('integrator', `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用なら\`supabase db push --local\`で適用する）。\`supabase db push\`は\`--local\`を付けないとデフォルトでリモート（本番）データベースが対象になるため、\`--local\`を必ず明示すること。\`--linked\`・\`--db-url\`等でリモート・本番Supabaseに適用することは絶対にしないこと。ローカル以外への適用が必要だと判断した場合は、何も実行せずstatus: blockedで報告して止まること。\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. npx tsc --noEmit を実行 → 型エラーがあれば修正（3回まで。issue #46のDONE基準に型検査を含める）\n6. 全テスト・lint・tsc緑を確認して報告\n7. .aidd/run-manifest.json をReadツールで読み、manifest.baseCommitを取得する（無ければこのステップはスキップしてよい）。取得できた場合、Bashツールで \`git diff --name-only \${baseCommit}\`（baseCommitはmanifestの値に置き換える）を実行し、変更されたファイル一覧を取得する。取得できたら .aidd/run-manifest.json の changedFiles フィールドをその一覧で上書きし、Writeツールで保存する（docs/agents/run-manifest.md 参照。他フィールドは変更しないこと）。\n\n## 各完了報告\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${groupImplResult ? `\n### group-implementer（5ロール全員が担当外だったため追加起動）\n${groupImplResult.detail}` : ''}${guide(
+    'npm test・npm run lint・npx tsc --noEmitが最終的に全て緑で統合完了',
+    '3回の修正試行後もtest/lint/tscのいずれかが赤のまま',
+    'SPEC.mdが見つからない、またはいずれかのimplエージェントの完了報告に「仕様書が見つからない」「作業を開始できない」旨の記述がある。または、マイグレーションの適用先がローカルSupabase以外（リモート・本番）である必要があると判断した'
+  )}`),
+  { label: 'integrator', phase: 'Integrate', agentType: 'aidd-vkumai:integrator', schema: AGENT_RESULT_SCHEMA }
+)
+
+countLoggable('integrator')
+countProgressLoggable('integrator')
+log('統合完了')
+
+// 品質ゲート: .claude/workflows/lib/quality-gate.js の shouldBlock と同一ロジック（deny-by-default）
+if (shouldBlock([integrationResult])) {
+  log('品質ゲート: Integrateでfail/blockedを検知したため中断（Reviewへは進みません）')
+  return {
+    done: false,
+    contractResult,
+    dbResult,
+    dataResult,
+    apiResult,
+    uiResult,
+    coverageCheck,
+    groupImplResult,
+    integration: integrationResult,
+    blocked: true,
+    blockedAt: 'Integrate',
+    stats: { phase: 'phase2', done: false, blocked: true, blockedAt: 'Integrate', expectedLoopObservabilityRecords: loggableAgentCount, expectedAgentProgressRecords: progressLoggableAgentCount },
+  }
+}
+logMinorOnlyPassThrough('Integrate', [integrationResult])
+
+// ─── Phase D: 4観点並列レビュー（fail時はImplementerへ差し戻す修正ループ、最大3回）──
+// issue #45/#292: 従来はReviewのstatus(fail)を一切見ずdetailのみ使い、指摘があっても
+// 後続に何も反映されず「検証完了」として終わっていた。fail検出時はImplementerへ
+// 差し戻して再修正させ、再度4観点レビューし直す。最大3回再試行し、それでもfailが
+// 残る場合はblockedとして人間（停止②の構造化レビュー）に引き渡す。
+// 判定ロジック: .claude/workflows/lib/review-retry.js の classifyReviewRound と同一
+// （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
+// 重大度分類: findings全件がminorの指摘だけでは差し戻さない（UIの軽微な指摘で修正ループを
+// 回さない。DB/ロジックのcritical/important指摘は従来通り差し戻し対象）
+phase('Review')
+
+const REVIEW_DIMENSIONS = [
+  { key: 'correctness', label: '正しさ（バグ・境界条件）' },
+  { key: 'coverage',    label: '仕様カバレッジ（受け入れ条件 vs 実装・テスト）' },
+  { key: 'redundancy',  label: '重複・過剰実装・抜け漏れ' },
+  { key: 'type-safety', label: '型安全・データ層の整合' },
+]
+
+const reviewGuide = guide(
+  'レビューを完了し指摘なし',
+  'レビューを完了し1件以上の指摘がある',
+  'レビュー対象のコード・SPEC.mdが見つからずレビュー自体ができなかった'
+)
+
+// issue #314: blockedの観点はImplementerへの差し戻しでは解決しない（レビュー対象自体が
+// 見つからない等）ため、fail判定より先に見て即座に打ち切る。従来はblockedのみの回を
+// done=true,blocked=falseとして素通りしており、最終returnにblockedAtが付かず追跡できなかった。
+// issue #525のPRレビューで発覚: status==='blocked'のみを明示チェックしていたため、
+// null（agent()実行失敗）がblockedにもfailedにも分類されず「全観点pass」と誤判定される
+// 抜け道が残っていた。deny-by-defaultに統一する（正本: .claude/workflows/lib/review-retry.js。
+// 同期は review-retry-sync.test.js が検証する）。
+function classifyReviewRound(reviewResults, dimensions, attempt, maxRetries) {
+  const blockedDimensions = dimensions
+    .map((dim, i) => ({ dim, result: reviewResults[i] }))
+    .filter(({ result }) => result?.status !== 'pass' && result?.status !== 'fail')
+
+  if (blockedDimensions.length > 0) {
+    return { done: true, blocked: true, failingDimensions: [], blockedDimensions }
+  }
+
+  const failingDimensions = dimensions
+    .map((dim, i) => ({ dim, result: reviewResults[i] }))
+    .filter(({ result }) => result?.status === 'fail' && !isMinorOnlyFailure(result))
+
+  if (failingDimensions.length === 0) {
+    return { done: true, blocked: false, failingDimensions: [], blockedDimensions: [] }
+  }
+  if (attempt > maxRetries) {
+    return { done: true, blocked: true, failingDimensions, blockedDimensions: [] }
+  }
+  return { done: false, blocked: false, failingDimensions, blockedDimensions: [] }
+}
+
+// issue #525のPRレビューで発覚: reviewResults[i]がnull（agent()実行失敗）の場合も
+// `?? '指摘なし'`で「指摘なし」に丸められ、偽の「レビュー完了・問題なし」に見えていた
+// （aidd-phase1.jsのdescribeSweepResultと同型の修正。正本は
+// .claude/workflows/lib/review-retry.js。同期は review-retry-sync.test.js が検証する）。
+function describeReviewResult(result) {
+  if (result === null) return '(実行失敗: エージェントが結果を返しませんでした。手動で再実行してください)'
+  return result.detail ?? '指摘なし'
+}
+
+// issue #490: Reviewリトライのたびに新規implementerへ指摘の文字列のみを渡していたため、
+// 前回attemptで何をどう修正したかが引き継がれず、各attemptがゼロから修正対象を再発見して
+// いた（同じ修正の繰り返し・矛盾する修正のリスク）。次のretryプロンプトに直近2attempt分の
+// 「指摘→修正報告」履歴を含めることで軽減する。
+// 正本: .claude/workflows/lib/review-retry-history.js（buildRetryHistorySection）。
+// Workflow DSLはrequire不可のためインライン複製している。
+const MAX_RETRY_HISTORY_ENTRIES = 2
+function buildRetryHistorySection(retryHistory) {
+  if (!Array.isArray(retryHistory) || retryHistory.length === 0) return ''
+  const recent = retryHistory.slice(-MAX_RETRY_HISTORY_ENTRIES)
+  const entries = recent
+    .map(({ attempt, findings, detail }) => `### attempt ${attempt}\n指摘:\n${findings}\n\n修正報告:\n${detail ?? '(報告なし)'}`)
+    .join('\n\n')
+  return `\n\n## 前回までの修正履歴\n${entries}`
+}
+
+const MAX_REVIEW_RETRIES = 3
+let reviewResults
+let reviewAttempt = 0
+let reviewRetryAgentCount = 0
+const retryHistory = []
+
+while (true) {
+  // サーキットブレーカー: Review差し戻しループはこのworkflow内で唯一の反復構造のため、
+  // ラウンドごとに累計量を確認する（MAX_REVIEW_RETRIESの回数上限とは独立した量ベースの保険）
+  if (isDefaultCapExceeded(budget, DEFAULT_TOKEN_CAP)) {
+    return tokenCapReturn('Review', {
+      manifestCheck,
+      contractResult,
+      dbResult,
+      dataResult,
+      apiResult,
+      uiResult,
+      coverageCheck,
+      groupImplResult,
+      integration: integrationResult,
+    })
+  }
+  reviewAttempt++
+  log(`Reviewラウンド ${reviewAttempt}/${MAX_REVIEW_RETRIES + 1} 開始`)
+
+  reviewResults = await parallel(
+    REVIEW_DIMENSIONS.map(dim => () => agent(
+      withIntent(`review:${dim.key}:R${reviewAttempt}`, `まず ${specPath} を Read ツールで読んでください。\n観点「${dim.label}」の視点のみでレビューしてください。\n指摘のみを箇条書きで返す。修正はしない。問題なければ「指摘なし」と返す。${reviewGuide}`),
+      { label: `review:${dim.key}:R${reviewAttempt}`, agentType: 'aidd-core:reviewer', phase: 'Review', schema: AGENT_RESULT_SCHEMA }
+    ))
+  )
+
+  REVIEW_DIMENSIONS.forEach(() => countLoggable('reviewer'))
+  REVIEW_DIMENSIONS.forEach(() => countProgressLoggable('reviewer'))
+
+  const { done, blocked, failingDimensions, blockedDimensions } = classifyReviewRound(reviewResults, REVIEW_DIMENSIONS, reviewAttempt, MAX_REVIEW_RETRIES)
+
+  if (done && !blocked) {
+    log(`Review完了: ラウンド${reviewAttempt}で全観点pass（指摘なし）`)
+    logMinorOnlyPassThrough('Review', reviewResults)
+    break
+  }
+
+  if (blocked) {
+    const reason = blockedDimensions.length > 0
+      ? `${blockedDimensions.length}件の観点でレビュー自体が実行できなかった（blocked）ため`
+      : `${MAX_REVIEW_RETRIES}回の差し戻し後もfailが残るため`
+    log(`品質ゲート: Reviewで${reason}中断（blockedとして人間に引き渡します）`)
+    return {
+      done: false,
+      contractResult,
+      dbResult,
+      dataResult,
+      apiResult,
+      uiResult,
+      coverageCheck,
+      groupImplResult,
+      integration: integrationResult,
+      reviewFindings: REVIEW_DIMENSIONS.map((dim, i) => ({
+        dimension: dim.label,
+        findings:  describeReviewResult(reviewResults[i]),
+      })),
+      blocked: true,
+      blockedAt: 'Review',
+      stats: {
+        phase: 'phase2',
+        done: false,
+        blocked: true,
+        blockedAt: 'Review',
+        reviewBlockedDimensions: blockedDimensions.length,
+        reviewRetries: reviewRetryAgentCount,
+        expectedLoopObservabilityRecords: loggableAgentCount,
+        expectedAgentProgressRecords: progressLoggableAgentCount,
+      },
+    }
+  }
+
+  log(`Review: ${failingDimensions.length}件の観点でfailを検知（試行${reviewAttempt}/${MAX_REVIEW_RETRIES + 1}）→ Implementerへ差し戻します`)
+
+  const retryFindings = failingDimensions
+    .map(({ dim, result }) => `## ${dim.label}\n${result.detail}`)
+    .join('\n\n')
+
+  const retryHistorySection = buildRetryHistorySection(retryHistory)
+
+  const retryResult = await agent(
+    withIntent(`implementer-retry:R${reviewAttempt}`, `まず ${specPath} を Read ツールで読んでください。\n以下はコードレビューで検出された指摘です。該当箇所を修正してください（修正のみ、レビューはしない）。\n\n${retryFindings}${retryHistorySection}${guide(
+      '指摘箇所をすべて修正できた',
+      '修正を試みたが解決できない指摘が残る',
+      '指摘内容から修正対象・該当ファイルが特定できない'
+    )}`),
+    { label: `implementer-retry:R${reviewAttempt}`, phase: 'Review', agentType: 'aidd-vkumai:implementer', schema: AGENT_RESULT_SCHEMA }
+  )
+  countLoggable('implementer')
+  countProgressLoggable('implementer')
+  reviewRetryAgentCount++
+  retryHistory.push({ attempt: reviewAttempt, findings: retryFindings, detail: retryResult?.detail })
+}
+
+const implResults = [contractResult, dbResult, dataResult, apiResult, uiResult, ...(groupImplResult ? [groupImplResult] : [])]
+
+// DONE判定: .claude/workflows/lib/phase2-done.js の computeDone と同一ロジック
+// （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
+// issue #46: 修正ループ（Review差し戻し等）を実装しても、最終的な完了条件(DONE)が
+// 明示されていないと「いつ止まっていいか」が曖昧になる。DONE = 全実装がpass（またはfindings
+// 全件minorのfail） AND 統合ゲート(test/lint/tsc)がpass AND 全観点Reviewがpass AND
+// specHashが一致、のすべてを満たした場合のみtrueにする。
+function allPass(results) {
+  return results.length > 0 && results.every(r => r?.status === 'pass' || isMinorOnlyFailure(r))
+}
+const done =
+  allPass(implResults) &&
+  integrationResult?.status === 'pass' &&
+  allPass(reviewResults) &&
+  manifestCheck?.status === 'pass'
+
+log(`検証完了（DONE=${done}）。/structured-review でレビュー結果を確認してください。`)
+
+return {
+  done,
+  manifestCheck,
+  contractResult,
+  dbResult,
+  dataResult,
+  apiResult,
+  uiResult,
+  coverageCheck,
+  groupImplResult,
+  integration:  integrationResult,
+  reviewFindings: REVIEW_DIMENSIONS.map((dim, i) => ({
+    dimension: dim.label,
+    findings:  describeReviewResult(reviewResults[i]),
+  })),
+  stats: {
+    phase: 'phase2',
+    done,
+    implAgents: implResults.length,
+    groupImplementerTriggered: Boolean(groupImplResult),
+    reviewAgents: REVIEW_DIMENSIONS.length,
+    reviewRetries: reviewRetryAgentCount,
+    totalAgents: 1 + 5 + 1 + (groupImplResult ? 1 : 0) + 1 + REVIEW_DIMENSIONS.length + reviewRetryAgentCount,
+    implSuccessCount: implResults.filter(r => r?.status === 'pass').length,
+    implBlockedCount: implResults.filter(r => r?.status === 'blocked').length,
+    expectedLoopObservabilityRecords: loggableAgentCount,
+    expectedAgentProgressRecords: progressLoggableAgentCount,
+  },
+}

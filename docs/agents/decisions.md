@@ -411,3 +411,33 @@ eval-runs.jsonl の追記をコミットに含める。eval が意味を持た�
 **How to apply:** 高リスクの語・パスを足すときは `aidd.config.json` の `risk` と
 `aidd-phase1-router.js` の `LOCAL_RISK_CONFIG` の両方を直す（片方だけだとテストが RED）。
 汎用語を足すときだけ `router-risk.js` の `DEFAULT_RISK_CONFIG` を直す（禁止語に注意）。
+
+## なぜプラグイン v1 を「vkumai から機械生成する配布物」にし、層の表と禁止語検査で共通側を守るか（issue #420 セット C、2026-09-05）
+
+7 月の試作（手コピー）は agent 名の名前空間が付かず sweep 4 体が全滅し、しかも `findingCount: 0` の
+偽の正常完了に見えた（後者は issue #521 で修正済み）。手順に頼ると同じ事故が再発するため、
+`scripts/build-plugin.sh` が層の表（`scripts/lib/plugin-layout.json`）に従って `dist/plugins/` を生成する。
+生成物は決定的で、`--check` が CI（`scripts/build-plugin.test.sh`）で鮮度を見る。
+
+**なぜ vkumai を正本にしたか（プラグインを正本にしない）:** vkumai は 1 日に数 PR の速度で hook が増え、
+同期テスト 30 本超がその変更を守っている。プラグイン側を正本にすると開発が止まり、構造テストも
+効かなくなる。「新しい仕組みは vkumai で先に作り、他リポジトリは受け取るだけ・逆流禁止」を、生成という
+構造で守る。v2 以降で反転するかは v1 を 2 リポジトリで回してから決める。
+
+**なぜ共通側に禁止語検査を置くか:** 「vkumai 専用設定をそのまま汎用プラグインにしない」が最重要原則。
+コメント込みで検査するのは、コメントの固有語もそのまま導入先に配られ、後で読む人を誤らせるため。
+初回の生成で 37 件が出て、うち本物の移植性バグが 1 件あった（TS 補助スクリプト 3 本の既定
+`--project-dir` が個人環境のパスを直書き。cwd から導出する形に修正）。docs のファイル名
+（`actuator-inventory.md` 等）は許容句として除外する（ファイル名の語の誤一致は既知の型）。
+
+**なぜ同梱閉包を検査するか:** hook が `$SCRIPT_DIR/lib/…` を参照するとき、参照先が同じプラグインに
+無ければ導入先で無音死する（fail-open）。本文の参照を機械的に集め、同梱されていなければ生成を失敗させる。
+案内文だけの参照は `allowUnresolvedReferences` に理由付きで書く。
+
+**なぜ bin/ を使うか:** agent / skill / workflow の本文は `scripts/log-agent-progress.sh` のように
+リポジトリ相対でスクリプトを呼ぶが、プラグインとして配ると導入先に `scripts/` は無い。プラグインの `bin/`
+は Bash の PATH に足されるので、生成時に `scripts/<bin>` を裸の名前に書き換える。
+
+**How to apply:** 新しい hook・スクリプト・エージェントを足したら `plugin-layout.json` に層を書く
+（書かなければ生成が失敗する）。共通側に置くなら固有語を本文・コメントから消す。
+`bash scripts/build-plugin.sh` を実行して `dist/plugins/` の差分をコミットする。
