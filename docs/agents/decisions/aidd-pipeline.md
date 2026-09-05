@@ -617,3 +617,42 @@ auto mode classifier に拒否される）ため、tokenizer に依存しない�
 最重要指示を SKILL.md の冒頭へ寄せ、事例・経緯は `references/` へ分離する（agentskills.io の
 progressive disclosure: name+description → 本文 → 参照ファイルの 3 層）。閾値を上げる場合は
 公式 compaction 仕様の変更を確認してからにする。
+
+## なぜ SessionStart hook を「compact 以外」と「compact のみ」の2群に分け、compact 時は AIDD 実行状態の再注入だけにしたか（issue #712）
+
+**結論: 警告系 12 本は matcher `startup|resume|clear|fork` に限定し、compact 時は
+`scripts/reinject-aidd-run-state.sh` 1 本だけが run-manifest / 進捗 / 復旧キューの現在値を
+additionalContext として再注入する。**
+
+公式の compaction 仕様（context-window ドキュメント「What survives compaction」）では、
+プロジェクトルート CLAUDE.md・unscoped rules・auto memory はディスクから再注入されるが、
+**hook が以前に注入したコンテキストは会話と一緒に要約されて薄れる**。一方 SessionStart hook は
+matcher 無しだと startup / resume / clear / compact / fork のすべてで再実行される。従来の
+設定は 12 本すべてが matcher 無しで、長時間の AIDD 自律実行中に compaction が起きると、
+ブランチ鮮度・worktree 残骸・OTel 状態などの警告 12 本（この時点では何も変わっていない）が
+毎回再注入される一方、本当に必要な「どの run-manifest で・どのエージェントがどこまで進み・
+未対応の復旧タスクは何か」は薄れていた。センサーの本数は多いが、compaction という
+「コンテキストが失われる瞬間」に何を守るかが設計されていなかった。
+
+**警告系を `startup` のみでなく `startup|resume|clear|fork` にした理由:** issue 本文は
+「startup 限定」としていたが、resume は数時間〜数日後の再開でありブランチ鮮度・main 遅れ・
+worktree 残骸の警告は改めて有用。clear / fork はコンテキストが空になるので同様。除外すべきは
+「環境は何も変わっていないのにコンテキストだけ縮んだ」compact だけ、と整理した。
+将来 source の値が増えた場合はこの matcher に足さないと警告が出なくなる（構造テストが
+startup / resume / clear / fork の 4 値については固定する）。
+
+**再注入の内容を状態ファイル由来に限定した理由:** CLAUDE.md の「絶対ルール」
+「サーキットブレーカー」等は compaction 後に CLAUDE.md 自体が再注入されるので重複させない
+（ポインタのみ）。/goal の条件は会話内にしか無く外部から読めない（issue #441）ため、
+「設定していたなら従い続けること」という注意喚起に留める。
+
+**既知の限界:** matcher が実際に compact 時だけ発火するか・additionalContext が compaction 後の
+context に入るかは、Claude Code 本体の挙動であり shell テストでは証明できない
+（`docs/agents/test-matrix.md`「hook 実機発火」）。スクリプト単体の入出力と settings.json の
+構造は `scripts/reinject-aidd-run-state.test.sh`・`scripts/check-session-start-matchers.test.sh`
+で固定した。実機確認は AIDD 実行中のセッションで `/compact` を手動実行し、直後の応答に
+「compaction 後に AIDD 実行状態を再注入しました」の systemMessage が出ることで行う。
+
+**How to apply:** SessionStart hook を新設するときは必ず matcher を付ける（構造テストが
+無指定を拒否する）。compact 時に必要なものは reinject スクリプトのセクションとして足し、
+別 hook を compact に登録しない。

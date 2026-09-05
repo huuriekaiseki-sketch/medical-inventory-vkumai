@@ -27,6 +27,7 @@
 | PreToolUse (Write/Edit/MultiEdit 高リスクパス) | `check-run-manifest-presence.sh` | warning-only | `permissionDecision: "allow"` + `additionalContext`。blockしない設計（issue #444、意図的） |
 | SessionStart | `check-workflow-interruption.sh` | **自動復旧（queue）** | Workflow中断を検知し`workflow-interrupted`としてqueue登録（issue #534） |
 | SessionStart | `check-recovery-queue.sh` | 自動復旧（queue、表示側） | pendingエントリのcontext注入＋surfaced放置エントリのエスカレーション表示（issue #523・#579）。是正の実行そのものはこのhookの範囲外 |
+| SessionStart（matcher: `compact` のみ） | `reinject-aidd-run-state.sh` | context 注入（是正なし） | compaction 直後に `.aidd/run-manifest.json`・`logs/agent-progress.jsonl`・`.aidd/recovery-queue.jsonl` の現在値を additionalContext として再注入する（issue #712）。同時に上記 12 本の警告系 hook は matcher `startup\|resume\|clear\|fork` に限定し、compact 時には再実行しない。構成は `scripts/check-session-start-matchers.test.sh` が固定する |
 | SessionStart | `check-branch-pr-status.sh` | warning-only | マージ済みブランチ上での作業を警告 |
 | SessionStart | `check-branch-tool-ownership.sh` | warning-only | ブランチ命名規約（codex/*・claude/*）と起動ツールの取り違えを警告。Claude/Codex両方のhook設定に登録される共有ガード（引数で自ツール名を渡す）。block不可のSessionStartのため意図的にwarning-only |
 | PreToolUse (Codex側・Bash/Write/Edit skipマーカー) | `codex-skip-marker-deny.sh` | **deny**（Codex側のみ） | `check-skip-marker-write.sh`（Claude側ask）のCodex用ラッパー。Codexはask未対応（実機確認済み）のためdenyへ読み替える。判定ロジックは共有正本に委譲し、出力契約の変換のみ担う |
@@ -61,6 +62,7 @@
 - 自動復旧（queue、うち登録側）: 2件（`check-workflow-interruption.sh`・`check-gap-check-state.sh`）
 - 自動復旧（queue、表示側）: 1件（`check-recovery-queue.sh`）
 - warning-only: 17件
+- context 注入（是正なし、compact 時のみ）: 1件（`reinject-aidd-run-state.sh`、issue #712）
 
 約23件の検知hookのうち、機械的に実行を止める・確認を強制する（block/ask）のは3件。
 recovery-queue接続によって「次回セッション冒頭で機械的に目の前に出る」までは自動化されている
