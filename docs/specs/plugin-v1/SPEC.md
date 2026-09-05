@@ -138,17 +138,23 @@ v2 以降で「プラグインが正本、vkumai も消費者」へ反転する�
 - **D**: プラグインリポジトリの CI が vkumai の `hooks-test` と同じテストを生成物に対して回して green
 - **F**: RED 方向を必ず含める（名前空間を意図的に外した生成物で `agent type not found` が **エラーとして** 見えること。#521 の修正により `failedCount` に出る）
 
-### 要検証（実装前に実機で確かめる。docs に書いていない）
+### 要検証 → 実測結果（2026-09-05、Claude Code 2.1.258、scratchpad の最小プラグイン 2 つを
+`claude -p --plugin-dir` で読み込み、1 セッション $0.20 で確認）
 
-1. Workflow 名の名前空間（`workflow('aidd-core:aidd-phase1')` か `'aidd-phase1'` か）。7 月は
-   非修飾で「見つからない」にはならなかったが、agent と同じ規則かは未確認
-2. `${CLAUDE_PLUGIN_ROOT}` が hook の `command` で展開されること、および展開後のスクリプトから
-   `git rev-parse --git-common-dir` で導入先の `logs/` を解決できること
-3. プラグイン間依存（`aidd-vkumai` → `aidd-core`）で、依存側の hook・agent が両方ロードされる順序
-4. `--plugin-dir` で読んだプラグインの hook が `settings.json` の hook と**重複**して発火しないか
-   （vkumai 本体で両方入っている状態を作らない運用にするか、生成物側の hook を無効化する仕組みが要るか）
-5. plugins-reference の要約に「`InstructionsLoaded` でプラグインが文脈を注入できる」旨があるが、
-   hooks docs は「出力は全て無視」と書いており矛盾。実機で確かめ、結果を `upstream-docs-review.md` に記録
+1. **Workflow 名も名前空間付き**（`aidd-core-spike:spike-inner`）。DSL 内の `workflow('spike-inner')` も
+   メインエージェントの `Workflow({name: 'spike-flow'})` も、非修飾は「no workflow with that name」で失敗する
+   （エラー文に利用可能な修飾名一覧が出る）。agent も同様（7 月試作の再現。`agent type 'echo-agent' not found`）
+   → 生成スクリプトは agentType と workflow() の両方を書き換え、導入先 CLAUDE.md の呼び出し例も修飾名にする
+2. **`${CLAUDE_PLUGIN_ROOT}` は hook の command で展開される**（プラグインディレクトリの絶対パス）。
+   hook 内の `CLAUDE_PROJECT_DIR` と cwd は導入先で、`git rev-parse --git-common-dir` も導入先の `.git` を
+   返す → `resolve_log_dir` はそのまま導入先の `logs/` に解決する
+3. **別プラグインの agent / workflow を修飾名で呼べる**（adapter → core）。`dependencies` の解決順は
+   `--plugin-dir` 2 つ同時指定では検証できていない（両方明示ロードのため）。marketplace 経由の
+   インストールで再確認する
+4. 未検証（両方ロードすれば当然二重に発火する）。運用で「vkumai 本体では生成物を読まない」とし、
+   生成スクリプトの出力先を `dist/plugins/` に固定してリポジトリ内 `.claude/` と混ざらないようにする
+5. **InstructionsLoaded の出力は文脈に入らない**（hook は発火し stdin も来るが、additionalContext /
+   systemMessage とも無視）。hooks docs が正しく、plugins-reference の記述は誤り → `upstream-docs-review.md` に記録
 
 ### 型・データアクセス層の方針
 
