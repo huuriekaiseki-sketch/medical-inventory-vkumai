@@ -1,8 +1,10 @@
 # WHY: issue #496。.claude/workflows/*.js（プロンプト正本のlib/prompts/配下を含む）を
 # 変更したPRで、docs/agents/eval-runs.jsonl（eval実行完了時にeval-workflow-prompts.sh /
 # eval-sweep-recall.shが自動追記する実行痕跡）の更新が抜けていないかを機械的に警告する
-# (.github/workflows/agent-baseline-check.ymlと同型)。まずはwarningのみで、マージを
-# ブロックしない。実evalそのものをCIで自動実行することはしない（実エージェント呼び出しの
+# (.github/workflows/agent-baseline-check.ymlと同型)。2026-07-23の導入時はwarningのみだったが、
+# ::warning:: はrunを開かないと見えず3件のPR（#627 #679 #693）で無視されたため、2026-09-05に
+# 失敗（exit 1）へ切り替えた。eval不要な変更はPR本文に `eval-skip: <理由>` と書けば通る。
+# 実evalそのものをCIで自動実行することはしない（実エージェント呼び出しの
 # 課金コストで見送り済みの判断は変えない。issue本文の注意点参照）。
 
 name: Eval Runs Freshness Check
@@ -30,4 +32,6 @@ jobs:
       - name: Check eval-runs.jsonl freshness
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          # WHY: PR 本文の `eval-skip: <理由>` 申告をスクリプトへ渡す。本文はシェルに展開せず env 経由で受ける
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: bash scripts/check-eval-runs-freshness.sh "origin/$BASE_REF" HEAD
