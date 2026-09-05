@@ -245,6 +245,12 @@
         "hooks": [
           { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-direct-ddl-execution.sh", "timeout": 5 }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-readonly-bash.sh", "timeout": 5 }
+        ]
       }
     ],
     "SubagentStart": [
