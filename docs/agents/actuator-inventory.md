@@ -28,7 +28,7 @@
 | PreToolUse (Write/Edit/MultiEdit 高リスクパス) | `check-run-manifest-presence.sh` | warning-only | `permissionDecision: "allow"` + `additionalContext`。blockしない設計（issue #444、意図的） |
 | SessionStart | `check-workflow-interruption.sh` | **自動復旧（queue）** | Workflow中断を検知し`workflow-interrupted`としてqueue登録（issue #534） |
 | SessionStart | `check-recovery-queue.sh` | 自動復旧（queue、表示側） | pendingエントリのcontext注入＋surfaced放置エントリのエスカレーション表示（issue #523・#579）。是正の実行そのものはこのhookの範囲外 |
-| SessionStart（matcher: `compact` のみ） | `reinject-aidd-run-state.sh` | context 注入（是正なし） | compaction 直後に `.aidd/run-manifest.json`・`logs/agent-progress.jsonl`・`.aidd/recovery-queue.jsonl` の現在値を additionalContext として再注入する（issue #712）。同時に上記 12 本の警告系 hook は matcher `startup\|resume\|clear\|fork` に限定し、compact 時には再実行しない。構成は `scripts/check-session-start-matchers.test.sh` が固定する |
+| SessionStart（matcher: `compact` のみ） | `reinject-aidd-run-state.sh` | context 注入（是正なし） | compaction 直後に `.aidd/run-manifest.json`・`logs/agent-progress.jsonl`・`.aidd/recovery-queue.jsonl` の現在値を additionalContext として再注入する（issue #712）。同時に startup 群の警告系 hook（導入時 12 本、2026-09-05 時点で 14 本）は matcher `startup\|resume\|clear\|fork` に限定し、compact 時には再実行しない。構成は `scripts/check-session-start-matchers.test.sh` が固定する |
 | SessionStart | `check-branch-pr-status.sh` | warning-only | マージ済みブランチ上での作業を警告 |
 | SessionStart | `check-branch-tool-ownership.sh` | warning-only | ブランチ命名規約（codex/*・claude/*）と起動ツールの取り違えを警告。Claude/Codex両方のhook設定に登録される共有ガード（引数で自ツール名を渡す）。block不可のSessionStartのため意図的にwarning-only |
 | PreToolUse (Codex側・Bash/Write/Edit skipマーカー) | `codex-skip-marker-deny.sh` | **deny**（Codex側のみ） | `check-skip-marker-write.sh`（Claude側ask）のCodex用ラッパー。Codexはask未対応（実機確認済み）のためdenyへ読み替える。判定ロジックは共有正本に委譲し、出力契約の変換のみ担う |
@@ -38,6 +38,7 @@
 | SessionStart | `check-blocked-issues-staleness.sh` | warning-only | `blocked`ラベル長期滞留issueの警告 |
 | SessionStart | `check-fault-injection-drill-staleness.sh` | warning-only | fault injection訓練の実施タイミング警告 |
 | SessionStart | `check-upstream-docs-review-staleness.sh` | warning-only | 公式ドキュメント差分の定期確認（`docs/agents/upstream-docs-review.md`）の期限切れ警告 |
+| SessionStart | `check-subagent-model-force.sh` | warning-only | `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`（Claude Code 2.1.257）が環境変数または settings の `env` に非空であれば警告（issue #743）。全 subagent のモデルを強制するため AIDD のモデル階層（agent ごとの model 指定、issue #419・#693）が黙って無効化される。個人環境の変数はリポジトリから消せず、意図的に使う場面もあるため warning-only |
 | Setup（matcher `maintenance`） | `maintenance-digest.sh` | warning-only | `claude -p --maintenance` で fault-injection 訓練・hook 実走ドリル・docs 差分確認の 3 期限を一括表示（issue #741）。明示的に呼ばないと動かないため SessionStart の個別警告は残す |
 | SessionStart | `check-claude-md-size.sh` | warning-only | CLAUDE.md/docs/agents/common.mdの行数肥大化を警告（トークン効率化。common.mdは機械検知ルール集のため「短ければ良い」わけではなく、削除判断は人間に委ねる） |
 | SessionStart | `check-stale-worktrees.sh` | warning-only | worktree・ローカルブランチ残骸の蓄積警告（issue #674）。マージ/クローズ済みPRに対応するworktree数・goneブランチ数（閾値超過時）・PRを一度も作らず一定日数放置されたブランチ数（閾値超過時、issue #708）を警告。削除は不可逆に近い操作のため意図的にwarning-only |
