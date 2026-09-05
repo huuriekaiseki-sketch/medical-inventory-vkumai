@@ -1,4 +1,4 @@
 {
-  "expectedFilePathContains": "eval-fixture-recall/repository.ts",
+  "expectedFilePathContains": ["eval-fixture-recall/repository.ts", "types/eval-fixture-recall.ts"],
   "expectedKeywords": ["internalNote", "internal_note", "EvalFixtureRecallItem"]
 }

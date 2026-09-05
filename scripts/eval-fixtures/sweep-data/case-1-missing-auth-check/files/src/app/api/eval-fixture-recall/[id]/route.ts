@@ -1,8 +1,3 @@
-// issue #431のrecallベンチマーク用fixture。既知の失敗パターン
-// （docs/agents/known-failure-patterns.md「動いたからOKでfacility_idフィルタ漏れ・
-// RLS未設定を見逃す」issue #24再発防止）を意図的に再現している:
-// requireAuth/requireFacilityAccessによる認可チェックが一切無いまま、
-// パスパラメータのidをそのままDBクエリに渡している。
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 

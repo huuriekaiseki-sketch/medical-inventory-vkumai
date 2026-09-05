@@ -11,3 +11,8 @@
 {"timestamp":"2026-09-05T04:43:46Z","script":"eval-sweep-recall","fixtureSet":"sweep-types","pass":0,"total":1}
 {"timestamp":"2026-09-05T04:48:22Z","script":"eval-workflow-prompts","fixtureSet":"db-impl","pass":4,"total":4}
 {"timestamp":"2026-09-05T04:48:38Z","script":"eval-workflow-prompts","fixtureSet":"spec-check","pass":1,"total":1}
+{"timestamp":"2026-09-05T04:54:58Z","script":"eval-sweep-recall","fixtureSet":"sweep-types","pass":1,"total":1}
+{"timestamp":"2026-09-05T04:55:38Z","script":"eval-sweep-recall","fixtureSet":"sweep-data","pass":0,"total":1}
+{"timestamp":"2026-09-05T05:01:19Z","script":"eval-sweep-recall","fixtureSet":"sweep-data","pass":1,"total":1}
+{"timestamp":"2026-09-05T05:06:47Z","script":"eval-sweep-recall","fixtureSet":"sweep-types","pass":0,"total":1}
+{"timestamp":"2026-09-05T05:10:41Z","script":"eval-sweep-recall","fixtureSet":"sweep-types","pass":0,"total":1}
