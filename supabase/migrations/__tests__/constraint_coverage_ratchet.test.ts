@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest'
 import {
   assessRisk,
   findAdminOnlyTablesWithoutTest,
+  findExposedRpcWithoutBoundaryTest,
   findRlsTablesWithoutIdorTest,
   findUndeclaredCardinality,
   findUncoveredConstraintMigrations,
@@ -30,9 +31,12 @@ const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf-8')) as {
   uncoveredIntegration: { migration: string; risk: 'high' | 'medium' | 'low' }[]
   rlsWithoutIdorTest: { table: string; risk: 'high' | 'medium' | 'low' }[]
   rlsIdorNotRequired: { table: string; reason: string }[]
+  rpcWithoutBoundaryTest: { function: string; risk: 'high' | 'medium' | 'low' }[]
+  rpcNotRequired: { function: string; reason: string }[]
 }
 const baselineMigrations = baseline.uncoveredIntegration.map((e) => e.migration)
 const baselineRlsTables = baseline.rlsWithoutIdorTest.map((e) => e.table)
+const baselineRpcFunctions = baseline.rpcWithoutBoundaryTest.map((e) => e.function)
 
 const migrations = readdirSync(MIGRATIONS_DIR)
   .filter((f) => f.endsWith('.sql'))
@@ -102,6 +106,24 @@ const adminUncovered: string[] = findAdminOnlyTablesWithoutTest({
   allMigrationSql,
   adminTestSource,
 }).uncovered
+
+// RPC 軸（issue #757 の 34）: 境界テスト＝実 DB 統合テスト + e2e の攻撃テスト。
+// アプリのソースは「業務経路かどうか」の判定材料（テストは除く）
+const boundaryTestSource = [
+  integrationSource,
+  collectSource([path.resolve(__dirname, '../../../e2e')]),
+].join('\n')
+const rpc = findExposedRpcWithoutBoundaryTest({
+  migrations,
+  boundaryTestSource,
+  appSource: collectSource([
+    path.resolve(__dirname, '../../../src/lib'),
+    path.resolve(__dirname, '../../../src/app'),
+  ]),
+  notRequired: baseline.rpcNotRequired.map((e) => e.function),
+})
+const rpcUncoveredNames = rpc.uncovered.map((u) => u.name)
+const actualRpcRisk = new Map(rpc.uncovered.map((u) => [u.name, u.risk]))
 
 /** 業務データ判定の材料としてアプリ本体のソースを集める（生成物の型定義は含めない） */
 function collectSource(dirs: string[]): string {
@@ -196,5 +218,52 @@ describe('DB制約カバレッジのratchet（issue #675 再発防止） [P-042]
       .filter((e) => actualRlsRisk.has(e.table) && actualRlsRisk.get(e.table) !== e.risk)
       .map((e) => ({ table: e.table, baseline: e.risk, actual: actualRlsRisk.get(e.table) }))
     expect({ drifted, driftedRls }).toEqual({ drifted: [], driftedRls: [] })
+  })
+})
+
+// 約束カタログ（docs/agents/promise-catalog.md）: P-043 クライアントから呼べる RPC は境界テストに登場する
+describe('クライアントロールから呼べる RPC の境界テスト ratchet（issue #757 の 34） [P-043]', () => {
+  // WHY: API Route は e2e の攻撃テストが fs で列挙して攻撃表に無ければ落とす（P-017）が、
+  //      RPC は「テストを書いた関数だけ守られている」状態だった。PostgreSQL は CREATE FUNCTION
+  //      した関数の EXECUTE を既定で PUBLIC に与えるため、GRANT を書かなくても authenticated /
+  //      anon から呼べる。migration に関数を足した時点で新しい経路が開くので、列挙する側を持つ。
+
+  it('クライアントロールから呼べる RPC を検出できている（パーサ自壊の検知）', () => {
+    // 発注・返却 RPC 4 本と認可述語（is_facility_member 等）は必ず含まれる
+    expect(rpc.exposed).toEqual(expect.arrayContaining(['create_loan_order_atomic', 'is_facility_member']))
+    expect(rpc.exposed.length).toBeGreaterThanOrEqual(10)
+  })
+
+  it('解釈できない権限構文（ON ALL FUNCTIONS IN SCHEMA / ALTER DEFAULT PRIVILEGES）を使っていない', () => {
+    // WHY: 使い始めたら判定が黙って緩む（見逃す方向）ので、先に検知器側を拡張してから使う
+    expect(rpc.unsupported).toEqual([])
+  })
+
+  it('呼べるのに境界テストで一度も呼んでいない RPC が新規に増えていない', () => {
+    // 増えていた場合の直し方:
+    //   supabase/__tests__/integration/ か e2e/ で、他施設ユーザー・非 admin・anon のいずれかで
+    //   `.rpc('関数名', ...)` を呼んで拒否されることを確かめるテストを書く
+    //   クライアントに公開する必要が無い関数なら、migration で REVOKE ALL ... FROM PUBLIC, anon,
+    //   authenticated して service_role にだけ GRANT する（呼べなくなれば対象から外れる）
+    const added = rpcUncoveredNames.filter((n) => !baselineRpcFunctions.includes(n))
+    expect(added).toEqual([])
+  })
+
+  it('rpcNotRequired の各行に理由があり、実在する公開 RPC を指している', () => {
+    const withoutReason = baseline.rpcNotRequired.filter((e) => !e.reason?.trim())
+    const unknown = baseline.rpcNotRequired.map((e) => e.function).filter((f) => !rpc.exposed.includes(f))
+    expect({ withoutReason, unknown }).toEqual({ withoutReason: [], unknown: [] })
+  })
+
+  it('baseline に、既に解消済み（テストを書いた・呼べなくした）の RPC が残っていない', () => {
+    const stale = baselineRpcFunctions.filter((n) => !rpcUncoveredNames.includes(n))
+    expect(stale).toEqual([])
+  })
+
+  it('baseline に書かれた risk が、現在の機械判定と一致している', () => {
+    const drifted = baseline.rpcWithoutBoundaryTest
+      .filter((e) => actualRpcRisk.has(e.function) && actualRpcRisk.get(e.function) !== e.risk)
+      .map((e) => ({ function: e.function, baseline: e.risk, actual: actualRpcRisk.get(e.function) }))
+    expect(drifted).toEqual([])
   })
 })

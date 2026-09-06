@@ -316,6 +316,124 @@ export function findAdminOnlyTablesWithoutTest({ allMigrationSql, adminTestSourc
   return { adminOnlyTables, uncovered: adminOnlyTables.filter((t) => !tested.includes(t)) }
 }
 
+/**
+ * クライアントロール（anon / authenticated / PUBLIC 既定）から PostgREST 経由で呼べる RPC のうち、
+ * 境界テスト（統合テスト・E2E の攻撃テスト）で一度も `.rpc('name')` として呼ばれていないものを探す。
+ *
+ * WHY: issue #757 の 34（未テスト経路の自動検出）。API Route は e2e の攻撃テストが fs で列挙して
+ *      攻撃表に無ければ落とす（P-017）が、RPC は「テストを書いた関数だけ守られている」状態だった。
+ *      PostgreSQL は CREATE FUNCTION した関数の EXECUTE を既定で PUBLIC に与えるため、
+ *      GRANT を書かなくても authenticated / anon から呼べる。つまり「migration に関数を足した」
+ *      時点で新しい経路が開いており、それを列挙する側が無いと守るテストの有無を誰も確かめない。
+ *
+ *      判定は migration を適用順に走査して最終状態を組み立てる:
+ *        - CREATE [OR REPLACE] FUNCTION: 定義（RETURNS / SECURITY DEFINER）を更新。権限は維持
+ *        - DROP FUNCTION: 定義と権限を消す（再 CREATE で PUBLIC 既定に戻る）
+ *        - GRANT / REVOKE ... ON FUNCTION: role ごとの EXECUTE を記録。REVOKE FROM PUBLIC で既定を外す
+ *      RETURNS trigger / event_trigger の関数は RPC として呼べないので対象外。public 以外の
+ *      スキーマも対象外（PostgREST に公開されるのは public のみ）。
+ *
+ * 既知の限界:
+ *   - `GRANT ... ON ALL FUNCTIONS IN SCHEMA` と `ALTER DEFAULT PRIVILEGES` は解釈しない（現状使っていない。
+ *     使い始めたらここを拡張する。見逃す方向＝安全側ではないので unsupported として結果に出す）
+ *   - 「テストに登場する」は `.rpc('name'` の文字列一致であり、他施設 id で拒否されることまでは保証しない
+ *     （RLS/IDOR 軸と同じ偽陰性）。「一度も呼んでいない」側だけを高い確度で拾う
+ *
+ * @param {{migrations: {name: string, sql: string}[], boundaryTestSource: string, appSource?: string,
+ *          notRequired?: string[]}} options
+ * @returns {{functions: {name: string, definedIn: string, securityDefiner: boolean, exposedVia: string[],
+ *                        appUses: boolean, tested: boolean}[],
+ *            exposed: string[], uncovered: {name: string, risk: 'high'|'medium'|'low', reasons: string[]}[],
+ *            unsupported: string[]}}
+ */
+export function findExposedRpcWithoutBoundaryTest({ migrations, boundaryTestSource, appSource = '', notRequired = [] }) {
+  const state = new Map()
+  const unsupported = []
+  const identFor = (n) => `(?:"?public"?\\.)?"?(?<${n}>[a-z_][a-z0-9_]*)"?`
+  const nonPublic = /^"?(auth|storage|extensions|cron|vault|net|pgsodium|realtime|supabase_functions)"?\./
+  // 1 ファイル内でも「DROP → CREATE」「CREATE → GRANT」の順序が意味を持つので、文の種類ごとに
+  // 別々に走査せず、1 本の正規表現で出現順に処理する
+  const statement = new RegExp(
+    [
+      `(?<create>create (?:or replace )?function (?<schema>(?:"?[a-z_]+"?\\.)?)${identFor('cname')} ?\\((?:[^)]*)\\)(?<header>[\\s\\S]*?)\\bas (?:\\$|'))`,
+      `(?<drop>drop function (?:if exists )?${identFor('dname')})`,
+      `(?<priv>(?<verb>grant|revoke) (?:execute|all(?: privileges)?) on function ${identFor('pname')} ?(?:\\([^)]*\\))? (?:to|from) (?<roles>[a-z_, ]+?) ?;)`,
+    ].join('|'),
+    'g',
+  )
+
+  for (const { name: file, sql: raw } of migrations) {
+    const lower = stripComments(raw).replace(/\s+/g, ' ').toLowerCase()
+    if (/on all functions in schema|alter default privileges/.test(lower)) {
+      unsupported.push(`${file}: ON ALL FUNCTIONS IN SCHEMA / ALTER DEFAULT PRIVILEGES は解釈していない`)
+    }
+    for (const m of lower.matchAll(statement)) {
+      const g = m.groups
+      if (g.create !== undefined) {
+        const name = g.cname
+        if (g.schema && nonPublic.test(g.schema)) continue
+        const prev = state.get(name)
+        state.set(name, {
+          name,
+          definedIn: file,
+          returnsTrigger: /returns (?:trigger|event_trigger)\b/.test(g.header),
+          securityDefiner: /security definer/.test(g.header),
+          // CREATE OR REPLACE は権限を維持する。DROP 後の再 CREATE は prev が無いので既定（PUBLIC）に戻る
+          publicExecute: prev ? prev.publicExecute : true,
+          roles: prev ? prev.roles : new Map(),
+        })
+      } else if (g.drop !== undefined) {
+        state.delete(g.dname)
+      } else if (g.priv !== undefined) {
+        const fn = state.get(g.pname)
+        if (!fn) continue
+        const granted = g.verb === 'grant'
+        for (const role of g.roles.split(',').map((r) => r.trim()).filter(Boolean)) {
+          if (role === 'public') fn.publicExecute = granted
+          else fn.roles.set(role, granted)
+        }
+      }
+    }
+  }
+
+  const tests = String(boundaryTestSource ?? '').toLowerCase()
+  const app = String(appSource ?? '').toLowerCase()
+  const excluded = new Set(notRequired)
+  const functions = []
+  for (const fn of [...state.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+    if (fn.returnsTrigger) continue
+    const exposedVia = []
+    if (fn.publicExecute) exposedVia.push('PUBLIC（既定。GRANT を書いていない）')
+    if (fn.roles.get('anon')) exposedVia.push('anon')
+    if (fn.roles.get('authenticated')) exposedVia.push('authenticated')
+    const callPattern = new RegExp(`rpc\\(\\s*['"]${fn.name}['"]`)
+    functions.push({
+      name: fn.name,
+      definedIn: fn.definedIn,
+      securityDefiner: fn.securityDefiner,
+      exposedVia,
+      appUses: callPattern.test(app),
+      tested: callPattern.test(tests),
+    })
+  }
+
+  const exposed = functions.filter((f) => f.exposedVia.length > 0)
+  const uncovered = exposed
+    .filter((f) => !f.tested && !excluded.has(f.name))
+    .map((f) => {
+      const reasons = []
+      if (f.securityDefiner) reasons.push('SECURITY DEFINER（RLS を通らず、関数内の検査だけが境界）')
+      if (f.exposedVia.some((v) => v.startsWith('PUBLIC'))) reasons.push('明示 GRANT が無く PostgreSQL 既定の PUBLIC 権限で呼べる')
+      if (f.exposedVia.includes('anon')) reasons.push('anon（未ログイン）からも呼べる')
+      if (f.appUses) reasons.push('アプリが呼んでいる（業務経路）')
+      else reasons.push('アプリは呼んでいない（使われていない公開経路。REVOKE の候補）')
+      const level = f.securityDefiner ? 'high' : f.appUses || f.exposedVia.includes('anon') ? 'medium' : 'low'
+      return { name: f.name, risk: level, reasons }
+    })
+
+  return { functions, exposed: exposed.map((f) => f.name), uncovered, unsupported }
+}
+
 // ---- CLI ----
 
 const LEVEL_ORDER = { high: 0, medium: 1, low: 2 }
@@ -383,8 +501,18 @@ function main() {
     }))
     .sort((a, b) => LEVEL_ORDER[a.risk.level] - LEVEL_ORDER[b.risk.level])
 
+  // RPC 軸（issue #757 の 34）: 境界テスト＝統合テスト + e2e。アプリのソースは業務経路かどうかの材料
+  const rpcBaselinePath = path.join(repoRoot, 'supabase/migrations/__tests__/constraint-coverage-baseline.json')
+  const rpcBaseline = existsSync(rpcBaselinePath) ? JSON.parse(readFileSync(rpcBaselinePath, 'utf-8')) : {}
+  const rpc = findExposedRpcWithoutBoundaryTest({
+    migrations,
+    boundaryTestSource: [integrationSource, collectSource([path.join(repoRoot, 'e2e')], ['.spec.ts'])].join('\n'),
+    appSource,
+    notRequired: (rpcBaseline.rpcNotRequired ?? []).map((e) => e.function),
+  })
+
   if (process.argv.includes('--json')) {
-    console.log(JSON.stringify({ cardinality, integrationCoverage: { ...coverage, ranked } }, null, 2))
+    console.log(JSON.stringify({ cardinality, integrationCoverage: { ...coverage, ranked }, rpc }, null, 2))
     return
   }
 
@@ -463,6 +591,22 @@ function main() {
     }
     console.log('')
   }
+
+  const rpcRanked = [...rpc.uncovered].sort((a, b) => LEVEL_ORDER[a.risk] - LEVEL_ORDER[b.risk])
+  console.log(
+    `■ クライアント（anon / authenticated）から呼べるのに、境界テストで一度も呼んでいないRPC（${rpc.uncovered.length}/${rpc.exposed.length}関数）`,
+  )
+  if (rpcRanked.length === 0) {
+    console.log('  なし\n')
+  } else {
+    for (const r of rpcRanked) {
+      console.log(`  ${LEVEL_LABEL[r.risk]} ${r.name}`)
+      for (const reason of r.reasons) console.log(`           - ${reason}`)
+    }
+    console.log('           → 他施設・非admin・anon で .rpc() を呼んで拒否されるテストを書くか、公開不要なら REVOKE する')
+    console.log('')
+  }
+  for (const u of rpc.unsupported) console.log(`  [解釈不能] ${u}`)
 
   console.log('■ 制約を作ったが、実DBで効くか一度も試していない')
   if (ranked.length === 0) {
