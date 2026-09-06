@@ -51,6 +51,8 @@ const opts = parseArgs(process.argv.slice(2))
 const SOURCE = path.resolve(opts.source ?? path.resolve(__dirname, '../..'))
 const LAYOUT_FILE = path.resolve(opts.layout ?? path.join(SOURCE, 'scripts/lib/plugin-layout.json'))
 const OUT = path.resolve(opts.out ?? path.join(SOURCE, 'dist/plugins'))
+// 配布物の同一性（issue #757 の 37）。scripts/check-plugin-integrity.sh と同じ名前を使う
+const MANIFEST_NAME = '.aidd-manifest.json'
 const layout = JSON.parse(readFileSync(LAYOUT_FILE, 'utf8'))
 
 const errors = []
@@ -318,6 +320,22 @@ function build(outRoot) {
       for (const m of text.matchAll(/workflow\(\s*'([^':]+)'/g)) fail(`${plugin}/${r}: 名前空間の無い workflow('${m[1]}')`)
     }
   }
+  // 4. 配布物の同一性（issue #757 の 37）。生成した全ファイルの sha256 を .aidd-manifest.json に書く。
+  //    導入先では SessionStart hook（check-plugin-integrity.sh）がこの表と実物を突き合わせ、
+  //    配布経路での差し替え・部分適用・手編集を検知する。
+  //    written には入れない（禁止語・同梱閉包の検査対象にせず、内容も検査結果に影響させないため）。
+  //    中身は sha256 とパスだけで、時刻・ホスト名・版などの揺れる値を入れない（決定性のため）。
+  for (const plugin of pluginNames) {
+    const files = {}
+    for (const r of (written[plugin] ?? []).slice().sort()) {
+      files[r] = sha(readFileSync(path.join(outRoot, plugin, r)))
+    }
+    writeFileSync(
+      path.join(outRoot, plugin, MANIFEST_NAME),
+      JSON.stringify({ plugin, algorithm: 'sha256', files }, null, 2) + '\n'
+    )
+  }
+
   return written
 }
 

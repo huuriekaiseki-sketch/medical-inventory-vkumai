@@ -39,6 +39,7 @@
 | SessionStart | `check-fault-injection-drill-staleness.sh` | warning-only | fault injection訓練の実施タイミング警告 |
 | SessionStart | `check-upstream-docs-review-staleness.sh` | warning-only | 公式ドキュメント差分の定期確認（`docs/agents/upstream-docs-review.md`）の期限切れ警告 |
 | SessionStart | `check-subagent-model-force.sh` | warning-only | `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`（Claude Code 2.1.257）が環境変数または settings の `env` に非空であれば警告（issue #743）。全 subagent のモデルを強制するため AIDD のモデル階層（agent ごとの model 指定、issue #419・#693）が黙って無効化される。個人環境の変数はリポジトリから消せず、意図的に使う場面もあるため warning-only |
+| SessionStart | `check-plugin-integrity.sh` | warning-only | 配布物の同一性（issue #757 の 37）。build-plugin.sh が各プラグインに書く `.aidd-manifest.json`（全ファイルの sha256）と実物を突き合わせ、差し替え・欠落・混入を警告する。中心リポジトリでは `dist/plugins/*`、導入先では `$CLAUDE_PLUGIN_ROOT` を見る。manifest ごと書き換えられたら検知できない（署名は #757-30）ため、止める力は持たせず warning-only |
 | Setup（matcher `maintenance`） | `maintenance-digest.sh` | warning-only | `claude -p --maintenance` で fault-injection 訓練・hook 実走ドリル・docs 差分確認の 3 期限を一括表示（issue #741）。明示的に呼ばないと動かないため SessionStart の個別警告は残す |
 | SessionStart | `check-claude-md-size.sh` | warning-only | CLAUDE.md/docs/agents/common.mdの行数肥大化を警告（トークン効率化。common.mdは機械検知ルール集のため「短ければ良い」わけではなく、削除判断は人間に委ねる） |
 | SessionStart | `check-stale-worktrees.sh` | warning-only | worktree・ローカルブランチ残骸の蓄積警告（issue #674）。マージ/クローズ済みPRに対応するworktree数・goneブランチ数（閾値超過時）・PRを一度も作らず一定日数放置されたブランチ数（閾値超過時、issue #708）を警告。削除は不可逆に近い操作のため意図的にwarning-only |

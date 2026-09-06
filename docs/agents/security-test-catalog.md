@@ -75,7 +75,7 @@
 | カナリア環境・施設 | 一部の施設だけに新 plugin・hook を適用し波及を防ぐ | 引き金付き | 導入先が 3 リポジトリ以上、または施設数が 10 を超えたら |
 | 競合する停止操作 | plugin 停止の瞬間に別プロセスの hook・queue が継続しないか | 引き金付き | plugin v1.x で bin/ の PATH 問題を直すとき |
 | 供給網の侵害シミュレーション | marketplace・npm・Action・bin・Codex 手コピーの改ざんを検知・隔離・停止 | 計画 #757-30 | |
-| ビルド成果物の同一性 | ソースから作った成果物と配布 plugin のハッシュ一致・署名 | 計画 #757-37 | 生成の決定性は実装済み。配布物への `--check` を足す |
+| ビルド成果物の同一性 | ソースから作った成果物と配布 plugin のハッシュ一致・署名 | 実装済み（一部） | 生成の決定性（`build-plugin.sh --check`）に加え、配布物の自己検査 `scripts/check-plugin-integrity.sh`（`.aidd-manifest.json` と突合、CI と導入先の SessionStart）を入れた。**署名は未**なので manifest ごと書き換えられたら検知できない（#757-30 の供給網演習と同時に判断する） |
 | 依存の名前取り違え | typo-squatting・scope 違い・registry 差し替え | 実装済み（一部） | ロック出所の検査、registry fetch 禁止テスト。scope 違いは引き金付き（依存追加時に ask 文言へ） |
 | Archive slip・symlink・Git hook・submodule・巨大入力 | 展開・リンク・Git 由来で保護外へ書く、圧縮爆弾で停止 | 引き金付き | plugin か製品がファイル・アーカイブ・外部 Git を受け取る機能を持ったとき |
 | ターミナル制御文字 | plugin・hook の出力に ANSI escape を混ぜて端末を欺く | 引き金付き | hook の出力に外部由来の文字列（issue 本文・商品名）を含めるとき |

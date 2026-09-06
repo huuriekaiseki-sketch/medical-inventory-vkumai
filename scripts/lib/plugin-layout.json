@@ -70,6 +70,7 @@
     "check-claude-md-size.sh": "aidd-core",
     "check-stale-worktrees.sh": "aidd-core",
     "check-empty-session-report.sh": "aidd-core",
+    "check-plugin-integrity.sh": "aidd-core",
     "check-upstream-docs-review-staleness.sh": "aidd-core",
     "check-subagent-model-force.sh": "aidd-core",
     "reinject-aidd-run-state.sh": "aidd-core",
@@ -128,6 +129,7 @@
     "check-agent-progress-gap.sh": "aidd-core"
   },
   "allowUnresolvedReferences": {
+    "scripts/build-plugin.sh": "check-plugin-integrity.sh の説明文と是正案内が中心リポジトリ側の生成コマンドを示すだけ（配布物には同梱しない）",
     "scripts/derive-test-selection.sh": "check-handoff-format.sh の警告文が導入先の derive を案内するだけ（実行しない）",
     "scripts/check-handoff-format.sh": "handoff-format スキル本文が Stop hook 名を説明するだけ",
     "scripts/log-find-av-precision.sh": "check-find-av-precision-recorded.sh の警告文が呼び方を案内するだけ",
