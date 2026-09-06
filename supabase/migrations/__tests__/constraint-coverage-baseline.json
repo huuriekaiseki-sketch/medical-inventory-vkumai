@@ -22,9 +22,8 @@
   ],
   "rlsWithoutIdorTest": [],
   "undeclaredCardinality": [],
-  "_rpcWithoutBoundaryTestとは": "クライアントロール（anon / authenticated / PUBLIC 既定）から PostgREST 経由で呼べる RPC のうち、統合テスト・e2e のどこでも `.rpc('name')` として呼んで拒否を確かめていないもの（issue #757 の 34、2026-09-06 初回計測 13 件）。PostgreSQL は GRANT を書かなくても EXECUTE を PUBLIC に与えるので、migration に関数を足した時点で経路が開く。解消は (a) 境界テストを書く か (b) REVOKE ALL FROM PUBLIC, anon, authenticated して service_role だけに GRANT する（呼べなくなれば対象外）。schema drift 系 4 本（check_schema_drift / record_schema_drift / record_issue_url / refresh_schema_baseline_snapshot）は service_role 用なのに PUBLIC 既定で誰でも呼べる状態で、(b) が正しい（初回計測で発見）",
+  "_rpcWithoutBoundaryTestとは": "クライアントロール（anon / authenticated / PUBLIC 既定）から PostgREST 経由で呼べる RPC のうち、統合テスト・e2e のどこでも `.rpc('name')` として呼んで拒否を確かめていないもの（issue #757 の 34、2026-09-06 初回計測 13 件）。PostgreSQL は GRANT を書かなくても EXECUTE を PUBLIC に与えるので、migration に関数を足した時点で経路が開く。解消は (a) 境界テストを書く か (b) REVOKE ALL FROM PUBLIC, anon, authenticated して service_role だけに GRANT する（呼べなくなれば対象外）。schema drift 系 4 本（check_schema_drift / record_schema_drift / record_issue_url / refresh_schema_baseline_snapshot）は service_role 用なのに PUBLIC 既定で誰でも呼べる状態だったため、20260906000001 で (b) を適用し 13 → 9 件に減った",
   "rpcWithoutBoundaryTest": [
-    { "function": "check_schema_drift", "risk": "high" },
     { "function": "get_admin_status", "risk": "high" },
     { "function": "get_distributor_product_price_history", "risk": "high" },
     { "function": "get_news_feed", "risk": "medium" },
@@ -33,9 +32,6 @@
     { "function": "is_admin", "risk": "high" },
     { "function": "is_facility_member", "risk": "high" },
     { "function": "is_facility_writer", "risk": "high" },
-    { "function": "record_issue_url", "risk": "high" },
-    { "function": "record_schema_drift", "risk": "high" },
-    { "function": "refresh_schema_baseline_snapshot", "risk": "high" },
     { "function": "resolve_jan_unit_price", "risk": "low" }
   ],
   "_rpcNotRequiredとは": "クライアントから呼べるが「境界の約束がそもそも無い」RPC の除外リスト（理由必須）。例: 引数も状態も持たず公開情報だけを返す関数。認可述語（is_admin 等）は自分の状態しか返さないが、SECURITY DEFINER で RLS の要なので除外せず、他人の id で false が返るテストを書く側に置く",

@@ -46,6 +46,27 @@ Next.js API Route（`requireFacilityAccess`等）を経由せず直接呼び出�
 
 詳細: [`decisions/db-rls.md`](./decisions/db-rls.md#なぜ施設分離をrls--is_facility_member関数で実現したか)
 
+### 「GRANT を書いていない」を「呼べない」と読む（2026-09-06）
+
+**チェック内容:** `CREATE FUNCTION` した関数に `GRANT EXECUTE ... TO service_role` だけを書き、
+コメントに「service_role のみ実行可能」と注記しても、PostgreSQL は関数の EXECUTE を既定で
+`PUBLIC` に与えるため anon / authenticated からも PostgREST 経由で呼べる。client に公開しない
+関数は `REVOKE ALL ON FUNCTION f(...) FROM PUBLIC, anon, authenticated;` を明示し、その後に
+service_role へ GRANT し直す（順序が逆だと service_role も失う）。`REVOKE ... FROM authenticated`
+だけでは PUBLIC 経由の権限が残る。
+
+**なぜ再発したか:** 20260714000001 / 20260714000003 の schema drift 系 4 関数（`check_schema_drift`
+/ `record_schema_drift` / `record_issue_url` / `refresh_schema_baseline_snapshot`）がこの形で、
+SECURITY DEFINER の書き込み関数を anon キーで呼べる状態が約 2 か月続いた（施設データは RLS で
+守られていたが、drift 検知の baseline と記録は誰でも書き換えられた）。テーブルの GRANT は
+`REVOKE ALL ... FROM anon` を横断確認していた（issue #461）のに、関数の既定権限は誰も列挙して
+いなかった。20260906000001 で是正。
+
+**機械検知:** `constraint_coverage_ratchet.test.ts` の P-043（`findExposedRpcWithoutBoundaryTest`）が
+migration を適用順に畳み込み、GRANT の無い関数を「PUBLIC 既定で呼べる」として列挙する。
+呼べるのに境界テストで `.rpc()` されていない関数が増えると落ちる。`bash scripts/check-constraint-coverage.sh`
+で現状の一覧を怪しい順に見られる。
+
 ### 後付けFK列のカーディナリティを宣言しないまま放置する（issue #675）
 
 **チェック内容:** 既存テーブルへ `ALTER TABLE ... ADD COLUMN ... REFERENCES` で
