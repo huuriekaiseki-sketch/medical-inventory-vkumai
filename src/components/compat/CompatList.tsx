@@ -1,6 +1,7 @@
 'use client'
 
 import type { ProductCompatibility } from '@/types/compatibility'
+import { formatJstDate } from '@/lib/format-date'
 
 type CompatListProps = {
   items: ProductCompatibility[]
@@ -22,7 +23,7 @@ function formatProductLabel(product: { name: string; jan: string; maker: string 
 }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('ja-JP')
+  return formatJstDate(iso)
 }
 
 export function CompatList({ items, isAdmin, onDelete, hasFilter, isLoading, onAddClick }: CompatListProps) {

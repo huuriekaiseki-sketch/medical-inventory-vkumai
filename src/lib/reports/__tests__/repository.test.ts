@@ -16,7 +16,7 @@ describe('fetchOrderAmountReport', () => {
 
     expect(rpc).toHaveBeenCalledWith('get_order_amount_report', {
       p_date_from: '2026-07-01T00:00:00+09:00',
-      p_date_to: '2026-07-31T23:59:59+09:00',
+      p_date_to: '2026-07-31T23:59:59.999999+09:00',
     })
   })
 

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asOptionalString } from '@/lib/mapping'
 import { jstDayStart, jstDayEnd } from '@/lib/jst-date-range'
 import type { OrderListItem, OrderListFilter, OrderKind } from '@/types/order'
+import { formatJstDate } from '@/lib/format-date'
 
 // WHY(重複実装について・issue #20 レビュー指摘: 型安全・データ層の整合 important):
 //   listCaseOrders/listConsumableOrders/listLoanOrders/listLoanReturns と本ファイルの
@@ -206,7 +207,7 @@ async function fetchLoanReturnItems(db: SupabaseClient, facilityId: string, filt
       kind: 'loan_return' as const,
       facilityId: asString(r.facility_id),
       status: asString(r.status),
-      summary: `返却 ${new Date(asString(r.return_datetime)).toLocaleDateString('ja-JP')}`,
+      summary: `返却 ${formatJstDate(asString(r.return_datetime))}`,
       createdAt: asString(r.created_at),
     }))
 }

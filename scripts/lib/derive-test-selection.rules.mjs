@@ -44,6 +44,7 @@ export const RULES = [
   { key: 'pii-log', label: 'PII のログ流出検査', timing: 'always', commands: ['npm run lint', 'bash scripts/check-pii-leak.test.sh'] },
   { key: 'secret-scan', label: '秘密情報の走査', timing: 'always', commands: ['bash scripts/check-secret-leak.test.sh'] },
   { key: 'security-headers', label: 'セキュリティヘッダ', timing: 'always', commands: ['npm test'] },
+  { key: 'timezone', label: '時刻・タイムゾーン', timing: 'always', commands: ['npm test', 'npm run lint'] },
   { key: 'workflow-sync', label: 'ワークフロー同期テスト', timing: 'always', commands: ['npm test'] },
   {
     key: 'hook-regression',

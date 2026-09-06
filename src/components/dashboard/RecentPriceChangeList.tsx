@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import type { RecentPriceChange } from '@/types/dashboard'
 import { FIELD_LABEL, ENTITY_LABEL } from '@/types/priceHistory'
+import { formatJstDateTimeShort } from '@/lib/format-date'
 
 type RecentPriceChangeListProps = {
   items: RecentPriceChange[]
@@ -14,13 +15,7 @@ function formatPrice(value: number | null): string {
 }
 
 function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('ja-JP', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return formatJstDateTimeShort(iso)
 }
 
 export function RecentPriceChangeList({ items }: RecentPriceChangeListProps) {

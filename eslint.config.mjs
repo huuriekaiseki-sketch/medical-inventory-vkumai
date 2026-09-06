@@ -30,6 +30,27 @@ const eslintConfig = defineConfig([
     files: ["src/lib/log-safe.ts"],
     rules: { "no-console": "off" },
   },
+  // WHY: issue #757 の 15（タイムゾーン）。toLocale*String は実行環境のタイムゾーンで整形するため、
+  //      Vercel（UTC）でサーバー整形すると JST の日付が前日になる。日付の整形は
+  //      src/lib/format-date.ts（Asia/Tokyo 固定）だけに置き、直接呼び出しを機械的に禁止する。
+  //      数値の toLocaleString（価格の桁区切り）は対象外
+  {
+    files: ["src/**/*.ts", "src/**/*.tsx"],
+    ignores: ["src/lib/format-date.ts", "**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.property.name=/^toLocale(Date|Time)String$/]",
+          message: "日付の整形は src/lib/format-date.ts の formatJst* を使う（Asia/Tokyo 固定。issue #757 の 15）",
+        },
+        {
+          selector: "CallExpression[callee.property.name='toLocaleString'][callee.object.type='NewExpression'][callee.object.callee.name='Date']",
+          message: "日付の整形は src/lib/format-date.ts の formatJst* を使う（Asia/Tokyo 固定。issue #757 の 15）",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

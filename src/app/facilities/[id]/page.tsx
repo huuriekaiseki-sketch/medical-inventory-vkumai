@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { Facility } from '@/types/facility'
 import { useFacilityRole } from '@/hooks/useFacilityRole'
 import { OrderButtons } from '@/components/orders/OrderButtons'
+import { formatJstDate } from '@/lib/format-date'
 
 export default function FacilityDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -78,7 +79,7 @@ export default function FacilityDetailPage({ params }: { params: Promise<{ id: s
                 登録日
               </th>
               <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
-                {new Date(facility.createdAt).toLocaleDateString('ja-JP')}
+                {formatJstDate(facility.createdAt)}
               </td>
             </tr>
             <tr>
@@ -86,7 +87,7 @@ export default function FacilityDetailPage({ params }: { params: Promise<{ id: s
                 更新日
               </th>
               <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
-                {new Date(facility.updatedAt).toLocaleDateString('ja-JP')}
+                {formatJstDate(facility.updatedAt)}
               </td>
             </tr>
           </tbody>
