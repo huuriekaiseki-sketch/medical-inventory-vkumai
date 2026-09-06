@@ -19,7 +19,8 @@ import {
   type SeedProductCompatibilitiesFixtures,
 } from './helpers/seed-rls-idor'
 
-describe('product_compatibilities DB制約', () => {
+// 不変条件カタログ（docs/agents/invariant-catalog.md）: I-032 互換ペアは自己参照せず順序付きで 1 件
+describe('product_compatibilities DB制約 [I-032]', () => {
   let fixtures: SeedProductCompatibilitiesFixtures
   const db = createServiceRoleClient()
 

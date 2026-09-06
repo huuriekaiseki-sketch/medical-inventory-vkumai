@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asNumber, asNullableNumber } from '@/lib/mapping'
 import { ClientVisibleError } from '@/lib/client-visible-error'
+import { toRepositoryError } from '@/lib/invariant-error'
 import type { HospitalPrice, HospitalPriceInput } from '@/types/hospitalPrice'
 
 const HOSPITAL_PRICE_COLUMNS =
@@ -74,7 +75,7 @@ export async function createHospitalPrice(db: SupabaseClient, input: HospitalPri
   if (error) {
     if (error.code === '23505') throw new ClientVisibleError('この代理店商品と施設の組み合わせは既に登録されています')
     if (error.code === '23503') throw new ClientVisibleError('代理店商品または施設が存在しません')
-    throw new Error(error.message)
+    throw toRepositoryError(error)
   }
   return mapHospitalPrice(data)
 }
@@ -104,7 +105,7 @@ export async function updateHospitalPrice(db: SupabaseClient, id: string, input:
     if (error.code === 'PGRST116') throw new ClientVisibleError(`病院別価格ID "${id}" は存在しません`)
     if (error.code === '23505') throw new ClientVisibleError('この代理店商品と施設の組み合わせは既に登録されています')
     if (error.code === '23503') throw new ClientVisibleError('代理店商品または施設が存在しません')
-    throw new Error(error.message)
+    throw toRepositoryError(error)
   }
   return mapHospitalPrice(data)
 }

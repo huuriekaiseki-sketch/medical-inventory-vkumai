@@ -3,6 +3,7 @@ import { asString, asOptionalString, asNumber, asNullableNumber, asEnum } from '
 import { jstDayStart, jstDayEnd } from '@/lib/jst-date-range'
 import { KEYWORD_SCAN_LIMIT, type OrderRepositoryFilter } from '@/lib/orders/list-filter'
 import type { CaseOrder, CaseOrderInput, CaseOrderItem } from '@/types/order'
+import { toRepositoryError } from '@/lib/invariant-error'
 
 const GENDERS = ['male', 'female', 'other'] as const
 const STATUSES = ['draft', 'submitted'] as const
@@ -120,7 +121,7 @@ export async function createCaseOrder(db: SupabaseClient, facilityId: string, in
       quantity: item.quantity,
     })),
   })
-  if (error) throw new Error(error.message)
+  if (error) throw toRepositoryError(error)
 
   const o = (data ?? {}) as CaseOrderRow & { items?: unknown }
   const itemRows = Array.isArray(o.items) ? (o.items as CaseOrderItemRow[]) : []

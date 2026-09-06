@@ -3,6 +3,7 @@ import { asString, asOptionalString, asNumber, asEnum } from '@/lib/mapping'
 import { jstDayStart, jstDayEnd } from '@/lib/jst-date-range'
 import { KEYWORD_SCAN_LIMIT, type OrderRepositoryFilter } from '@/lib/orders/list-filter'
 import { ClientVisibleError } from '@/lib/client-visible-error'
+import { toRepositoryError } from '@/lib/invariant-error'
 import type { LoanReturn, LoanReturnInput, LoanReturnItem } from '@/types/order'
 
 const STATUSES = ['draft', 'returned'] as const
@@ -141,7 +142,7 @@ export async function createLoanReturn(db: SupabaseClient, facilityId: string, i
     //      含む文字列)をそのままthrowするとスキーマ情報が漏洩しうるため、ClientVisibleError
     //      として翻訳しroute側で400として扱えるようにする(consumables/repository.ts:53と同じパターン)
     if (error.code === '23505') throw new ClientVisibleError('この短貸発注は既に返却登録されています')
-    throw new Error(error.message)
+    throw toRepositoryError(error)
   }
   if (!data) throw new ClientVisibleError('loan_returns の作成に失敗しました')
 

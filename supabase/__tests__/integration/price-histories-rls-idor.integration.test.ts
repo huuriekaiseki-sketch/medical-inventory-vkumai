@@ -25,7 +25,8 @@ import {
 } from './helpers/seed-rls-idor'
 
 // 約束カタログ（docs/agents/promise-catalog.md）: P-010 他施設は読めない / P-015 自施設は通る（対照）/ P-051 書き込みはトリガーのみ
-describe('price_histories RLS/IDOR・DB制約 [P-010 P-015 P-051]', () => {
+// 不変条件カタログ（docs/agents/invariant-catalog.md）: I-041 価格履歴は値が変わったときだけ増え直接 INSERT できない
+describe('price_histories RLS/IDOR・DB制約 [P-010 P-015 P-051 I-041]', () => {
   let fixtures: SeedPriceHistoriesFixtures
 
   beforeAll(async () => {

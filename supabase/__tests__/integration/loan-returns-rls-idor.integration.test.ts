@@ -18,7 +18,8 @@ import {
 } from './helpers/seed-rls-idor'
 
 // 約束カタログ（docs/agents/promise-catalog.md）: P-010 他施設は読めない / P-012 RPC に他施設 id は forbidden / P-015 自施設は通る（対照）/ P-050 返却は 1 件まで
-describe('loan_returns RLS/IDOR [P-010 P-012 P-015]', () => {
+// 不変条件カタログ（docs/agents/invariant-catalog.md）: I-030 短貸発注 1 件に返却は 1 件まで
+describe('loan_returns RLS/IDOR [P-010 P-012 P-015 I-030]', () => {
   let fixtures: SeedLoanReturnsRlsIdorFixtures
 
   beforeAll(async () => {

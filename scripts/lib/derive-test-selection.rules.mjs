@@ -163,6 +163,18 @@ export const RULES = [
     commands: ['(個別テスト) 同じ入力で RPC を2回呼び、件数・状態が変わらないことを統合テストで Assert する'],
   },
   {
+    key: 'invariants',
+    label: '業務不変条件（DB 制約）',
+    timing: 'on-change',
+    trigger: ctx => {
+      // 不変条件を守るのは DB（migration）で、破る側の入口は発注・返却・価格のリポジトリ
+      const hits = anyPath(ctx.files, /^supabase\/migrations\/[^/]*\.sql$|^src\/lib\/(loan-orders|case-orders|consumable-orders|loan-returns|hospital-prices)\/|^src\/lib\/invariant-error\.ts$|^docs\/agents\/invariant-catalog\.md$/)
+      return { hit: hits.length > 0, why: `不変条件を守る migration か、破る側の入口に触れた: ${hits.join(', ')}` }
+    },
+    notRequiredReason: 'migration・発注/返却/価格のリポジトリ・不変条件カタログに触れていない',
+    commands: ['npm run test:integration', 'bash scripts/check-invariant-catalog.test.sh'],
+  },
+  {
     key: 'concurrency',
     label: '同時実行',
     timing: 'on-change',
