@@ -34,6 +34,7 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 | 読み取り専用ロールの Bash ガード（settings.json の PreToolUse で `agent_type` を見て書き込み系コマンドを deny） | `scripts/check-readonly-bash.sh`、`READONLY_AGENT_TYPES` | issue #713。「ロール名の集合 × コマンド分類」で deny する方式は汎用。ロール名一覧（sweep-* / reviewer 等）はエージェント構成に依存 |
 | docs 整合性検査（相対リンク・見出しアンカー・パス言及の実在、歴史的マーカー付きは免除） | `scripts/lib/check-docs-integrity.mjs`、`.github/workflows/docs-integrity-check.yml` | issue #714。検査の 3 種と GitHub の slug 規則は汎用。`PATH_MENTION_PREFIXES`（`scripts/` `supabase/` 等）と歴史的マーカー語（削除済み・廃止済み等）はリポジトリ固有 |
 | eval fixture の中立性検査（fixture コードに「ベンチマーク用・意図的」等の自己申告語を書かせない）と、recall 判定器の「非 JSON 応答は生出力で判定」「期待パスの配列（いずれか一致）」 | `scripts/check-eval-fixtures-neutral.test.sh`、`scripts/eval-sweep-recall.sh`、`scripts/lib/judge-sweep-recall.py` | issue #731。「評価対象に正解を教えない」「MISS = 見落としではない、判定器・fixture・エージェントを生出力で切り分ける」という原則は LLM 評価一般に通用する。禁止語の一覧は日本語運用固有 |
+| 検査そのものを配る仕組み（検査は対象スクリプトと同じ層に自動で付いていく／対象を持たない構造テストだけを層の表に書く／配らないものは理由を書く／未分類があれば落とす） | `scripts/lib/plugin-layout.json` の `checks` `checksNotDistributed`、`scripts/lib/build-plugin.mjs`、`scripts/check-plugin-check-coverage.test.sh` | 2026-09-07。「ルールを配るなら、そのルールの検査も一緒に配る」という原則と、層を決めるまで通さないゲートは汎用。どの検査がどちらの層かはリポジトリ固有 |
 | 実行痕跡の鮮度チェックを warning でなく失敗にし、免除は PR 本文の申告（`eval-skip: <理由>`）に限定する運用 | `scripts/check-eval-runs-freshness.sh`、`.github/workflows/eval-runs-freshness-check.yml` | issue #496。「`::warning::` は run を開かないと見えず 3 PR で無視された」という教訓と、本文申告による免除の形は汎用 |
 
 ## このリポジトリ・スタック固有と考えられる部分
