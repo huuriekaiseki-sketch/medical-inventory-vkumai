@@ -193,8 +193,8 @@ echo "=== scenario 4: 実態のカタログの ID は区分ごとの番号帯に
 BAD_BAND=0
 for id in $(catalog_rows "$CATALOG" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}'); do
   case "$id" in
-    P-00[0-9]|P-01[0-9]|P-02[0-9]|P-03[0-9]|P-04[0-9]|P-05[0-9]) ;;
-    *) echo "    band: $id は定義済みの番号帯（00x〜05x）に無い"; BAD_BAND=1 ;;
+    P-00[0-9]|P-01[0-9]|P-02[0-9]|P-03[0-9]|P-04[0-9]|P-05[0-9]|P-06[0-9]) ;;
+    *) echo "    band: $id は定義済みの番号帯（00x〜06x）に無い"; BAD_BAND=1 ;;
   esac
 done
 if [ "$BAD_BAND" -eq 0 ]; then assert_ok "全 ID が番号帯に収まる"; else assert_fail "番号帯の外の ID がある（区分を増やしたら凡例とこの検査を同時に更新する）"; fi

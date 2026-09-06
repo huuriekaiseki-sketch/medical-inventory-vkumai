@@ -10,7 +10,7 @@ UI や取込などそれ以外の層は [テスト一覧](./test-matrix.md) の�
 - 列は固定 9 列: ID / 約束 / Arrange / Act / Assert（肯定）/ Assert（否定）/ 境界値 / 守るテスト / 実施タイミング。
   列の中に `|` を書かない（列ずれは構造テストが違反として数える）。
 - ID は `P-` + 3 桁。区分ごとに 10 刻み（認証 00x / 施設境界 01x / ロール・admin 境界 02x / AAL2 03x /
-  RLS 衛生 04x / 施設境界に関わる DB 制約 05x）。欠番は詰めない（過去の PR 本文が ID を参照するため）。
+  RLS 衛生 04x / 施設境界に関わる DB 制約 05x / 監査 06x）。欠番は詰めない（過去の PR 本文が ID を参照するため）。
 - 守るテスト列はバッククォートでファイルパスを書く。**そのファイルの中に ID 文字列が実在する**ことを
   `scripts/check-promise-catalog.test.sh`（CI `hooks-test` ジョブ）が検査する（kojigyo の「ファイル存在
   だけ」の検査ではテスト名のリネームに追従しなかった穴を塞ぐ）。逆に、テストコードにあるのに
@@ -74,3 +74,11 @@ UI や取込などそれ以外の層は [テスト一覧](./test-matrix.md) の�
 | P-050 | 短貸発注 1 件に返却は 1 件まで。2 回目の登録も、2 件の同時送信も 1 件だけ残る（issue #675） | 施設 A の短貸発注 1 件 | 同じ `loan_order_id` で返却登録を 2 回連続、および 2 件同時送信 | 1 回目は成功 | 2 回目はエラー。同時送信は成功 1 / 失敗 1、`loan_returns` 該当行は 1 件 | 同時送信 | `supabase/__tests__/integration/loan-returns-rls-idor.integration.test.ts` | 変更時 |
 | P-051 | 価格履歴は直接 INSERT できず、SECURITY DEFINER トリガーだけが書き、価格が変わらない更新では増えない | 施設 A の仕入価格 | 自施設ユーザーが `price_histories` へ insert、`hospital_prices` を更新 | 価格変更で施設スコープの履歴が正しい内容で残る | 直接 insert は拒否（`price_histories_no_insert`）。同値更新で履歴が増えない | `IS DISTINCT FROM` | `supabase/__tests__/integration/price-histories-rls-idor.integration.test.ts` | 変更時 |
 | P-052 | 施設別価格（`hospital_prices`）の同じ行を複数の利用者が同時に保存しても後勝ちの上書きにならない。更新は読み込み時の `updatedAt` を `expectedUpdatedAt` として渡す楽観ロックで 1 件だけ成功し、競合側は 409（本文で UNIQUE 違反と区別）。同じ組み合わせへの並列 INSERT は UNIQUE で 1 件 | 施設 A の価格 1 行と同施設の利用者 2 人（別セッション） | 2 人が同じ行を読んでから並列に保存。古い `updatedAt` で再保存。同じ組み合わせを並列 INSERT | 成功側の値が残り、読み直した `updatedAt` なら通る | 競合側はエラー、価格履歴は 1 件しか増えない、INSERT は 23505 | `expectedUpdatedAt` 省略時は無条件更新（後方互換。API 経由の画面は必ず渡す） | `supabase/__tests__/integration/hospital-prices-concurrency.integration.test.ts`、`src/app/api/hospital-prices/[id]/__tests__/route.test.ts` | 変更時 |
+
+## 監査（誰が何を変えたか）
+
+| ID | 約束 | Arrange | Act | Assert（肯定） | Assert（否定） | 境界値 | 守るテスト | 実施タイミング |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| P-060 | 施設スコープの業務データ・所属（権限）・マスタへの INSERT / UPDATE / DELETE は、経路（RPC・API・service_role の直接操作・migration）によらず `audit_log` に 1 行残る。誰（`actor_id` / `actor_role`）・いつ・どの表のどの行・変わった列・変更前後の値を持つ | 施設 A の価格 1 行、利用者 A、service_role | RPC で発注、service_role で価格を UPDATE / DELETE、所属の role を変更、同値 UPDATE | INSERT / UPDATE / DELETE の各行が actor と facility_id 付きで残り、`changed_columns` は変わった列だけ | 同値 UPDATE（updated_at だけが動く）では増えない | `user_facilities` は id を持たず row_id が null。service_role は actor_id が null で role が service_role | `supabase/__tests__/integration/audit-log-rls-idor.integration.test.ts`、`supabase/migrations/__tests__/add_audit_log.test.ts` | 変更時 |
+| P-061 | `audit_log` は append-only。client（anon / authenticated）は INSERT / UPDATE / DELETE できず、service_role でも UPDATE / DELETE / TRUNCATE はトリガーが拒否する。記録は SECURITY DEFINER のトリガーだけが書く | 自施設の監査行 1 件 | client と service_role が UPDATE / DELETE、client が INSERT | — | いずれも 42501。行の内容は変わらない | Supabase 既定権限（ALL）を 3 ロールとも REVOKE してから SELECT だけ GRANT | `supabase/__tests__/integration/audit-log-rls-idor.integration.test.ts`、`supabase/migrations/__tests__/add_audit_log.test.ts` | 変更時 |
+| P-062 | 監査行は施設境界を守る。他施設の利用者は施設 A の行を主キー直指定でも読めず、自施設の利用者は自施設の行を、admin は全施設の行を読める。anon は読めない | 施設 A / B の利用者、admin | 各立場で `audit_log` を SELECT | 自施設・admin は取得できる | 他施設は空、anon は 42501 | `facility_id` が null の行（マスタ）は admin だけが読める | `supabase/__tests__/integration/audit-log-rls-idor.integration.test.ts` | 変更時 |
