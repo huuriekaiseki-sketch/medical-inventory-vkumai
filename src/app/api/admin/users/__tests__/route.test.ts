@@ -81,6 +81,44 @@ describe('GET /api/admin/users', () => {
     expect(body.users[1].facilities).toEqual([])
   })
 
+  // WHY(#757-32): listUsers() は既定で 1 ページ 50 件しか返さない。全ページを取り切らないと
+  //      51 人目から画面にも API にも出ない（2026-09-07 に 60 人作って実測）。
+  it('利用者が 1 ページに収まらないときも全員を返す（ページを取り切る）', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: ADMIN_ID, email: ADMIN_EMAIL } } })
+    const page1 = Array.from({ length: 1000 }, (_, i) => ({
+      id: `u-${i}`,
+      email: `u${i}@example.test`,
+      last_sign_in_at: null,
+    }))
+    const page2 = [{ id: 'u-1000', email: 'u1000@example.test', last_sign_in_at: null }]
+    mockListUsers
+      .mockResolvedValueOnce({ data: { users: page1 }, error: null })
+      .mockResolvedValueOnce({ data: { users: page2 }, error: null })
+    mockFrom.mockReturnValue({
+      select: () => ({ in: async () => ({ data: [], error: null }) }),
+    })
+
+    const res = await GET()
+    const body = await res.json()
+
+    expect(mockListUsers).toHaveBeenCalledTimes(2)
+    expect(mockListUsers).toHaveBeenNthCalledWith(1, { page: 1, perPage: 1000 })
+    expect(mockListUsers).toHaveBeenNthCalledWith(2, { page: 2, perPage: 1000 })
+    expect(body.users).toHaveLength(1001)
+    expect(body.users.at(-1).id).toBe('u-1000')
+  })
+
+  it('2 ページ目の取得が失敗したら 500 を返す（黙って途中まで返さない）', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: ADMIN_ID, email: ADMIN_EMAIL } } })
+    const page1 = Array.from({ length: 1000 }, (_, i) => ({ id: `x-${i}`, email: `x${i}@example.test`, last_sign_in_at: null }))
+    mockListUsers
+      .mockResolvedValueOnce({ data: { users: page1 }, error: null })
+      .mockResolvedValueOnce({ data: { users: [] }, error: { message: 'boom' } })
+
+    const res = await GET()
+    expect(res.status).toBe(500)
+  })
+
   it('DBのroleが想定外の値の場合はstaffにフォールバックする', async () => {
     mockListUsers.mockResolvedValue({
       data: { users: [{ id: 'u1', email: 'a@test.com', last_sign_in_at: null }] },
