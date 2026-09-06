@@ -79,8 +79,16 @@ export async function createHospitalPrice(db: SupabaseClient, input: HospitalPri
   return mapHospitalPrice(data)
 }
 
+export const HOSPITAL_PRICE_CONFLICT_MESSAGE =
+  '他の利用者が先に更新または削除しました。最新の内容を読み込み直してから再度保存してください'
+
 export async function updateHospitalPrice(db: SupabaseClient, id: string, input: HospitalPriceInput): Promise<HospitalPrice> {
-  const { data, error } = await db
+  // WHY(P-052 楽観ロック): 同じ価格行を 2 人が同時に開いて保存すると、後から保存した側が
+  //      相手の変更を黙って上書きする（lost update）。読み込み時の updated_at を WHERE に入れ、
+  //      一致する行だけを更新する。updated_at は BEFORE UPDATE トリガーが毎回 now() にするので、
+  //      誰かが先に更新していれば一致せず 0 行 → PGRST116 になり、それを競合として返す。
+  //      値は API が返した文字列をそのまま送り返す（Date に変換するとマイクロ秒が落ちて一致しない）。
+  let query = db
     .from('hospital_prices')
     .update({
       distributor_product_id: input.distributorProductId,
@@ -89,9 +97,10 @@ export async function updateHospitalPrice(db: SupabaseClient, id: string, input:
       delivery_price: input.deliveryPrice,
     })
     .eq('id', id)
-    .select(HOSPITAL_PRICE_COLUMNS)
-    .single()
+  if (input.expectedUpdatedAt) query = query.eq('updated_at', input.expectedUpdatedAt)
+  const { data, error } = await query.select(HOSPITAL_PRICE_COLUMNS).single()
   if (error) {
+    if (error.code === 'PGRST116' && input.expectedUpdatedAt) throw new ClientVisibleError(HOSPITAL_PRICE_CONFLICT_MESSAGE)
     if (error.code === 'PGRST116') throw new ClientVisibleError(`病院別価格ID "${id}" は存在しません`)
     if (error.code === '23505') throw new ClientVisibleError('この代理店商品と施設の組み合わせは既に登録されています')
     if (error.code === '23503') throw new ClientVisibleError('代理店商品または施設が存在しません')

@@ -13,10 +13,16 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
+// vi.mock は巻き上げられるので、factory から参照する値は vi.hoisted で先に定義する
+const { CONFLICT_MESSAGE } = vi.hoisted(() => ({
+  CONFLICT_MESSAGE: '他の利用者が先に更新または削除しました。最新の内容を読み込み直してから再度保存してください',
+}))
+
 vi.mock('@/lib/hospital-prices/repository', () => ({
   getHospitalPrice: (...args: unknown[]) => mockGetHospitalPrice(...args),
   updateHospitalPrice: (...args: unknown[]) => mockUpdateHospitalPrice(...args),
   deleteHospitalPrice: (...args: unknown[]) => mockDeleteHospitalPrice(...args),
+  HOSPITAL_PRICE_CONFLICT_MESSAGE: CONFLICT_MESSAGE,
 }))
 
 vi.mock('@/lib/supabase/require-facility-access', () => ({
@@ -115,6 +121,20 @@ describe('PUT /api/hospital-prices/[id]', () => {
     expect(res.status).toBe(200)
     expect(mockRequireFacilityAccess).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'f1')
     expect(mockRequireFacilityAccess).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'f2')
+  })
+
+  // 約束カタログ（docs/agents/promise-catalog.md）: P-052 同一行の同時更新は競合側が拒否される
+  it('楽観ロックの競合（他の利用者が先に更新）は 409 と区別できるメッセージを返す [P-052]', async () => {
+    authenticated()
+    mockGetHospitalPrice.mockResolvedValue({ id: 'hp1', ...validInput })
+    mockUpdateHospitalPrice.mockRejectedValue(new Error(CONFLICT_MESSAGE))
+    const staleInput = { ...validInput, expectedUpdatedAt: '2026-09-06T00:00:00.000000+00:00' }
+    const req = new Request('http://localhost', { method: 'PUT', body: JSON.stringify(staleInput) })
+    const res = await PUT(req as never, context)
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe(CONFLICT_MESSAGE)
+    // expectedUpdatedAt はそのままリポジトリへ渡る（ここで落とすと楽観ロックが黙って無効になる）
+    expect(mockUpdateHospitalPrice).toHaveBeenCalledWith(expect.anything(), 'hp1', expect.objectContaining({ expectedUpdatedAt: staleInput.expectedUpdatedAt }))
   })
 
   it('認証済み・アクセス権ありで正常に更新できる（facilityId変更なし）', async () => {
