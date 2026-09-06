@@ -110,7 +110,13 @@ v2 以降で「プラグインが正本、vkumai も消費者」へ反転する�
   clone せずに済み、移行手順・互換性を壊す変更・変更履歴を版に紐づけて管理できる
 - **受け入れ条件が通るまでの検証は (b) vkumai 内 `dist/plugins/`** に生成物を置き、
   `claude --plugin-dir` で読む。生成スクリプトの出力先を変えるだけで (a) へ移せる
-- リポジトリ作成（GitHub 上の操作）はユーザー側の作業。受け入れ条件が通った時点で依頼する
+- 2026-09-06: 非公開リポジトリ `huuriekaiseki-sketch/aidd-plugins` を作成し、`scripts/build-plugin.sh --marketplace
+  --out ~/aidd-plugins/plugins` で `.claude-plugin/marketplace.json`・README・両プラグインを生成して push、
+  `aidd-core--v0.1.0` / `aidd-vkumai--v0.1.0` をタグ付け。`claude plugin marketplace add
+  huuriekaiseki-sketch/aidd-plugins` → 検証リポジトリで `claude plugin install aidd-vkumai@aidd-plugins
+  --scope project` を実行すると **依存の aidd-core がタグ経由で自動 install**（`resolvedVersion: 0.1.0`、
+  `auto: true`）され、`--plugin-dir` 無しのセッションで hook が読み込まれた（`claude plugin list --json` に
+  errors 無し）。vkumai 内の `dist/plugins/` は CI の鮮度検査用に残す（配布物と同一内容）
 
 **仕様承認**: 2026-09-05 ユーザー承認（停止①通過）。
 

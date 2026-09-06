@@ -68,6 +68,14 @@ ok "両プラグインに 5 文書と evidence/ がある（欠落があれば�
 REVIEWED="$(grep -o -E 'Claude Code \| [0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/docs/agents/upstream-docs-review.md" | head -n1 | grep -o -E '[0-9]+\.[0-9]+\.[0-9]+' || true)"
 if [ -n "$REVIEWED" ] && grep -q "$REVIEWED" "$WORK/a/aidd-core/COMPATIBILITY.md"; then ok "COMPATIBILITY.md が docs 確認版 $REVIEWED を含む"; else ng "COMPATIBILITY.md の版が upstream-docs-review と食い違う（reviewed=$REVIEWED）"; fi
 
+echo "=== scenario 4c: --marketplace で出力先の親に marketplace.json と README を書く（配布形態 (a)） ==="
+node "$BUILD" --marketplace --out "$WORK/mp/plugins" >/dev/null
+[ -f "$WORK/mp/.claude-plugin/marketplace.json" ] && ok "marketplace.json がある" || ng "marketplace.json が無い"
+if jq -e '.metadata.pluginRoot == "./plugins" and (.plugins | length) == 2 and (.plugins[0].version | length) > 0' "$WORK/mp/.claude-plugin/marketplace.json" >/dev/null; then ok "pluginRoot と 2 プラグイン・版がある"; else ng "marketplace.json の内容"; fi
+[ -f "$WORK/mp/README.md" ] && ok "README がある" || ng "README が無い"
+if jq -e '.author.name and .metadata.generatedBy' "$WORK/mp/plugins/aidd-core/.claude-plugin/plugin.json" >/dev/null; then ok "plugin.json に author と metadata.generatedBy がある（validate の警告なし）"; else ng "plugin.json の author / metadata"; fi
+if jq -e 'has("hooks") | not' "$WORK/mp/plugins/aidd-core/.claude-plugin/plugin.json" >/dev/null; then ok "plugin.json に hooks を書かない（自動読み込みと重複するため）"; else ng "plugin.json に hooks が残っている"; fi
+
 echo "=== scenario 5: RED 方向（fixture のミニリポジトリ） ==="
 FX="$WORK/fixture"
 mkdir -p "$FX/.claude/agents" "$FX/.claude/workflows" "$FX/scripts/lib"

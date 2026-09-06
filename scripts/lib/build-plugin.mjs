@@ -32,11 +32,13 @@ import { createHash } from 'node:crypto'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 function parseArgs(argv) {
-  const opts = { out: null, check: false, source: null, layout: null, json: false }
+  const opts = { out: null, check: false, source: null, layout: null, json: false, marketplace: false }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--out') opts.out = argv[++i]
     else if (a === '--check') opts.check = true
+    // --marketplace: 出力先の親（配布リポジトリのルート）に .claude-plugin/marketplace.json と README を書く
+    else if (a === '--marketplace') opts.marketplace = true
     else if (a === '--source') opts.source = argv[++i]
     else if (a === '--layout') opts.layout = argv[++i]
     else if (a === '--json') opts.json = true
@@ -174,9 +176,11 @@ function build(outRoot) {
       version: meta.version,
       description: meta.description,
       dependencies: meta.dependencies ?? [],
+      author: layout.marketplace?.owner,
       // hooks/hooks.json は自動で読まれる。manifest に "hooks" を書くと重複扱いで
-      // "Hook load failed: Duplicate hooks file" になる（2026-09-05 プラグイン経由の実走ドリルで発見）
-      generatedBy: 'AIDD plugin build (issue #420). 生成物なので手で編集しない。正本は中心リポジトリの .claude/ と scripts/',
+      // "Hook load failed: Duplicate hooks file" になる（2026-09-05 プラグイン経由の実走ドリルで発見）。
+      // 生成元の注記は Claude Code が読まない自由領域 metadata に置く（validate の Unknown field 警告を避ける）
+      metadata: { generatedBy: 'AIDD plugin build (issue #420). 生成物なので手で編集しない。正本は中心リポジトリの .claude/ と scripts/' },
     }, null, 2) + '\n')
     put(plugin, 'hooks/hooks.json', JSON.stringify(buildHooksJson(settings, plugin), null, 2) + '\n')
   }
@@ -351,6 +355,47 @@ try {
       rmSync(dst, { recursive: true, force: true })
       mkdirSync(path.dirname(dst), { recursive: true })
       cpSync(path.join(tmp, plugin), dst, { recursive: true })
+    }
+    if (opts.marketplace) {
+      // 配布形態 (a): 出力先 <repo>/plugins の親に marketplace の manifest を置く（layout.marketplace が正本）
+      const mp = layout.marketplace
+      if (!mp) throw new Error('--marketplace には layout.marketplace が必要')
+      const repoRoot = path.dirname(OUT)
+      const manifest = {
+        name: mp.name,
+        owner: mp.owner,
+        description: mp.description,
+        metadata: { pluginRoot: `./${path.basename(OUT)}` },
+        plugins: pluginNames.map(p => ({
+          name: p,
+          source: p,
+          description: layout.plugins[p].description,
+          version: layout.plugins[p].version,
+        })),
+      }
+      mkdirSync(path.join(repoRoot, '.claude-plugin'), { recursive: true })
+      writeFileSync(path.join(repoRoot, '.claude-plugin/marketplace.json'), JSON.stringify(manifest, null, 2) + '\n')
+      const readme = [
+        `# ${mp.name}`,
+        '',
+        mp.description,
+        '',
+        '## 使い方',
+        '',
+        '```bash',
+        `claude plugin marketplace add ${mp.repo}`,
+        ...pluginNames.map(p => `claude plugin install ${p}@${mp.name}`),
+        '```',
+        '',
+        '## 中身',
+        '',
+        ...pluginNames.map(p => `- \`plugins/${p}\` ${layout.plugins[p].version}: ${layout.plugins[p].description}`),
+        '',
+        '生成物。手で編集しない。正本は中心リポジトリの `.claude/` と `scripts/`、生成は `scripts/build-plugin.sh --marketplace --out <このリポジトリ>/plugins`。',
+        '各プラグインのルートに COMPATIBILITY / CHANGELOG / KNOWN-LIMITS / MIGRATION / BREAKING と evidence/ がある。',
+        '',
+      ].join('\n')
+      writeFileSync(path.join(repoRoot, 'README.md'), readme)
     }
     const summary = Object.fromEntries(pluginNames.map(p => [p, (written[p] ?? []).length]))
     if (opts.json) console.log(JSON.stringify({ out: OUT, files: summary }, null, 2))

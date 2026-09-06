@@ -4,9 +4,11 @@
 
 v0 は中心リポジトリの `.claude/` と `scripts/` を導入先へ手でコピーしていた形（riff-gear / cardiosearch）。
 
-1. **インストール**（検証中は `--plugin-dir`、最終形は `claude plugin install`）
-   - `claude --plugin-dir <path>/aidd-core --plugin-dir <path>/aidd-vkumai`
-   - 依存: `aidd-vkumai` は `aidd-core` を要求する
+1. **インストール**（marketplace `aidd-plugins`。非公開リポジトリなので `gh auth login` 済みの環境で）
+   - `claude plugin marketplace add huuriekaiseki-sketch/aidd-plugins`
+   - 導入先リポジトリで `claude plugin install aidd-vkumai@aidd-plugins --scope project`
+     （依存の `aidd-core` は自動で入る。共通側だけ使うなら `aidd-core@aidd-plugins`）
+   - 開発中の生成物を直接読むなら `claude --plugin-dir <path>/aidd-core --plugin-dir <path>/aidd-vkumai`
 2. **導入先アダプターを置く**（`templates/consumer/` をコピーして値を埋める）
    - `aidd.config.json`: 高リスクの語・パス、読み取り専用ロール、検査コマンド、追記先 docs
    - `.claude/rules/*.md`: パス限定ルール（プラグインは同梱できない）
