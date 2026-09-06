@@ -8,8 +8,8 @@
 --      （他施設 ID の総当たり・admin 画面への繰り返しアクセス）は、成功した操作ではなく
 --      **失敗した操作の並び**にしか現れない。
 --
---      記録はアプリの認可ガード（requireAuth / requireFacilityAccess / requireAdmin と proxy の
---      admin ガード）から行う。RLS が黙って 0 件を返す経路はここに来ない（既知の限界。下記）。
+--      記録はアプリの認可ガード（requireAuth / requireFacilityAccess / requireAdmin）から行う。
+--      RLS が黙って 0 件を返す経路と proxy 段の拒否はここに来ない（既知の限界。下記）。
 --
 -- WHY(RPC 経由で書く): 書き手は Next.js のサーバー（service_role）だが、テーブルへ直接
 --      INSERT 権限を渡すと「監査対象のロールが監査表を自由に書ける」状態になる。
@@ -20,10 +20,16 @@
 -- WHY(append-only): audit_log と同じ。client は SELECT のみ、service_role でも
 --      UPDATE / DELETE / TRUNCATE をトリガーで拒否する。
 --
+-- WHY(route / method): Route Handler は自分のパスを知る手段を持たないので、proxy.ts が
+--      転送リクエストへ x-aidd-route / x-aidd-method を付け（クライアントの値は必ず上書き）、
+--      記録ヘルパーがそれを読む。src/lib/security/denial-headers.ts が名前の正本。
+--
 -- 既知の限界（#757 の 24 に残す）:
 --   - RLS で「見えない」ことによる拒否（SELECT が 0 件、UPDATE が 0 行）はアプリから区別できず、
 --     ここに来ない。PostgREST / Supabase のログ側で扱う
 --   - 画面（Server Component）からの読み取りは API Route を通らないので記録されない
+--   - proxy が admin パスを /login へ返す経路は未記録（Edge Runtime に service role を持ち込まない
+--     判断のため。guard = 'proxy_admin' は将来のために予約してある）
 --   - 記録に失敗してもリクエストは通常どおり拒否される（記録のためにサービスを止めない。fail-open だが
 --     「拒否そのもの」は fail-closed のまま。docs/agents/fail-open-inventory.md の型）
 --

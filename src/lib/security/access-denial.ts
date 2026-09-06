@@ -1,5 +1,7 @@
+import { headers } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database.generated'
+import { DENIAL_METHOD_HEADER, DENIAL_ROUTE_HEADER } from '@/lib/security/denial-headers'
 
 // WHY: issue #757 の 24。拒否された操作は audit_log の行トリガーに来ないので、
 //      アプリの認可ガードが弾いた瞬間にここで記録する（P-063）。
@@ -19,7 +21,8 @@ import type { Database } from '@/types/database.generated'
 //   - proxy.ts が admin パスを /login へリダイレクトする経路は、Edge Runtime に
 //     service role を持ち込まないため未記録（guard='proxy_admin' は将来のために予約）
 //   - RLS が黙って 0 件を返す拒否はアプリから見えない
-//   - route / method は proxy がヘッダを付ける段（次の PR）まで null
+//   - route / method は proxy が転送リクエストへ付けたヘッダから取る。proxy を通らない
+//     呼び出し（テスト・スクリプト）では null のまま
 
 export type DenialGuard = 'auth' | 'facility' | 'admin' | 'proxy_admin'
 export type DenialReason = 'unauthenticated' | 'facility_id_required' | 'forbidden' | 'not_admin'
@@ -29,7 +32,7 @@ export interface AccessDenial {
   reason: DenialReason
   actorId?: string | null
   facilityId?: string | null
-  /** 経路が分かる呼び出し元だけが渡す（現状は未使用。列は先に用意してある） */
+  /** 明示したいときだけ渡す。省略時は proxy が付けたヘッダから取る */
   route?: string | null
   method?: string | null
 }
@@ -50,17 +53,32 @@ function serviceRoleClient() {
   return cached
 }
 
+// proxy が付けたヘッダから経路を取る。Route Handler の外（テスト・スクリプト）では
+// headers() が使えないので、その場合は経路なしで記録する（記録自体は止めない）
+async function routeFromHeaders(): Promise<{ route: string | null; method: string | null }> {
+  try {
+    const h = await headers()
+    return { route: h.get(DENIAL_ROUTE_HEADER), method: h.get(DENIAL_METHOD_HEADER) }
+  } catch {
+    return { route: null, method: null }
+  }
+}
+
 export async function recordAccessDenial(denial: AccessDenial): Promise<void> {
   try {
     const db = serviceRoleClient()
     if (!db) return
+    const ctx =
+      denial.route !== undefined || denial.method !== undefined
+        ? { route: denial.route ?? null, method: denial.method ?? null }
+        : await routeFromHeaders()
     // WHY: 省略可の引数は undefined で渡す（SQL 側が DEFAULT NULL を持つ）。
     //      null を渡すと生成型（p_route?: string）と食い違う
     await db.rpc('record_access_denial', {
       p_guard: denial.guard,
       p_reason: denial.reason,
-      p_route: denial.route ?? undefined,
-      p_method: denial.method ?? undefined,
+      p_route: ctx.route ?? undefined,
+      p_method: ctx.method ?? undefined,
       p_actor_id: denial.actorId ?? undefined,
       p_facility_id: denial.facilityId ?? undefined,
     })
