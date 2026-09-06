@@ -1,0 +1,28 @@
+{
+  "_comment": "GitHub 復旧後にマージする順番（issue #757 の作業。2026-09-06 のアカウント停止で PR が出せず溜まった分）。bash scripts/rehearse-merge.sh で衝突を先に調べる。マージが終わったブランチは消してよい（rehearse は無いブランチを『無し』として飛ばす）。依存があるものは後ろに置く。",
+  "queue": [
+    { "label": "14 フレーキー検知", "branch": "feat/flaky-detection" },
+    { "label": "22 脅威モデル", "branch": "feat/threat-model" },
+    { "label": "21 依存の月次棚卸し", "branch": "feat/dependency-update-runbook" },
+    { "label": "31 fail-open 総点検", "branch": "feat/fail-open-inventory" },
+    { "label": "27 権限の時間変化", "branch": "feat/permission-revocation" },
+    { "label": "12 施設削除の CASCADE", "branch": "feat/facility-delete-cascade" },
+    { "label": "28 データの残存先（12・27 の上）", "branch": "feat/data-lifecycle-inventory" },
+    { "label": "33 人間系の回避経路", "branch": "feat/human-bypass-inventory" },
+    { "label": "26 代替経路（27 の上）", "branch": "feat/access-path-inventory" },
+    { "label": "13/25 リリース順序", "branch": "feat/release-safety" },
+    { "label": "36 鍵・権限の棚卸し（21 の上）", "branch": "feat/access-review-runbook" },
+    { "label": "17 エクスポート ratchet", "branch": "feat/export-path-ratchet" },
+    { "label": "37 配布物の同一性", "branch": "feat/artifact-identity" },
+    { "label": "30 供給網の演習（37 の上）", "branch": "feat/supply-chain-drill" },
+    { "label": "38 部分成功", "branch": "feat/partial-success-inventory" },
+    { "label": "39 到達範囲", "branch": "feat/blast-radius" },
+    { "label": "39 読み取りの aal2（39 の上）", "branch": "feat/require-aal2-for-reads" },
+    { "label": "24 拒否された操作の記録", "branch": "feat/access-denial-log" },
+    { "label": "19 索引と規模", "branch": "feat/query-plan-baseline" },
+    { "label": "E2E 並列フレーキー", "branch": "fix/e2e-attack-spec-parallel-flaky" },
+    { "label": "検査の配布", "branch": "feat/portable-checks" },
+    { "label": "ルールブック基盤", "branch": "feat/rulebook-engine" },
+    { "label": "マージ予行演習（このブランチ）", "branch": "feat/merge-rehearsal" }
+  ]
+}
