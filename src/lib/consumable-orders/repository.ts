@@ -3,6 +3,7 @@ import { asString, asNumber, asNullableNumber, asEnum } from '@/lib/mapping'
 import { jstDayStart, jstDayEnd } from '@/lib/jst-date-range'
 import { KEYWORD_SCAN_LIMIT, type OrderRepositoryFilter } from '@/lib/orders/list-filter'
 import type { ConsumableOrder, ConsumableOrderInput, ConsumableOrderItem } from '@/types/order'
+import { toRepositoryError } from '@/lib/invariant-error'
 
 const STATUSES = ['draft', 'submitted'] as const
 
@@ -100,7 +101,7 @@ export async function createConsumableOrder(db: SupabaseClient, facilityId: stri
       quantity: item.quantity,
     })),
   })
-  if (error) throw new Error(error.message)
+  if (error) throw toRepositoryError(error)
 
   const o = (data ?? {}) as ConsumableOrderRow & { items?: unknown }
   const itemRows = Array.isArray(o.items) ? (o.items as ConsumableOrderItemRow[]) : []

@@ -1,0 +1,199 @@
+// supabase/__tests__/integration/business-invariants.integration.test.ts
+// WHY: issue #757 の 3。不変条件カタログ（docs/agents/invariant-catalog.md）の各行は
+//      「破る操作が拒否されること」でしか確かめられない（#675 の教訓: 静的 SQL 検証は約束を破れない）。
+//      RPC 経由・直接 INSERT・service_role のそれぞれから破ろうとして 23514 で止まることを実 DB で見る。
+//      派生値（粗利・掛け率）は「常に等しい」を INSERT 直後と償還価格の変更後で確かめる。
+
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import {
+  cleanupHospitalPricesRlsIdorFixtures,
+  createServiceRoleClient,
+  seedHospitalPricesRlsIdorFixtures,
+  type SeedHospitalPricesRlsIdorFixtures,
+} from './helpers/seed-rls-idor'
+
+const CHECK_VIOLATION = '23514'
+
+describe('業務不変条件（DB 制約・トリガー） [I-010 I-011 I-012 I-013 I-014 I-020 I-040]', () => {
+  const serviceClient = createServiceRoleClient()
+  let fx: SeedHospitalPricesRlsIdorFixtures
+  let jan: string
+
+  beforeAll(async () => {
+    fx = await seedHospitalPricesRlsIdorFixtures()
+    const { data } = await serviceClient.from('products').select('jan').eq('id', fx.masters.productId).single()
+    jan = data!.jan as string
+  }, 60_000)
+
+  afterAll(async () => {
+    if (fx) await cleanupHospitalPricesRlsIdorFixtures(fx)
+  })
+
+  describe('I-010 発注明細の数量は 1 以上（RPC 経由でも止まる）', () => {
+    it('短貸発注: quantity 0 の明細は 23514 で拒否され、発注ヘッダも残らない', async () => {
+      const { error } = await fx.userA.client.rpc('create_loan_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_procedure_name: '不変条件テスト',
+        p_maker: 'テストメーカー',
+        p_items: [{ jan: null, name: '数量ゼロ', quantity: 0 }],
+      })
+      expect(error?.code).toBe(CHECK_VIOLATION)
+      const { data: rows } = await serviceClient.from('loan_orders').select('id').eq('facility_id', fx.facilityA.id).eq('procedure_name', '不変条件テスト')
+      expect(rows).toEqual([])
+    })
+
+    it('症例発注: quantity -1 の明細は 23514', async () => {
+      const { error } = await fx.userA.client.rpc('create_case_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_case_datetime: new Date().toISOString(),
+        p_procedure_name: '不変条件テスト',
+        p_patient_id: 'PT-INV-1',
+        p_patient_initials: 'I.V.',
+        p_gender: 'other',
+        p_doctor_name: 'テスト医師',
+        p_items: [{ jan, lot: null, ubd: null, quantity: -1 }],
+      })
+      expect(error?.code).toBe(CHECK_VIOLATION)
+    })
+
+    it('消耗品発注: quantity 0 の明細は 23514', async () => {
+      const { data: consumable } = await serviceClient
+        .from('consumables')
+        .insert({ facility_id: fx.facilityA.id, name: '不変条件テスト消耗品', purpose: 'test' })
+        .select('id')
+        .single()
+      const { error } = await fx.userA.client.rpc('create_consumable_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_items: [{ consumable_id: consumable!.id, quantity: 0 }],
+      })
+      expect(error?.code).toBe(CHECK_VIOLATION)
+    })
+  })
+
+  describe('I-011 返却明細の数量は 1 以上', () => {
+    it('返却 RPC: quantity 0 の明細は 23514', async () => {
+      const { error } = await fx.userA.client.rpc('create_loan_return_atomic', {
+        p_header: { facility_id: fx.facilityA.id, return_datetime: new Date().toISOString(), loan_order_id: null },
+        p_items: [{ jan, lot: null, ubd: null, quantity: 0 }],
+      })
+      expect(error?.code).toBe(CHECK_VIOLATION)
+    })
+  })
+
+  describe('I-012 明細の単価スナップショットは 0 以上（service_role の直接 INSERT でも止まる）', () => {
+    it('loan_order_items.unit_price = -1 は 23514、NULL は許される', async () => {
+      const { data: order, error: orderError } = await fx.userA.client.rpc('create_loan_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_procedure_name: '単価テスト',
+        p_maker: 'テストメーカー',
+        p_items: [],
+      })
+      expect(orderError).toBeNull()
+      const orderId = (order as { id: string }).id
+
+      const { error: negative } = await serviceClient
+        .from('loan_order_items')
+        .insert({ loan_order_id: orderId, name: '負の単価', quantity: 1, unit_price: -1 })
+      expect(negative?.code).toBe(CHECK_VIOLATION)
+
+      const { error: nullPrice } = await serviceClient
+        .from('loan_order_items')
+        .insert({ loan_order_id: orderId, name: '単価なし', quantity: 1, unit_price: null })
+      expect(nullPrice).toBeNull()
+    })
+  })
+
+  describe('I-013 施設別価格の仕切値・納品価格は 0 以上', () => {
+    it('purchase_price = -1 は 23514、UPDATE で負にするのも 23514', async () => {
+      const { error: insertError } = await fx.userA.client.from('hospital_prices').insert({
+        distributor_product_id: fx.distributorProductForInsert.id,
+        facility_id: fx.facilityA.id,
+        purchase_price: -1,
+        delivery_price: 100,
+      })
+      expect(insertError?.code).toBe(CHECK_VIOLATION)
+
+      const { error: updateError } = await fx.userA.client
+        .from('hospital_prices')
+        .update({ delivery_price: -5 })
+        .eq('id', fx.hospitalPriceA.id)
+      expect(updateError?.code).toBe(CHECK_VIOLATION)
+    })
+  })
+
+  describe('I-014 代理店商品の入数は 1 以上、償還価格は 0 以上', () => {
+    it('quantity 0 と reimbursement_price -1 は service_role でも 23514', async () => {
+      const base = { product_id: fx.masters.productId, category_id: fx.masters.categoryId, maker: 'm', supplier: 's', name: '不変条件テスト' }
+      const { error: q } = await serviceClient.from('distributor_products').insert({ ...base, quantity: 0 })
+      expect(q?.code).toBe(CHECK_VIOLATION)
+      const { error: r } = await serviceClient.from('distributor_products').insert({ ...base, reimbursement_price: -1 })
+      expect(r?.code).toBe(CHECK_VIOLATION)
+    })
+  })
+
+  describe('I-020 状態は前にしか進まない', () => {
+    it('loan_orders: draft → submitted は通り、submitted → draft は service_role でも 23514', async () => {
+      const { data: order } = await fx.userA.client.rpc('create_loan_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_procedure_name: '状態遷移テスト',
+        p_maker: 'テストメーカー',
+        p_items: [],
+      })
+      const orderId = (order as { id: string }).id
+
+      const { error: forward } = await serviceClient.from('loan_orders').update({ status: 'submitted' }).eq('id', orderId)
+      expect(forward).toBeNull()
+
+      const { error: backward } = await serviceClient.from('loan_orders').update({ status: 'draft' }).eq('id', orderId)
+      expect(backward?.code).toBe(CHECK_VIOLATION)
+
+      const { data: after } = await serviceClient.from('loan_orders').select('status').eq('id', orderId).single()
+      expect(after?.status).toBe('submitted')
+    })
+
+    it('loan_returns: returned → draft は 23514', async () => {
+      const { data: ret } = await fx.userA.client.rpc('create_loan_return_atomic', {
+        p_header: { facility_id: fx.facilityA.id, return_datetime: new Date().toISOString(), loan_order_id: null },
+        p_items: [],
+      })
+      const returnId = (ret as { id: string }).id
+      const { error: forward } = await serviceClient.from('loan_returns').update({ status: 'returned' }).eq('id', returnId)
+      expect(forward).toBeNull()
+      const { error: backward } = await serviceClient.from('loan_returns').update({ status: 'draft' }).eq('id', returnId)
+      expect(backward?.code).toBe(CHECK_VIOLATION)
+    })
+  })
+
+  describe('I-040 粗利と掛け率は常に価格から導かれる', () => {
+    it('gross_profit = delivery − purchase、掛け率は償還価格の変更に追従する', async () => {
+      await serviceClient.from('distributor_products').update({ reimbursement_price: 200 }).eq('id', fx.distributorProduct.id)
+      await serviceClient.from('hospital_prices').update({ purchase_price: 100, delivery_price: 150 }).eq('id', fx.hospitalPriceA.id)
+
+      const { data: row } = await serviceClient
+        .from('hospital_prices')
+        .select('gross_profit, purchase_rate, delivery_rate')
+        .eq('id', fx.hospitalPriceA.id)
+        .single()
+      expect(Number(row?.gross_profit)).toBe(50)
+      expect(Number(row?.purchase_rate)).toBeCloseTo(0.5)
+      expect(Number(row?.delivery_rate)).toBeCloseTo(0.75)
+
+      await serviceClient.from('distributor_products').update({ reimbursement_price: 400 }).eq('id', fx.distributorProduct.id)
+      const { data: after } = await serviceClient
+        .from('hospital_prices')
+        .select('purchase_rate, delivery_rate')
+        .eq('id', fx.hospitalPriceA.id)
+        .single()
+      expect(Number(after?.purchase_rate)).toBeCloseTo(0.25)
+      expect(Number(after?.delivery_rate)).toBeCloseTo(0.375)
+
+      await serviceClient.from('distributor_products').update({ reimbursement_price: null }).eq('id', fx.distributorProduct.id)
+      const { data: nulled } = await serviceClient
+        .from('hospital_prices')
+        .select('purchase_rate')
+        .eq('id', fx.hospitalPriceA.id)
+        .single()
+      expect(nulled?.purchase_rate).toBeNull()
+    })
+  })
+})

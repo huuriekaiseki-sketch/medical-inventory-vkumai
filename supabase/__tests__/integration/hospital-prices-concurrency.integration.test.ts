@@ -21,7 +21,8 @@ import {
 import { getHospitalPrice, updateHospitalPrice, HOSPITAL_PRICE_CONFLICT_MESSAGE } from '@/lib/hospital-prices/repository'
 
 // 約束カタログ（docs/agents/promise-catalog.md）: P-052 同一行の同時更新は 1 件だけ成功し競合側が拒否される
-describe('hospital_prices の同時更新（楽観ロック・一意制約） [P-052]', () => {
+// 不変条件カタログ（docs/agents/invariant-catalog.md）: I-031 施設×代理店商品の価格は 1 行 / I-042 updated_at は更新のたびに進む
+describe('hospital_prices の同時更新（楽観ロック・一意制約） [P-052 I-031 I-042]', () => {
   const serviceClient = createServiceRoleClient()
   let fx: SeedHospitalPricesRlsIdorFixtures
   /** 同じ施設 A のもう 1 人（別セッション）。同一人物の 2 タブでも同じ挙動になる */
