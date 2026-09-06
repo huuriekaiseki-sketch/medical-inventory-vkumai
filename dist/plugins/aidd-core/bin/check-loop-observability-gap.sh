@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+source "$SCRIPT_DIR/../scripts/lib/resolve-log-dir.sh"
 
 LOG_FILE="$(resolve_log_dir)/loop-observability.jsonl"
 BEFORE_COUNT=""
@@ -38,4 +38,4 @@ ACTUAL_COUNT=$(( AFTER_COUNT - BEFORE_COUNT ))
 
 # WHY: npx tsx はレジストリ依存で遅い日に数分かかる（harvest-journal-events.sh のコメント参照）。
 #      実体は .js（ESM）なので node で直接実行する
-node --experimental-detect-module --no-warnings "$SCRIPT_DIR/../.claude/workflows/lib/loop-observability-gap.js" --actual "$ACTUAL_COUNT" --expected "$EXPECTED_COUNT"
+node --experimental-detect-module --no-warnings "$SCRIPT_DIR/../scripts/workflow-lib/loop-observability-gap.js" --actual "$ACTUAL_COUNT" --expected "$EXPECTED_COUNT"

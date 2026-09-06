@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+source "$SCRIPT_DIR/../scripts/lib/resolve-log-dir.sh"
 
 LOG_FILE="$(resolve_log_dir)/agent-progress.jsonl"
 STALE_SECONDS=180

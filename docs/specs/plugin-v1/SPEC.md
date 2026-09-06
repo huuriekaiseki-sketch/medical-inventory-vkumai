@@ -89,7 +89,9 @@ v2 以降で「プラグインが正本、vkumai も消費者」へ反転する�
       → 2026-09-05: SessionStart / Stop / InstructionsLoaded / SubagentStart・Stop をプラグイン経由で実走。
       2 件の無音死（manifest の `hooks` 重複、`cd` のスクリプト位置基準）を発見し同日修正、再実走で 0 件。
       PreToolUse 5 本は未実走（`hook-live-drill.md` に記録。次回の RED 確認で埋める）
-- [ ] fault-injection 訓練 4 シナリオがプラグイン経由でも `blocked` を返す
+- [x] fault-injection 訓練 4 シナリオがプラグイン経由でも `blocked` を返す
+      → 2026-09-06: 4 シナリオとも期待どおり（Spec Check 1・Manifest Check 3、いずれも正しい理由。約 $0.8）。
+      7 月の #399（args.specPath 無視）は再現せず。`fault-injection-drill.md` 実施記録参照
 - [x] vkumai 本体で `npm test`・`hooks-test` CI が無変更で green（本体の既存フローが動き続ける）
       → PR #749 / #750 / #752 とも CI 全 green。本体の `.claude/settings.json` の hooks は変更なし
 - [x] 共通プラグイン内に vkumai / medical / facility / supabase / npm の語が無いことを構造テストが保証

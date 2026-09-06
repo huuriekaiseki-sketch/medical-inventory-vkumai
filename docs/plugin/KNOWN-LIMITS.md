@@ -32,9 +32,23 @@
   が担い、生成物に対しては `scripts/build-plugin.test.sh` の構造検査（決定性・名前空間・同梱閉包・禁止語）
   のみ。生成物を直接テストする仕組みは別リポジトリ化（配布形態 (a)）のときに作る
 
+## Workflow 内エージェントからの進捗記録（v1.0 の穴）
+
+- エージェント本文の `log-agent-progress.sh` 等は、プラグインの `bin/` が Bash ツールの PATH に足される
+  ことを前提にしている。**メインセッションの Bash では PATH にあることを実測したが、Workflow 内の
+  エージェント（agent()）の Bash からは見つからなかった**（2026-09-06、fault-injection の 4 実走すべてで
+  「見つからず実行できない」と報告、`logs/agent-progress.jsonl` は生成されず）。結果、プラグイン経由では
+  自己申告の進捗・観測ログが欠落し、gap 検査（Stop hook）が記録漏れとして警告する。hook 側の骨格記録
+  （`subagent-skeleton.jsonl`）は残るため、起動・完了の事実は追える
+- 対処候補（v1.x）: エージェント本文に絶対パスを埋め込むのは配置場所が導入先ごとに違うため不可。
+  SessionStart hook が導入先の `logs/` 配下等に PATH 情報を書き、本文からそれを読む案、または
+  Claude Code 側で Workflow エージェントの PATH にも `bin/` が入るかの仕様確認（docs 差分確認で追う）
+- `derive-test-selection`（04 表の機械導出）は導入先の `.claude/workflows/lib/router-risk.js` を import する
+  ため v1.0 では同梱しない。導入先が手コピーで持つ
+
 ## 未検証
 
 - `dependencies` の解決順（`--plugin-dir` 2 つ同時指定では検証不能。marketplace 経由で確認する）
-- fault-injection 4 シナリオのプラグイン経由での実測（受け入れ条件 3 件目）
-- PreToolUse hook 5 本のプラグイン経由での RED 確認（SessionStart / Stop / InstructionsLoaded /
-  SubagentStart・Stop はプラグイン経由で発火と成否を確認済み）
+- `check-skip-marker-write.sh`（ask 型）のプラグイン経由: `bypassPermissions` では ask が素通りし
+  （設計どおり）、`default` では headless のため拒否された。ask ダイアログが出ることは対話セッションで
+  未確認（中心リポジトリでは実機確認済み）

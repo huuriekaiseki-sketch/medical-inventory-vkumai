@@ -104,10 +104,13 @@
     "summarize-instructions-loaded.sh": "aidd-core",
     "log-find-av-precision.sh": "aidd-core",
     "verify-agent-progress-transcript.sh": "aidd-core",
-    "lib/verify-agent-progress-transcript.ts": "aidd-core",
-    "derive-test-selection.sh": "aidd-vkumai",
-    "lib/derive-test-selection.mjs": "aidd-vkumai",
-    "lib/derive-test-selection.rules.mjs": "aidd-vkumai"
+    "lib/verify-agent-progress-transcript.ts": "aidd-core"
+  },
+  "workflowLib": {
+    "_comment": ".claude/workflows/lib/ の純粋関数のうち bin/ のスクリプトが node で呼ぶもの。scripts/workflow-lib/ に置く（workflows/ 配下に置くと Workflow として走査されるため）",
+    "loop-observability-gap.js": "aidd-core",
+    "agent-progress-gap.js": "aidd-core",
+    "find-av-precision.js": "aidd-core"
   },
   "bin": {
     "log-agent-progress.sh": "aidd-core",
@@ -132,6 +135,7 @@
     "scripts/lib/check-docs-integrity.mjs": "同上",
     "scripts/check-generated-supabase-types.sh": "同上",
     "scripts/eval-workflow-prompts.sh": "同上",
-    "scripts/build-plugin.test.sh": "derive のルール表のコメントが生成物の鮮度検査の所在を示すだけ"
+    "scripts/build-plugin.test.sh": "derive のルール表のコメントが生成物の鮮度検査の所在を示すだけ",
+    "scripts/lib/derive-test-selection.mjs": "derive は導入先の .claude/workflows/lib/router-risk.js に依存するため v1.0 では同梱しない（KNOWN-LIMITS）。案内文の参照のみ"
   }
 }
