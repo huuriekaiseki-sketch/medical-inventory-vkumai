@@ -10,6 +10,11 @@
 //
 // 前提: global-setup.ts が cross-facility フィクスチャ（施設 A / B、ユーザー A / B、施設 A の短貸発注）
 //      を作っていること。無ければ skip。
+// 前提2: この spec は「攻撃の間、施設 A に他の誰も書き込まない」ことを前提に前後スナップショットを
+//      比較する。施設 A は他の spec（consumable-orders.spec.ts）も書き込む共有フィクスチャなので、
+//      並列実行のままだと他テストの行が「攻撃で変わった」と誤検知される（2026-09-07 実測）。
+//      playwright.config.ts で単独プロジェクトに隔離して先頭に走らせることで前提を守っている
+//      （e2e/project-isolation.ts）。この spec を別プロジェクトから外すとフレーキーが再発する。
 
 import { test, expect, request as playwrightRequest, type APIRequestContext } from '@playwright/test'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
