@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { LoanReturn } from '@/types/order'
+import { formatJstDate, formatJstDateTime } from '@/lib/format-date'
 
 const STATUS_LABEL: Record<string, string> = {
   draft: '下書き',
@@ -75,11 +76,11 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
               {returns.map(ret => (
                 <tr key={ret.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
                   <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
-                    {ret.returnDatetime ? new Date(ret.returnDatetime).toLocaleString('ja-JP') : '-'}
+                    {ret.returnDatetime ? formatJstDateTime(ret.returnDatetime) : '-'}
                   </td>
                   <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>{STATUS_LABEL[ret.status] ?? ret.status}</td>
                   <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
-                    {new Date(ret.createdAt).toLocaleDateString('ja-JP')}
+                    {formatJstDate(ret.createdAt)}
                   </td>
                 </tr>
               ))}

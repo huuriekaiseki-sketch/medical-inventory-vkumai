@@ -9,9 +9,14 @@ export function jstDayStart(dateFrom: string): string {
   return `${dateFrom}T00:00:00+09:00`
 }
 
-/** YYYY-MM-DD を JST 23:59:59 終了境界の ISO8601 文字列（lte用）に変換する */
+/**
+ * YYYY-MM-DD を JST のその日の最後の瞬間（lte用）に変換する。
+ * WHY(.999999): timestamptz はマイクロ秒精度。23:59:59 ちょうどで切ると 23:59:59.5 に作られた行が
+ *      「その日」から漏れる（issue #757 の 15）。翌日 0:00 の lt に変えるのが本筋だが、
+ *      5 つのリポジトリの .lte() を触らずに済むよう境界値だけを正す
+ */
 export function jstDayEnd(dateTo: string): string {
-  return `${dateTo}T23:59:59+09:00`
+  return `${dateTo}T23:59:59.999999+09:00`
 }
 
 // WHY: jstDayStart/jstDayEnd は入力を検証せず文字列テンプレートで結合するだけのため、

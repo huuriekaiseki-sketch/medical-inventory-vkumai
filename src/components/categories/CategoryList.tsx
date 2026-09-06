@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { Category } from '@/types/category'
+import { formatJstDate } from '@/lib/format-date'
 
 type CategoryListProps = {
   categories: Category[]
@@ -55,7 +56,7 @@ export function CategoryList({ categories, onEdit, onDelete }: CategoryListProps
                 {category.description ?? '—'}
               </td>
               <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
-                {new Date(category.createdAt).toLocaleDateString('ja-JP')}
+                {formatJstDate(category.createdAt)}
               </td>
               <td className="px-6 py-4 text-sm">
                 <div className="flex items-center gap-3">

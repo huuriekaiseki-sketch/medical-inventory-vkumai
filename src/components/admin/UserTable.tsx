@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import type { AdminUser, Facility } from '@/types/admin'
 import { FACILITY_ROLES, type FacilityRole } from '@/types/role'
+import { formatJstDate } from '@/lib/format-date'
 
 type Props = {
   users: AdminUser[]
@@ -32,7 +33,7 @@ export function UserTable({ users, facilities, onToggleFacility, onDeleteUser, o
               <td className="py-2 px-3">{user.email}</td>
               <td className="py-2 px-3">
                 {user.lastSignInAt
-                  ? new Date(user.lastSignInAt).toLocaleDateString('ja-JP')
+                  ? formatJstDate(user.lastSignInAt)
                   : '未ログイン'}
               </td>
               <td className="py-2 px-3">

@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { CaseOrder } from '@/types/order'
+import { formatJstDate, formatJstDateTime } from '@/lib/format-date'
 
 const STATUS_LABEL: Record<string, string> = {
   draft: '下書き',
@@ -79,12 +80,12 @@ export default function CaseOrdersPage({ params }: { params: Promise<{ id: strin
               {orders.map(order => (
                 <tr key={order.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
                   <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
-                    {order.caseDatetime ? new Date(order.caseDatetime).toLocaleString('ja-JP') : '-'}
+                    {order.caseDatetime ? formatJstDateTime(order.caseDatetime) : '-'}
                   </td>
                   <td className="px-6 py-4 text-sm font-medium" style={{ color: '#111827' }}>{order.procedureName}</td>
                   <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>{STATUS_LABEL[order.status] ?? order.status}</td>
                   <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
-                    {new Date(order.createdAt).toLocaleDateString('ja-JP')}
+                    {formatJstDate(order.createdAt)}
                   </td>
                 </tr>
               ))}

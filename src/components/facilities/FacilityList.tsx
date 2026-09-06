@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import type { Facility } from '@/types/facility'
+import { formatJstDate } from '@/lib/format-date'
 
 type FacilityListProps = {
   facilities: Facility[]
@@ -46,7 +47,7 @@ export function FacilityList({ facilities }: FacilityListProps) {
                 </Link>
               </td>
               <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
-                {new Date(facility.createdAt).toLocaleDateString('ja-JP')}
+                {formatJstDate(facility.createdAt)}
               </td>
             </tr>
           ))}

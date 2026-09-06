@@ -1,5 +1,6 @@
 import type { PriceHistory } from '@/types/priceHistory'
 import { FIELD_LABEL, ENTITY_LABEL } from '@/types/priceHistory'
+import { formatJstDateTimeShort } from '@/lib/format-date'
 
 function formatPrice(value: number | null): string {
   if (value === null) return '—'
@@ -7,13 +8,7 @@ function formatPrice(value: number | null): string {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString('ja-JP', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return formatJstDateTimeShort(iso)
 }
 
 function entityLabel(item: PriceHistory): string {

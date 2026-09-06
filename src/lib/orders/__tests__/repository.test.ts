@@ -141,7 +141,7 @@ describe('listOrders', () => {
     const { db, queries } = makeMockOrdersDb(allTableResults())
     await listOrders(db, 'f-1', { kind: 'case_order', dateFrom: '2026-06-24', dateTo: '2026-06-25' }, 50, 0)
     expect(queries.case_orders.gte).toHaveBeenCalledWith('created_at', '2026-06-24T00:00:00+09:00')
-    expect(queries.case_orders.lte).toHaveBeenCalledWith('created_at', '2026-06-25T23:59:59+09:00')
+    expect(queries.case_orders.lte).toHaveBeenCalledWith('created_at', '2026-06-25T23:59:59.999999+09:00')
   })
 
   it('keywordがconsumable_orderの場合は消耗品名で一致する', async () => {
@@ -220,10 +220,12 @@ describe('listOrders', () => {
     expect(lo3?.unreturned).toBe(false)
   })
 
-  it('loan_returnのsummaryは返却日時の日本語日付になる', async () => {
+  it('loan_returnのsummaryは返却日時のJST日付になる（UTC 15:00 = JST 翌日 0:00。issue #757 の 15）', async () => {
+    // WHY: 以前は期待値を実装と同じ式（環境のタイムゾーンで整形）で作っていたため、
+    //      Vercel（UTC）で前日になる不具合をテストが見逃していた。JST の日付を文字列で固定する
     const { db } = makeMockOrdersDb(allTableResults())
     const result = await listOrders(db, 'f-1', { kind: 'loan_return' }, 50, 0)
-    expect(result[0].summary).toBe(`返却 ${new Date('2026-06-26T15:00:00Z').toLocaleDateString('ja-JP')}`)
+    expect(result[0].summary).toBe('返却 2026/6/27')
   })
 
   it('kind指定かつoffset+limitが500を超える場合、LIMITはoffset+limitまで引き上げられる（ページング破綻の修正）', async () => {

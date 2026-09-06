@@ -8,6 +8,10 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
+    // WHY: issue #757 の 15。Vercel は UTC で動く。開発機（JST）でしか通らない日付整形を
+    //      CI と手元の両方で同じ条件（UTC）で走らせて見つける。JST に依存する整形は
+    //      src/lib/format-date.ts が Asia/Tokyo を明示する
+    env: { TZ: 'UTC' },
     // integration.test.ts は vitest.integration.config.ts（実DB接続用の別設定）でのみ実行する。
     // 除外しないと npm test（jsdom環境・DB非接続前提）が本物のSupabase接続を試みて壊れる。
     exclude: [

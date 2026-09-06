@@ -1,6 +1,7 @@
 'use client'
 
 import type { OrderKind, OrderListItem } from '@/types/order'
+import { formatJstDate } from '@/lib/format-date'
 
 // WHY: issue #20 Part 2 Set E「ステータスラベルマップ」をそのまま踏襲。
 // 既存値（draft/submitted/returned）以外は想定外だが、フォールバックで生値を表示し画面を壊さない。
@@ -69,7 +70,7 @@ export function OrderHistoryTable({ items }: Props) {
                   )}
                 </td>
                 <td className="px-6 py-4 text-sm whitespace-nowrap" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
-                  {new Date(item.createdAt).toLocaleDateString('ja-JP')}
+                  {formatJstDate(item.createdAt)}
                 </td>
               </tr>
             ))}

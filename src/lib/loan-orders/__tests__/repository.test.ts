@@ -137,7 +137,7 @@ describe('listLoanOrders', () => {
     const { db, query } = makeMockListDb({ data: rows, error: null })
     await listLoanOrders(db, 'f-1', 50, 0, { dateFrom: '2026-06-24', dateTo: '2026-06-25' })
     expect(query.gte).toHaveBeenCalledWith('created_at', '2026-06-24T00:00:00+09:00')
-    expect(query.lte).toHaveBeenCalledWith('created_at', '2026-06-25T23:59:59+09:00')
+    expect(query.lte).toHaveBeenCalledWith('created_at', '2026-06-25T23:59:59.999999+09:00')
   })
 
   it('Supabaseエラー時に例外を投げる', async () => {

@@ -165,6 +165,21 @@ Vercel のログに出す。
 **機械検知:** eslint no-console（`npm run lint`）、`src/lib/log-safe.test.ts`（伏せ漏れは RED）、
 `scripts/check-pii-leak.test.sh`（追跡ファイルの許可ドメイン外メール・gitignore）。
 
+### 日付の整形を実行環境のタイムゾーンに任せ、Vercel（UTC）で前日になる（2026-09-06）
+
+**チェック内容:** `new Date(iso).toLocaleDateString('ja-JP')` / `toLocaleString('ja-JP')` を直接呼ばない。
+日付の整形は `src/lib/format-date.ts` の `formatJst*`（`timeZone: 'Asia/Tokyo'` 固定）を使う
+（eslint `no-restricted-syntax` が `src/` 全体で禁止し、`format-date.ts` だけを例外にしている）。
+テストの期待値を実装と同じ式（`new Date(x).toLocaleDateString('ja-JP')`）で作らない。
+
+**なぜ再発したか:** `listOrders` の返却 summary が `toLocaleDateString('ja-JP')` で日付を作っており、
+開発機（JST）では正しく、Vercel（UTC）では JST 0:00〜9:00 の返却が前日の日付になっていた。
+テストは期待値を同じ式で作っていたため、どの環境でも通った（実装の鏡）。画面側にも同じ呼び出しが
+14 か所あり、サーバーコンポーネントで整形されるものは同じ不具合になる。
+
+**機械検知:** eslint no-restricted-syntax（`npm run lint`）、`vitest.config.ts` の `TZ=UTC`（Vercel と同じ条件で
+unit テストを走らせる）、`src/lib/__tests__/format-date.test.ts`（UTC 15:00 = JST 翌日 0:00 の境界を文字列で固定）。
+
 ### クエリパラメータのバリデーション漏れ（NaN・負数・上限）
 
 **チェック内容:** APIルートで `Number(request.nextUrl.searchParams.get(...))` のように

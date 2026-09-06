@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import type { DashboardFacilitySummary, LoanOutstandingSummary } from '@/types/dashboard'
+import { formatJstDateTimeShort } from '@/lib/format-date'
 
 type FacilitySummaryListProps = {
   facilitySummaries: DashboardFacilitySummary[]
@@ -10,13 +11,7 @@ type FacilitySummaryListProps = {
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString('ja-JP', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return formatJstDateTimeShort(iso)
 }
 
 export function FacilitySummaryList({ facilitySummaries, loanOutstanding }: FacilitySummaryListProps) {
