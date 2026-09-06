@@ -26,11 +26,18 @@ describe('toClientErrorMessage', () => {
     expect(result).not.toContain('products_jan_key')
   })
 
-  it('ClientVisibleError以外はconsole.errorにerror内容を記録する', () => {
+  it('ClientVisibleError以外は伏せた形でconsole.errorに記録し、生のerrorは渡さない（issue #757 の 5）', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const error = new Error('detail')
+    const error = Object.assign(new Error('violates check constraint'), {
+      code: '23514',
+      details: 'Failing row contains (PT-SECRET-4242, T.K., 山田医師).',
+    })
     toClientErrorMessage(error, 'fallback')
-    expect(spy).toHaveBeenCalledWith(error)
+    expect(spy).toHaveBeenCalledTimes(1)
+    const printed = JSON.stringify(spy.mock.calls[0])
+    expect(printed).toContain('23514')
+    expect(printed).not.toContain('PT-SECRET-4242')
+    expect(spy.mock.calls[0]).not.toContain(error)
   })
 
   it('ClientVisibleErrorの場合はconsole.errorを呼ばない(想定内の業務エラーのためログ不要)', () => {
