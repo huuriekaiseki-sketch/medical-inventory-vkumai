@@ -29,10 +29,22 @@ describe('findExposedRpcWithoutBoundaryTest [P-043]', () => {
     expect(r.functions[0].exposedVia).toEqual([])
   })
 
-  it('REVOKE FROM PUBLIC の後に authenticated へ GRANT すれば authenticated 経由で呼べる', () => {
+  it('REVOKE FROM PUBLIC だけでは Supabase 既定権限の anon / authenticated が残る（get_admin_status で実際に起きた型）', () => {
+    // WHY: Supabase は postgres ロールの ALTER DEFAULT PRIVILEGES で、CREATE FUNCTION の時点で
+    //      anon / authenticated / service_role に明示 EXECUTE を付ける。PUBLIC を外しても消えない。
+    //      20260827000001 はこの形で「anon を含めない」つもりが、素の DB では anon が呼べた（2026-09-06）
     const sql = `${fn('get_status')}
       REVOKE ALL ON FUNCTION get_status(UUID) FROM PUBLIC;
       GRANT EXECUTE ON FUNCTION get_status(UUID) TO authenticated, service_role;`
+    const r = run([{ name: '001.sql', sql }])
+    expect(r.functions[0].exposedVia).toEqual(['anon（Supabase 既定権限）', 'authenticated'])
+  })
+
+  it('anon を明示的に REVOKE すれば anon 経由では呼べない', () => {
+    const sql = `${fn('get_status')}
+      REVOKE ALL ON FUNCTION get_status(UUID) FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION get_status(UUID) TO authenticated, service_role;
+      REVOKE EXECUTE ON FUNCTION get_status(UUID) FROM anon;`
     const r = run([{ name: '001.sql', sql }])
     expect(r.functions[0].exposedVia).toEqual(['authenticated'])
   })
@@ -63,7 +75,7 @@ describe('findExposedRpcWithoutBoundaryTest [P-043]', () => {
   })
 
   it('CREATE OR REPLACE は権限を維持する', () => {
-    const first = `${fn('f')} REVOKE ALL ON FUNCTION f(UUID) FROM PUBLIC;`
+    const first = `${fn('f')} REVOKE ALL ON FUNCTION f(UUID) FROM PUBLIC, anon, authenticated;`
     const r = run([
       { name: '001.sql', sql: first },
       { name: '002.sql', sql: fn('f', 'SECURITY DEFINER') },
@@ -99,12 +111,12 @@ describe('findExposedRpcWithoutBoundaryTest [P-043]', () => {
     expect(r.functions.map((f) => f.name)).toEqual(['real'])
   })
 
-  it('risk は SECURITY DEFINER なら high、アプリが呼ぶか anon から呼べれば medium、それ以外 low', () => {
-    const sql = `${fn('a', 'SECURITY DEFINER')} ${fn('b')} ${fn('c')} ${fn('d')}
-      GRANT EXECUTE ON FUNCTION d(UUID) TO anon;`
+  it('risk は SECURITY DEFINER なら high、アプリが呼べば medium、それ以外 low（anon から呼べるかは既定で全部そうなので risk に使わない）', () => {
+    const sql = `${fn('a', 'SECURITY DEFINER')} ${fn('b')} ${fn('c')}`
     const r = run([{ name: '001.sql', sql }], '', { appSource: "supabase.rpc('b', {})" })
     const risk = Object.fromEntries(r.uncovered.map((u) => [u.name, u.risk]))
-    expect(risk).toEqual({ a: 'high', b: 'medium', c: 'low', d: 'medium' })
+    expect(risk).toEqual({ a: 'high', b: 'medium', c: 'low' })
+    expect(r.uncovered.find((u) => u.name === 'c').reasons).toContain('anon（未ログイン）からも呼べる')
   })
 
   it('notRequired に載せた関数は uncovered から外れるが exposed には残る', () => {
