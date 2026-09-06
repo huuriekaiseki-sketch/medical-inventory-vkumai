@@ -47,6 +47,15 @@ ORDERS=12000 bash scripts/measure-scale.sh
 再発は `scripts/check-foreign-key-indexes.test.sh`（CI `hooks-test`）が止める。
 この検査は実測の前に書いていなかったら見つからなかった `distributor_products.product_id` も拾った。
 
+## 索引を足すときに止まるもの
+
+`CREATE INDEX` は作成中その表への書き込みを止める。migration はトランザクション内で走るため
+`CONCURRENTLY` が使えず、本番では利用の少ない時間帯に当てるしかない。
+2026-09-07 の索引 10 本はローカル 36,000 行で約 40 ms だったが、**本番のデータ量は未計測**。
+
+書き込みを止める DDL を書いたら `-- lock:` の 1 行で「何がどれだけ止まるか」を残す
+（`scripts/check-migration-lock-safety.test.sh` が注記の有無を機械検査する）。
+
 ## まだ測っていないもの
 
 - 発注以外の一覧（返却・消耗品・仕入価格）と横断履歴 `listOrders`。同じ複合索引の形なので
