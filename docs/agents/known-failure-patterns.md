@@ -324,6 +324,22 @@ issue化を検討）。
 
 詳細: [`tooling-decisions.md`](./tooling-decisions.md#subagent-frontmatterのskillsプリロードpermissionmode-planは見送りmaxturnsは延期issue-652)
 
+### 認可・MFA の判定で `{ data }` だけ受け取り、API が落ちるとガードが素通りする（2026-09-06）
+
+**チェック内容:** `await …rpc(` / `auth.getUser(` / `auth.mfa.*` の結果は必ず `error` を受け取り、
+`error || !data` を拒否側に倒す。「取れなかったら判定しない」は「取れなかったら通す」と同じ。
+一覧は [`fail-open-inventory.md`](./fail-open-inventory.md)（F-xxx）、`scripts/check-fail-open.test.sh`
+が `error` を捨てる判定呼び出しを機械で止める。
+
+**なぜ再発したか:** proxy の MFA ガードは `const { data: aal } = await getAuthenticatorAssuranceLevel()`
+と書き、`aal && …` で判定していた。正常系のテスト（aal1→aal2 は送る、aal1→aal1 は通す）は全部
+green で、「API が落ちた」ケースは誰も書かなかった。DB 側は書き込みにだけ aal2 を要求するので、
+MFA 登録済みの aal1 セッションが保護ページを**読める**穴になっていた。認可の判定は「通す条件」
+ではなく「拒否できない条件」で書く。
+
+**機械検知:** `scripts/check-fail-open.test.sh`（hooks-test）、`src/__tests__/proxy.test.ts`
+（MFA API がエラー / data null → /mfa-challenge、getUser がエラー → /login）。
+
 ### fail-open の warning-only hook が、入力形式の変化で無音のまま死ぬ（2026-09-05）
 
 **チェック内容:** 「判定材料が取れなければ沈黙する（fail-open）」設計の hook を書く・触るときは、

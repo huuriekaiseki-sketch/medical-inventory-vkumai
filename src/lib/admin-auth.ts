@@ -6,8 +6,8 @@ import { resolveIsAdmin } from '@/lib/admin-status'
 
 export async function requireAdmin() {
   const db = await createServerSupabase()
-  const { data: { user } } = await db.auth.getUser()
-  if (!user) return null
+  const { data: { user }, error } = await db.auth.getUser()
+  if (error || !user) return null
 
   const isAdmin = await resolveIsAdmin(db, user)
   return isAdmin ? user : null

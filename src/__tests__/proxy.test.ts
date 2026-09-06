@@ -396,6 +396,76 @@ describe('proxy', () => {
       expect(response?.status).not.toBe(307)
     })
 
+    // WHY: issue #757 の 31（fail-open の総点検）。MFA API が落ちている間、以前は aal が取れないと
+    //      ガードを素通りさせていた（MFA 登録済みの aal1 セッションが保護ページを読める）。
+    //      判定材料が取れないときは「昇格が要る」側に倒す（docs/agents/fail-open-inventory.md F-004）
+    it('MFA API がエラーを返したら保護パスを通さず /mfa-challenge へ送る（fail-closed）', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: { id: 'u', email: 'u@example.com' } }, error: null }),
+          mfa: {
+            getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({ data: null, error: { message: 'mfa api down' } }),
+          },
+        },
+        rpc: vi.fn(),
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const response = await proxy(new NextRequest(new URL('http://localhost:3000/facilities')))
+
+      expect(response?.status).toBe(307)
+      expect(response?.headers.get('location')).toContain('/mfa-challenge')
+    })
+
+    it('MFA API が error なしで data も null を返したときも /mfa-challenge へ送る', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: { id: 'u', email: 'u@example.com' } }, error: null }),
+          mfa: {
+            getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({ data: null, error: null }),
+          },
+        },
+        rpc: vi.fn(),
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const response = await proxy(new NextRequest(new URL('http://localhost:3000/facilities')))
+
+      expect(response?.status).toBe(307)
+      expect(response?.headers.get('location')).toContain('/mfa-challenge')
+    })
+
+    it('MFA API がエラーでも /mfa-challenge 自体は通す（ループしない）', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: { id: 'u', email: 'u@example.com' } }, error: null }),
+          mfa: {
+            getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({ data: null, error: { message: 'mfa api down' } }),
+          },
+        },
+        rpc: vi.fn(),
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const response = await proxy(new NextRequest(new URL('http://localhost:3000/mfa-challenge')))
+
+      expect(response?.status).not.toBe(307)
+    })
+
+    it('getUser がエラーを返したら未認証として /login へ送る', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: { id: 'stale', email: 'stale@example.com' } }, error: { message: 'auth down' } }),
+        },
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const response = await proxy(new NextRequest(new URL('http://localhost:3000/facilities')))
+
+      expect(response?.status).toBe(307)
+      expect(response?.headers.get('location')).toContain('/login')
+    })
+
     it('既にaal2のユーザーは保護パスへ通常通りアクセスできる', async () => {
       const { createServerClient } = await import('@supabase/ssr')
       vi.mocked(createServerClient).mockReturnValueOnce(
