@@ -27,7 +27,7 @@ function createAnonClient(): SupabaseClient {
 }
 
 // 影響範囲の棚卸し（docs/agents/blast-radius.md）: B-xxx
-describe('乗っ取られた admin（パスワードのみ・aal1）の到達範囲 [B-001 B-002 B-003 B-004 P-033]', () => {
+describe('乗っ取られた admin（パスワードのみ・aal1）の到達範囲 [B-001 B-002 B-003 B-004 P-033 P-034]', () => {
   const runId = randomUUID()
   const serviceClient = createServiceRoleClient()
   const adminEmail = `blast-radius-admin-${runId}@example.test`
@@ -105,21 +105,55 @@ describe('乗っ取られた admin（パスワードのみ・aal1）の到達範
     return client
   }
 
-  // B-001 読み取り: aal1 のまま全施設の業務データに届く（RLS の SELECT に has_aal2 が無い）
-  it('B-001 パスワードだけで、所属していない施設の発注と患者 ID まで読める（読み取りに aal2 は要らない）', async () => {
+  // B-001 読み取り: 2026-09-07（20260907000001）以降、施設スコープの SELECT にも aal2 が要る。
+  //   それ以前は aal1 のまま全施設の患者 ID まで読めていた（この測定で見つけた）。
+  it('B-001 パスワードだけでは、他施設どころか自施設の患者情報も 1 件も読めない [P-034]', async () => {
     const client = await aal1()
+
+    const other = await client
+      .from('case_orders')
+      .select('id, patient_id')
+      .eq('id', otherOrderId)
+      .maybeSingle()
+    expect(other.error).toBeNull()
+    expect(other.data).toBeNull()
+
+    // 自施設も同じ（RLS は「見えない」で拒否するのでエラーではなく 0 件）
+    const own = await client.from('case_orders').select('id').eq('facility_id', ownFacilityId)
+    expect(own.error).toBeNull()
+    expect(own.data ?? []).toHaveLength(0)
+
+    // 監査ログも読めない（old_data / new_data に患者情報が入る）
+    const audit = await client.from('audit_log').select('id').limit(1)
+    expect(audit.data ?? []).toHaveLength(0)
+
+    // admin の集計 RPC は SECURITY DEFINER なので RLS を通らない。関数側で止める
+    const report = await client.rpc('get_order_amount_report', { p_date_from: null, p_date_to: null })
+    expect(report.error).not.toBeNull()
+    expect(report.error!.message).toContain('aal2')
+  })
+
+  it('B-001 aal2 まで上げれば、admin として全施設の患者情報も監査ログも集計も読める（対照）', async () => {
+    const client = await aal1()
+    await stepUpToAal2(client, factorId, secret)
+
     const { data, error } = await client
       .from('case_orders')
-      .select('id, facility_id, patient_id, patient_initials, doctor_name')
+      .select('id, facility_id, patient_id')
       .eq('id', otherOrderId)
       .single()
     expect(error).toBeNull()
     expect(data!.facility_id).toBe(otherFacilityId)
     expect(data!.patient_id).toBe(`PT-BLAST-${runId}`)
 
-    // 施設の一覧も全件見える（テナントの数がそのまま到達範囲になる）
-    const { data: facilities } = await client.from('facilities').select('id').in('id', [ownFacilityId, otherFacilityId])
-    expect(facilities).toHaveLength(2)
+    const report = await client.rpc('get_order_amount_report', { p_date_from: null, p_date_to: null })
+    expect(report.error).toBeNull()
+  })
+
+  it('B-001 施設の一覧は aal1 でも見える（施設名は患者情報ではないので対象外にした）', async () => {
+    const client = await aal1()
+    const { data } = await client.from('facilities').select('id').in('id', [ownFacilityId, otherFacilityId])
+    expect(data).toHaveLength(2)
   })
 
   // B-002 書き込み（施設スコープ）: aal2 が無いと拒否される
