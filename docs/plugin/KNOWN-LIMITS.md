@@ -48,7 +48,6 @@
 
 ## 未検証
 
-- `dependencies` の解決順（`--plugin-dir` 2 つ同時指定では検証不能。marketplace 経由で確認する）
 - `check-skip-marker-write.sh`（ask 型）のプラグイン経由: `bypassPermissions` では ask が素通りし
   （設計どおり）、`default` では headless のため拒否された。ask ダイアログが出ることは対話セッションで
   未確認（中心リポジトリでは実機確認済み）

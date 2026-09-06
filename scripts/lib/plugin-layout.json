@@ -1,5 +1,12 @@
 {
   "_comment": "プラグイン v1 の層の表（issue #420、docs/specs/plugin-v1/SPEC.md Part 2 セット A・C）。scripts/build-plugin.sh がこの表に従って dist/plugins/<name>/ を生成する。ここに無いファイルは同梱されない。共通側（forbiddenWords: true）に固有語が 1 つでもあれば生成は失敗する。層の判断基準は docs/agents/portability-inventory.md。",
+  "marketplace": {
+    "_comment": "配布形態 (a)。build-plugin.sh --marketplace --out <repo>/plugins で <repo>/.claude-plugin/marketplace.json と README.md を生成する",
+    "name": "aidd-plugins",
+    "repo": "huuriekaiseki-sketch/aidd-plugins",
+    "owner": { "name": "Masanori", "url": "https://github.com/huuriekaiseki-sketch" },
+    "description": "AIDD パイプラインのプラグイン（aidd-core / aidd-vkumai）。中心リポジトリから機械生成（issue #420 v1）"
+  },
   "plugins": {
     "aidd-core": {
       "version": "0.1.0",
