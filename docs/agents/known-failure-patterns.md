@@ -148,6 +148,23 @@ RLSポリシーの棚卸し（`pg_policies`を見る、または`CREATE POLICY`�
 
 詳細: [`docs/specs/issue-458-459-price-history-admin-and-unit-price.md`](../specs/issue-458-459-price-history-admin-and-unit-price.md)（横断確認の実施結果を含む）
 
+### DB エラーを console.error に丸ごと渡し、行の中身（患者情報）がサーバーログに乗る（2026-09-06）
+
+**チェック内容:** サーバー側（API Route・データ層・proxy）で `console.*` を直接呼ばない。エラーは
+`src/lib/log-safe.ts` の `logServerError` を通す（eslint `no-console` がサーバー側だけ機械的に禁止し、
+`log-safe.ts` だけを例外にしている）。PostgreSQL の CHECK / NOT NULL 違反の DETAIL は
+`Failing row contains (...)` として**行の全列**を含み、UNIQUE 違反は `Key (col)=(value)` を含む。
+PostgREST はこれを `error.details` に載せるので、`console.error(error)` は患者 ID・イニシャル・医師名を
+Vercel のログに出す。
+
+**なぜ再発したか:** `toClientErrorMessage`（architecture review 2026-07-26）は「クライアントへ生のメッセージを
+返さない」ことだけを守り、サーバー側ログは「安全な場所」とみなして `console.error(error)` していた。
+ログも施設の外に出る（Vercel・将来のエラー追跡サービス）ことが約束に書かれていなかった。
+`pii-error-details.integration.test.ts` で、症例発注の CHECK 違反の生エラーに患者 ID が入ることを実測した。
+
+**機械検知:** eslint no-console（`npm run lint`）、`src/lib/log-safe.test.ts`（伏せ漏れは RED）、
+`scripts/check-pii-leak.test.sh`（追跡ファイルの許可ドメイン外メール・gitignore）。
+
 ### クエリパラメータのバリデーション漏れ（NaN・負数・上限）
 
 **チェック内容:** APIルートで `Number(request.nextUrl.searchParams.get(...))` のように

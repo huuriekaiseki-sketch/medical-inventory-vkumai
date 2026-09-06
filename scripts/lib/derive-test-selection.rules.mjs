@@ -41,6 +41,7 @@ export const RULES = [
   { key: 'build', label: 'build', timing: 'always', commands: ['npm run build'] },
   { key: 'migration-static', label: 'migration 静的テスト', timing: 'always', commands: ['npm test'] },
   { key: 'constraint-ratchet', label: 'DB 制約 ratchet', timing: 'always', commands: ['npm test', 'bash scripts/check-constraint-coverage.sh'] },
+  { key: 'pii-log', label: 'PII のログ流出検査', timing: 'always', commands: ['npm run lint', 'bash scripts/check-pii-leak.test.sh'] },
   { key: 'workflow-sync', label: 'ワークフロー同期テスト', timing: 'always', commands: ['npm test'] },
   {
     key: 'hook-regression',
