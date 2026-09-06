@@ -18,6 +18,8 @@ export default function NewCaseOrderPage({ params }: { params: Promise<{ id: str
   const [items, setItems] = useState<ItemRow[]>(() => [{ id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // WHY: 二重送信対策の鍵（P-053）。ページを開いたときに 1 回だけ作り、再送でも同じ鍵を送る
+  const [clientRequestId] = useState(() => crypto.randomUUID())
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,6 +39,7 @@ export default function NewCaseOrderPage({ params }: { params: Promise<{ id: str
           gender,
           doctorName,
           items: items.map(r => ({ jan: r.jan, lot: r.lot || undefined, ubd: r.ubd || undefined, quantity: r.quantity })),
+          clientRequestId,
         }),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || '送信に失敗しました') }

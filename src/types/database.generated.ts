@@ -130,6 +130,7 @@ export type Database = {
       case_orders: {
         Row: {
           case_datetime: string
+          client_request_id: string | null
           created_at: string
           doctor_name: string
           facility_id: string
@@ -143,6 +144,7 @@ export type Database = {
         }
         Insert: {
           case_datetime: string
+          client_request_id?: string | null
           created_at?: string
           doctor_name: string
           facility_id: string
@@ -156,6 +158,7 @@ export type Database = {
         }
         Update: {
           case_datetime?: string
+          client_request_id?: string | null
           created_at?: string
           doctor_name?: string
           facility_id?: string
@@ -245,6 +248,7 @@ export type Database = {
       }
       consumable_orders: {
         Row: {
+          client_request_id: string | null
           created_at: string
           facility_id: string
           id: string
@@ -252,6 +256,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          client_request_id?: string | null
           created_at?: string
           facility_id: string
           id?: string
@@ -259,6 +264,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          client_request_id?: string | null
           created_at?: string
           facility_id?: string
           id?: string
@@ -499,6 +505,7 @@ export type Database = {
       }
       loan_orders: {
         Row: {
+          client_request_id: string | null
           created_at: string
           facility_id: string
           id: string
@@ -508,6 +515,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          client_request_id?: string | null
           created_at?: string
           facility_id: string
           id?: string
@@ -517,6 +525,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          client_request_id?: string | null
           created_at?: string
           facility_id?: string
           id?: string
@@ -585,6 +594,7 @@ export type Database = {
       }
       loan_returns: {
         Row: {
+          client_request_id: string | null
           created_at: string
           facility_id: string
           id: string
@@ -594,6 +604,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          client_request_id?: string | null
           created_at?: string
           facility_id: string
           id?: string
@@ -603,6 +614,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          client_request_id?: string | null
           created_at?: string
           facility_id?: string
           id?: string
@@ -875,6 +887,7 @@ export type Database = {
       create_case_order_atomic: {
         Args: {
           p_case_datetime: string
+          p_client_request_id?: string
           p_doctor_name: string
           p_facility_id: string
           p_gender: string
@@ -886,11 +899,16 @@ export type Database = {
         Returns: Json
       }
       create_consumable_order_atomic: {
-        Args: { p_facility_id: string; p_items: Json }
+        Args: {
+          p_client_request_id?: string
+          p_facility_id: string
+          p_items: Json
+        }
         Returns: Json
       }
       create_loan_order_atomic: {
         Args: {
+          p_client_request_id?: string
           p_facility_id: string
           p_items: Json
           p_maker: string

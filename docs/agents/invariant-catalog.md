@@ -47,6 +47,7 @@
 | I-031 | 施設 × 代理店商品の価格は 1 行 | UNIQUE `hospital_prices(distributor_product_id, facility_id)`（P-052） | 同じ組み合わせを並列 INSERT | 成功 1 / 23505 1 | `supabase/__tests__/integration/hospital-prices-concurrency.integration.test.ts` | 実装済み |
 | I-032 | 互換ペアは自己参照せず、順序付き（小 < 大）で 1 件 | CHECK `no_self_compat` / `ordered_pair`、UNIQUE | 同じ製品同士、逆順、重複 | 23514 / 23505 | `supabase/__tests__/integration/product-compatibilities-constraints.integration.test.ts` | 実装済み |
 | I-033 | 利用者は 1 施設に 1 行（同じ施設に二重所属しない） | 主キー `user_facilities(user_id, facility_id)` | 同じ組み合わせを 2 回 INSERT | 23505 | 未 | 計画 |
+| I-034 | 同じ施設 × 同じ `client_request_id` の発注（3 種）・返却は 1 行（画面の再送・二重クリックで同じ発注が 2 件できない） | 部分 UNIQUE `*_client_request_id_unique`（20260906000006、P-053）。RPC は同じ鍵で既存の行を返す | 同じ鍵で RPC を 2 回・2 件同時、service_role で同じ鍵を 2 回 INSERT | RPC は同じ id を返し行は 1 件。直接 INSERT の 2 回目は 23505 | `supabase/__tests__/integration/order-idempotency.integration.test.ts`、`supabase/migrations/__tests__/add_client_request_id_for_order_idempotency.test.ts` | 実装済み |
 
 ## 派生値
 

@@ -81,11 +81,12 @@ assert_contains "$(keys_of "$OUT" required)" "workflow-eval" "workflow eval が 
 assert_contains "$(keys_of "$OUT" required)" "fault-injection-drill" "fault injection 訓練が節目から昇格"
 assert_not_contains "$(keys_of "$OUT" milestone)" "fault-injection-drill" "昇格した種別は milestone 側に残らない"
 
-echo "=== scenario 7: リスク申告 → 未整備の種別（冪等性）が required になり not-ready が付く ==="
+echo "=== scenario 7: リスク申告 → 種別（冪等性・同時実行）がパスに関係なく required になる ==="
 run --files src/components/Foo.tsx --risk retry_possible,contention
 assert_contains "$(keys_of "$OUT" required)" "idempotency" "retry_possible で冪等性が required"
 assert_contains "$(keys_of "$OUT" required)" "concurrency" "contention で同時実行が required"
-assert_eq "$(printf '%s' "$OUT" | jq -r '.required[] | select(.key=="idempotency") | .status')" "not-ready" "未整備の種別は not-ready"
+# 2026-09-06 に冪等性は整備済み（P-053）になったので not-ready は付かない（付いたら test-matrix と食い違い）
+assert_eq "$(printf '%s' "$OUT" | jq -r '.required[] | select(.key=="idempotency") | .status')" "ready" "整備済みの種別は ready（not-ready が付かない）"
 run --files src/components/Foo.tsx --risk authz_change
 assert_contains "$(keys_of "$OUT" required)" "rls-idor-integration" "authz_change 申告で RLS/IDOR 統合が required（パスに関係なく）"
 assert_contains "$(keys_of "$OUT" required)" "direct-attack" "authz_change 申告で直接攻撃が required"

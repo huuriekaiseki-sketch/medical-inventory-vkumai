@@ -5,6 +5,7 @@ import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listConsumableOrders, createConsumableOrder } from '@/lib/consumable-orders/repository'
 import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parsePagination } from '@/lib/api-pagination'
+import { validateClientRequestId } from '@/lib/client-request-id'
 import type { ConsumableOrderInput } from '@/types/order'
 
 export async function GET(request: NextRequest) {
@@ -38,6 +39,8 @@ export async function POST(request: NextRequest) {
   }
   if (!body.facilityId) return apiError('施設IDは必須です', 400)
   if (!body.items?.length) return apiError('発注物品を1つ以上選択してください', 400)
+  const clientRequestId = validateClientRequestId(body.clientRequestId)
+  if (!clientRequestId.ok) return apiError(clientRequestId.message, 400)
 
   try {
     const db = await createServerSupabase()
@@ -49,7 +52,7 @@ export async function POST(request: NextRequest) {
       if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('施設IDは必須です', 400)
       return apiError('アクセス権限がありません', 403)
     }
-    const order = await createConsumableOrder(db, body.facilityId, { items: body.items })
+    const order = await createConsumableOrder(db, body.facilityId, { items: body.items, clientRequestId: clientRequestId.value })
     return NextResponse.json({ order }, { status: 201 })
   } catch (error) {
     return apiError(toClientErrorMessage(error, '発注に失敗しました'))

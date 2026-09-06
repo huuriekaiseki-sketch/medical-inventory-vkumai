@@ -100,6 +100,8 @@ export async function createConsumableOrder(db: SupabaseClient, facilityId: stri
       consumable_id: item.consumableId,
       quantity: item.quantity,
     })),
+    // WHY: 鍵が無い呼び出しは引数自体を渡さず、RPC の DEFAULT NULL（毎回新しい行）に任せる（P-053）
+    ...(input.clientRequestId ? { p_client_request_id: input.clientRequestId } : {}),
   })
   if (error) throw toRepositoryError(error)
 

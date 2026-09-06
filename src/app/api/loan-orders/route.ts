@@ -5,6 +5,7 @@ import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listLoanOrders, createLoanOrder } from '@/lib/loan-orders/repository'
 import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parsePagination } from '@/lib/api-pagination'
+import { validateClientRequestId } from '@/lib/client-request-id'
 import type { LoanOrderInput } from '@/types/order'
 
 export async function GET(request: NextRequest) {
@@ -42,11 +43,14 @@ export async function POST(request: NextRequest) {
   if (body.items && body.items.some((item: { name?: string }) => !item.name?.trim())) {
     return apiError('品名は必須です', 400)
   }
+  const clientRequestId = validateClientRequestId(body.clientRequestId)
+  if (!clientRequestId.ok) return apiError(clientRequestId.message, 400)
 
   const input: LoanOrderInput = {
     procedureName: body.procedureName,
     maker: body.maker,
     items: body.items ?? [],
+    clientRequestId: clientRequestId.value,
   }
   try {
     const db = await createServerSupabase()
