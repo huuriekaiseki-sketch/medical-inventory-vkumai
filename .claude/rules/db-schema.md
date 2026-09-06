@@ -10,6 +10,11 @@ paths:
   `supabase db execute`・`psql`直接実行、およびMCP経由のexecute_sql系ツール呼び出しは
   PreToolUse hook（`scripts/check-direct-ddl-execution.sh`、issue #444）で機械的にdenyされる
   （`db push`/`db reset`等の正規のmigration適用手段は対象外）
+- **2026-09-07 以降の migration は先頭付近に `-- release-order: db-first` か `-- release-order: app-first`、
+  末尾に `-- ROLLBACK:` を書く**（`scripts/check-migration-release-safety.test.sh` が必須にする、issue #757 の 13・25）。
+  認可を絞る・列や関数を足す変更は `db-first`、列・表・関数・ポリシーを消す・改名する・型を変える
+  変更（contract）は `app-first` にし、`-- contract:` に「どの PR 以降のアプリが参照しなくなったか」を書く。
+  順序の理由と混在期間の表は [`../../docs/agents/release-safety-runbook.md`](../../docs/agents/release-safety-runbook.md)
 - マイグレーション外で本番/リモートDBに存在するスキーマ変更（トリガー・関数等）を発見した場合は、
   差分をキャッチアップ用マイグレーションとして必ず記録してから作業を進める
 - 理由（過去のスキーマドリフト事例）は [`../../docs/agents/decisions/db-rls.md`](../../docs/agents/decisions/db-rls.md#なぜdbスキーマ変更をmigrationファイル経由に限定し直接ddl実行を禁止したか) を参照

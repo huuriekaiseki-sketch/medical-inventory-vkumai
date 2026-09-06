@@ -67,7 +67,7 @@
 | 冪等性（再送・二重実行） | ✅ | 変更時 | 注文・返却系 RPC の変更、作成 route・画面の送信経路の変更 | 発注 3 種と返却の作成は画面が 1 回だけ作る `clientRequestId` を鍵に、同じ鍵の再送・同時送信で行が増えないことを実 DB で固定した（P-053 / I-034、issue #757 の 2）。画面は失敗後の再送で同じ鍵、成功後は新しい鍵を送る。作成経路を足す機能はここに行を足す | `supabase/__tests__/integration/order-idempotency.integration.test.ts`、`src/app/api/__tests__/orders-client-request-id.test.ts`、`src/components/orders/__tests__/CaseOrderModal.client-request-id.test.tsx` | idempotency | riff-gear `tests/idempotency/` | `npm run test:integration` |
 | 同時実行 | 🟡 | 変更時 | 同一注文・同一在庫行を複数ユーザーが同時に更新する変更 | 施設別価格の同一行の並列更新（楽観ロック、P-052）と同一組み合わせの並列 INSERT（UNIQUE）、短貸返却の二重登録（P-050）を実 DB で固定した。注文・明細に更新経路が無いため現時点の同時更新対象はこれで全てだが、更新経路を足す機能はここに行を足す | `supabase/__tests__/integration/hospital-prices-concurrency.integration.test.ts`、`supabase/__tests__/integration/loan-returns-rls-idor.integration.test.ts` | concurrency | riff-gear `tests/concurrency/` | `npm run test:integration` |
 | 障害注入（外部依存停止） | ⬜ 未整備 | 節目 | 依存 major 更新、外部公開前 | Supabase 停止・タイムアウト時に UI / API Route がハングせず失敗を返すか未確認 | — | fault-injection | Chaos Engineering（縮小版） | — |
-| 復旧手順（ランブック） | 🟡 | 節目 | 障害発生時、公開前 | Workflow 中断の再開手順と recovery-queue はあるが、本番 DB・認証（MFA/AAL2）障害時の手順は無い | `docs/agents/workflow-resume-runbook.md`、`docs/agents/recovery-queue.md` | runbook | SRE ランブック | — |
+| 復旧手順（ランブック） | 🟡 | 節目 | 障害発生時、公開前 | Workflow 中断の再開手順と recovery-queue、リリース順序（DB が先・縮めるは後）と混在期間・ロールバックの手順（2026-09-06、#757-13・25）はある。本番 DB・認証（MFA/AAL2）障害時の手順とバックアップ復元の実演（#757-11・23）は無い | `docs/agents/workflow-resume-runbook.md`、`docs/agents/recovery-queue.md`、`docs/agents/release-safety-runbook.md`、`scripts/check-migration-release-safety.test.sh` | runbook | SRE ランブック | — |
 
 ## 節目のイベント
 
