@@ -49,11 +49,12 @@ Next.js API Route（`requireFacilityAccess`等）を経由せず直接呼び出�
 ### 「GRANT を書いていない」を「呼べない」と読む（2026-09-06）
 
 **チェック内容:** `CREATE FUNCTION` した関数に `GRANT EXECUTE ... TO service_role` だけを書き、
-コメントに「service_role のみ実行可能」と注記しても、PostgreSQL は関数の EXECUTE を既定で
-`PUBLIC` に与えるため anon / authenticated からも PostgREST 経由で呼べる。client に公開しない
-関数は `REVOKE ALL ON FUNCTION f(...) FROM PUBLIC, anon, authenticated;` を明示し、その後に
-service_role へ GRANT し直す（順序が逆だと service_role も失う）。`REVOKE ... FROM authenticated`
-だけでは PUBLIC 経由の権限が残る。
+コメントに「service_role のみ実行可能」と注記しても、anon / authenticated から PostgREST 経由で呼べる。
+既定権限は 2 層ある: (1) PostgreSQL は関数の EXECUTE を既定で `PUBLIC` に与える、(2) Supabase は
+postgres ロールの `ALTER DEFAULT PRIVILEGES` で public スキーマの関数に anon / authenticated /
+service_role へ**明示の** EXECUTE を付ける。(2) は `REVOKE ... FROM PUBLIC` では消えない。client に
+公開しない関数は `REVOKE ALL ON FUNCTION f(...) FROM PUBLIC, anon, authenticated;` を 3 つとも書き、
+その後に service_role へ GRANT し直す（順序が逆だと service_role も失う）。
 
 **なぜ再発したか:** 20260714000001 / 20260714000003 の schema drift 系 4 関数（`check_schema_drift`
 / `record_schema_drift` / `record_issue_url` / `refresh_schema_baseline_snapshot`）がこの形で、
@@ -61,6 +62,11 @@ SECURITY DEFINER の書き込み関数を anon キーで呼べる状態が約 2 
 守られていたが、drift 検知の baseline と記録は誰でも書き換えられた）。テーブルの GRANT は
 `REVOKE ALL ... FROM anon` を横断確認していた（issue #461）のに、関数の既定権限は誰も列挙して
 いなかった。20260906000001 で是正。
+同日、`get_admin_status`（20260827000001）でも (2) の型を発見: `REVOKE ALL ... FROM PUBLIC` →
+`GRANT ... TO authenticated, service_role` と書いて「anon を含めない」つもりだったが、素の DB
+（CI の `db reset`・本番の初期化）では anon が呼べた。増分適用してきたローカル DB では拒否されていた
+ため手元では気づけず、P-045 の統合テストを CI で回して初めて見えた。20260906000002 で是正。
+**教訓: 権限の検証は migration 全適用の素の DB で行う**（ローカルの増分 DB は履歴に依存する）。
 
 **機械検知:** `constraint_coverage_ratchet.test.ts` の P-043（`findExposedRpcWithoutBoundaryTest`）が
 migration を適用順に畳み込み、GRANT の無い関数を「PUBLIC 既定で呼べる」として列挙する。

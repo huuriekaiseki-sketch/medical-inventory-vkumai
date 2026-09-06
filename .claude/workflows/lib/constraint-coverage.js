@@ -378,9 +378,19 @@ export function findExposedRpcWithoutBoundaryTest({ migrations, boundaryTestSour
           definedIn: file,
           returnsTrigger: /returns (?:trigger|event_trigger)\b/.test(g.header),
           securityDefiner: /security definer/.test(g.header),
-          // CREATE OR REPLACE は権限を維持する。DROP 後の再 CREATE は prev が無いので既定（PUBLIC）に戻る
+          // CREATE OR REPLACE は権限を維持する。DROP 後の再 CREATE は prev が無いので既定に戻る。
+          // 既定は 2 層ある: PostgreSQL の PUBLIC 既定と、Supabase が postgres ロールに設定している
+          // ALTER DEFAULT PRIVILEGES（public スキーマの関数に anon / authenticated / service_role へ
+          // 明示 EXECUTE）。後者は REVOKE FROM PUBLIC では消えない（2026-09-06 に CI の素の DB で実測。
+          // get_admin_status は PUBLIC を外して authenticated に GRANT し直したのに anon が呼べた）
           publicExecute: prev ? prev.publicExecute : true,
-          roles: prev ? prev.roles : new Map(),
+          roles: prev
+            ? prev.roles
+            : new Map([
+                ['anon', 'default'],
+                ['authenticated', 'default'],
+                ['service_role', 'default'],
+              ]),
         })
       } else if (g.drop !== undefined) {
         state.delete(g.dname)
@@ -403,9 +413,12 @@ export function findExposedRpcWithoutBoundaryTest({ migrations, boundaryTestSour
   for (const fn of [...state.values()].sort((a, b) => a.name.localeCompare(b.name))) {
     if (fn.returnsTrigger) continue
     const exposedVia = []
-    if (fn.publicExecute) exposedVia.push('PUBLIC（既定。GRANT を書いていない）')
-    if (fn.roles.get('anon')) exposedVia.push('anon')
-    if (fn.roles.get('authenticated')) exposedVia.push('authenticated')
+    if (fn.publicExecute) exposedVia.push('PUBLIC（PostgreSQL 既定。GRANT を書いていない）')
+    for (const role of ['anon', 'authenticated']) {
+      const v = fn.roles.get(role)
+      if (v === true) exposedVia.push(role)
+      else if (v === 'default') exposedVia.push(`${role}（Supabase 既定権限）`)
+    }
     const callPattern = new RegExp(`rpc\\(\\s*['"]${fn.name}['"]`)
     functions.push({
       name: fn.name,
@@ -423,11 +436,11 @@ export function findExposedRpcWithoutBoundaryTest({ migrations, boundaryTestSour
     .map((f) => {
       const reasons = []
       if (f.securityDefiner) reasons.push('SECURITY DEFINER（RLS を通らず、関数内の検査だけが境界）')
-      if (f.exposedVia.some((v) => v.startsWith('PUBLIC'))) reasons.push('明示 GRANT が無く PostgreSQL 既定の PUBLIC 権限で呼べる')
-      if (f.exposedVia.includes('anon')) reasons.push('anon（未ログイン）からも呼べる')
+      if (f.exposedVia.some((v) => v.includes('既定'))) reasons.push('明示 GRANT が無く既定権限（PostgreSQL の PUBLIC / Supabase の ALTER DEFAULT PRIVILEGES）で呼べる')
+      if (f.exposedVia.some((v) => v.startsWith('anon'))) reasons.push('anon（未ログイン）からも呼べる')
       if (f.appUses) reasons.push('アプリが呼んでいる（業務経路）')
       else reasons.push('アプリは呼んでいない（使われていない公開経路。REVOKE の候補）')
-      const level = f.securityDefiner ? 'high' : f.appUses || f.exposedVia.includes('anon') ? 'medium' : 'low'
+      const level = f.securityDefiner ? 'high' : f.appUses ? 'medium' : 'low'
       return { name: f.name, risk: level, reasons }
     })
 
