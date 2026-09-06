@@ -23,6 +23,8 @@ export interface CrossFacilityFixtures {
   facilityAId: string
   facilityBId: string
   loanOrderProcedureName: string
+  /** 施設 A にシードした短貸発注の ID（api-cross-facility-attack.spec.ts が path / body に入れて攻撃する。P-017） */
+  loanOrderId?: string
 }
 
 export const CROSS_FACILITY_FIXTURES_PATH = path.join(process.cwd(), 'e2e', '.auth', 'cross-facility-fixtures.json')
@@ -105,15 +107,17 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
 
   // シード用の1件はservice role client（RLSをバイパスする）で直接作成する。
   const loanOrderProcedureName = `クロス施設境界テスト用術式-${runId}`
-  const { error: loanOrderError } = await supabase
+  const { data: loanOrder, error: loanOrderError } = await supabase
     .from('loan_orders')
     .insert({
       facility_id: facilityA.id,
       procedure_name: loanOrderProcedureName,
       maker: 'クロス施設境界テスト用メーカー',
     })
-  if (loanOrderError) {
-    throw new Error(`[E2E cross-facility auth] loan_ordersシード失敗: ${loanOrderError.message}`)
+    .select('id')
+    .single()
+  if (loanOrderError || !loanOrder) {
+    throw new Error(`[E2E cross-facility auth] loan_ordersシード失敗: ${loanOrderError?.message}`)
   }
 
   await signInAndSaveStorageState(supabase, emailA, CROSS_FACILITY_USER_A_AUTH_PATH)
@@ -123,6 +127,7 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     facilityAId: facilityA.id as string,
     facilityBId: facilityB.id as string,
     loanOrderProcedureName,
+    loanOrderId: loanOrder.id as string,
   }
   fs.writeFileSync(CROSS_FACILITY_FIXTURES_PATH, JSON.stringify(fixtures))
   console.log(`[E2E cross-facility auth] フィクスチャを書き出しました: ${CROSS_FACILITY_FIXTURES_PATH}`)

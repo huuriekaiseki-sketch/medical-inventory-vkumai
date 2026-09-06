@@ -38,6 +38,7 @@ UI や取込などそれ以外の層は [テスト一覧](./test-matrix.md) の�
 | P-014 | 横断発注履歴（`listOrders`）も施設境界を守り、他施設の発注は種別指定でも返らない | 施設 A の 4 種別発注 | ユーザー B が `listOrders`（kind 指定あり / なし） | ユーザー A は 4 種別全て取得 | 0 件 | `kind=loan_order` 指定 | `supabase/__tests__/integration/orders-rls-idor.integration.test.ts` | 変更時 |
 | P-015 | 自施設の利用者は取得・作成できる（対照。拒否が RLS 由来であり、古い許可ポリシーの残存や全拒否の退行を検知する） | 同上 | ユーザー A が select / RPC / insert（施設 A） | シード行が含まれる。RPC が成功し `facility_id` が一致 | — | — | `supabase/__tests__/integration/case-orders-rls-idor.integration.test.ts`、`supabase/__tests__/integration/loan-orders-rls-idor.integration.test.ts`、`supabase/__tests__/integration/consumable-orders-rls-idor.integration.test.ts`、`supabase/__tests__/integration/loan-returns-rls-idor.integration.test.ts`、`supabase/__tests__/integration/hospital-prices-rls-idor.integration.test.ts`、`supabase/__tests__/integration/price-histories-rls-idor.integration.test.ts` | 変更時 |
 | P-016 | 画面経由でも施設境界は守られる（他施設の一覧 URL を開くとアクセス権限エラーになり、シード済み発注が見えない） | Playwright の認証状態（ユーザー A / B）と施設 A のシード発注 | ユーザー B が施設 A の loan-orders 一覧を開く | ユーザー A は自施設の発注を閲覧できる | 権限エラー表示、発注が見えない | — | `e2e/cross-facility-boundary.spec.ts` | 節目 |
+| P-017 | API Route（`route.ts`）を機械列挙し、全メソッドを他施設ユーザーが施設 A の ID 入り（query / body / path）で直接叩いても、2xx 応答に施設 A の目印（発注 ID・術式名・施設 ID）が無く、施設 A の行（発注 3 種・返却・消耗品・仕入価格・施設・所属）がテスト前後で 1 つも変わらない。新しい route × メソッドは攻撃表（`e2e/api-attack-matrix.ts`）に無ければ失敗する（ratchet） | cross-facility フィクスチャ（施設 A / B、ユーザー B の storageState、施設 A の短貸発注 ID） | ユーザー B が全 route × 全メソッドを request API で呼ぶ | 自施設は P-015 で対照 | 漏洩 0 件・変更 0 件。admin 系は proxy が /login へリダイレクト | `weak` 印の route（施設 A の資源をシードしていない [id] 系・admin 境界）は 404 / 400 止まりで境界判定に到達しない | `e2e/api-cross-facility-attack.spec.ts` | 節目 |
 
 ## ロール・admin 境界
 
@@ -74,5 +75,4 @@ UI や取込などそれ以外の層は [テスト一覧](./test-matrix.md) の�
 
 | ID | 約束 | Arrange | Act | Assert（肯定） | Assert（否定） | 境界値 | 守るテスト | 実施タイミング |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| P-017 | API Route（`route.ts`）は全メソッドで `requireAuth` と `requireFacilityAccess` 相当を通り、他施設の実在するリソース ID を渡すと 403 / 404 になる（issue #24 の再発防止。現状は手動の「直接攻撃の実測」に依存） | 他施設の実在 ID | 各 route を他施設ユーザーで直接呼ぶ | 自施設は 200 | 403 / 404 | クエリ・パス・ボディの各 `facility_id` | 未 | 変更時 |
 | P-052 | 同一注文・同一在庫行を複数ユーザーが同時更新しても整合が壊れない（楽観ロック・一意制約） | 同一行 | 並列更新 | 1 件だけ成功 | 競合側が拒否される | — | 未 | 変更時 |
