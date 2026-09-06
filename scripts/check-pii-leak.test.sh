@@ -63,12 +63,15 @@ echo "=== scenario 3: fixture 差し替えで検知できる（RED 方向の自�
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 git -C "$WORK_DIR" init -q
+# 漏洩側の fixture は実行時に連結して作る（この script 自身が追跡ファイルなので、リテラルで書くと
+# scenario 1 が自分を検知する。CI で実際に踏んだ）
+LEAK_EMAIL="real.person@gmail"".com"
 printf 'contact: ok@example.com\n' > "$WORK_DIR/ok.md"
-printf 'leaked: real.person@gmail.com\n' > "$WORK_DIR/leak.md"
+printf 'leaked: %s\n' "$LEAK_EMAIL" > "$WORK_DIR/leak.md"
 printf 'signed-off: noreply@anthropic.com\n' > "$WORK_DIR/sig.md"
 git -C "$WORK_DIR" add -A
 FIX_HITS="$(scan_emails "$WORK_DIR")"
-if printf '%s\n' "$FIX_HITS" | grep -q 'leak.md:1:real.person@gmail.com'; then
+if printf '%s\n' "$FIX_HITS" | grep -q "leak.md:1:$LEAK_EMAIL"; then
   assert_ok "gmail.com を検知"
 else
   assert_fail "gmail.com を検知できない" "$FIX_HITS"
