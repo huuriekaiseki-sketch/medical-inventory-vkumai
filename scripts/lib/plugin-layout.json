@@ -4,7 +4,10 @@
     "_comment": "配布形態 (a)。build-plugin.sh --marketplace --out <repo>/plugins で <repo>/.claude-plugin/marketplace.json と README.md を生成する",
     "name": "aidd-plugins",
     "repo": "huuriekaiseki-sketch/aidd-plugins",
-    "owner": { "name": "Masanori", "url": "https://github.com/huuriekaiseki-sketch" },
+    "owner": {
+      "name": "Masanori",
+      "url": "https://github.com/huuriekaiseki-sketch"
+    },
     "description": "AIDD パイプラインのプラグイン（aidd-core / aidd-vkumai）。中心リポジトリから機械生成（issue #420 v1）"
   },
   "plugins": {
@@ -17,21 +20,62 @@
     "aidd-vkumai": {
       "version": "0.1.0",
       "description": "vkumai アダプター: Next.js + Supabase 向けの Workflow・4 軸 Sweep・実装系エージェント・Supabase ガード（aidd-core に依存）",
-      "dependencies": [{ "name": "aidd-core", "version": "^0.1.0" }],
+      "dependencies": [
+        {
+          "name": "aidd-core",
+          "version": "^0.1.0"
+        }
+      ],
       "forbiddenWords": false
     }
   },
-  "forbiddenWords": ["vkumai", "medical", "facility", "tenant", "organization", "inventory", "supabase", "npm", "next.js", "playwright", "医療"],
-  "forbiddenWordsAllowPhrases": ["actuator-inventory", "portability-inventory", "undetectable-rules-inventory"],
-  "forbiddenWordsSkipPaths": ["COMPATIBILITY.md", "CHANGELOG.md", "KNOWN-LIMITS.md", "MIGRATION.md", "BREAKING.md", "evidence/", "templates/"],
+  "forbiddenWords": [
+    "vkumai",
+    "medical",
+    "facility",
+    "tenant",
+    "organization",
+    "inventory",
+    "supabase",
+    "npm",
+    "next.js",
+    "playwright",
+    "医療"
+  ],
+  "forbiddenWordsAllowPhrases": [
+    "actuator-inventory",
+    "portability-inventory",
+    "undetectable-rules-inventory"
+  ],
+  "forbiddenWordsSkipPaths": [
+    "COMPATIBILITY.md",
+    "CHANGELOG.md",
+    "KNOWN-LIMITS.md",
+    "MIGRATION.md",
+    "BREAKING.md",
+    "evidence/",
+    "templates/"
+  ],
   "releaseDocs": {
     "_comment": "各バージョンで残す 7 項目（SPEC Part 1 の 3.）。正本は docs/plugin/。両プラグインのルートへコピーする。禁止語検査の対象外（中心リポジトリ名を書く必要があるため）",
     "sourceDir": "docs/plugin",
-    "files": ["COMPATIBILITY.md", "CHANGELOG.md", "KNOWN-LIMITS.md", "MIGRATION.md", "BREAKING.md"],
-    "dirs": ["evidence"]
+    "files": [
+      "COMPATIBILITY.md",
+      "CHANGELOG.md",
+      "KNOWN-LIMITS.md",
+      "MIGRATION.md",
+      "BREAKING.md"
+    ],
+    "dirs": [
+      "evidence"
+    ]
   },
-  "schema": { "lib/aidd-config.schema.json": "aidd-core" },
-  "templates": { "docs/plugin/templates/consumer": "aidd-core" },
+  "schema": {
+    "lib/aidd-config.schema.json": "aidd-core"
+  },
+  "templates": {
+    "docs/plugin/templates/consumer": "aidd-core"
+  },
   "agents": {
     "reviewer": "aidd-core",
     "adversarial-verify": "aidd-core",
@@ -93,8 +137,14 @@
     "check-direct-ddl-execution.sh": "aidd-vkumai"
   },
   "supportScripts": {
-    "lib/resolve-log-dir.sh": ["aidd-core", "aidd-vkumai"],
-    "lib/aidd-config.sh": ["aidd-core", "aidd-vkumai"],
+    "lib/resolve-log-dir.sh": [
+      "aidd-core",
+      "aidd-vkumai"
+    ],
+    "lib/aidd-config.sh": [
+      "aidd-core",
+      "aidd-vkumai"
+    ],
     "harvest-journal-events.sh": "aidd-core",
     "otel-debug-collector.mjs": "aidd-core",
     "lib/pr-numbers-from-transcript.jq": "aidd-core",
@@ -111,7 +161,13 @@
     "summarize-instructions-loaded.sh": "aidd-core",
     "log-find-av-precision.sh": "aidd-core",
     "verify-agent-progress-transcript.sh": "aidd-core",
-    "lib/verify-agent-progress-transcript.ts": "aidd-core"
+    "lib/verify-agent-progress-transcript.ts": "aidd-core",
+    "lib/check-catalog.mjs": "aidd-core",
+    "lib/new-rulebook.mjs": "aidd-core",
+    "lib/render-rulebook-index.mjs": "aidd-core",
+    "new-rulebook.sh": "aidd-core",
+    "render-rulebook-index.sh": "aidd-core",
+    "lib/catalog-registry.json": "aidd-vkumai"
   },
   "workflowLib": {
     "_comment": ".claude/workflows/lib/ の純粋関数のうち bin/ のスクリプトが node で呼ぶもの。scripts/workflow-lib/ に置く（workflows/ 配下に置くと Workflow として走査されるため）",
@@ -143,6 +199,11 @@
     "scripts/check-generated-supabase-types.sh": "同上",
     "scripts/eval-workflow-prompts.sh": "同上",
     "scripts/build-plugin.test.sh": "derive のルール表のコメントが生成物の鮮度検査の所在を示すだけ",
-    "scripts/lib/derive-test-selection.mjs": "derive は導入先の .claude/workflows/lib/router-risk.js に依存するため v1.0 では同梱しない（KNOWN-LIMITS）。案内文の参照のみ"
+    "scripts/lib/derive-test-selection.mjs": "derive は導入先の .claude/workflows/lib/router-risk.js に依存するため v1.0 では同梱しない（KNOWN-LIMITS）。案内文の参照のみ",
+    "scripts/check-catalogs.test.sh": "new-rulebook.sh と render-rulebook-index.mjs の案内文が、導入先で回す検査の名前を示すだけ（検査そのものの配布は層の表の checks で決める）",
+    "scripts/lib/catalog-registry.js": "登録簿（catalog-registry.json）は導入先のリポジトリ側にある。CLAUDE_PROJECT_DIR 優先で解決するので配布物に同梱しない（.json を .js と読む走査の癖でこの名前で出る）",
+    "scripts/lib/check-catalog.mjs": "登録簿の説明文がエンジンの場所を案内するだけ（エンジンは共通側、登録簿はアダプター側にあり、実行時は導入先のパスで解決する）",
+    "scripts/new-rulebook.sh": "同上（登録簿の説明文が雛形生成の入口を案内する）",
+    "scripts/check-invariant-catalog.test.sh": "登録簿の注記が、エンジンと併存する bespoke 検査の名前を示すだけ"
   }
 }
