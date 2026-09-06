@@ -34,6 +34,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_denials: {
+        Row: {
+          actor_id: string | null
+          facility_id: string | null
+          guard: string
+          id: string
+          method: string | null
+          occurred_at: string
+          reason: string
+          route: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          facility_id?: string | null
+          guard: string
+          id?: string
+          method?: string | null
+          occurred_at?: string
+          reason: string
+          route?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          facility_id?: string | null
+          guard?: string
+          id?: string
+          method?: string | null
+          occurred_at?: string
+          reason?: string
+          route?: string | null
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
@@ -978,6 +1011,17 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_facility_member: { Args: { p_facility_id: string }; Returns: boolean }
       is_facility_writer: { Args: { p_facility_id: string }; Returns: boolean }
+      record_access_denial: {
+        Args: {
+          p_actor_id?: string
+          p_facility_id?: string
+          p_guard: string
+          p_method?: string
+          p_reason: string
+          p_route?: string
+        }
+        Returns: string
+      }
       record_business_invariants: { Args: never; Returns: undefined }
       record_issue_url: {
         Args: { log_id: string; url: string }
