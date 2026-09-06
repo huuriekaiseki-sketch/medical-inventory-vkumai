@@ -5,6 +5,7 @@ import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listCaseOrders, createCaseOrder } from '@/lib/case-orders/repository'
 import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parsePagination } from '@/lib/api-pagination'
+import { validateClientRequestId } from '@/lib/client-request-id'
 import type { CaseOrderInput } from '@/types/order'
 
 export async function GET(request: NextRequest) {
@@ -47,6 +48,8 @@ export async function POST(request: NextRequest) {
     return apiError('性別は male / female / other のいずれかを指定してください', 400)
   }
   if (!body.doctorName?.trim()) return apiError('担当医師名は必須です', 400)
+  const clientRequestId = validateClientRequestId(body.clientRequestId)
+  if (!clientRequestId.ok) return apiError(clientRequestId.message, 400)
 
   const input: CaseOrderInput = {
     caseDatetime: body.caseDatetime,
@@ -56,6 +59,7 @@ export async function POST(request: NextRequest) {
     gender: body.gender,
     doctorName: body.doctorName,
     items: body.items ?? [],
+    clientRequestId: clientRequestId.value,
   }
 
   try {

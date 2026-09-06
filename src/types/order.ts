@@ -33,6 +33,8 @@ export type CaseOrderInput = {
   gender: 'male' | 'female' | 'other'
   doctorName: string
   items: CaseOrderItemInput[]
+  /** 二重送信対策の鍵（UUID）。画面がフォームを開いたときに 1 回だけ生成する。同じ鍵の再送は同じ発注を返す（P-053） */
+  clientRequestId?: string
 }
 
 export type CaseOrderItemInput = {
@@ -112,6 +114,8 @@ export type ConsumableOrderItem = {
 
 export type ConsumableOrderInput = {
   items: ConsumableOrderItemInput[]
+  /** 二重送信対策の鍵（UUID）。P-053 */
+  clientRequestId?: string
 }
 
 export type ConsumableOrderItemInput = {
@@ -145,6 +149,8 @@ export type LoanOrderInput = {
   procedureName: string
   maker: string
   items: LoanOrderItemInput[]
+  /** 二重送信対策の鍵（UUID）。P-053 */
+  clientRequestId?: string
 }
 
 export type LoanOrderItemInput = {
@@ -178,6 +184,8 @@ export type LoanReturnItem = {
 export type LoanReturnInput = {
   returnDatetime: string
   items: LoanReturnItemInput[]
+  /** 二重送信対策の鍵（UUID）。P-053 */
+  clientRequestId?: string
 }
 
 export type LoanReturnItemInput = {

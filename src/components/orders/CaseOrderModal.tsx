@@ -20,6 +20,9 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
   const [items, setItems] = useState<ItemRow[]>(() => [{ id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // WHY: 二重送信対策の鍵（P-053）。フォームを開いたときに 1 回だけ作り、通信断後の再送でも同じ鍵を送る。
+  //      成功して次の発注に移るときだけ新しい鍵にする
+  const [clientRequestId, setClientRequestId] = useState(() => crypto.randomUUID())
 
   const resetForm = () => {
     setCaseDatetime('')
@@ -30,6 +33,7 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
     setDoctorName('')
     setItems([{ id: crypto.randomUUID(), jan: '', lot: '', ubd: '', quantity: 1 }])
     setError(null)
+    setClientRequestId(crypto.randomUUID())
   }
 
   const handleClose = () => { resetForm(); onClose() }
@@ -58,6 +62,7 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
           gender,
           doctorName,
           items: items.map(r => ({ jan: r.jan, lot: r.lot || undefined, ubd: r.ubd || undefined, quantity: r.quantity })),
+          clientRequestId,
         }),
       })
       if (!res.ok) {

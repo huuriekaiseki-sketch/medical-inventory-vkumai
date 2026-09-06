@@ -15,6 +15,8 @@ export default function NewLoanOrderPage({ params }: { params: Promise<{ id: str
   const [items, setItems] = useState<LoanItemRow[]>([{ jan: '', name: '', quantity: 1 }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // WHY: 二重送信対策の鍵（P-053）。ページを開いたときに 1 回だけ作り、再送でも同じ鍵を送る
+  const [clientRequestId] = useState(() => crypto.randomUUID())
 
   const addRow = () => setItems(prev => [...prev, { jan: '', name: '', quantity: 1 }])
   const removeRow = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i))
@@ -36,6 +38,7 @@ export default function NewLoanOrderPage({ params }: { params: Promise<{ id: str
           procedureName,
           maker,
           items: items.map(r => ({ jan: r.jan || undefined, name: r.name, quantity: r.quantity })),
+          clientRequestId,
         }),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || '送信に失敗しました') }

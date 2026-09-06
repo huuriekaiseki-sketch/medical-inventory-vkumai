@@ -6,6 +6,7 @@ import { listLoanReturns, createLoanReturn } from '@/lib/loan-returns/repository
 import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { ClientVisibleError } from '@/lib/client-visible-error'
 import { parsePagination } from '@/lib/api-pagination'
+import { validateClientRequestId } from '@/lib/client-request-id'
 import type { LoanReturnInput } from '@/types/order'
 
 export async function GET(request: NextRequest) {
@@ -46,10 +47,13 @@ export async function POST(request: NextRequest) {
   if (body.items && body.items.some((item: { jan?: string }) => !item.jan?.trim())) {
     return apiError('JANは必須です', 400)
   }
+  const clientRequestId = validateClientRequestId(body.clientRequestId)
+  if (!clientRequestId.ok) return apiError(clientRequestId.message, 400)
 
   const input: LoanReturnInput = {
     returnDatetime: body.returnDatetime,
     items: body.items ?? [],
+    clientRequestId: clientRequestId.value,
   }
   try {
     const db = await createServerSupabase()

@@ -165,6 +165,23 @@ Vercel のログに出す。
 **機械検知:** eslint no-console（`npm run lint`）、`src/lib/log-safe.test.ts`（伏せ漏れは RED）、
 `scripts/check-pii-leak.test.sh`（追跡ファイルの許可ドメイン外メール・gitignore）。
 
+### 送信ボタンの disabled を二重送信の防御と思い、作成 RPC を呼ばれた回数だけ INSERT する（2026-09-06）
+
+**チェック内容:** 行を作る経路（発注・返却の RPC、将来の招待・エクスポート）は、画面が 1 回だけ作る鍵
+（`clientRequestId`、UUID）を受け取り、DB の UNIQUE（施設 × 鍵）で「同じ送信は 1 行」を守る。
+RPC は同じ鍵の再送・同時送信で既存の行を返す（`replayed: true`）。画面は失敗後の再送で同じ鍵、
+成功後は新しい鍵を送る（P-053 / I-034）。`submitting` で disabled にするのは利便性で、応答が返る前の
+通信断・タブの二重化・リロード後の再送には効かない。
+
+**なぜ再発したか:** 「1 トランザクションで原子的に INSERT する」（issue #2 の RPC 化）と「二重送信で
+2 件できない」は別の性質だが、前者を入れた時点で後者も済んだ気になっていた。テストは 1 回呼んで
+1 行できることしか見ていなかった。
+
+**機械検知:** `order-idempotency.integration.test.ts`（同じ鍵で 2 回・2 件同時 → 1 行）、
+`orders-client-request-id.test.ts`（route が鍵を通す・UUID でなければ 400）、
+`CaseOrderModal.client-request-id.test.tsx`（再送で同じ鍵・成功後は新しい鍵）。作成 route を足したら
+derive の `idempotency` が required を出す（`derive-test-selection.rules.mjs`）。
+
 ### 日付の整形を実行環境のタイムゾーンに任せ、Vercel（UTC）で前日になる（2026-09-06）
 
 **チェック内容:** `new Date(iso).toLocaleDateString('ja-JP')` / `toLocaleString('ja-JP')` を直接呼ばない。

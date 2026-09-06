@@ -156,15 +156,18 @@ export const RULES = [
     key: 'idempotency',
     label: '冪等性（再送・二重実行）',
     timing: 'on-change',
-    status: 'not-ready',
     trigger: ctx => {
-      // migration 本体（.sql）だけを見る。migrations/__tests__/*.test.ts はテストであり RPC の挙動を変えない
-      const hits = anyPath(ctx.files, /^supabase\/migrations\/[^/]*(order|loan|return|rpc)[^/]*\.sql$/i)
+      // migration 本体（.sql）だけを見る。migrations/__tests__/*.test.ts はテストであり RPC の挙動を変えない。
+      // 作成 route と画面の送信経路（clientRequestId を送る側）も対象（P-053）
+      const hits = anyPath(
+        ctx.files,
+        /^supabase\/migrations\/[^/]*(order|loan|return|rpc|idempotency)[^/]*\.sql$|^src\/app\/api\/(case-orders|loan-orders|consumable-orders|loan-returns)\/route\.ts$|^src\/lib\/client-request-id\.ts$/i,
+      )
       const hit = ctx.risks.includes('retry_possible') || hits.length > 0
-      return { hit, why: ctx.risks.includes('retry_possible') ? 'リスク申告 retry_possible' : `注文・返却系 RPC の migration に触れた: ${hits.join(', ')}` }
+      return { hit, why: ctx.risks.includes('retry_possible') ? 'リスク申告 retry_possible' : `注文・返却系の RPC / 作成 route / 鍵の検査に触れた: ${hits.join(', ')}` }
     },
-    notRequiredReason: '注文・返却系 RPC に触れておらず、retry_possible の申告も無い',
-    commands: ['(個別テスト) 同じ入力で RPC を2回呼び、件数・状態が変わらないことを統合テストで Assert する'],
+    notRequiredReason: '注文・返却系の RPC / 作成 route に触れておらず、retry_possible の申告も無い',
+    commands: ['npm run test:integration', 'npx vitest run src/app/api/__tests__/orders-client-request-id.test.ts'],
   },
   {
     key: 'invariants',

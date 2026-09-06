@@ -16,6 +16,8 @@ export default function NewLoanReturnPage({ params }: { params: Promise<{ id: st
   const [error, setError] = useState<string | null>(null)
   const [loanOrderId, setLoanOrderId] = useState('')
   const [unreturnedLoanOrders, setUnreturnedLoanOrders] = useState<OrderListItem[]>([])
+  // WHY: 二重送信対策の鍵（P-053）。ページを開いたときに 1 回だけ作り、再送でも同じ鍵を送る
+  const [clientRequestId] = useState(() => crypto.randomUUID())
 
   // WHY: 「未返却」バッジ判定（loan_returns.loan_order_id、issue #20 Set A）は返却作成時に
   //      対象の短貸発注を紐付けない限り、その短貸発注は永久に未返却のまま表示され続けるバグに
@@ -55,6 +57,7 @@ export default function NewLoanReturnPage({ params }: { params: Promise<{ id: st
           returnDatetime,
           items: items.map(r => ({ jan: r.jan, lot: r.lot || undefined, ubd: r.ubd || undefined, quantity: r.quantity })),
           ...(loanOrderId ? { loanOrderId } : {}),
+          clientRequestId,
         }),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || '送信に失敗しました') }

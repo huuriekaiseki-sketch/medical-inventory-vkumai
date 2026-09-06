@@ -17,12 +17,15 @@ export function LoanOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
   const [items, setItems] = useState<LoanItemRow[]>([{ jan: '', name: '', quantity: 1 }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // WHY: 二重送信対策の鍵（P-053）。フォームを開いたときに 1 回だけ作り、成功したときだけ新しくする
+  const [clientRequestId, setClientRequestId] = useState(() => crypto.randomUUID())
 
   const resetForm = () => {
     setProcedureName('')
     setMaker('')
     setItems([{ jan: '', name: '', quantity: 1 }])
     setError(null)
+    setClientRequestId(crypto.randomUUID())
   }
 
   const handleClose = () => { resetForm(); onClose() }
@@ -47,6 +50,7 @@ export function LoanOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
         body: JSON.stringify({
           facilityId, procedureName, maker,
           items: items.map(r => ({ jan: r.jan || undefined, name: r.name, quantity: r.quantity })),
+          clientRequestId,
         }),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || '送信に失敗しました') }

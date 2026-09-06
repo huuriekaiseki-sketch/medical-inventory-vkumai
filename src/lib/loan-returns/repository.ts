@@ -127,7 +127,13 @@ export async function createLoanReturn(db: SupabaseClient, facilityId: string, i
   //      (supabase/migrations/20260629000002_loan_return_atomic_rpc.sql)で単一トランザクションに
   //      統一する。loanOrderIdのテナント境界検証は上記で完了済みのため、RPC側では再検証しない
   const { data, error } = await db.rpc('create_loan_return_atomic', {
-    p_header: { facility_id: facilityId, return_datetime: input.returnDatetime, loan_order_id: loanOrderId ?? null },
+    p_header: {
+      facility_id: facilityId,
+      return_datetime: input.returnDatetime,
+      loan_order_id: loanOrderId ?? null,
+      // WHY: 返却 RPC はシグネチャを変えず p_header の中で鍵を受ける（P-053）。無ければ入れない
+      ...(input.clientRequestId ? { client_request_id: input.clientRequestId } : {}),
+    },
     p_items: input.items.map(item => ({
       jan: item.jan,
       lot: item.lot ?? null,

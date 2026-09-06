@@ -17,6 +17,8 @@ export default function NewConsumableOrderPage({ params }: { params: Promise<{ i
   const [activeTab, setActiveTab] = useState<Tab>('ALL')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // WHY: 二重送信対策の鍵（P-053）。ページを開いたときに 1 回だけ作り、再送でも同じ鍵を送る
+  const [clientRequestId] = useState(() => crypto.randomUUID())
 
   useEffect(() => {
     let cancelled = false
@@ -50,7 +52,7 @@ export default function NewConsumableOrderPage({ params }: { params: Promise<{ i
       const res = await fetch('/api/consumable-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ facilityId: id, items }),
+        body: JSON.stringify({ facilityId: id, items, clientRequestId }),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || '送信に失敗しました') }
       router.push(`/facilities/${id}/consumable-orders`)
