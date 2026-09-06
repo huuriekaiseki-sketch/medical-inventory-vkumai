@@ -10,7 +10,7 @@
 
 - 列は固定 7 列: ID / 不変条件 / 守る場所 / 破る操作 / 期待 / 守るテスト / 状態。列の中に `|` を書かない。
 - ID は `I-` + 3 桁。区分ごとに 10 刻み（数量・金額 01x / 状態遷移 02x / 関係の個数 03x /
-  派生値 04x / 集計をまたぐ 05x）。欠番は詰めない。
+  派生値 04x / 集計をまたぐ 05x / 入力の長さ 06x）。欠番は詰めない。
 - 守るテスト列はバッククォートでファイルパスを書き、**そのファイルの中に ID 文字列が実在する**ことを
   `scripts/check-invariant-catalog.test.sh`（CI `hooks-test`）が検査する。テストコードにあるのに
   カタログに無い ID も違反。守るテストが無い行は `未` と書く。
@@ -56,6 +56,22 @@
 | I-040 | 粗利 = 納品価格 − 仕切値。掛け率 = 価格 ÷ 償還価格で、償還価格が変わると全施設の掛け率が追従し、償還価格が NULL / 0 なら掛け率は NULL | 生成列 `gross_profit`、トリガー `compute_hospital_price_rates` / `propagate_reimbursement_price_change` | 価格を UPDATE、償還価格を UPDATE / NULL 化 | 直後の SELECT で等式が成り立つ | `supabase/__tests__/integration/business-invariants.integration.test.ts` | 実装済み |
 | I-041 | 価格履歴は値が変わったときだけ 1 件増え、直接 INSERT できない | SECURITY DEFINER トリガー、RLS `price_histories_no_insert`（P-051） | 同値 UPDATE、直接 INSERT | 増えない、拒否 | `supabase/__tests__/integration/price-histories-rls-idor.integration.test.ts` | 実装済み |
 | I-042 | `updated_at` は更新のたびに進む（楽観ロックの前提） | トリガー `update_updated_at`（P-052 が依存） | 2 回 UPDATE して比較 | 単調増加 | `supabase/__tests__/integration/hospital-prices-concurrency.integration.test.ts` | 実装済み |
+
+## 入力の長さ
+
+自由入力の TEXT 列に上限を置く。画面の maxlength は利便性であって防御ではない（API を直接叩けば通る）。
+2026-09-07 の実測では、上限が無かったため術式名に 1 MB の文字列がそのまま保存されていた。
+値は実データの最大長の 10 倍以上にしてあり、入力欄を狭めるためのものではない。
+
+| ID | 不変条件 | 守る場所 | 破る操作 | 期待 | 守るテスト | 状態 |
+| --- | --- | --- | --- | --- | --- | --- |
+| I-060 | 症例発注の術式名は 200 文字以内、患者 ID は 100 文字以内、イニシャルは 20 文字以内、医師名は 100 文字以内 | CHECK `case_orders_text_length`（20260907000004、NOT VALID） | 1 MB の術式名で発注を作る | 23514。ヘッダも明細も残らない | `supabase/__tests__/integration/text-length-limits.integration.test.ts`、`supabase/migrations/__tests__/add_text_length_limits.test.ts` | 実装済み |
+| I-061 | 短貸発注の術式名とメーカー名は 200 文字以内 | CHECK `loan_orders_text_length` | 長いメーカー名で発注を作る | 23514 | `supabase/__tests__/integration/text-length-limits.integration.test.ts` | 実装済み |
+| I-062 | 明細の JAN は 64 文字以内、ロットと使用期限は 100 文字以内、品名は 200 文字以内 | CHECK `case_order_items_text_length` / `loan_order_items_text_length` / `loan_return_items_text_length` | 長い JAN の明細を直接 INSERT する | 23514 | `supabase/__tests__/integration/text-length-limits.integration.test.ts` | 実装済み |
+| I-063 | 消耗品の品名は 200 文字以内、用途は 1,000 文字以内 | CHECK `consumables_text_length` | 長い用途で消耗品を作る | 23514 | `supabase/__tests__/integration/text-length-limits.integration.test.ts` | 実装済み |
+| I-064 | 施設名は 200 文字以内 | CHECK `facilities_text_length` | 200,000 文字の施設名を作る | 23514 | `supabase/__tests__/integration/text-length-limits.integration.test.ts` | 実装済み |
+| I-065 | マスタの JAN と品番は 64 文字以内、名称・メーカー・仕入先は 200 文字以内 | CHECK `products_text_length` / `categories_text_length` / `distributor_products_text_length` | 5,000 文字の JAN で商品を作る | 23514 | `supabase/__tests__/integration/text-length-limits.integration.test.ts` | 実装済み |
+| I-066 | 既存行が上の上限を破っていない（NOT VALID で入れたので夜間検査で確かめてから VALIDATE する） | 夜間検査 I-051（pg_constraint から NOT VALID を動的に列挙。本番で 0 件を確認したら VALIDATE の migration を出す） | — | 違反 0 件 | 未 | 計画 |
 
 ## 集計をまたぐ（DB 制約にできない。夜間 SELECT 検査 #757 の 9）
 
