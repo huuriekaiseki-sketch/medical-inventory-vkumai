@@ -856,6 +856,14 @@ export type Database = {
       }
     }
     Functions: {
+      check_business_invariants: {
+        Args: never
+        Returns: {
+          detail: Json
+          invariant_id: string
+          object_name: string
+        }[]
+      }
       check_schema_drift: {
         Args: never
         Returns: {
@@ -952,6 +960,7 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_facility_member: { Args: { p_facility_id: string }; Returns: boolean }
       is_facility_writer: { Args: { p_facility_id: string }; Returns: boolean }
+      record_business_invariants: { Args: never; Returns: undefined }
       record_issue_url: {
         Args: { log_id: string; url: string }
         Returns: undefined

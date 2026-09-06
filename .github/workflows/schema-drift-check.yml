@@ -85,7 +85,22 @@ jobs:
             drift_type=$(echo "$row" | jq -r '.drift_type')
             object_name=$(echo "$row" | jq -r '.object_name')
             detected_at=$(echo "$row" | jq -r '.detected_at')
-            cat > issue-body.md <<EOF
+            if [ "$drift_type" = "invariant_violation" ]; then
+              # WHY: 業務不変条件の夜間検査（issue #757 の 9）も同じ経路で issue 化する。
+              #      object_name は "I-xxx:<対象>"。カタログ docs/agents/invariant-catalog.md の ID で引く
+              cat > issue-body.md <<EOF
+          ## 検知内容
+          - invariant: \`${object_name}\`（docs/agents/invariant-catalog.md の ID）
+          - detected_at: ${detected_at}
+
+          業務不変条件に違反するデータが本番DBに存在します（夜間検査 \`record_business_invariants()\`）。
+          I-050 は返却数量が貸出数量を超えている短貸発注、I-051 は NOT VALID の CHECK 制約に違反する既存行です。
+          データを直すか、不変条件の定義を見直してください。解消されると自動クローズされます。
+
+          issue #757 の 9（不変条件の夜間検査）により自動作成されました。
+          EOF
+            else
+              cat > issue-body.md <<EOF
           ## 検知内容
           - drift_type: \`${drift_type}\`
           - object_name: \`${object_name}\`
@@ -95,6 +110,7 @@ jobs:
 
           issue #305 のスキーマドリフト検知により自動作成されました。
           EOF
+            fi
             gh issue create --title "$title" --label schema-drift --label bug --body-file issue-body.md
           done < expected_titles.txt
 
