@@ -60,6 +60,6 @@
 
 | ID | 不変条件 | 守る場所 | 破る操作 | 期待 | 守るテスト | 状態 |
 | --- | --- | --- | --- | --- | --- | --- |
-| I-050 | 返却明細の数量合計は、対応する短貸発注の明細数量合計を超えない | 夜間 SELECT（loan_order_id で結合し JAN ごとに集計） | 貸出 1 個に対し返却 2 個 | 検知して issue 化 | 未 | 計画 |
-| I-051 | NOT VALID で入れた CHECK（I-01x）に違反する既存行が 0 件。負の粗利（I-015）は件数を出す | 夜間 SELECT（`NOT (制約式)` で数える） | 制約導入前の古い行 | 0 件なら VALIDATE CONSTRAINT へ | 未 | 計画 |
+| I-050 | 返却明細の数量合計は、対応する短貸発注の明細数量合計を JAN ごとに超えない | 夜間検査 `check_business_invariants()`（pg_cron 22:50 UTC が `record_business_invariants()` で `schema_drift_log` に記録し、`schema-drift-check.yml` が issue 化・自動クローズ。20260906000005） | 貸出 1 個に対し返却 2 個を登録 | `I-050:<loan_order_id>:<jan>` が detected で残り、返却を消すと resolved | `supabase/__tests__/integration/business-invariants-nightly.integration.test.ts`、`supabase/migrations/__tests__/add_nightly_invariant_check.test.ts` | 実装済み |
+| I-051 | NOT VALID で入れた CHECK（I-01x）に違反する既存行が 0 件（pg_constraint から動的に列挙し `NOT (制約式)` で数える。制約を足しても検査側の変更は不要） | 同上の夜間検査 | 制約導入前の古い行 | 違反があれば `I-051:<制約名>` が detected。0 件なら VALIDATE CONSTRAINT へ | `supabase/__tests__/integration/business-invariants-nightly.integration.test.ts`、`supabase/migrations/__tests__/add_nightly_invariant_check.test.ts` | 実装済み |
 | I-052 | 施設を削除すると、その施設の発注・返却・価格・所属が残らない | FK `ON DELETE CASCADE`（20260624000000 / 20260627010000） | 施設を DELETE して各表を数える | 0 件 | 未 | 計画 |

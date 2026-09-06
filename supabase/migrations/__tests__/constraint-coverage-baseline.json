@@ -27,8 +27,5 @@
   "_rpcNotRequiredとは": "クライアントから呼べるが「境界の約束がそもそも無い」RPC の除外リスト（理由必須）。例: 引数も状態も持たず公開情報だけを返す関数。認可述語（is_admin 等）は自分の状態しか返さないが、SECURITY DEFINER で RLS の要なので除外せず、他人の id で false が返るテストを書く側に置く",
   "rpcNotRequired": [],
   "_既知の偽陰性": "この軸は『テーブル名が統合テストに登場するか』で判定するため、登場さえすれば消える。実際 price_histories の CHECK 制約（entity_type/field_name の許可値）は、GRANTがSELECTのみで service_role でも直接INSERTできず、唯一の書き手であるSECURITY DEFINERトリガーが固定リテラルを渡すため、**どのクライアント経路からも違反させられない**（実測確認済み）。代わりにトリガーが正しい履歴を残すことを price-histories-rls-idor.integration.test.ts で検証している",
-  "uncoveredIntegration": [
-    { "migration": "20260714000001_create_schema_drift_detection.sql", "risk": "low" },
-    { "migration": "20260714000003_schema_drift_v1_hardening.sql", "risk": "low" }
-  ]
+  "uncoveredIntegration": []
 }
