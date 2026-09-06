@@ -166,14 +166,15 @@ export const RULES = [
     key: 'concurrency',
     label: '同時実行',
     timing: 'on-change',
-    status: 'not-ready',
     trigger: ctx => {
-      const hits = anyPath(ctx.files, /^supabase\/migrations\/[^/]*(order|loan|return|inventory|stock)[^/]*\.sql$/i)
+      // 更新経路を持つのは現状 hospital_prices（楽観ロック、P-052）と loan_returns（UNIQUE、P-050）。
+      // その migration・リポジトリ・route に触れたら並列更新のテストを回す
+      const hits = anyPath(ctx.files, /^supabase\/migrations\/[^/]*(order|loan|return|inventory|stock|price)[^/]*\.sql$|^src\/lib\/hospital-prices\/|^src\/app\/api\/hospital-prices\//i)
       const hit = ctx.risks.includes('contention') || hits.length > 0
-      return { hit, why: ctx.risks.includes('contention') ? 'リスク申告 contention' : `同一注文・同一在庫行を更新しうる migration に触れた: ${hits.join(', ')}` }
+      return { hit, why: ctx.risks.includes('contention') ? 'リスク申告 contention' : `同一行を並列更新しうる箇所に触れた: ${hits.join(', ')}` }
     },
     notRequiredReason: '同一注文・同一在庫行を複数ユーザーが更新する変更ではなく、contention の申告も無い',
-    commands: ['(個別テスト) 同一行を並列更新し、楽観ロック・一意制約の拒否を統合テストで Assert する'],
+    commands: ['npm run test:integration', '(新しい更新経路を足したら) 同一行を並列更新し、楽観ロック・一意制約の拒否を統合テストで Assert する'],
   },
 
   // ---- 節目（PR ごとには要求しない。いつ回すかだけ出す） ----

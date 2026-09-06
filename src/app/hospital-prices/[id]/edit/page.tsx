@@ -51,7 +51,9 @@ export default function EditHospitalPricePage({ params }: { params: Promise<{ id
       const res = await fetch(`/api/hospital-prices/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        // WHY(P-052): 読み込んだときの updatedAt を送り、その後に他の利用者が更新していれば
+        //      409 で止める（黙って上書きしない）
+        body: JSON.stringify({ ...data, expectedUpdatedAt: price?.updatedAt }),
       })
 
       if (!res.ok) {
@@ -60,7 +62,9 @@ export default function EditHospitalPricePage({ params }: { params: Promise<{ id
         } else if (res.status === 422) {
           setError('施設または代理店商品が存在しません')
         } else if (res.status === 409) {
-          setError('この施設と商品の組み合わせは既に登録されています')
+          // UNIQUE 違反（組み合わせ重複）と楽観ロックの競合はどちらも 409。本文のメッセージで区別する
+          const body = await res.json().catch(() => ({}))
+          setError(body.error ?? 'この施設と商品の組み合わせは既に登録されています')
         } else {
           const body = await res.json()
           setError(body.error ?? '更新に失敗しました')

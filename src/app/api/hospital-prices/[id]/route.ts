@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
-import { getHospitalPrice, updateHospitalPrice, deleteHospitalPrice } from '@/lib/hospital-prices/repository'
+import {
+  getHospitalPrice,
+  updateHospitalPrice,
+  deleteHospitalPrice,
+  HOSPITAL_PRICE_CONFLICT_MESSAGE,
+} from '@/lib/hospital-prices/repository'
 import { apiError } from '@/lib/api-error'
 import type { HospitalPriceInput } from '@/types/hospitalPrice'
 import type { RouteContext } from '@/types/route'
@@ -69,6 +74,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ error: error.message }, { status: 422 })
       }
       if (error.message.includes('既に登録されています')) {
+        return NextResponse.json({ error: error.message }, { status: 409 })
+      }
+      // 楽観ロックの競合（P-052）。UNIQUE 違反と同じ 409 だが、本文で区別できるようメッセージを返す
+      if (error.message === HOSPITAL_PRICE_CONFLICT_MESSAGE) {
         return NextResponse.json({ error: error.message }, { status: 409 })
       }
     }

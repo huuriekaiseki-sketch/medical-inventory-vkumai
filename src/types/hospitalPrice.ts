@@ -16,4 +16,9 @@ export type HospitalPriceInput = {
   facilityId: string
   purchasePrice: number
   deliveryPrice: number
+  /**
+   * 楽観ロック（P-052）。更新時に「読み込んだときの updatedAt」を渡すと、その後に他の利用者が
+   * 更新していた場合は 409 で拒否され、後勝ちの上書きにならない。省略時は従来どおり無条件更新。
+   */
+  expectedUpdatedAt?: string
 }
