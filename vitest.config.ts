@@ -19,6 +19,9 @@ export default defineConfig({
       '**/node_modules/**',
       '**/.claude/worktrees/**',
       '**/*.integration.test.ts',
+      // フレーキー検知（scripts/check-flaky-tests.test.sh）の RED 方向 fixture。意図的に落ちるテストなので
+      // 通常の npm test では回さない（scripts/eval-fixtures/flaky/vitest.config.mjs だけが拾う）
+      '**/scripts/eval-fixtures/**',
     ],
   },
   resolve: {
