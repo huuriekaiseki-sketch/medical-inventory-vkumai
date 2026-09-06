@@ -228,6 +228,7 @@ export const RULES = [
     commands: ['(個別テスト) Supabase 停止・タイムアウト時に UI / API Route が失敗を返すことを Assert する'],
   },
   { key: 'runbook', label: '復旧手順（ランブック）', timing: 'milestone', event: '障害発生時、公開前' },
+  { key: 'scale-measurement', label: '規模の実測', timing: 'milestone', event: '索引・スキーマの変更、依存の major 更新、外部公開前' },
 ]
 
 // --risk で申告できるキー。test-matrix.md のトリガー列と対応
