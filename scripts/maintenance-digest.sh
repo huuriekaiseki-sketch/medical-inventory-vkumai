@@ -16,6 +16,7 @@ set -euo pipefail
 #   FAULT_INJECTION_DRILL_DOC   既定 docs/agents/fault-injection-drill.md
 #   HOOK_LIVE_DRILL_DOC         既定 docs/agents/hook-live-drill.md
 #   UPSTREAM_DOCS_REVIEW_DOC    既定 docs/agents/upstream-docs-review.md
+#   DEPENDENCY_UPDATE_DOC       既定 docs/agents/dependency-update-runbook.md（issue #757 の 21 で追加。4 つ目）
 #   MAINTENANCE_DIGEST_PLAIN=1  JSON でなく人が読む素のテキストで出す（手動実行用）
 
 command -v jq >/dev/null 2>&1 || exit 0
@@ -75,6 +76,7 @@ BODY="$(
   line_for "fault injection 訓練" "${FAULT_INJECTION_DRILL_DOC:-docs/agents/fault-injection-drill.md}" "手順: docs/agents/fault-injection-drill.md「## 実行手順」"
   line_for "hook 実走ドリル" "${HOOK_LIVE_DRILL_DOC:-docs/agents/hook-live-drill.md}" "手順: docs/agents/hook-live-drill.md「## 手順」"
   line_for "公式 docs 差分確認" "${UPSTREAM_DOCS_REVIEW_DOC:-docs/agents/upstream-docs-review.md}" "手順: docs/agents/upstream-docs-review.md「## 手順（1〜2 時間）」"
+  line_for "依存の月次棚卸し" "${DEPENDENCY_UPDATE_DOC:-docs/agents/dependency-update-runbook.md}" "手順: docs/agents/dependency-update-runbook.md「## 手順（30 分）」"
 )"
 # サブシェル内の加算は親に戻らないため、本文の ⚠ を数え直す
 OVERDUE="$(printf '%s\n' "$BODY" | grep -c '⚠' || true)"
