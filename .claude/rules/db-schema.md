@@ -5,6 +5,11 @@ paths:
 
 # DBスキーマ変更ルール
 
+- **新しいテーブルを作る前に、[`../../docs/agents/design-questions.md`](../../docs/agents/design-questions.md) の質問を人に聞く。**
+  大きさ（文字数・件数）・量（何回まで）・権限（誰が読み書きするか）・消えるとき・記録・途中で止まったとき・
+  外部送信の 7 つ。**分からない値を勝手に既定値で埋めない**（2026-09-07 にそれをやって、後から
+  migration をもう 1 本書き直した）。聞いた答えは migration の先頭に `-- design:` で残し、
+  `scripts/check-design-questions.test.sh`（CI `hooks-test`）が記録の有無を検査する
 - **DBスキーマ変更は必ず `supabase/migrations/` 配下のマイグレーションファイル経由で行う。**
   `execute_sql` 等による直接実行・直接DDL適用は禁止（ローカル・リモート問わず）。
   `supabase db execute`・`psql`直接実行、およびMCP経由のexecute_sql系ツール呼び出しは

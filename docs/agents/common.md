@@ -156,9 +156,9 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 `--status` は `starting|running|waiting|done|failed` のいずれか。`feature`名が
 呼び出し元から与えられていない場合は `unknown` を使う。
 
-現在の状態は `scripts/show-agent-status.sh` で一覧できる（`--stale-seconds`未満は既定180秒＝3分。`running`/`waiting`のまま既定180秒以上更新がないエージェントは「止まってる？」として表示される）。最終報告が`--max-age-seconds`（既定604800秒＝7日）より古いエージェントは過去フローの残骸として表示せず、末尾に非表示件数だけ出す（`0`で全件表示。ログは追記のみで消えないため、数週間前の`running`が「止まってる？（数百万秒応答なし）」としてcompaction後の再注入（issue #712）に毎回混ざっていた対策）。
+現在の状態は `scripts/show-agent-status.sh` で一覧できる（既定で 180 秒以上更新の無い `running`/`waiting` を「止まってる？」と出し、7 日より古い報告は件数だけ出す。閾値と経緯は [`observability-internals.md`](./observability-internals.md#agent-progress記録の構造的限界記録内容検証の詳細)）。
 
-記録漏れ検知の手順はloop-observabilityと共通のgap check state方式（上記[「loop-observabilityログの記録漏れ検知」](#loop-observabilityログの記録漏れ検知)参照。フロー完了後に `scripts/record-gap-check-state.sh expected --agent-progress <値>` を呼ぶ）。記録内容の正しさは `scripts/verify-agent-progress-transcript.sh` が自己申告とtranscriptを機械比較する。両者の判定ロジック・既知の限界（agent-progress.jsonlの構造的限界、mismatches/lowOverlapDetailsの仕組み等）は [`observability-internals.md`](./observability-internals.md#agent-progress記録の構造的限界記録内容検証の詳細) を参照。
+記録漏れ検知は loop-observability と同じ gap check state 方式（フロー完了後に `scripts/record-gap-check-state.sh expected --agent-progress <値>`）。記録内容の正しさは `scripts/verify-agent-progress-transcript.sh` が自己申告と transcript を機械比較する。判定ロジックと既知の限界は [`observability-internals.md`](./observability-internals.md#agent-progress記録の構造的限界記録内容検証の詳細)。
 
 ## 観測・Eval基盤の内部詳細への参照
 
@@ -249,6 +249,7 @@ AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p
 | [`docs/agents/test-matrix.md`](./test-matrix.md) | テスト種別ごとの実施タイミング（毎回/変更時/節目/一度きり）・トリガー・証跡・derive キーの正本。`scripts/check-test-matrix.test.sh`が整合を検査 |
 | [`docs/agents/promise-catalog.md`](./promise-catalog.md) | auth / RLS / facility 境界の約束カタログ（AAA、`P-xxx`）。守るテストの `describe` 名に ID を書き、`scripts/check-promise-catalog.test.sh` が双方向に突合 |
 | [`docs/agents/invariant-catalog.md`](./invariant-catalog.md) | 業務不変条件（`I-xxx`）。DB の CHECK / トリガーが守り、構造テストがテストと突合 |
+| [`docs/agents/design-questions.md`](./design-questions.md) | 新しいテーブル・API・外部送信を作る**前に**人に聞く質問の一覧。2026-09-07 の点検で見つけた実害が全て「作る前に聞いていれば防げた」ものだったことから作った。決めた値もここに残す |
 | [`docs/agents/security-test-catalog.md`](./security-test-catalog.md) | ルーチン外の検査の引き出し。新機能・事故・公開時に引き金列を読み #757 へ昇格 |
 | `scripts/derive-test-selection.sh` / `scripts/lib/derive-test-selection.mjs` / `scripts/lib/derive-test-selection.rules.mjs` | 変更ファイルから「今回必須 / 今回不要（理由付き）」を機械導出し 04 表を出す（PR②）。エンジン（共通）とルール表（固有）を分離。高リスク判定は`router-risk.js`を参照 |
 | [`docs/agents/tooling-decisions.md`](./tooling-decisions.md) | 公式機能・プラグインの導入可否判断記録（common.mdから分離、issue #486） |
