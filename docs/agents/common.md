@@ -250,6 +250,7 @@ AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p
 | [`docs/agents/promise-catalog.md`](./promise-catalog.md) | auth / RLS / facility 境界の約束カタログ（AAA、`P-xxx`）。守るテストの `describe` 名に ID を書き、`scripts/check-promise-catalog.test.sh` が双方向に突合 |
 | [`docs/agents/invariant-catalog.md`](./invariant-catalog.md) | 業務不変条件（`I-xxx`）。DB の CHECK / トリガーが守り、構造テストがテストと突合 |
 | [`docs/agents/security-test-catalog.md`](./security-test-catalog.md) | ルーチン外の検査の引き出し。新機能・事故・公開時に引き金列を読み #757 へ昇格 |
+| [`docs/agents/threat-model.md`](./threat-model.md) | 脅威モデル（`T-xxx`）と守る検査（P / I / #757）の対応表。全 P / I がどれかの脅威に紐づくことを構造テストが検査 |
 | `scripts/derive-test-selection.sh` / `scripts/lib/derive-test-selection.mjs` / `scripts/lib/derive-test-selection.rules.mjs` | 変更ファイルから「今回必須 / 今回不要（理由付き）」を機械導出し 04 表を出す（PR②）。エンジン（共通）とルール表（固有）を分離。高リスク判定は`router-risk.js`を参照 |
 | [`docs/agents/tooling-decisions.md`](./tooling-decisions.md) | 公式機能・プラグインの導入可否判断記録（common.mdから分離、issue #486） |
 | [`docs/agents/actuator-inventory.md`](./actuator-inventory.md) | 検知hookの検知後の是正（block/自動復旧/warning-only）の棚卸し（issue #578） |
@@ -267,11 +268,11 @@ AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p
 | [`docs/agents/run-manifest.md`](./run-manifest.md) | AIDDフローのspecHash/baseCommit突合用Run Manifestのスキーマ |
 | `scripts/log-agent-progress.sh` / `scripts/show-agent-status.sh` | サブエージェント進捗の記録・一覧表示（issue #18） |
 | `aidd.config.json` / `scripts/lib/aidd-config.sh` | 導入先アダプター設定（issue #420）。TRI/RISK の固有語彙・読み取り専用ロール・検査コマンド・追記先 docs。判定エンジンと hook 4 本が読み、値は汎用既定値に足すだけで消せない |
-| `scripts/build-plugin.sh` / `scripts/lib/plugin-layout.json` | プラグイン v1 の生成（issue #420）。層の表に従い `dist/plugins/` を機械生成し、共通側の禁止語・同梱閉包・決定性を検査。配布は `--marketplace --out ~/aidd-plugins/plugins`（非公開 marketplace `aidd-plugins`、版は `{plugin}--v{version}` タグ）。`build-plugin.test.sh` が dist の鮮度を見る |
-| `scripts/lib/resolve-log-dir.sh` | `logs/`の書き込み先をworktree横断で単一のディレクトリ（メインworktree直下）に解決する。全`log-*.sh`/`check-*.sh`/`summarize-*.sh`が参照する（issue #546。従来は各worktreeが起動時のカレントディレクトリ相対で別々の`logs/`に書き込み、観測記録の約半数が死蔵していた） |
+| `scripts/build-plugin.sh` / `scripts/lib/plugin-layout.json` | プラグイン v1 の生成（issue #420）。層の表に従い `dist/plugins/` を機械生成し、禁止語・同梱閉包・決定性を検査。配布は `--marketplace --out ~/aidd-plugins/plugins`（版は `{plugin}--v{version}` タグ）。`build-plugin.test.sh` が dist の鮮度を見る |
+| `scripts/lib/resolve-log-dir.sh` | `logs/`の書き込み先をworktree横断で単一のディレクトリ（メインworktree直下）に解決する。全`log-*.sh`/`check-*.sh`/`summarize-*.sh`が参照する（issue #546。worktreeごとに別の`logs/`へ書いて観測記録の約半数が死蔵していた対策） |
 | `scripts/lib/canonical-event.ts` | hook/journal/agent-progress/loop-observabilityの4ログを正規化する読み取り専用Adapter層（issue #569） |
-| `scripts/harvest-journal-events.sh` / `scripts/lib/harvest-journal-events.ts` | Workflow journal(wf_*)をtranscript cleanupで消える前に`logs/journal-harvest.jsonl`へ収穫（Stop hook契機・source+agentIdで重複排除。issue #642） |
-| `scripts/summarize-gate-passfail.sh` / `scripts/lib/gate-effectiveness-summary.ts` | 収穫済みjournalベースでagentType別pass/fail/blockedを集計し月次品質ゲートサマリへ出力（旧summarize-gate-blocked.sh=blockedのみ集計を統合。issue #569・#642） |
+| `scripts/harvest-journal-events.sh` / `scripts/lib/harvest-journal-events.ts` | Workflow journal(wf_*)をtranscript cleanupで消える前に`logs/journal-harvest.jsonl`へ収穫（Stop hook契機・重複排除。issue #642） |
+| `scripts/summarize-gate-passfail.sh` / `scripts/lib/gate-effectiveness-summary.ts` | 収穫済みjournalからagentType別pass/fail/blockedを集計し月次品質ゲートサマリへ出力（issue #569・#642） |
 | `.claude/workflows/lib/constraint-coverage.js` | DB制約・RLS/admin境界・公開RPCの「守るテストが無い穴」の判定ロジック正本（issue #675、P-043） |
 | `scripts/check-constraint-coverage.sh` | 現存する穴を**怪しい順**に表示。新規発生の阻止は`supabase/migrations/__tests__/constraint_coverage_ratchet.test.ts`が`npm test`で行う |
 | `scripts/check-agent-progress-gap.sh` | agent-progress記録漏れの機械検知（issue #339） |
