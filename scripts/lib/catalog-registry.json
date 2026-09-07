@@ -1,0 +1,55 @@
+{
+  "_comment": "ルールブック（カタログ）の登録簿。新しいルールブックを足すときはここに 1 エントリ書き、文書を作るだけでよい。検査は scripts/lib/check-catalog.mjs（汎用エンジン）が行い、scripts/check-catalogs.test.sh が全件を回す。エンジンは共通側（aidd-core）、この登録簿はリポジトリ固有（aidd-vkumai）。雛形の作成は bash scripts/new-rulebook.sh。",
+  "catalogs": [
+    {
+      "id": "invariant",
+      "file": "docs/agents/invariant-catalog.md",
+      "idPrefix": "I",
+      "columns": 7,
+      "evidenceColumn": 6,
+      "statusColumn": 7,
+      "states": [
+        "実装済み",
+        "計画",
+        "対象外"
+      ],
+      "evidenceRequiredStates": [
+        "実装済み"
+      ],
+      "idBands": [
+        10,
+        20,
+        30,
+        40,
+        50
+      ],
+      "_note": "bespoke な scripts/check-invariant-catalog.test.sh も残す（ID がテスト本文に実在するかの双方向突合はエンジンの範囲外）",
+      "purpose": "業務データが「どの経路から書かれても」満たしていなければならない条件。守る場所は原則 DB"
+    },
+    {
+      "id": "promise",
+      "file": "docs/agents/promise-catalog.md",
+      "idPrefix": "P",
+      "columns": 9,
+      "evidenceColumn": 8,
+      "statusColumn": 9,
+      "states": [
+        "毎回",
+        "変更時",
+        "節目",
+        "一度きり"
+      ],
+      "idBands": [
+        0,
+        10,
+        20,
+        30,
+        40,
+        50,
+        60
+      ],
+      "_note": "状態列は実施タイミング（4 語）。守るテストが 未 の行があるので evidenceRequiredStates は置かない",
+      "purpose": "auth / RLS / 施設境界 / admin 境界 / AAL2 / RPC 契約の約束。守るテストの名前に ID を書いて双方向に突合する"
+    }
+  ]
+}

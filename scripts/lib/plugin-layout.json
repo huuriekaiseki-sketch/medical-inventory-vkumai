@@ -161,7 +161,13 @@
     "summarize-instructions-loaded.sh": "aidd-core",
     "log-find-av-precision.sh": "aidd-core",
     "verify-agent-progress-transcript.sh": "aidd-core",
-    "lib/verify-agent-progress-transcript.ts": "aidd-core"
+    "lib/verify-agent-progress-transcript.ts": "aidd-core",
+    "lib/check-catalog.mjs": "aidd-core",
+    "lib/new-rulebook.mjs": "aidd-core",
+    "lib/render-rulebook-index.mjs": "aidd-core",
+    "new-rulebook.sh": "aidd-core",
+    "render-rulebook-index.sh": "aidd-core",
+    "lib/catalog-registry.json": "aidd-vkumai"
   },
   "workflowLib": {
     "_comment": ".claude/workflows/lib/ の純粋関数のうち bin/ のスクリプトが node で呼ぶもの。scripts/workflow-lib/ に置く（workflows/ 配下に置くと Workflow として走査されるため）",
@@ -195,7 +201,12 @@
     "scripts/build-plugin.test.sh": "derive のルール表のコメントが生成物の鮮度検査の所在を示すだけ",
     "scripts/lib/derive-test-selection.mjs": "derive は導入先の .claude/workflows/lib/router-risk.js に依存するため v1.0 では同梱しない（KNOWN-LIMITS）。案内文の参照のみ",
     "scripts/lib/merge-queue.js": "順番ファイル（merge-queue.json）は導入先のリポジトリ側にある。CLAUDE_PROJECT_DIR 優先で解決するので共通側には同梱しない（.json を .js と読む走査の癖でこの名前で出る）",
-    "scripts/rehearse-merge.sh": "順番ファイルの説明文が、共通側にある実行スクリプトの名前を案内するだけ"
+    "scripts/rehearse-merge.sh": "順番ファイルの説明文が、共通側にある実行スクリプトの名前を案内するだけ",
+    "scripts/check-catalogs.test.sh": "new-rulebook.sh と render-rulebook-index.mjs の案内文が、導入先で回す検査の名前を示すだけ（検査そのものの配布は層の表の checks で決める）",
+    "scripts/lib/catalog-registry.js": "登録簿（catalog-registry.json）は導入先のリポジトリ側にある。CLAUDE_PROJECT_DIR 優先で解決するので配布物に同梱しない（.json を .js と読む走査の癖でこの名前で出る）",
+    "scripts/lib/check-catalog.mjs": "登録簿の説明文がエンジンの場所を案内するだけ（エンジンは共通側、登録簿はアダプター側にあり、実行時は導入先のパスで解決する）",
+    "scripts/new-rulebook.sh": "同上（登録簿の説明文が雛形生成の入口を案内する）",
+    "scripts/check-invariant-catalog.test.sh": "登録簿の注記が、エンジンと併存する bespoke 検査の名前を示すだけ"
   },
   "checks": {
     "_comment": "検査（*.test.sh）の層。check-x.sh に対する check-x.test.sh は自動で対象と同じプラグインへ付いていくので、ここに書くのは (1) 対象スクリプトを持たない構造テスト (2) 自動判定を上書きしたいもの の 2 つだけ。上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙（高リスクパスの例・ドメイン語・スタック名）で書かれている検査で、共通側の禁止語検査に引っかかるもの。",
