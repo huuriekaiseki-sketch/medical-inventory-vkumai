@@ -930,6 +930,18 @@ export type Database = {
           object_name: string
         }[]
       }
+      check_denial_anomalies: {
+        Args: {
+          p_lookback_seconds?: number
+          p_threshold?: number
+          p_window_seconds?: number
+        }
+        Returns: {
+          detail: Json
+          hits: number
+          subject: string
+        }[]
+      }
       check_schema_drift: {
         Args: never
         Returns: {
@@ -1053,6 +1065,14 @@ export type Database = {
         Returns: string
       }
       record_business_invariants: { Args: never; Returns: undefined }
+      record_denial_anomalies: {
+        Args: {
+          p_lookback_seconds?: number
+          p_threshold?: number
+          p_window_seconds?: number
+        }
+        Returns: undefined
+      }
       record_issue_url: {
         Args: { log_id: string; url: string }
         Returns: undefined
@@ -1061,6 +1081,10 @@ export type Database = {
       refresh_schema_baseline_snapshot: {
         Args: { new_epoch: string }
         Returns: undefined
+      }
+      resolve_denial_anomaly_subject: {
+        Args: { p_object_name: string }
+        Returns: string
       }
       resolve_jan_unit_price: {
         Args: { p_facility_id: string; p_jan: string }

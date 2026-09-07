@@ -56,7 +56,7 @@ jobs:
           # (フォーマット文字列を複数箇所に重複させない)。rls_disabledはSPEC.md記載の
           # 優先度が最も高いドリフト種別のため、タイトルにも明示する
           jq '[.[] | . + {
-                title: (if .drift_type == "rls_disabled"
+                title: (if (.drift_type == "rls_disabled" or .drift_type == "denial_anomaly")
                         then "[schema-drift][priority:high] " + .drift_type + ": " + .object_name
                         else "[schema-drift] " + .drift_type + ": " + .object_name end)
               }]' drift_raw.json > drift.json
@@ -98,6 +98,24 @@ jobs:
           データを直すか、不変条件の定義を見直してください。解消されると自動クローズされます。
 
           issue #757 の 9（不変条件の夜間検査）により自動作成されました。
+          EOF
+            elif [ "$drift_type" = "denial_anomaly" ]; then
+              # WHY: 拒否の並びの異常（issue #757 の 8）。object_name は利用者 ID の伏せ字
+              #      "user:<md5 の先頭 12 桁>" か "anonymous:<guard>"。issue は広く見えるので
+              #      実際の ID は載せない（resolve_denial_anomaly_subject() が aal2 の admin にだけ返す）
+              cat > issue-body.md <<EOF
+          ## 検知内容
+          - subject: \`${object_name}\`（利用者 ID の伏せ字、または未認証の拒否をまとめた印）
+          - detected_at: ${detected_at}
+
+          同じ相手が短時間に何度も認可で弾かれています（夜間検査 \`record_denial_anomalies()\`、既定は 1 時間に 20 回）。
+          乗っ取りや総当たりの兆候はここにしか出ません。伏せ字から実際の利用者 ID を引くには、
+          aal2 まで上げた admin で \`select resolve_denial_anomaly_subject('${object_name}')\` を実行します。
+          そのうえで \`access_denials\` を guard / reason で辿り、
+          正規の操作ミス（期限切れセッション・画面の不具合）か、他施設 ID の総当たりかを切り分けてください。
+          収まると自動クローズされます。
+
+          issue #757 の 8（安全性のモニタリング）により自動作成されました。
           EOF
             else
               cat > issue-body.md <<EOF
