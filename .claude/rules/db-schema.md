@@ -18,6 +18,12 @@ paths:
 - マイグレーション外で本番/リモートDBに存在するスキーマ変更（トリガー・関数等）を発見した場合は、
   差分をキャッチアップ用マイグレーションとして必ず記録してから作業を進める
 - 理由（過去のスキーマドリフト事例）は [`../../docs/agents/decisions/db-rls.md`](../../docs/agents/decisions/db-rls.md#なぜdbスキーマ変更をmigrationファイル経由に限定し直接ddl実行を禁止したか) を参照
+- **その表への書き込みを止める DDL を書いたら `-- lock:` の 1 行を添える**（issue #757 の 18）。
+  対象は CREATE INDEX（CONCURRENTLY 無し）・ADD CONSTRAINT CHECK / FOREIGN KEY（NOT VALID 無し）・
+  ALTER COLUMN ... TYPE。何がどれだけ止まるか、本番規模を測ったかを書く。
+  `scripts/check-migration-lock-safety.test.sh`（CI `hooks-test`）が注記の有無だけを機械検査する
+  （止まる時間の見積もりは人にしか書けないため）。安全な書き方（CONCURRENTLY / NOT VALID）を
+  使っていれば注記は要らない
 - **publicスキーマのテーブルを追加/削除するmigrationは、末尾で`SELECT refresh_schema_baseline_snapshot('<そのmigrationのタイムスタンプ>');`を呼ぶ**（issue #305のスキーマドリフト検知が使うbaselineスナップショットを更新するため）。
   呼ばないと、正規のPRレビュー済み変更であっても`table_added`/`table_removed`ドリフトとして恒久的に誤検知され続け、対応するGitHub Issueが自動クローズされなくなる
 - **`supabase/migrations/`やRLSポリシーを変更したPRでは、`npm run test:integration`（RLS/IDOR

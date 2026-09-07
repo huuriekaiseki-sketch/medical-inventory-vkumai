@@ -1,6 +1,10 @@
 -- supabase/migrations/20260907000003_add_foreign_key_indexes.sql
 -- issue #757 の 19（性能と上限）。索引の穴は scripts/check-foreign-key-indexes.test.sh が固定する。
 -- release-order: db-first
+-- lock: 索引 10 本の作成中、対象表（明細 4 表・消耗品・代理店商品）への書き込みが止まる。
+--       ローカルの実測は 36,000 行で約 40 ms だが、本番のデータ量は未計測。
+--       CREATE INDEX CONCURRENTLY は migration がトランザクション内で走るため使えないので、
+--       利用の少ない時間帯に当てる（docs/agents/performance-baseline.md）。
 --
 -- WHY: PostgreSQL は外部キーを作っても**参照する側**に索引を作らない。索引が無いと、
 --      親を 1 行消すたびに子テーブル全体を走査して参照行を探す。行数に比例した走査が
