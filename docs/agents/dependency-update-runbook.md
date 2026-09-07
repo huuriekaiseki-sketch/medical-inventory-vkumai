@@ -53,8 +53,31 @@ SessionStart hook（`scripts/check-dependency-update-staleness.sh`）と `claude
 | typescript | 5.9.3（Latest 7.0.2、major 保留） | 2026-09-06 |
 | eslint | 9.39.4（Latest 10.10.0、major 保留） | 2026-09-06 |
 | CI の npm | 11.19.0（setup-node の Environment details） | 2026-09-05 |
+| fast-check | 4.9.0（dev のみ。推移依存は `pure-rand` 8.4.2 だけ） | 2026-09-07 |
 
 ## 実施記録
+
+### 2026-09-07（追加 1 件: fast-check）
+
+`fast-check@4.9.0` を `devDependencies` に追加した（#757-6 プロパティテスト。
+使い方と限界は [`property-testing.md`](./property-testing.md)）。
+
+- **用途**: 不変条件カタログ（I-010 / I-012 / I-020）の**境界**を乱数で測る。
+  既存の統合テストは代表値 1〜2 点しか通しておらず、境界そのものを測っていなかった。
+- **代替案**: 端の値を配列に並べて `it.each` で回す。依存は増えないが、
+  その配列は書き手が「危なそう」と思った値なので生成元がテストと同じになる（台帳の独立性でいう「同源」）。
+  失敗を最小の反例まで縮める（shrinking）も無い。実際、導入初回に `-5e-324` という
+  自分では書かない値で反例が出たので、この差は実効があった。
+- **権限 / 環境変数 / DB への影響**: なし。実行時コードには入らない。
+  ネットワークもファイル書き込みもしない。テストが実 DB を叩くぶん所要時間は増える（1 性質 25 回）。
+- **固定した版と出所**: `fast-check` 4.9.0 / MIT / github.com/dubzzz/fast-check、
+  推移依存は `pure-rand` 8.4.2 / MIT / 同一作者。**この 2 つで閉じている**。
+- **差分**: `package.json` +1 行、`package-lock.json` +41 行（2 パッケージ）。
+- **`npm audit --omit=dev --audit-level=high`**: 0 件（dev のみなので本番依存は変わらない）。
+- **`bash scripts/check-lockfile-integrity.test.sh`**: 718 項目すべて registry 由来・sha512。
+- **ロールバック**: `npm uninstall fast-check` と
+  `supabase/__tests__/integration/invariant-properties.integration.test.ts` の削除で戻せる。
+  他のテスト・実行時コードはこの依存を参照していない。
 
 ### 2026-09-06（初回。GitHub 停止中のため PR は復旧後）
 
