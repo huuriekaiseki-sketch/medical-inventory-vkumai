@@ -80,6 +80,11 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-subagent-model-force.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-plugin-integrity.sh",
+            "timeout": 30
           }
         ]
       },

@@ -243,6 +243,11 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-subagent-model-force.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-plugin-integrity.sh",
+            "timeout": 30
           }
         ]
       },
