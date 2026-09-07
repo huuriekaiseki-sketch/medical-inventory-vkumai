@@ -135,7 +135,9 @@
     "check-dependency-change.sh": "aidd-vkumai",
     "ai-check-suggest.sh": "aidd-vkumai",
     "check-automode-config.sh": "aidd-vkumai",
-    "check-direct-ddl-execution.sh": "aidd-vkumai"
+    "check-direct-ddl-execution.sh": "aidd-vkumai",
+    "record-test-failure.sh": "aidd-core",
+    "check-escape-ledger.sh": "aidd-core"
   },
   "supportScripts": {
     "lib/resolve-log-dir.sh": [
@@ -169,7 +171,8 @@
     "lib/render-rulebook-index.mjs": "aidd-core",
     "new-rulebook.sh": "aidd-core",
     "render-rulebook-index.sh": "aidd-core",
-    "lib/catalog-registry.json": "aidd-vkumai"
+    "lib/catalog-registry.json": "aidd-vkumai",
+    "triage-escapes.sh": "aidd-core"
   },
   "workflowLib": {
     "_comment": ".claude/workflows/lib/ の純粋関数のうち bin/ のスクリプトが node で呼ぶもの。scripts/workflow-lib/ に置く（workflows/ 配下に置くと Workflow として走査されるため）",

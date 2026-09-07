@@ -78,6 +78,31 @@
       "_note": "bespoke な supabase/migrations/__tests__/table_registry.test.ts も残す（宣言と migration の実態の突合はエンジンの範囲外）。エンジンは形、bespoke は中身",
       "purpose": "新しいテーブルを作るときに決める 4 軸（RLS・ポリシー・誰が読み書きできるか・監査）の正本",
       "limits": "migration の SQL しか見ないので、実 DB に手で当てた変更や Supabase の既定権限は見えない。宣言が業務上妥当かも見ない"
+    },
+    {
+      "id": "escaped-defects",
+      "file": "docs/agents/escaped-defects.md",
+      "idPrefix": "E",
+      "columns": 9,
+      "evidenceColumn": 8,
+      "statusColumn": 9,
+      "states": [
+        "未分類",
+        "対応中",
+        "解決済み",
+        "該当なし"
+      ],
+      "evidenceRequiredStates": [
+        "解決済み"
+      ],
+      "idBands": [
+        10,
+        20,
+        30
+      ],
+      "_note": "bespoke な scripts/lib/__tests__/escaped-defects.test.ts も残す（分類・検出源・決定者の語彙と「ルールブック不足なら名指し必須」はエンジンの範囲外）。エンジンは形、bespoke は輪が閉じているか",
+      "purpose": "すり抜けた 1 件 = 1 行。ルールブックの限界を実際の漏れから育てるための台帳",
+      "limits": "気づいた漏れしか載らない。分類は自己申告で、環境を選べば何でも通せる。Bash 以外で気づいた漏れは自動では拾えない"
     }
   ]
 }

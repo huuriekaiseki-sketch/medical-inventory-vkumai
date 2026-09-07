@@ -116,6 +116,18 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/record-test-failure.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "SubagentStart": [
       {
         "hooks": [
@@ -152,6 +164,11 @@
     "Stop": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-escape-ledger.sh",
+            "timeout": 10
+          },
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-domain-decisions-suggest.sh",
