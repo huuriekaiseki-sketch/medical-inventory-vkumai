@@ -18,6 +18,7 @@ green でも、実行パスの本体（プロンプト駆動のエージェン�
 
 1. `.claude/workflows/aidd-phase2.js`のSpec Check/Manifest Check関連プロンプトを変更したとき
 2. 四半期に1回の定期訓練として（下記「次回実施予定日」参照）
+3. この回では供給網の侵害演習（`docs/agents/supply-chain-drill.md`、issue #757 の 30）も同時に実施する（`bash scripts/supply-chain-drill.sh`）
 
 ## 対象シナリオ（4種）
 
