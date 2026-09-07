@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
 
   let email: string | undefined
   try {
+    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
     const body = await request.json()
     email = body.email?.trim()
   } catch {
@@ -78,6 +79,7 @@ export async function DELETE(request: NextRequest) {
 
   let userId: string
   try {
+    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
     const body = await request.json()
     userId = body.userId
   } catch {

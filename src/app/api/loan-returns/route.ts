@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
   //      受け取り、createLoanReturn の第4引数としてそのまま渡す
   let body: { facilityId?: string; loanOrderId?: string } & Partial<LoanReturnInput>
   try {
+    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
     body = await request.json()
   } catch {
     return apiError('リクエストが不正です', 400)

@@ -51,6 +51,33 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // WHY: issue #757 の 20（入力検証）。「スキーマを読み込んでいるか」を検査しても、読み込んだ
+  //      うえで使っていない route は捕まえられない。本文を読む方法を
+  //      src/lib/validation/parse-body.ts の parseBody だけにし、request.json() の直接呼び出しを
+  //      機械的に禁止する（ログを log-safe.ts に、日付整形を format-date.ts に寄せたのと同じ形）。
+  //      移行が済んでいない route は scripts/lib/input-validation-baseline.json に載っており、
+  //      1 本ずつ移す間だけ eslint-disable を付ける。一覧は減らすことしかできない
+  {
+    files: ["src/app/api/**/*.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.property.name='json'][callee.object.name='request']",
+          message: "本文は src/lib/validation/parse-body.ts の parseBody(request, schema) で読む（issue #757 の 20）",
+        },
+        {
+          selector: "CallExpression[callee.property.name='json'][callee.object.name='req']",
+          message: "本文は src/lib/validation/parse-body.ts の parseBody(request, schema) で読む（issue #757 の 20）",
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/lib/validation/parse-body.ts"],
+    rules: { "no-restricted-syntax": "off" },
+  },
 ]);
 
 export default eslintConfig;

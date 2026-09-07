@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
 
   let userId: string | undefined, facilityId: string | undefined, role: FacilityRole | undefined
   try {
+    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
     const body = await request.json()
     userId = body.userId
     facilityId = body.facilityId
@@ -41,6 +42,7 @@ export async function DELETE(request: NextRequest) {
 
   let userId: string, facilityId: string
   try {
+    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
     const body = await request.json()
     userId = body.userId
     facilityId = body.facilityId

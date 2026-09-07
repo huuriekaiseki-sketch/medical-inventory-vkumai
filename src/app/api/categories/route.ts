@@ -5,7 +5,7 @@ import { resolveIsAdmin } from '@/lib/admin-status'
 import { listCategories, createCategory } from '@/lib/categories/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import { categoryInputSchema } from '@/lib/validation/schemas'
-import { firstIssueMessage } from '@/lib/validation/text-limits'
+import { parseBody } from '@/lib/validation/parse-body'
 
 export async function GET() {
   try {
@@ -19,15 +19,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  let raw: unknown
-  try {
-    raw = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-  // WHY(#757-20): 必須だけでなく長さも入口で見る（上限は aidd.config.json）
-  const parsed = categoryInputSchema.safeParse(raw)
-  if (!parsed.success) return apiError(firstIssueMessage(parsed.error), 400)
+  // WHY(#757-20): 本文を読む唯一の入口。上限は aidd.config.json の limits.textLength
+  const parsed = await parseBody(request, categoryInputSchema)
+  if (!parsed.ok) return parsed.response
   const input = parsed.data
 
   try {

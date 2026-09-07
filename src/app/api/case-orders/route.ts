@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   let body: { facilityId?: string } & Partial<CaseOrderInput>
   try {
+    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
     body = await request.json()
   } catch {
     return apiError('リクエストが不正です', 400)

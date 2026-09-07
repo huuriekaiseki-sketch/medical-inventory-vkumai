@@ -22,6 +22,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   let input: FacilityInput
   try {
+    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
     input = await request.json()
   } catch {
     return NextResponse.json({ error: 'リクエストが不正です' }, { status: 400 })

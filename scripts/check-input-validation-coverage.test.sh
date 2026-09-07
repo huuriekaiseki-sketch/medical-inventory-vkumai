@@ -7,8 +7,15 @@
 #      同じ形の ratchet がこのリポジトリには既にある（攻撃表・制約カバレッジ・
 #      ミューテーションスコア）。「今あるものは許す。増えたら落とす。減ったら基準を下げる」。
 #
-#   (a) 本文を読む route はすべて、スキーマを通しているか一覧に載っている
-#   (b) 一覧に載っているのに実はスキーマを使っている行は、陳腐化として落とす（消し忘れ検知）
+#      2026-09-07 追記: 判定を「スキーマを読み込んでいるか」から「parseBody を使っているか」へ
+#      変えた。読み込んだうえで使わない route を捕まえられなかったため。あわせて
+#      request.json() の直接呼び出しを eslint で禁止し、移行待ちの route だけ
+#      eslint-disable を付けている。**印を付ければ逃げられる**ので、印の付いた route が
+#      一覧に載っていることもここで検査する。
+#
+#   (a) 本文を読む route はすべて、parseBody を使っているか一覧に載っている
+#   (b) 一覧に載っているのに実は parseBody を使っている行は、陳腐化として落とす（消し忘れ検知）
+#   (b2) eslint-disable が付いているのに一覧に載っていない route は落とす（印で逃げる穴）
 #   (c) 一覧に載っているのに route が存在しない行も落とす（消し忘れ検知）
 #   (d) 走査対象が少なすぎたら落とす（fail-open 防止）
 #   (e) fixture で (a)(b) を検知できる（RED 方向の自己検証）
@@ -62,9 +69,16 @@ for (const file of routes) {
   if (!src.includes("request.json()")) continue
   const rel = "api/" + path.relative(apiDir, file).split(path.sep).join("/")
   seen.add(rel)
-  const usesSchema = src.includes("@/lib/validation/schemas")
-  if (usesSchema && pending.has(rel)) console.log("stale-used " + rel)
-  if (!usesSchema && !pending.has(rel)) console.log("new " + rel)
+  // WHY: import の有無ではなく parseBody を実際に呼んでいるかで見る。
+  //      読み込んだうえで使わない route を捕まえるため
+  const usesParseBody = /parseBody\s*\(/.test(src)
+  const hasDisable = src.includes("eslint-disable-next-line no-restricted-syntax")
+  if (usesParseBody && pending.has(rel)) console.log("stale-used " + rel)
+  if (!usesParseBody && !pending.has(rel)) console.log("new " + rel)
+  // 印を付けて逃げていないか（一覧に無いのに disable だけある）
+  if (hasDisable && !pending.has(rel)) console.log("undeclared-disable " + rel)
+  // 移行が済んだのに印が残っていないか
+  if (usesParseBody && hasDisable) console.log("leftover-disable " + rel)
 }
 for (const rel of pending) {
   if (!seen.has(rel)) console.log("stale-missing " + rel)
@@ -108,6 +122,22 @@ else
       改名・削除したなら一覧からも消す"
 fi
 
+echo "=== scenario 3b: eslint-disable で逃げていない ==="
+UNDECLARED="$(printf '%s\n' "$OUT" | grep '^undeclared-disable ' || true)"
+LEFTOVER="$(printf '%s\n' "$OUT" | grep '^leftover-disable ' || true)"
+if [ -z "$UNDECLARED" ]; then
+  assert_ok "一覧に無いのに eslint-disable だけ付いた route は無い"
+else
+  assert_fail "eslint-disable を付けて検証を飛ばしている route がある" "$UNDECLARED
+      parseBody へ移すか、scripts/lib/input-validation-baseline.json に理由付きで足す"
+fi
+if [ -z "$LEFTOVER" ]; then
+  assert_ok "移行済みなのに eslint-disable が残っている route は無い"
+else
+  assert_fail "移行が済んだのに eslint-disable が残っている" "$LEFTOVER
+      不要な disable を消す（付けっぱなしだと次の違反を隠す）"
+fi
+
 echo "=== scenario 4: 借金の件数が増えていない ==="
 PENDING_COUNT="$(node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log((b.pending??[]).length)' "$BASELINE")"
 # 2026-09-07 の実測。**この数字は減らすことしかできない**
@@ -129,8 +159,17 @@ cat > "$WORK/api/old-thing/route.ts" <<'EOF'
 export async function POST(request) { const b = await request.json(); return b }
 EOF
 cat > "$WORK/api/moved/route.ts" <<'EOF'
+import { parseBody } from '@/lib/validation/parse-body'
 import { x } from '@/lib/validation/schemas'
-export async function POST(request) { const b = await request.json(); return x.safeParse(b) }
+export async function POST(request) { const b = await request.json(); return parseBody(request, x) }
+EOF
+mkdir -p "$WORK/api/sneaky"
+cat > "$WORK/api/sneaky/route.ts" <<'EOF'
+export async function POST(request) {
+  // eslint-disable-next-line no-restricted-syntax -- 印だけ付けて逃げる例
+  const b = await request.json()
+  return b
+}
 EOF
 cat > "$WORK/api/read-only/route.ts" <<'EOF'
 export async function GET() { return null }
@@ -148,6 +187,7 @@ if printf '%s' "$FOUT" | grep -q '^stale-used api/moved/route.ts$'; then assert_
 if printf '%s' "$FOUT" | grep -q '^stale-missing api/gone/route.ts$'; then assert_ok "存在しない行を検知"; else assert_fail "存在しない行を検知できない" "$FOUT"; fi
 if printf '%s' "$FOUT" | grep -q 'api/old-thing'; then assert_fail "一覧にある借金を違反にした" "$FOUT"; else assert_ok "一覧にある借金は誤検知しない"; fi
 if printf '%s' "$FOUT" | grep -q 'api/read-only'; then assert_fail "本文を読まない route を違反にした" "$FOUT"; else assert_ok "本文を読まない route は対象外"; fi
+if printf '%s' "$FOUT" | grep -q '^undeclared-disable api/sneaky/route.ts$'; then assert_ok "印だけ付けて逃げる route を検知"; else assert_fail "印で逃げる route を検知できない" "$FOUT"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
