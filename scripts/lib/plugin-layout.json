@@ -303,6 +303,7 @@
     "check-data-lifecycle-inventory.test.sh": "docs/agents/data-lifecycle-inventory.md の実データを検査する",
     "check-design-answers.test.sh": "aidd.config.json の limits と design-questions.md の実データを突合する。値が導入先ごとに違う",
     "check-design-questions.test.sh": "supabase/migrations/ の実データを走査する",
-    "check-export-paths.test.sh": "src/ の実コードと依存名を走査する（エクスポート経路が生えた瞬間に落とす ratchet）"
+    "check-export-paths.test.sh": "src/ の実コードと依存名を走査する（エクスポート経路が生えた瞬間に落とす ratchet）",
+    "check-rule-guard-coverage.test.sh": "突合のエンジンは汎用だが、対象の RULE_DOCS と NOT_RULES が docs/agents 配下の実ファイルで、シナリオ 2 が実態のリポジトリを検査する。対象 doc を設定に出せば共通側へ移せる"
   }
 }

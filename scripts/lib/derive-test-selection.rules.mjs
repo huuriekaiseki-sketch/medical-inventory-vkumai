@@ -65,6 +65,8 @@ export const RULES = [
   { key: 'docs-integrity', label: 'docs 整合性', timing: 'always', commands: ['node scripts/lib/check-docs-integrity.mjs'] },
   // WHY(毎回): merge=union の重複は「マージした PR」ではなく「次に表を触った PR」で表面化する。
   //      触った人が犯人とは限らないので、変更時ではなく毎回回して早く落とす。
+  // WHY(毎回): ルールを外に出す判断はどの PR でも起こりうる。安いので毎回回す。
+  { key: 'rule-guard-coverage', label: 'ルールを守る検査の有無', timing: 'always', commands: ['node scripts/lib/check-rule-guard-coverage.mjs --verbose'] },
   { key: 'table-row-duplicates', label: '棚卸し表の行の重複', timing: 'always', commands: ['node scripts/lib/check-table-row-duplicates.mjs'] },
 
   // ---- 変更時 ----
