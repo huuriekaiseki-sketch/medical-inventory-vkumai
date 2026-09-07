@@ -136,6 +136,14 @@
     {
       "label": "4/24 監査ログの閲覧 UI（8 の上）",
       "branch": "feat/audit-log-viewer"
+    },
+    {
+      "label": "7 テストの効き目の計測（4/24 の上）",
+      "branch": "feat/mutation-testing"
+    },
+    {
+      "label": "20 画面の操作性（7 の上）",
+      "branch": "feat/a11y-check"
     }
   ]
 }
