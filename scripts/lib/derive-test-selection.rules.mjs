@@ -70,6 +70,9 @@ export const RULES = [
   // WHY(毎回): 12 秒で終わる。検査の実効性は「検査を書いた PR」以外でも劣化しうる
   //      （テスト側を緩めれば no-op でも通るようになる）ので、変更時ではなく毎回回す。
   { key: 'rule-guard-effective', label: 'ルールを守る検査が効いているか', timing: 'always', commands: ['bash scripts/check-rule-guard-effective.test.sh'] },
+  // WHY(毎回): 状態が古くなるのは「その項目を実装した PR」ではなく、その後のどの PR でも起こる
+  //      （実装した本人がカタログを直し忘れる形）。安いので毎回見る。
+  { key: 'roadmap-staleness', label: 'ロードマップの状態の鮮度', timing: 'always', commands: ['node scripts/lib/check-roadmap-staleness.mjs --verbose'] },
   { key: 'table-row-duplicates', label: '棚卸し表の行の重複', timing: 'always', commands: ['node scripts/lib/check-table-row-duplicates.mjs'] },
 
   // ---- 変更時 ----
