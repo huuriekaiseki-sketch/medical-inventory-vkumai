@@ -249,6 +249,7 @@
   "checksNotDistributed": {
     "_comment": "配らない検査と、その理由。導入先に存在しないもの（このリポジトリの docs・カタログ・スキーマ）を検査していて、配ると必ず落ちるものだけをここに書く。「面倒だから」で足さない。",
     "check-test-matrix.test.sh": "docs/agents/test-matrix.md の実データを検査する。形式は汎用だが、行の中身は導入先ごとに違う（形式だけを配るには雛形が要る。#535）",
+    "check-table-row-duplicates.test.sh": "重複を見るエンジンは汎用だが、対象の表と鍵の列（TABLES）が docs/agents 配下の実ファイルで、シナリオ 3 が .gitattributes の union 対象と突き合わせる。エンジンと登録簿を分ければ（catalog-registry.json と同じ形）共通側へ移せる",
     "check-promise-catalog.test.sh": "同上（promise-catalog.md の実データ）",
     "check-invariant-catalog.test.sh": "同上（invariant-catalog.md の実データ）",
     "check-docs-integrity.test.sh": "同上（docs/agents 配下の実データ）",

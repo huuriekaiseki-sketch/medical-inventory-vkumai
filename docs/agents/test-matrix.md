@@ -54,6 +54,7 @@
 | 依存監査（既知脆弱性） | ✅ | 毎回 | 全 PR | 本番依存（`--omit=dev`）に high 以上の公開済み脆弱性が無い。緑でも「安全の証明」ではなく、未公表の攻撃や登録されていない悪意あるコードは見つけられない（2026-09-04） | CI `dependency-audit` ジョブ（`.github/workflows/ci.yml`） | dependency-audit | OWASP A06（脆弱で古いコンポーネント）、SCA | `npm audit --omit=dev --audit-level=high` |
 | ロックファイルの出所 | ✅ | 毎回 | 全 PR | `package-lock.json` の全項目が registry.npmjs.org 由来で sha512 の integrity を持ち、`package.json` に git / file / http 指定が無い。レジストリ上の正規パッケージ内部の悪意は見つけられない | `scripts/check-lockfile-integrity.test.sh`、CI `hooks-test` ジョブ | lockfile-integrity | SLSA（出所の固定） | `bash scripts/check-lockfile-integrity.test.sh` |
 | docs 整合性 | ✅ | 毎回 | 全 PR（docs のみの PR は `docs-integrity-check.yml`、それ以外は hooks-test） | AI が毎回読む知識庫（docs/agents 等）のリンク切れ・アンカー不一致・削除済みスクリプトへの言及を機械検知する（issue #714）。文章内容の陳腐化・クローズ済み issue への言及は見つけられない | `scripts/lib/check-docs-integrity.mjs`、`scripts/check-docs-integrity.test.sh`、`.github/workflows/docs-integrity-check.yml`、CI `hooks-test` ジョブ | docs-integrity | OpenAI Harness engineering（docs の腐敗抑制） | `node scripts/lib/check-docs-integrity.mjs` |
+| 棚卸し表の行の重複 | ✅ | 毎回 | 全 PR | `.gitattributes` の `merge=union` は衝突を報告せず**両方の行を残す**ため、ID 列を持たない棚卸し表では同じ観点の古い版と新しい版が並んで残る。2026-09-07 に 40 本のマージ後 10 行の重複が実在し、どれも「計画のまま・根拠列が空」の古い版だったため「まだやっていない」と誤読させた。鍵の列の重複を落とす。**どちらが新しいかは判定しないので直しは人が行う** | `scripts/lib/check-table-row-duplicates.mjs`、`scripts/check-table-row-duplicates.test.sh`、`.gitattributes`、CI `hooks-test` ジョブ | table-row-duplicates | — | `node scripts/lib/check-table-row-duplicates.mjs` |
 | 依存差分レビュー | 🟡 | 変更時 | `package.json` / `package-lock.json` の変更 | 追加・更新した依存ごとに用途・代替案・権限/環境変数/DB への影響・固定版と出所・ロールバックを人が確認する。追加の瞬間は PreToolUse hook（`scripts/check-dependency-change.sh`、ask）が止め、PR 段階は Stop hook が「依存の変更」の記述有無を警告する。記述の中身の妥当性は機械検査できない | `scripts/check-dependency-change.sh`、`scripts/check-handoff-format.sh`、`.claude/skills/handoff-format/SKILL.md` の 00 欄 | dependency-diff-review | OWASP A08（ソフトウェアとデータの整合性）、サプライチェーン | `(手動) 00 欄「依存の変更」を書く。npm explain <pkg> で間接依存の起点を辿る` |
 | RLS/IDOR 統合（実 DB） | ✅ | 変更時 | CI paths: `supabase/migrations/**`・`supabase/__tests__/**`・`src/lib/supabase/**`・`**/proxy.ts`・`**/middleware.ts`。内容ベースの高リスク変更はローカル実行義務 | ローカル Supabase に本人・他人・admin・viewer でアクセスし、他施設データが取れないことを実測。PR ごとに回すと Actions 無料枠が枯渇するため高リスクパスに限定（2026-08） | `supabase/__tests__/integration/`、`.github/workflows/integration-gate.yml` | rls-idor-integration | OWASP ASVS V4（アクセス制御）/ Google Medium | `npm run test:integration` |
 | 生成型の鮮度 | ✅ | 変更時 | RLS/IDOR 統合と同じ paths | `supabase gen types` の結果と `src/lib/supabase/` の生成型が一致する | `scripts/check-generated-supabase-types.sh`、`.github/workflows/integration-gate.yml` | generated-types | — | `bash scripts/check-generated-supabase-types.sh` |
@@ -78,7 +79,6 @@
 | main へのマージ後 | E2E |
 | 毎日 | スキーマドリフト検知 |
 | 毎週 | フレーキー検知（unit 5 回・integration 3 回） |
-| 依存の major 更新 | 障害注入、RLS/IDOR 統合、E2E、build |
 | 依存の major 更新 | 障害注入、RLS/IDOR 統合、E2E、build、規模の実測 |
 | 四半期 | fault injection 訓練、hook 実機発火（ゲート訓練）、復旧手順の見直し |
 | 外部公開の前 | 障害注入、復旧手順、規模の実測 |
