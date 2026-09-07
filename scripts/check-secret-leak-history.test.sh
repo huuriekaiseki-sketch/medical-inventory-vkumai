@@ -14,6 +14,9 @@
 #       refs から辿る `--all` より広い。消したブランチのコミットも読めるため
 #   (c) 浅い clone（fetch-depth: 1）では走査にならないので**落とす**。黙って通さない
 #   (d) 「コミットしてから消した」秘密を、fixture の git リポジトリで実際に作って検知できる
+#   (e) 許可リスト（scripts/lib/secret-history-allowlist.txt）は**理由つきの登録だけ**効く。
+#       履歴は書き換えられないので、本物でないと確かめた値はハッシュで登録して除く。
+#       **いまのファイルの走査には使わない**（新しく入れようとしたものは無条件で止める）
 #
 # 見つけられないもの:
 #   - パターンに無い独自形式のトークン、暗号化・難読化された値、分割して書かれた値
@@ -44,9 +47,21 @@ while IFS= read -r line; do
   PATTERNS+=("$line")
 done < "$PATTERNS_FILE"
 
+ALLOWLIST_FILE="$SCRIPT_DIR/lib/secret-history-allowlist.txt"
+
+# 一致した文字列が許可リストに載っているか（載っていれば 0）
+# WHY: 履歴は書き換えられない（clone した全員が持っている）。本物でないと確かめたものは
+#      **ハッシュで**登録して除く。いまのファイルの走査には使わない
+is_allowlisted() {
+  local value="$1" h
+  [ -f "$ALLOWLIST_FILE" ] || return 1
+  h="$(printf '%s' "$value" | shasum -a 256 | awk '{ print $1 }')"
+  grep -q -E "^${h}[[:space:]]+[^[:space:]]" "$ALLOWLIST_FILE"
+}
+
 # $1=git リポジトリ。履歴に残る秘密らしい文字列を 1 行ずつ返す（空なら無し）
 scan_history() {
-  local repo="$1" tmp p n
+  local repo="$1" tmp p hit
   tmp="$(mktemp -d)"
   (
     cd "$repo" || exit 1
@@ -57,7 +72,11 @@ scan_history() {
     for p in "${PATTERNS[@]}"; do
       grep -a -o -E -- "$p" "$tmp/contents" 2>/dev/null
     done
-  ) | sort -u
+  ) | sort -u > "$tmp/hits"
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    is_allowlisted "$hit" || printf '%s\n' "$hit"
+  done < "$tmp/hits"
   rm -rf "$tmp"
 }
 
@@ -72,12 +91,17 @@ echo "=== scenario 1: パターンが偽の値に当たる（空振り防止） 
 A="$(printf 'a%.0s' $(seq 1 30))"
 B="$(printf 'b%.0s' $(seq 1 40))"
 H="$(printf '0123456789abcdef%.0s' $(seq 1 3))"
+# WHY(組み立てて作る): 偽の値をリテラルで書くと、**このファイル自身が走査に引っかかる**。
+#      2026-09-08 に AKIA の 1 本だけリテラルで書いてしまい、コミットした途端に
+#      `check-secret-leak.test.sh` と自分自身の両方が「秘密がある」と報告した。
+#      追跡されるまで気づけなかった（走査対象は `git ls-files` なので、未追跡の間は見えない）。
+U="0123456789ABCDEF"
 CANARIES=(
   "eyJ${A}.eyJ${B}"
   "sb_secret_${A}"
   "sbp_${H:0:40}"
   "$(printf -- '-----BEGIN %s KEY-----' 'TESTING PRIVATE')"
-  "AKIA0123456789ABCDEF"
+  "AKIA${U}"
   "ghp_${A}bcdef0123"
   "github_pat_${A}"
   "$(printf 'xox%s-0123456789-CANARY' 'b')"
@@ -158,6 +182,31 @@ if [ -z "$CLEANHITS" ]; then
 else
   assert_fail "秘密が無いのに検知した" "$CLEANHITS"
 fi
+
+echo "=== scenario 5: 許可リストは「理由つきの登録」だけを許す ==="
+# WHY: 許可リストは**本物の漏洩を隠す道**にもなる。ハッシュだけ書いて理由を書かない登録は
+#      通さない。載っていない値は当然どおり落ちることも同時に確かめる
+ALLOW_TMP="$(mktemp)"
+CANARY_HASH="$(printf '%s' "AKIA${U}" | shasum -a 256 | awk '{ print $1 }')"
+printf '%s\n' "$CANARY_HASH" > "$ALLOW_TMP"   # 理由なし
+if ALLOWLIST_FILE="$ALLOW_TMP" is_allowlisted "AKIA${U}"; then
+  assert_fail "理由の無い登録を許可リストとして受け入れた"
+else
+  assert_ok "理由の無い登録は効かない"
+fi
+printf '%s  実在しない偽の値\n' "$CANARY_HASH" > "$ALLOW_TMP"
+if ALLOWLIST_FILE="$ALLOW_TMP" is_allowlisted "AKIA${U}"; then
+  assert_ok "理由つきの登録は効く"
+else
+  assert_fail "理由つきの登録が効かない"
+fi
+Z="$(printf '0%.0s' $(seq 1 16))"   # ここもリテラルで書かない（走査に引っかかる）
+if ALLOWLIST_FILE="$ALLOW_TMP" is_allowlisted "AKIA${Z}"; then
+  assert_fail "登録していない値まで許可した"
+else
+  assert_ok "登録していない値は許可しない"
+fi
+rm -f "$ALLOW_TMP"
 
 if [ "$fail" -eq 0 ]; then
   echo "ALL PASSED"
