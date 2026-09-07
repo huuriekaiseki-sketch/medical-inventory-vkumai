@@ -65,13 +65,15 @@
     "decidedBy": "Masanori（AskUserQuestion で確認）",
     "textLength": {
       "procedureName": 200,
-      "personName": 200,
       "productName": 200,
       "patientId": 100,
       "lot": 100,
       "initials": 20,
       "janOrRef": 64,
-      "purpose": 1000
+      "purpose": 1000,
+      "doctorName": 100,
+      "expiryText": 100,
+      "supplierName": 200
     },
     "requestsPerMinute": 300,
     "invitesPerDay": 50
