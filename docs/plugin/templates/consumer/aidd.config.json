@@ -1,5 +1,5 @@
 {
-  "_comment": "導入先アダプター設定のひな形。値は共通側の汎用既定値（auth / rls / policy / migration）に足されるだけで、既定値を消すことはできない。スキーマ: aidd-core/schema/aidd-config.schema.json",
+  "_comment": "導入先アダプター設定のひな形。値は共通側の汎用既定値（auth / rls / policy / migration）に足されるだけで、既定値を消すことはできない。スキーマ: aidd-core/schema/aidd-config.schema.json。limits は作る前に人へ聞いて決める値で、雛形のままでは check-design-answers.test.sh が落ちる（それが狙い。AI に既定値を置かせず人に聞かせるため）。textLength のキーはこのリポジトリの語彙で書く（受注者名・本文・術式名など製品ごとに違う）",
   "risk": {
     "keywords": ["<説明文に含まれていれば高リスク候補とする語>"],
     "pathPrefixes": ["<この接頭辞で始まる変更パスは高リスク。例: db/migrations/>"],
@@ -15,5 +15,12 @@
   "docs": {
     "domain": "docs/agents/domain.md",
     "decisions": "docs/agents/decisions.md"
+  },
+  "limits": {
+    "decidedOn": "TODO",
+    "decidedBy": "TODO",
+    "textLength": { "<自由入力の役割名>": 0 },
+    "requestsPerMinute": 0,
+    "invitesPerDay": 0
   }
 }

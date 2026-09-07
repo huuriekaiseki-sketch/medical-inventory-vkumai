@@ -6,29 +6,56 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "$schema": { "type": "string" },
-    "_comment": { "type": "string" },
+    "$schema": {
+      "type": "string"
+    },
+    "_comment": {
+      "type": "string"
+    },
     "risk": {
       "type": "object",
       "additionalProperties": false,
       "description": "TRI/RISK 判定（router-risk.js の classifyRoute）に足す固有語彙",
       "properties": {
-        "keywords": { "$ref": "#/$defs/stringList", "description": "taskDescription（説明文）に含まれていれば高リスク候補とする語。changedFiles が空のときの補助判定にのみ使う" },
-        "pathPrefixes": { "$ref": "#/$defs/stringList", "description": "この接頭辞で始まる変更パスは高リスク（例: db/migrations/）" },
-        "domainKeywords": { "$ref": "#/$defs/stringList", "description": "変更パス・ファイル名に含まれていれば高リスクとする語（小文字比較）" },
-        "metaPathPrefixes": { "$ref": "#/$defs/stringList", "description": "全変更がこの接頭辞配下のみならメタ改修ルート。通常は既定値（.claude/workflows/ .claude/agents/ docs/agents/）のままでよい" }
+        "keywords": {
+          "$ref": "#/$defs/stringList",
+          "description": "taskDescription（説明文）に含まれていれば高リスク候補とする語。changedFiles が空のときの補助判定にのみ使う"
+        },
+        "pathPrefixes": {
+          "$ref": "#/$defs/stringList",
+          "description": "この接頭辞で始まる変更パスは高リスク（例: db/migrations/）"
+        },
+        "domainKeywords": {
+          "$ref": "#/$defs/stringList",
+          "description": "変更パス・ファイル名に含まれていれば高リスクとする語（小文字比較）"
+        },
+        "metaPathPrefixes": {
+          "$ref": "#/$defs/stringList",
+          "description": "全変更がこの接頭辞配下のみならメタ改修ルート。通常は既定値（.claude/workflows/ .claude/agents/ docs/agents/）のままでよい"
+        }
       }
     },
-    "readonlyAgentTypes": { "$ref": "#/$defs/stringList", "description": "PreToolUse で書き込み系 Bash を deny する読み取り専用ロール名（check-readonly-bash.sh）。hook は scripts/lib/aidd-config.sh 経由で読む" },
+    "readonlyAgentTypes": {
+      "$ref": "#/$defs/stringList",
+      "description": "PreToolUse で書き込み系 Bash を deny する読み取り専用ロール名（check-readonly-bash.sh）。hook は scripts/lib/aidd-config.sh 経由で読む"
+    },
     "commands": {
       "type": "object",
       "additionalProperties": false,
       "description": "Stop hook の実行痕跡検知（ai-check-suggest.sh）と引き継ぎメモが参照するコマンド。hook は scripts/lib/aidd-config.sh 経由で読む",
       "properties": {
-        "check": { "type": "string" },
-        "test": { "type": "string" },
-        "lint": { "type": "string" },
-        "typecheck": { "type": "string" }
+        "check": {
+          "type": "string"
+        },
+        "test": {
+          "type": "string"
+        },
+        "lint": {
+          "type": "string"
+        },
+        "typecheck": {
+          "type": "string"
+        }
       }
     },
     "docs": {
@@ -36,15 +63,62 @@
       "additionalProperties": false,
       "description": "高リスク変更時に追記を促すドキュメントの場所（check-domain-decisions-suggest.sh）。hook は scripts/lib/aidd-config.sh 経由で読む",
       "properties": {
-        "domain": { "type": "string" },
-        "decisions": { "type": "string" }
+        "domain": {
+          "type": "string"
+        },
+        "decisions": {
+          "type": "string"
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "「作る前に聞く質問」（docs/agents/design-questions.md）で人が決めた値。リポジトリごとに違う（項目名も上限も）。埋まっていない・置き換え忘れの値があれば scripts/check-design-answers.test.sh が止める。",
+      "required": [
+        "decidedOn",
+        "textLength",
+        "requestsPerMinute",
+        "invitesPerDay"
+      ],
+      "properties": {
+        "decidedOn": {
+          "type": "string",
+          "description": "決めた日（YYYY-MM-DD）。古くなったら棚卸しの合図"
+        },
+        "decidedBy": {
+          "type": "string",
+          "description": "誰が決めたか（人の名前・役割）。AI が既定値で埋めたものは値として認めない"
+        },
+        "textLength": {
+          "type": "object",
+          "description": "自由入力の文字数の上限。キーは列の役割（このリポジトリの語彙）",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minProperties": 1
+        },
+        "requestsPerMinute": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1 人あたり毎分のリクエスト上限"
+        },
+        "invitesPerDay": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "管理者 1 人あたり 1 日の招待メール上限"
+        }
       }
     }
   },
   "$defs": {
     "stringList": {
       "type": "array",
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "uniqueItems": true
     }
   }

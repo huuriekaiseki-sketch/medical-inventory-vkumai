@@ -4,7 +4,10 @@
     "_comment": "配布形態 (a)。build-plugin.sh --marketplace --out <repo>/plugins で <repo>/.claude-plugin/marketplace.json と README.md を生成する",
     "name": "aidd-plugins",
     "repo": "huuriekaiseki-sketch/aidd-plugins",
-    "owner": { "name": "Masanori", "url": "https://github.com/huuriekaiseki-sketch" },
+    "owner": {
+      "name": "Masanori",
+      "url": "https://github.com/huuriekaiseki-sketch"
+    },
     "description": "AIDD パイプラインのプラグイン（aidd-core / aidd-vkumai）。中心リポジトリから機械生成（issue #420 v1）"
   },
   "plugins": {
@@ -17,21 +20,62 @@
     "aidd-vkumai": {
       "version": "0.1.0",
       "description": "vkumai アダプター: Next.js + Supabase 向けの Workflow・4 軸 Sweep・実装系エージェント・Supabase ガード（aidd-core に依存）",
-      "dependencies": [{ "name": "aidd-core", "version": "^0.1.0" }],
+      "dependencies": [
+        {
+          "name": "aidd-core",
+          "version": "^0.1.0"
+        }
+      ],
       "forbiddenWords": false
     }
   },
-  "forbiddenWords": ["vkumai", "medical", "facility", "tenant", "organization", "inventory", "supabase", "npm", "next.js", "playwright", "医療"],
-  "forbiddenWordsAllowPhrases": ["actuator-inventory", "portability-inventory", "undetectable-rules-inventory"],
-  "forbiddenWordsSkipPaths": ["COMPATIBILITY.md", "CHANGELOG.md", "KNOWN-LIMITS.md", "MIGRATION.md", "BREAKING.md", "evidence/", "templates/"],
+  "forbiddenWords": [
+    "vkumai",
+    "medical",
+    "facility",
+    "tenant",
+    "organization",
+    "inventory",
+    "supabase",
+    "npm",
+    "next.js",
+    "playwright",
+    "医療"
+  ],
+  "forbiddenWordsAllowPhrases": [
+    "actuator-inventory",
+    "portability-inventory",
+    "undetectable-rules-inventory"
+  ],
+  "forbiddenWordsSkipPaths": [
+    "COMPATIBILITY.md",
+    "CHANGELOG.md",
+    "KNOWN-LIMITS.md",
+    "MIGRATION.md",
+    "BREAKING.md",
+    "evidence/",
+    "templates/"
+  ],
   "releaseDocs": {
     "_comment": "各バージョンで残す 7 項目（SPEC Part 1 の 3.）。正本は docs/plugin/。両プラグインのルートへコピーする。禁止語検査の対象外（中心リポジトリ名を書く必要があるため）",
     "sourceDir": "docs/plugin",
-    "files": ["COMPATIBILITY.md", "CHANGELOG.md", "KNOWN-LIMITS.md", "MIGRATION.md", "BREAKING.md"],
-    "dirs": ["evidence"]
+    "files": [
+      "COMPATIBILITY.md",
+      "CHANGELOG.md",
+      "KNOWN-LIMITS.md",
+      "MIGRATION.md",
+      "BREAKING.md"
+    ],
+    "dirs": [
+      "evidence"
+    ]
   },
-  "schema": { "lib/aidd-config.schema.json": "aidd-core" },
-  "templates": { "docs/plugin/templates/consumer": "aidd-core" },
+  "schema": {
+    "lib/aidd-config.schema.json": "aidd-core"
+  },
+  "templates": {
+    "docs/plugin/templates/consumer": "aidd-core"
+  },
   "agents": {
     "reviewer": "aidd-core",
     "adversarial-verify": "aidd-core",
@@ -93,8 +137,14 @@
     "check-direct-ddl-execution.sh": "aidd-vkumai"
   },
   "supportScripts": {
-    "lib/resolve-log-dir.sh": ["aidd-core", "aidd-vkumai"],
-    "lib/aidd-config.sh": ["aidd-core", "aidd-vkumai"],
+    "lib/resolve-log-dir.sh": [
+      "aidd-core",
+      "aidd-vkumai"
+    ],
+    "lib/aidd-config.sh": [
+      "aidd-core",
+      "aidd-vkumai"
+    ],
     "harvest-journal-events.sh": "aidd-core",
     "otel-debug-collector.mjs": "aidd-core",
     "lib/pr-numbers-from-transcript.jq": "aidd-core",
@@ -111,7 +161,8 @@
     "summarize-instructions-loaded.sh": "aidd-core",
     "log-find-av-precision.sh": "aidd-core",
     "verify-agent-progress-transcript.sh": "aidd-core",
-    "lib/verify-agent-progress-transcript.ts": "aidd-core"
+    "lib/verify-agent-progress-transcript.ts": "aidd-core",
+    "check-design-answers.test.sh": "aidd-core"
   },
   "workflowLib": {
     "_comment": ".claude/workflows/lib/ の純粋関数のうち bin/ のスクリプトが node で呼ぶもの。scripts/workflow-lib/ に置く（workflows/ 配下に置くと Workflow として走査されるため）",
