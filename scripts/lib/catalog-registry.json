@@ -24,7 +24,8 @@
         50
       ],
       "_note": "bespoke な scripts/check-invariant-catalog.test.sh も残す（ID がテスト本文に実在するかの双方向突合はエンジンの範囲外）",
-      "purpose": "業務データが「どの経路から書かれても」満たしていなければならない条件。守る場所は原則 DB"
+      "purpose": "業務データが「どの経路から書かれても」満たしていなければならない条件。守る場所は原則 DB",
+      "limits": "条件を DB が守っているかは見るが、その条件が業務上正しいかは見ない。集計をまたぐ条件は夜間検査まで気づけない"
     },
     {
       "id": "promise",
@@ -49,7 +50,8 @@
         60
       ],
       "_note": "状態列は実施タイミング（4 語）。守るテストが 未 の行があるので evidenceRequiredStates は置かない",
-      "purpose": "auth / RLS / 施設境界 / admin 境界 / AAL2 / RPC 契約の約束。守るテストの名前に ID を書いて双方向に突合する"
+      "purpose": "auth / RLS / 施設境界 / admin 境界 / AAL2 / RPC 契約の約束。守るテストの名前に ID を書いて双方向に突合する",
+      "limits": "守るテストの ID 文字列が実在するかは見るが、そのテストが本当に約束を守っているか（効き目）は見ない。効き目は RLS ミューテーションで別に測る"
     },
     {
       "id": "table",
@@ -74,7 +76,8 @@
         50
       ],
       "_note": "bespoke な supabase/migrations/__tests__/table_registry.test.ts も残す（宣言と migration の実態の突合はエンジンの範囲外）。エンジンは形、bespoke は中身",
-      "purpose": "新しいテーブルを作るときに決める 4 軸（RLS・ポリシー・誰が読み書きできるか・監査）の正本"
+      "purpose": "新しいテーブルを作るときに決める 4 軸（RLS・ポリシー・誰が読み書きできるか・監査）の正本",
+      "limits": "migration の SQL しか見ないので、実 DB に手で当てた変更や Supabase の既定権限は見えない。宣言が業務上妥当かも見ない"
     }
   ]
 }

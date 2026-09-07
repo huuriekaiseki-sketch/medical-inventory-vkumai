@@ -88,11 +88,16 @@ CATALOG_REGISTRY="$REGISTRY" bash "$SCRIPT_DIR/render-rulebook-index.sh" > /dev/
 
 echo ""
 echo "--- 作った直後の検査 ---"
-CATALOG_REGISTRY="$REGISTRY" bash "$SCRIPT_DIR/check-catalogs.test.sh"
+# WHY(落ちてよい): 雛形は「限界」が仮置きなので、この時点では**必ず落ちる**のが正しい。
+#      落ちたまま次の案内を出したいので、ここでは終了コードを見送る（set -e を効かせない）。
+CATALOG_REGISTRY="$REGISTRY" bash "$SCRIPT_DIR/check-catalogs.test.sh" || true
 
 echo ""
-echo "次にやること:"
+echo "次にやること（上の検査は雛形のままだと落ちる。それが正常）:"
 echo "  1. $FILE の「一覧」に実際の行を書く（雛形の行は消す）"
 echo "  2. 状態が「${evidence_states:-（守るテストが要る状態）}」の行には守るテストのパスを入れる"
-echo "  3. bash scripts/check-catalogs.test.sh で通ることを確かめる"
-echo "  4. 共通側（他リポジトリ）へ配るなら scripts/lib/plugin-layout.json の checks を見直す"
+echo "  3. $FILE の「## 限界」に、**この仕組みで見つからないこと**を書く"
+echo "  4. 登録簿の limits（索引に出す 1 行）を書く: $REGISTRY"
+echo "  5. bash scripts/render-rulebook-index.sh で索引を作り直す"
+echo "  6. bash scripts/check-catalogs.test.sh で通ることを確かめる"
+echo "  7. 共通側（他リポジトリ）へ配るなら scripts/lib/plugin-layout.json の checks を見直す"

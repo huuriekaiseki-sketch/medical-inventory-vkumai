@@ -59,7 +59,7 @@ echo "=== scenario 3: fixture で各違反を検知できる（RED 方向の自�
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-SPEC='{"id":"fixture","idPrefix":"Z","columns":4,"evidenceColumn":3,"statusColumn":4,"states":["済み","計画","対象外"],"evidenceRequiredStates":["済み"],"planRequiredStates":["計画"],"planPattern":"#[0-9]+-[0-9]+","idBands":[0,10]}'
+SPEC='{"id":"fixture","idPrefix":"Z","columns":4,"evidenceColumn":3,"statusColumn":4,"states":["済み","計画","対象外"],"evidenceRequiredStates":["済み"],"planRequiredStates":["計画"],"planPattern":"#[0-9]+-[0-9]+","idBands":[0,10],"limits":"fixture 用。表の形しか見ないので中身の妥当性は見ない"}'
 
 cat > "$WORK/bad.md" <<'EOF'
 | ID | 内容 | 守るテスト | 状態 |
@@ -74,6 +74,10 @@ cat > "$WORK/bad.md" <<'EOF'
 | Z-001 | 重複 | `package.json` | 済み |
 | Z-030 | 帯の外 | `package.json` | 済み |
 | Z-007 | 列ずれ | 済み |
+
+## 限界
+
+表の形（列・ID・状態の語彙）しか見ないので、書かれている中身が正しいかは見ない。
 EOF
 
 OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/bad.md" --root "$REPO_ROOT")"
@@ -102,6 +106,10 @@ cat > "$WORK/good.md" <<'EOF'
 | Z-001 | 正常 | `package.json` | 済み |
 | Z-010 | 別の帯 | 未 | 計画（#757-99） |
 | Z-011 | 対象外 | 未 | 対象外 |
+
+## 限界
+
+表の形（列・ID・状態の語彙）しか見ないので、書かれている中身が正しいかは見ない。
 EOF
 OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/good.md" --root "$REPO_ROOT")"
 if [ "$(printf '%s\n' "$OUT" | tail -n1)" = "violations=0" ]; then
@@ -111,7 +119,7 @@ else
 fi
 
 echo "=== scenario 5: 行が 1 つも無いルールブックは違反にする（空の登録を許さない） ==="
-printf '| ID | 内容 |\n| --- | --- |\n' > "$WORK/empty.md"
+printf '| ID | 内容 |\n| --- | --- |\n\n## 限界\n\n表の形しか見ないので、中身が正しいかは見ない。\n' > "$WORK/empty.md"
 OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/empty.md" --root "$REPO_ROOT")"
 if printf '%s\n' "$OUT" | grep -q '行が 1 つも無い'; then
   assert_ok "空のルールブックを検知"
@@ -119,7 +127,43 @@ else
   assert_fail "空を検知できない" "$OUT"
 fi
 
-echo "=== scenario 6: 索引が最新（登録簿から生成し直した内容と一致する） ==="
+echo "=== scenario 6: 「限界」を書いていないルールブックは通さない ==="
+# WHY: 2026-09-07。ルールブックは増える一方で、リポジトリごとに中身も変わる。
+#      「このルールが何を守らないか」を後から思い出すのは無理なので、先に書かせる。
+#      取りこぼしが起きたときに「あの限界ではないか」と最初に疑えるのが目的。
+printf '| ID | 内容 | 守るテスト | 状態 |\n| --- | --- | --- | --- |\n| Z-001 | 正常 | `package.json` | 済み |\n' > "$WORK/nolimits.md"
+OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/nolimits.md" --root "$REPO_ROOT")"
+if printf '%s\n' "$OUT" | grep -q '「## 限界」の節が無い'; then
+  assert_ok "限界の節が無いのを検知"
+else
+  assert_fail "限界の節が無いのを検知できない" "$OUT"
+fi
+
+cat > "$WORK/todolimits.md" <<'EOF'
+| ID | 内容 | 守るテスト | 状態 |
+| --- | --- | --- | --- |
+| Z-001 | 正常 | `package.json` | 済み |
+
+## 限界
+
+TODO: あとで書く。ここに見つからないことを書く予定。
+EOF
+OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/todolimits.md" --root "$REPO_ROOT")"
+if printf '%s\n' "$OUT" | grep -q '「## 限界」が仮置きのまま'; then
+  assert_ok "仮置きの限界を検知"
+else
+  assert_fail "仮置きの限界を検知できない" "$OUT"
+fi
+
+SPEC_NO_LIMITS='{"id":"fixture","idPrefix":"Z","columns":4,"evidenceColumn":3,"statusColumn":4,"states":["済み","計画","対象外"],"idBands":[0,10]}'
+OUT="$(node "$ENGINE" --spec "$SPEC_NO_LIMITS" --file "$WORK/good.md" --root "$REPO_ROOT")"
+if printf '%s\n' "$OUT" | grep -q '登録簿に limits'; then
+  assert_ok "登録簿の limits 未記入を検知（索引に空欄が出るのを防ぐ）"
+else
+  assert_fail "登録簿の limits 未記入を検知できない" "$OUT"
+fi
+
+echo "=== scenario 7: 索引が最新（登録簿から生成し直した内容と一致する） ==="
 if OUT="$(bash "$SCRIPT_DIR/render-rulebook-index.sh" --check 2>&1)"; then
   assert_ok "索引は最新"
 else

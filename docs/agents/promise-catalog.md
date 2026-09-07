@@ -83,3 +83,14 @@ UI や取込などそれ以外の層は [テスト一覧](./test-matrix.md) の�
 | P-060 | 施設スコープの業務データ・所属（権限）・マスタへの INSERT / UPDATE / DELETE は、経路（RPC・API・service_role の直接操作・migration）によらず `audit_log` に 1 行残る。誰（`actor_id` / `actor_role`）・いつ・どの表のどの行・変わった列・変更前後の値を持つ | 施設 A の価格 1 行、利用者 A、service_role | RPC で発注、service_role で価格を UPDATE / DELETE、所属の role を変更、同値 UPDATE | INSERT / UPDATE / DELETE の各行が actor と facility_id 付きで残り、`changed_columns` は変わった列だけ | 同値 UPDATE（updated_at だけが動く）では増えない | `user_facilities` は id を持たず row_id が null。service_role は actor_id が null で role が service_role。明細（`*_items`）は `facility_id` 列を持たないため監査行の `facility_id` が null になり、その施設の利用者には見えない（全体管理者のみ） | `supabase/__tests__/integration/audit-log-rls-idor.integration.test.ts`、`supabase/__tests__/integration/audit-completeness.integration.test.ts`、`supabase/migrations/__tests__/add_audit_log.test.ts`、`supabase/migrations/__tests__/audit_trigger_coverage.test.ts` | 変更時 |
 | P-061 | `audit_log` は append-only。client（anon / authenticated）は INSERT / UPDATE / DELETE できず、service_role でも UPDATE / DELETE / TRUNCATE はトリガーが拒否する。記録は SECURITY DEFINER のトリガーだけが書く | 自施設の監査行 1 件 | client と service_role が UPDATE / DELETE、client が INSERT | — | いずれも 42501。行の内容は変わらない | Supabase 既定権限（ALL）を 3 ロールとも REVOKE してから SELECT だけ GRANT | `supabase/__tests__/integration/audit-log-rls-idor.integration.test.ts`、`supabase/migrations/__tests__/add_audit_log.test.ts` | 変更時 |
 | P-062 | 監査行は施設境界を守る。他施設の利用者は施設 A の行を主キー直指定でも読めず、自施設の利用者は自施設の行を、admin は全施設の行を読める。anon は読めない | 施設 A / B の利用者、admin | 各立場で `audit_log` を SELECT | 自施設・admin は取得できる | 他施設は空、anon は 42501 | `facility_id` が null の行（マスタ）は admin だけが読める | `supabase/__tests__/integration/audit-log-rls-idor.integration.test.ts` | 変更時 |
+
+## 限界
+
+- **テストの効き目は見ない。** 守るテストの ID 文字列が実在するかを突き合わせるだけで、
+  そのテストが本当に約束を守っているかは分からない。2026-09-07 の実測では
+  RLS のテストの効き目は 60%（10 件中 4 件は壊しても誰も気づかなかった）だった。
+  効き目は RLS のミューテーション計測（`feat/input-validation` で追加）と Stryker で別に測る。
+- **書いていない約束は検知できない。** 一覧に無い境界は、そもそも守られていなくても
+  この表からは分からない。新しい境界を作ったら行を足すのは人の仕事。
+- **ID はテスト本文の文字列で照合する。** `describe` 名から ID を消すと、
+  テストは通ったまま突合だけが外れる（孤児として検知はする）。

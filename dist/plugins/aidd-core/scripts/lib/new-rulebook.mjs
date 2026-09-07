@@ -54,6 +54,13 @@ ${evidenceStates.length > 0 ? `- 状態が ${evidenceStates.join(' / ')} の行�
 ${exampleRow(1, evidenceExample, '`package.json`')}
 ${exampleRow(2, planExample, '未')}
 
+## 限界
+
+（ここに、**この仕組みで見つからないこと**を書く。埋めるまで検査が落ちる。
+書いておくと、取りこぼしが起きたときに「あの限界ではないか」と最初に疑える。
+例: 静的検査なので実行時の値は見ない / 名前で照合するので書き方を変えると外れる /
+一覧に載せ忘れた対象そのものは検知できない）
+
 ## 読み方
 
 （この表を見た人が最初に読むべき行、いちばん危ない行、まだ埋まっていない行を書く）
@@ -69,6 +76,8 @@ const entry = {
   states,
   ...(evidenceStates.length > 0 ? { evidenceRequiredStates: evidenceStates } : {}),
   ...(planStates.length > 0 ? { planRequiredStates: planStates, planPattern: `#${o.issue}-[0-9]+` } : {}),
+  // 索引に出す 1 行。埋めるまで検査が落ちる（事故のとき最初に開くのは索引なので、ここが要）
+  limits: '（ここに、この仕組みで見つからないことを 1 行で書く）',
 }
 
 if (o.dryRun) {

@@ -90,3 +90,18 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | TB-050 | schema_drift_log | スキーマドリフト検知の内部テーブル。record_schema_drift() 等の SECURITY DEFINER 関数からのみ書き込み、クライアントロールへ直接は公開しない | service_role | なし | 監視そのものの記録であって、業務上の変更ではない。ここが動くのは検知が走ったときだけ | `supabase/__tests__/integration/schema-drift-rpc-authz.integration.test.ts` | 実装済み |
 | TB-051 | schema_baseline_snapshots | スキーマドリフト検知の内部テーブル。refresh_schema_baseline_snapshot() からのみ書き込み、クライアントロールへ直接は公開しない | service_role | なし | 同じく監視の裏方であって業務上の変更ではない。ここが変わるのはスキーマそのものを直したときだけ | `supabase/__tests__/integration/schema-drift-rpc-authz.integration.test.ts` | 実装済み |
+
+## 限界
+
+- **migration の SQL しか見ない。** 実 DB に手で当てた変更、Supabase の既定権限
+  （`ALTER DEFAULT PRIVILEGES`）、ダッシュボードからの操作は見えない。
+  だからこそ「既定に答えを委ねず明示的に REVOKE → GRANT」を要求している。
+  実 DB とのずれはスキーマドリフト検知（#305）が別に見る。
+- **宣言が業務上妥当かは見ない。** 「anon にも読ませる」と書けばそのとおり通る。
+  一致だけを見ており、妥当性は人が決める。
+- **ポリシーの中身は見ない。** 数だけを数えるので、ポリシーが 1 つあれば
+  それが `USING (true)` でも通る。中身は約束カタログ（P-xxx）と RLS/IDOR テストの担当。
+- **RLS が有効かは別の検査。** ここは 4 軸のうち 3 軸（ポリシー・権限・監査）を見る。
+  RLS の有効化と `DISABLE` の不在は `rls_enabled_all_tables.test.ts` が見ている。
+- **列は見ない。** どんな列があるか、長さの上限があるかはこの表の外
+  （`check-text-column-limits.test.sh` と不変条件カタログ）。
