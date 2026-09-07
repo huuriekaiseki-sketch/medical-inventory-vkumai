@@ -6,7 +6,9 @@ path-scoped rules化とは異なり、特定パスに紐づかない内容のた
 
 本ファイルは「センサーが無い」ルールの棚卸し。「センサーはあるが、検知後の是正（アクチュエータ）
 がwarning止まりか機械化されているか」の棚卸しは[`actuator-inventory.md`](./actuator-inventory.md)
-（issue #578）を参照。
+（issue #578）を参照。「センサーも是正もあるが、人が意図して横を通れる経路」（緊急対応・Studio・
+赤 check のマージ等）とその記録手段は [`human-bypass-inventory.md`](./human-bypass-inventory.md)
+（issue #757 の 33）を参照。
 
 新しい運用ルールを書く前は必ず[`decisions.md`の該当原則](./decisions.md#なぜ新しい運用ルールに検知手段を先に決める原則を導入したかissue-339)を先に読むこと。
 特に、新しい検知・検証メカニズム自体を追加する際は「その起動トリガーは機械（hook/CI/cron/npm test）
