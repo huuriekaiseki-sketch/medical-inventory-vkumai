@@ -30,7 +30,7 @@ export default function AdminIndexPage() {
             ユーザー管理（招待・権限変更）
           </Link>
         </div>
-        <div className="px-6 py-4">
+        <div className="px-6 py-4" style={{ borderBottom: '1px solid #E5E7EB' }}>
           <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }}>
             レポート
           </p>
@@ -40,6 +40,19 @@ export default function AdminIndexPage() {
             style={{ color: '#072C2C' }}
           >
             発注金額レポート
+          </Link>
+        </div>
+        {/* WHY: issue #757 の 4・24。監査ログと拒否の記録は貯まっていたが読む導線が無かった */}
+        <div className="px-6 py-4">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }}>
+            監査
+          </p>
+          <Link
+            href="/admin/audit"
+            className="inline-flex items-center gap-2 text-sm font-medium hover:underline"
+            style={{ color: '#072C2C' }}
+          >
+            監査ログ（変更の記録・拒否された操作）
           </Link>
         </div>
       </div>
