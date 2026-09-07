@@ -9,7 +9,7 @@
 #   --config FILE vitest の設定（既定は vitest.config.ts = unit。統合は vitest.integration.config.ts）
 #   --out DIR     レポートの置き場（既定は一時ディレクトリ。flaky-report.md と run-N.json を置く）
 #   残りの引数はそのまま vitest に渡す（特定ファイルだけ回すときなど）
-# 終了コード: scripts/lib/flaky-aggregate.mjs と同じ（0 なし / 1 flaky / 2 常時失敗のみ / 3 レポート不読）
+# 終了コード: scripts/lib/flaky-aggregate.mjs と同じ（0 なし / 1 flaky / 2 常時失敗のみ / 3 レポート不読 / 4 環境事故のみ）
 #
 # 環境変数（テスト用注入ポイント）:
 #   FLAKY_VITEST_BIN  vitest の起動コマンド（既定 "npx vitest"）

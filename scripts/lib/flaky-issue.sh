@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # WHY: flaky-detection.yml が揺れ・常時失敗を見つけたときに GitHub issue を作る／追記する。
-#      issue を状態源にして重複作成を防ぐ（タイトル `[flaky] <suite>` で open issue を突合。
+#      issue を状態源にして重複作成を防ぐ（タイトル `[flaky] <suite>` / `[env] <suite>` で open issue を突合。
 #      schema-drift-check.yml と同じ型）。ワークフローの YAML に長い bash を埋めず、ここで
 #      構造テスト（scripts/lib/flaky-issue.test.sh）にかける。
 #
@@ -17,12 +17,17 @@ GH="${FLAKY_GH_BIN:-gh}"
 
 [ -f "$REPORT" ] || { echo "レポートが無い: $REPORT" >&2; exit 1; }
 
-TITLE="[flaky] ${SUITE}"
+# WHY(2026-09-07、exit 4 を分ける): 実測で「揺れるテスト 35 件」と出た正体が、
+#      **1 回の実行でまとめて落ちた環境事故**だったことがあった（ローカル Supabase の Auth 不調）。
+#      これを `[flaky] integration` として起票すると、**直す先がテストだと誤解させる**。
+#      題名を分けて、探す先が環境であることを最初の行で分かるようにする。
+#      黙らせはしない（環境が落ちたこと自体は問題で、実運用なら利用者に見える障害になる）。
 case "$STATUS" in
-  1) KIND="揺れるテスト（flaky）" ;;
-  2) KIND="毎回落ちるテスト（揺れではなくバグ）" ;;
-  3) KIND="vitest 自体が起動していない（レポート不読）" ;;
-  *) KIND="不明な状態（exit ${STATUS}）" ;;
+  1) KIND="揺れるテスト（flaky）" ; TITLE="[flaky] ${SUITE}" ;;
+  2) KIND="毎回落ちるテスト（揺れではなくバグ）" ; TITLE="[flaky] ${SUITE}" ;;
+  3) KIND="vitest 自体が起動していない（レポート不読）" ; TITLE="[flaky] ${SUITE}" ;;
+  4) KIND="環境事故（同じ回にまとまって落ちた。直す先はテストではなく環境）" ; TITLE="[env] ${SUITE}" ;;
+  *) KIND="不明な状態（exit ${STATUS}）" ; TITLE="[flaky] ${SUITE}" ;;
 esac
 RUN_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-}"
 

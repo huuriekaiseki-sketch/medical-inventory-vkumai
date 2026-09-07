@@ -6,6 +6,22 @@ name: Flaky Test Detection
 # ため週次にし、同じスクリプト（scripts/check-flaky-tests.sh）を手元でも使えるようにする。
 # 揺れ・常時失敗が見つかったら `[flaky]` 接頭辞の issue を作る（同じ suite の open issue があれば
 # コメントで追記）。issue を状態源にして重複作成を防ぐ（schema-drift-check.yml と同じ型）。
+#
+# WHY(回数、2026-09-07 に実測して見直した): 判定は「passed > 0 かつ failed > 0」なので、
+# 1 回あたり p で揺れるテストを N 回で捕まえられる確率は 1 - p^N - (1-p)^N。実測した表:
+#
+#   |   p |  N=3 |  N=5 | N=10 | N=20 |
+#   |  5% |  14% |  23% |  40% |  64% |
+#   | 10% |  27% |  41% |  65% |  88% |
+#   | 50% |  75% |  94% | 100% | 100% |
+#
+# **N=3 はどの p でも 80% に届かない**（最大が p=0.5 のときの 75%）。
+# 実際、2026-09-07 に p ≈ 5〜10% で揺れるプロパティテストが 1 件あったが、
+# 5 回の実行では 1 度も現れなかった（別経路で気づいた）。
+# unit 5 → 10、integration 3 → 10 に上げる。追加コストは週あたり unit +約 2 分・
+# integration +約 7 分（Free の 2,000 分/月に対して約 1.5%）。
+# 「揺れなし」の報告には検知力の数字が付く（scripts/lib/flaky-aggregate.mjs）ので、
+# この回数でも見つからない範囲があることは報告そのものから読める。
 on:
   schedule:
     - cron: '0 20 * * 0' # 日曜 20:00 UTC = 月曜 05:00 JST。平日の作業前に結果が出ている
@@ -13,10 +29,10 @@ on:
     inputs:
       runs:
         description: '実行回数（unit）'
-        default: '5'
+        default: '10'
       integration_runs:
         description: '実行回数（integration）'
-        default: '3'
+        default: '10'
 
 permissions:
   contents: read
@@ -41,7 +57,7 @@ jobs:
         id: flaky
         env:
           # WHY: 入力は run: に直接展開せず env 経由で渡す（式展開によるコマンド注入の型を避ける）
-          RUNS: ${{ github.event.inputs.runs || '5' }}
+          RUNS: ${{ github.event.inputs.runs || '10' }}
         run: |
           set +e
           bash scripts/check-flaky-tests.sh --runs "$RUNS" --out flaky-out
@@ -92,7 +108,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_API_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
-          RUNS: ${{ github.event.inputs.integration_runs || '3' }}
+          RUNS: ${{ github.event.inputs.integration_runs || '10' }}
         run: |
           set +e
           bash scripts/check-flaky-tests.sh --runs "$RUNS" --config vitest.integration.config.ts --out flaky-out
