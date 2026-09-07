@@ -82,3 +82,14 @@
 | I-051 | NOT VALID で入れた CHECK（I-01x）に違反する既存行が 0 件（pg_constraint から動的に列挙し `NOT (制約式)` で数える。制約を足しても検査側の変更は不要） | 同上の夜間検査 | 制約導入前の古い行 | 違反があれば `I-051:<制約名>` が detected。0 件なら VALIDATE CONSTRAINT へ | `supabase/__tests__/integration/business-invariants-nightly.integration.test.ts`、`supabase/migrations/__tests__/add_nightly_invariant_check.test.ts` | 実装済み |
 | I-052 | 施設を削除すると、その施設の所属・発注 3 種・明細・返却・消耗品・価格・価格履歴が残らない。監査ログ（`audit_log`）は FK を張らず意図的に残す（削除の証跡）。マスタと マスタの価格履歴は消えない | FK `ON DELETE CASCADE`（20260624000000 / 20260627010000 / 20260618063046）、`price_histories` は FK が無いためトリガー `hospital_prices_delete_price_histories`（20260906000007） | service_role で施設を DELETE して各表を数える | 施設スコープの 12 表が 0 件。audit_log に facilities / case_orders の DELETE が残る | `supabase/__tests__/integration/facility-delete-cascade.integration.test.ts`、`supabase/migrations/__tests__/delete_price_histories_with_hospital_price.test.ts` | 実装済み |
 | I-052 | 施設を削除すると、その施設の発注・返却・価格・所属が残らない | FK `ON DELETE CASCADE`（20260624000000 / 20260627010000） | 施設を DELETE して各表を数える | 0 件 | 未 | 計画 |
+
+## 限界
+
+- **条件が業務上正しいかは見ない。** DB がその条件を守っているかしか見ない。
+  「数量は 1 以上」が本当に業務のルールかは人が決める。
+- **集計をまたぐ条件は書き込みの瞬間に止められない。** 1 行の CHECK では表せないので
+  夜間検査（#757 の 9）に回しており、破られてから最大 1 日は残る。
+- **`NOT VALID` の CHECK は既存行を見ていない。** 新しい行は止まるが、入れた時点の
+  違反行はそのまま残る。夜間検査で 0 件を確認してから `VALIDATE CONSTRAINT` するまでは穴。
+- **アプリ側の入力検証は数えていない。** 画面で弾いていても DB に CHECK が無ければ
+  この表では「守っていない」。逆に DB にあれば画面の有無は問わない。

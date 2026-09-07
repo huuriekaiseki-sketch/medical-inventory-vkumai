@@ -43,6 +43,53 @@ export function splitRow(line) {
   return cells.slice(1, -1).map((c) => c.trim())
 }
 
+/** 仮置きのまま通さないための語 */
+const PLACEHOLDER = /todo|未定|後で|あとで|（ここに|\(ここに/i
+
+/**
+ * 「この検査で見つからないこと」を先に書かせる（2026-09-07）。
+ *
+ * WHY: ルールブックは増える一方で、リポジトリごとに中身も変わる。だから
+ *      「このルールが何を守らないか」を後から思い出すのは無理になる。
+ *      先に書いておくと、**取りこぼしが起きたときに「あの限界ではないか」と最初に疑える**。
+ *      実際、2026-09-07 に見つけた 3 件はどれも「その仕組みが見ていない軸」で起きており、
+ *      限界が書いてあれば真っ先にそこを見に行けた。
+ *
+ *      2 か所に書かせる。文書の `## 限界` 節（詳しく）と、登録簿の `limits`（索引に出す 1 行）。
+ *      索引に出るのが大事で、事故のときに開くのは索引 1 枚だから。
+ */
+export function checkLimits({ spec, text }) {
+  const violations = []
+
+  // WHY(正規表現 1 本にしない): `$` は m フラグ下で行末にも一致するため、
+  //      「次の見出しまで」を 1 本の正規表現で書くと本文が空に見える（実際に踏んだ）。
+  //      見出しの位置を探してから次の見出しまでを切り出す。
+  const heading = text.match(/^##\s*限界[^\n]*$/m)
+  if (!heading || heading.index === undefined) {
+    violations.push(
+      `${spec.id}: limits: 文書に「## 限界」の節が無い（この検査で見つからないことを先に書く）`,
+    )
+  } else {
+    const after = text.slice(heading.index + heading[0].length)
+    const next = after.search(/^#{1,2}\s/m)
+    const body = (next >= 0 ? after.slice(0, next) : after).trim()
+    if (body.length < 20) {
+      violations.push(`${spec.id}: limits: 「## 限界」の中身が短すぎる（${body.length} 文字）`)
+    } else if (PLACEHOLDER.test(body)) {
+      violations.push(`${spec.id}: limits: 「## 限界」が仮置きのまま`)
+    }
+  }
+
+  const oneLine = (spec.limits ?? '').trim()
+  if (oneLine.length < 10) {
+    violations.push(`${spec.id}: limits: 登録簿に limits（索引に出す 1 行）が無い`)
+  } else if (PLACEHOLDER.test(oneLine)) {
+    violations.push(`${spec.id}: limits: 登録簿の limits が仮置きのまま`)
+  }
+
+  return violations
+}
+
 /**
  * 1 つのルールブックを検査する。
  * @param {{spec: object, text: string, root: string}} input
@@ -57,6 +104,8 @@ export function checkCatalog({ spec, text, root }) {
   const rows = text.split('\n').filter((l) => rowRe.test(l))
 
   if (rows.length === 0) violations.push(`${spec.id}: 行が 1 つも無い（${prefix}-xxx の行）`)
+
+  violations.push(...checkLimits({ spec, text }))
 
   for (const line of rows) {
     const cells = splitRow(line)

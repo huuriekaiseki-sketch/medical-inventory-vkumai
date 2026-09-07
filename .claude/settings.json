@@ -95,6 +95,13 @@
       "Bash(bash scripts/check-blocked-issues-staleness.test.sh*)",
       "Bash(scripts/check-fault-injection-drill-staleness.sh *)",
       "Bash(bash scripts/check-fault-injection-drill-staleness.test.sh*)",
+      "Bash(scripts/record-test-failure.sh *)",
+      "Bash(scripts/check-escape-ledger.sh *)",
+      "Bash(bash scripts/check-escape-ledger.test.sh*)",
+      "Bash(bash scripts/triage-escapes.sh*)",
+      "Bash(scripts/check-integration-freshness.sh *)",
+      "Bash(bash scripts/check-integration-freshness.test.sh*)",
+      "Bash(bash scripts/run-integration-tests.sh*)",
       "Bash(scripts/check-claude-md-size.sh *)",
       "Bash(bash scripts/check-claude-md-size.test.sh*)",
       "Bash(scripts/check-stale-worktrees.sh*)",
@@ -248,6 +255,11 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-plugin-integrity.sh",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-integration-freshness.sh",
+            "timeout": 10
           }
         ]
       },
@@ -294,6 +306,14 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/record-test-failure.sh", "timeout": 10 }
+        ]
+      }
+    ],
     "SubagentStart": [
       {
         "hooks": [
@@ -318,6 +338,11 @@
     "Stop": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-escape-ledger.sh",
+            "timeout": 10
+          },
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-domain-decisions-suggest.sh",

@@ -57,6 +57,8 @@ export function renderIndex({ registry, root }) {
       title: (title ?? c.id).replace(/\|/g, '／'),
       prefix: `${c.idPrefix}-xxx`,
       states: (c.states ?? []).join(' / ').replace(/\|/g, '／'),
+      // 「この検査で見つからないこと」。事故のときに最初に開くのがこの索引なので、限界も 1 枚に並べる
+      limits: (c.limits ?? '（未記入）').replace(/\|/g, '／'),
       purpose,
     })
   }
@@ -72,10 +74,15 @@ export function renderIndex({ registry, root }) {
   lines.push('ルールブックは「守るべきことを 1 行 1 件で並べ、状態の語彙を固定し、機械が形を検査する表」。')
   lines.push('新しく作るときは `bash scripts/new-rulebook.sh`（雛形と登録を同時に作り、その場で検査まで回す）。')
   lines.push('')
-  lines.push('| ID 帯 | ルールブック | 何を並べるか | 状態の語彙 |')
-  lines.push('| --- | --- | --- | --- |')
+  lines.push('**取りこぼしが起きたら、まず「限界」列を読む。** 各ルールブックが何を守らないかを先に')
+  lines.push('書いてあるので、事故の原因がそこに書いてあることが多い（詳しくは各文書の「## 限界」節）。')
+  lines.push('')
+  lines.push('| ID 帯 | ルールブック | 何を並べるか | 状態の語彙 | 限界（見つからないこと） |')
+  lines.push('| --- | --- | --- | --- | --- |')
   for (const r of rows) {
-    lines.push(`| \`${r.prefix}\` | [${r.title}](${path.posix.basename(r.file)}) | ${r.purpose} | ${r.states} |`)
+    lines.push(
+      `| \`${r.prefix}\` | [${r.title}](${path.posix.basename(r.file)}) | ${r.purpose} | ${r.states} | ${r.limits} |`,
+    )
   }
   lines.push('')
   lines.push(`（${rows.length} 件）`)

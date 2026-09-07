@@ -1,0 +1,6 @@
+{
+  "_comment": "ルールブック（カタログ）の登録簿。scripts/lib/catalog-registry.json へ置く。ルールブックはリポジトリごとに増えるものなので、この登録簿は**導入先のもの**であり、プラグイン側からは配られない（配ると導入先の増えた分が上書きで消える）。エンジン scripts/lib/check-catalog.mjs と雛形生成 scripts/new-rulebook.sh はプラグインが配る。新しいルールブックは `bash scripts/new-rulebook.sh` で作ると、文書・この登録簿・索引がまとめて出来る。",
+  "_howto": "まずは catalogs を空のまま置いてよい（検査は 0 件でも通る）。最初の 1 つを作るときは new-rulebook.sh を使うこと。手で書き足すと列数・ID の帯・状態の語彙・limits のどれかを必ず忘れる。",
+  "_limits": "登録簿の各エントリには limits（この仕組みで見つからないことを 1 行）が必須。索引 docs/agents/rulebooks.md に列として出て、取りこぼしが起きたときに最初に読む場所になる。文書側にも「## 限界」の節が要る。どちらも書くまで検査が落ちる。",
+  "catalogs": []
+}

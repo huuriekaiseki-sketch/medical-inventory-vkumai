@@ -72,6 +72,109 @@
         "未測定"
       ],
       "planPattern": "#757-[0-9]+"
+    },
+    {
+      "id": "invariant",
+      "file": "docs/agents/invariant-catalog.md",
+      "idPrefix": "I",
+      "columns": 7,
+      "evidenceColumn": 6,
+      "statusColumn": 7,
+      "states": [
+        "実装済み",
+        "計画",
+        "対象外"
+      ],
+      "evidenceRequiredStates": [
+        "実装済み"
+      ],
+      "idBands": [
+        10,
+        20,
+        30,
+        40,
+        50
+      ],
+      "_note": "bespoke な scripts/check-invariant-catalog.test.sh も残す（ID がテスト本文に実在するかの双方向突合はエンジンの範囲外）",
+      "purpose": "業務データが「どの経路から書かれても」満たしていなければならない条件。守る場所は原則 DB",
+      "limits": "条件を DB が守っているかは見るが、その条件が業務上正しいかは見ない。集計をまたぐ条件は夜間検査まで気づけない"
+    },
+    {
+      "id": "promise",
+      "file": "docs/agents/promise-catalog.md",
+      "idPrefix": "P",
+      "columns": 9,
+      "evidenceColumn": 8,
+      "statusColumn": 9,
+      "states": [
+        "毎回",
+        "変更時",
+        "節目",
+        "一度きり"
+      ],
+      "idBands": [
+        0,
+        10,
+        20,
+        30,
+        40,
+        50,
+        60
+      ],
+      "_note": "状態列は実施タイミング（4 語）。守るテストが 未 の行があるので evidenceRequiredStates は置かない",
+      "purpose": "auth / RLS / 施設境界 / admin 境界 / AAL2 / RPC 契約の約束。守るテストの名前に ID を書いて双方向に突合する",
+      "limits": "守るテストの ID 文字列が実在するかは見るが、そのテストが本当に約束を守っているか（効き目）は見ない。効き目は RLS ミューテーションで別に測る"
+    },
+    {
+      "id": "table",
+      "file": "docs/agents/table-rulebook.md",
+      "idPrefix": "TB",
+      "columns": 8,
+      "evidenceColumn": 7,
+      "statusColumn": 8,
+      "states": [
+        "実装済み",
+        "計画",
+        "対象外"
+      ],
+      "evidenceRequiredStates": [
+        "実装済み"
+      ],
+      "idBands": [
+        10,
+        20,
+        30,
+        40,
+        50
+      ],
+      "_note": "bespoke な supabase/migrations/__tests__/table_registry.test.ts も残す（宣言と migration の実態の突合はエンジンの範囲外）。エンジンは形、bespoke は中身",
+      "purpose": "新しいテーブルを作るときに決める 4 軸（RLS・ポリシー・誰が読み書きできるか・監査）の正本",
+      "limits": "migration の SQL しか見ないので、実 DB に手で当てた変更や Supabase の既定権限は見えない。宣言が業務上妥当かも見ない"
+    },
+    {
+      "id": "escaped-defects",
+      "file": "docs/agents/escaped-defects.md",
+      "idPrefix": "E",
+      "columns": 9,
+      "evidenceColumn": 8,
+      "statusColumn": 9,
+      "states": [
+        "未分類",
+        "対応中",
+        "解決済み",
+        "該当なし"
+      ],
+      "evidenceRequiredStates": [
+        "解決済み"
+      ],
+      "idBands": [
+        10,
+        20,
+        30
+      ],
+      "_note": "bespoke な scripts/lib/__tests__/escaped-defects.test.ts も残す（分類・検出源・決定者の語彙と「ルールブック不足なら名指し必須」はエンジンの範囲外）。エンジンは形、bespoke は輪が閉じているか",
+      "purpose": "すり抜けた 1 件 = 1 行。ルールブックの限界を実際の漏れから育てるための台帳",
+      "limits": "気づいた漏れしか載らない。分類は自己申告で、環境を選べば何でも通せる。Bash 以外で気づいた漏れは自動では拾えない"
     }
   ]
 }

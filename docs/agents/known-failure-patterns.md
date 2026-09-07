@@ -455,6 +455,30 @@ DELETE、RPC関数）をレビューする際は、以下を**攻撃者視点**�
 引き継ぎメモの「検証済み」欄には、他テナントIDでのアクセス確認結果を明示する
 （詳細は [`common.md`](./common.md#引き継ぎフォーマット) 参照）。
 
+### テーブルに GRANT を書かず、service_role でも読めないまま守りのテストが赤で放置される（2026-09-07）
+
+**チェック内容:** RLS を有効にしてポリシーを 1 つも作らないテーブル（SECURITY DEFINER 関数から
+しか触らない設計）を新設したら、**読む側の GRANT も明示的に書く**。Supabase の既定権限
+（`ALTER DEFAULT PRIVILEGES`）に頼らず、`REVOKE ALL ... FROM PUBLIC, anon, authenticated,
+service_role;` してから必要なロールにだけ `GRANT SELECT` する（`audit_log`（20260906000004）が
+その型）。そのうえで、**読める側と読めない側の両方を統合テストで測る**。
+
+**なぜ再発したか:** `schema_drift_log` / `schema_baseline_snapshots`（20260714000001）は
+「関数からしか書かない」ことだけを設計し、読む側を書かなかった。RLS はポリシーが無いので
+client からは弾かれるが、**service_role も GRANT が無いので `permission denied` になる**
+（RLS のバイパスと、テーブル権限は別の話）。その結果、夜間の不変条件検査を守るはずの
+`business-invariants-nightly.integration.test.ts` が「記録されたか」を読めず、
+ずっと落ちたままだった。検知の仕組み自体は動いていた（anon 公開の `drift_alert_view` に
+行が出ることを実測で確認）ので、**赤いのはテストだけで、誰も直しに来なかった**。
+
+さらに `detail`（何がどう違反したか）は誰も読めず、原因の調べようが無い状態だった。
+
+**機械検知:** 統合テストが手元でしか回らない期間は「赤いテストが放置される」ことが起きる。
+`npm run test:integration` を通したときは、自分の変更と無関係な失敗も**必ず切り分けて報告する**
+（変更を外して `supabase db reset` し、元から落ちているかを確かめる）。
+権限そのものは `schema-drift-rpc-authz.integration.test.ts` が
+service_role / anon / authenticated の 3 方向で固定した。
+
 ## 依存関係層（npm サプライチェーン）
 
 ### npm パッケージの追加を「部品を増やす作業」として通してしまう（2026-09-04）

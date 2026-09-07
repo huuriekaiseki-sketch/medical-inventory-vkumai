@@ -10,6 +10,32 @@ paths:
   外部送信の 7 つ。**分からない値を勝手に既定値で埋めない**（2026-09-07 にそれをやって、後から
   migration をもう 1 本書き直した）。聞いた答えは migration の先頭に `-- design:` で残し、
   `scripts/check-design-questions.test.sh`（CI `hooks-test`）が記録の有無を検査する
+
+- **新しいテーブルを作るときは 4 軸すべてを決める（2026-09-07）。**
+  (1) RLS を有効にするか  (2) ポリシーを作るか  (3) **誰が読み書きできるか**  (4) 監査対象にするか。
+  決めた内容は [`docs/agents/table-rulebook.md`](../../docs/agents/table-rulebook.md)（TB-xxx）に 1 行書く。
+  **決めごとの正本はこの 1 枚だけ**で、`rls_enabled_all_tables` も `audit_trigger_coverage` も
+  ここを読む（同じ判断を 2 か所に置かない）。書かないと
+  `supabase/migrations/__tests__/table_registry.test.ts` が「宣言が無い」で落ちる
+  （`npm test` に含まれるので毎 PR）。宣言と migration の実態がずれても落ちる。
+  表の**形**は汎用エンジン `scripts/lib/check-catalog.mjs` が見る（登録は `scripts/lib/catalog-registry.json`、
+  索引は [`docs/agents/rulebooks.md`](../../docs/agents/rulebooks.md)）。
+  - 特に (3) は 2026-09-07 まで**どの検査も見ていなかった**。その結果 `schema_drift_log` は
+    作られてから 2 か月間 GRANT が 1 行も無く、service_role でも読めなかった。
+    RLS のバイパス（service_role）とテーブル権限は別の話で、**GRANT を書かなければ誰も読めない**
+  - **`REVOKE ALL ON TABLE <t> FROM PUBLIC, anon, authenticated, service_role;` を先に書いてから
+    必要な GRANT だけを書く**。Supabase の既定権限（`ALTER DEFAULT PRIVILEGES`）が効くかは
+    環境で変わり、実測でも効いている表と効いていない表の両方があった。既定に答えを委ねない
+  - ポリシーを作らない表（SECURITY DEFINER 関数からしか触らない表）は、
+    **実 DB で「読める人・読めない人」を測る統合テスト**も必須（静的検査は GRANT の文字列しか見られない）
+
+- **`supabase/` を触ったら `bash scripts/run-integration-tests.sh` で全件を通す。**
+  素の `npm run test:integration` ではなくこのラッパーを使うと、結果が
+  `logs/integration-runs.jsonl` に機械的に記録される（通ったことにはできない。記録するのは exit code）。
+  記録が無い・前回が赤・前回から `supabase/` が変わっている、のいずれかなら
+  SessionStart hook（`scripts/check-integration-freshness.sh`）が次のセッションで警告する。
+  2026-09-07 に統合テストが 2 件、いつからか分からないほど前から赤いまま放置されていたのが理由
+
 - **DBスキーマ変更は必ず `supabase/migrations/` 配下のマイグレーションファイル経由で行う。**
   `execute_sql` 等による直接実行・直接DDL適用は禁止（ローカル・リモート問わず）。
   `supabase db execute`・`psql`直接実行、およびMCP経由のexecute_sql系ツール呼び出しは

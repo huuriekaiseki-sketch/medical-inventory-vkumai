@@ -16,6 +16,8 @@ set -euo pipefail
 #   FAULT_INJECTION_DRILL_DOC   既定 docs/agents/fault-injection-drill.md
 #   HOOK_LIVE_DRILL_DOC         既定 docs/agents/hook-live-drill.md
 #   UPSTREAM_DOCS_REVIEW_DOC    既定 docs/agents/upstream-docs-review.md
+#   DEPENDENCY_UPDATE_DOC       既定 docs/agents/dependency-update-runbook.md（issue #757 の 21 で追加。4 つ目）
+#   ACCESS_REVIEW_DOC           既定 docs/agents/access-review-runbook.md（issue #757 の 36 で追加。5 つ目）
 #   MUTATION_TESTING_DOC        既定 docs/agents/mutation-testing.md
 #   RLS_MUTATION_DOC            既定 docs/agents/rls-mutation.md
 #   MAINTENANCE_DIGEST_PLAIN=1  JSON でなく人が読む素のテキストで出す（手動実行用）
@@ -77,6 +79,8 @@ BODY="$(
   line_for "fault injection 訓練" "${FAULT_INJECTION_DRILL_DOC:-docs/agents/fault-injection-drill.md}" "手順: docs/agents/fault-injection-drill.md「## 実行手順」"
   line_for "hook 実走ドリル" "${HOOK_LIVE_DRILL_DOC:-docs/agents/hook-live-drill.md}" "手順: docs/agents/hook-live-drill.md「## 手順」"
   line_for "公式 docs 差分確認" "${UPSTREAM_DOCS_REVIEW_DOC:-docs/agents/upstream-docs-review.md}" "手順: docs/agents/upstream-docs-review.md「## 手順（1〜2 時間）」"
+  line_for "依存の月次棚卸し" "${DEPENDENCY_UPDATE_DOC:-docs/agents/dependency-update-runbook.md}" "手順: docs/agents/dependency-update-runbook.md「## 手順（30 分）」"
+  line_for "鍵・権限の四半期棚卸し" "${ACCESS_REVIEW_DOC:-docs/agents/access-review-runbook.md}" "手順: docs/agents/access-review-runbook.md「## 手順（30 分）」"
   line_for "テストの効き目の計測" "${MUTATION_TESTING_DOC:-docs/agents/mutation-testing.md}" "手順: docs/agents/mutation-testing.md「## 使い方」"
   line_for "認可そのものの効き目の計測" "${RLS_MUTATION_DOC:-docs/agents/rls-mutation.md}" "手順: docs/agents/rls-mutation.md「## 使い方」"
 )"
