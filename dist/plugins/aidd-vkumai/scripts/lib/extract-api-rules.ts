@@ -9,8 +9,9 @@
 //      2026-09-07 の実測: `_zod.bag` は文字列なら { minimum: 最小長, maximum: 最大長 }、
 //      数値なら { minimum: 下限 } を返す。optional / nullable / pipe / default は剥がす。
 //
-// 使い方: npx tsx scripts/lib/extract-api-rules.ts
-//   出力は JSON（{ "<スキーマ名>.<フィールド名>": { type, maxLength, min, enum } }）。
+// 使い方: scripts/check-layer-consistency.test.sh が
+//   scripts/lib/__tests__/extract-api-rules.emit.test.ts 経由で呼ぶ（vitest を実行系に借りる）。
+//   返すのは { "<スキーマ名>.<フィールド名>": { type, maxLength, min, enum } }。
 
 import * as schemas from '../../src/lib/validation/schemas'
 
@@ -72,12 +73,19 @@ function collect(name: string, node: Any, out: Record<string, ApiRule>, depth = 
   }
 }
 
-const out: Record<string, ApiRule> = {}
-for (const [name, schema] of Object.entries(schemas as Record<string, unknown>)) {
-  if (!name.endsWith('Schema')) continue
-  collect(name, schema as Any, out)
+/**
+ * すべての zod スキーマから「実際の値」を取り出す。
+ *
+ * WHY(関数として公開する): 実行系は vitest から借りる（npx -y tsx は毎回レジストリから
+ *      落としてくるため。scripts/lib/__tests__/extract-api-rules.emit.test.ts 参照）。
+ */
+export function extractApiRules(): Record<string, ApiRule> {
+  const out: Record<string, ApiRule> = {}
+  for (const [name, schema] of Object.entries(schemas as Record<string, unknown>)) {
+    if (!name.endsWith('Schema')) continue
+    collect(name, schema as Any, out)
+  }
+  const sorted: Record<string, ApiRule> = {}
+  for (const key of Object.keys(out).sort()) sorted[key] = out[key]
+  return sorted
 }
-
-const sorted: Record<string, ApiRule> = {}
-for (const key of Object.keys(out).sort()) sorted[key] = out[key]
-console.log(JSON.stringify(sorted, null, 2))

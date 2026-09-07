@@ -42,13 +42,23 @@ assert_fail() {
   fail=1
 }
 
-# API 側は tsx が要る（zod を実行時に内省するため）。1 回だけ取り出して使い回す
+# API 側は zod を実行時に内省するので TypeScript を実行する必要がある。
+# WHY(npx -y tsx を使わない): 毎回レジストリから落としてくる（2026-09-04 に CI が 4〜8 倍に
+#      なった原因。scripts/check-no-registry-fetch.test.sh が hook スクリプトで禁止している）。
+#      node_modules に既にある vitest で実行する。
 API_JSON="$(mktemp)"
 trap 'rm -f "$API_JSON"' EXIT
-if ! npx -y tsx "$API_EXTRACTOR" > "$API_JSON" 2>/dev/null; then
-  echo "  NG: API 側のスキーマを読み取れない（npx tsx scripts/lib/extract-api-rules.ts）"
+if ! ./node_modules/.bin/vitest run --config vitest.config.ts \
+     --reporter=dot --disable-console-intercept \
+     scripts/lib/__tests__/extract-api-rules.emit.test.ts > /dev/null 2>&1; then
+  echo "  NG: API 側のスキーマを読み取れない（scripts/lib/__tests__/extract-api-rules.emit.test.ts）"
   exit 1
 fi
+cp "$REPO_ROOT/.api-rules.json" "$API_JSON" 2>/dev/null || {
+  echo "  NG: API 側の抽出結果が出力されていない"
+  exit 1
+}
+rm -f "$REPO_ROOT/.api-rules.json"
 
 echo "=== scenario 1: 両側から条件を取れている（fail-open 防止） ==="
 DB_COUNT="$(node "$DB_SCANNER" "$MIGRATIONS" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(Object.keys(JSON.parse(s)).length))')"

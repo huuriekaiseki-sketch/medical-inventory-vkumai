@@ -172,7 +172,9 @@
     "lib/scan-text-columns.mjs": "aidd-vkumai",
     "lib/scan-db-constraints.mjs": "aidd-vkumai",
     "lib/extract-api-rules.ts": "aidd-vkumai",
-    "lib/compare-layers.mjs": "aidd-vkumai"
+    "lib/compare-layers.mjs": "aidd-vkumai",
+    "check-rls-mutation.sh": "aidd-vkumai",
+    "lib/rls-mutants.json": "aidd-vkumai"
   },
   "workflowLib": {
     "_comment": ".claude/workflows/lib/ の純粋関数のうち bin/ のスクリプトが node で呼ぶもの。scripts/workflow-lib/ に置く（workflows/ 配下に置くと Workflow として走査されるため）",
@@ -204,6 +206,7 @@
     "scripts/check-generated-supabase-types.sh": "同上",
     "scripts/eval-workflow-prompts.sh": "同上",
     "scripts/build-plugin.test.sh": "derive のルール表のコメントが生成物の鮮度検査の所在を示すだけ",
-    "scripts/lib/derive-test-selection.mjs": "derive は導入先の .claude/workflows/lib/router-risk.js に依存するため v1.0 では同梱しない（KNOWN-LIMITS）。案内文の参照のみ"
+    "scripts/lib/derive-test-selection.mjs": "derive は導入先の .claude/workflows/lib/router-risk.js に依存するため v1.0 では同梱しない（KNOWN-LIMITS）。案内文の参照のみ",
+    "scripts/check-no-registry-fetch.test.sh": "npx を使わない理由を説明するコメントが検査の名前を挙げるだけ（実行しない）。この検査自体は共通側の話ではなくリポジトリの CI 事情なので同梱しない"
   }
 }
