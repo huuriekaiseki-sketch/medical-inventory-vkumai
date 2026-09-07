@@ -254,6 +254,7 @@
     "check-invariant-catalog.test.sh": "同上（invariant-catalog.md の実データ）",
     "check-docs-integrity.test.sh": "同上（docs/agents 配下の実データ）",
     "check-secret-leak.test.sh": "Supabase の鍵の形と src/lib/supabase/server.ts の存在を前提にする。走査の型は汎用なので、鍵の種類を設定に出せたら配れる",
+    "check-secret-leak-history.test.sh": "同上（パターン表を共有する）。走査の型は汎用だが、鍵の種類がこのスタック固有",
     "check-pii-leak.test.sh": "許可ドメインと追跡ファイルの構成がこのリポジトリ固有",
     "check-lockfile-integrity.test.sh": "npm の package-lock.json 前提（禁止語 npm を含む）",
     "check-eval-fixtures-neutral.test.sh": "scripts/eval-fixtures/ の実データを検査する",

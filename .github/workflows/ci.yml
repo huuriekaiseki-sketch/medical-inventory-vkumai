@@ -75,7 +75,13 @@ jobs:
   hooks-test:
     runs-on: ubuntu-latest
     steps:
+      # WHY(fetch-depth: 0): scripts/check-secret-leak-history.test.sh は git のオブジェクト全部を
+      # 走査して「一度でも秘密をコミットしていないか」を見る。既定の浅い clone（depth 1）では
+      # 走査対象がほぼ無く、**0 件だから安全**と読める緑になってしまう。
+      # 検査自体も浅い clone を検知して落ちるので、ここで深さを指定しないと CI が止まる。
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       # 認証ファイル漏洩チェック（BSGではなくCI側で行う方針）。e2e.ymlがPR自動実行を
       # やめた(2026-08-25、無料枠対応)ため、PRごとに回る本ジョブへ移設した(軽量・数秒)
       - name: Check auth state files are not committed

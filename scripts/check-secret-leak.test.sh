@@ -8,8 +8,10 @@
 #   (c) .env / .env.local / .env.test は gitignore されている（.env.test.example だけ追跡）
 #   (d) fixture 差し替えで (a)(b) を検知できる（RED 方向の自己検証）
 #
-# 見つけられないもの: git 履歴に過去に入った秘密（履歴の走査は別途 gitleaks 等）、暗号化・難読化された値、
-# パターンに無い独自形式のトークン。鍵のローテーション実測は #757 の 29。
+# 見つけられないもの: 暗号化・難読化された値、パターンに無い独自形式のトークン。
+# **git 履歴に過去に入った秘密は `scripts/check-secret-leak-history.test.sh` が見る**
+# （2026-09-08 に追加。パターンは scripts/lib/secret-patterns.txt で共有する）。
+# 鍵のローテーション実測は #757 の 29。
 #
 # 実行: bash scripts/check-secret-leak.test.sh
 # 環境変数（テスト用注入ポイント）:
@@ -19,19 +21,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${SECRET_SCAN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
-# 秘密らしい文字列のパターン（ERE）。この script 自身は追跡ファイルなので、パターンがパターン自身に
-# 一致しない形（文字クラス・量指定子）で書く
-SECRET_PATTERNS=(
-  'eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}'   # JWT（Supabase anon / service_role key）
-  'sb_secret_[A-Za-z0-9_-]{10,}'                   # Supabase secret key（新形式）
-  'sbp_[a-f0-9]{40}'                               # Supabase personal access token
-  '-----BEGIN [A-Z ]*PRIVATE KEY-----'             # 秘密鍵
-  'AKIA[0-9A-Z]{16}'                               # AWS access key id
-  'ghp_[A-Za-z0-9]{36}'                            # GitHub PAT（classic）
-  'github_pat_[A-Za-z0-9_]{22,}'                   # GitHub PAT（fine-grained）
-  'xox[baprs]-[0-9A-Za-z-]{10,}'                   # Slack token
-  'sk-(ant-)?[A-Za-z0-9_-]{20,}'                   # OpenAI / Anthropic API key
-)
+# 秘密らしい文字列のパターン（ERE）。正本は scripts/lib/secret-patterns.txt で、
+# git 履歴の走査（check-secret-leak-history.test.sh）と**同じ網**を使う。
+# 2 か所に書くと「今のファイルでは止まるが履歴には入れられる」穴が開く。
+SECRET_PATTERNS=()
+while IFS= read -r line; do
+  case "$line" in ''|'#'*) continue ;; esac
+  SECRET_PATTERNS+=("$line")
+done < "$SCRIPT_DIR/lib/secret-patterns.txt"
+if [ "${#SECRET_PATTERNS[@]}" -eq 0 ]; then
+  echo "  NG: パターンが 1 つも読めていない（走査になっていない）" >&2
+  exit 1
+fi
 
 fail=0
 assert_ok() { echo "  OK: $1"; }
