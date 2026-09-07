@@ -40,8 +40,8 @@ hook 側の fail-open は既知の制約として [known-failure-patterns.md](./
 | F-008 | `/api/facilities/[id]/my-role` | RPC・DB | `resolveIsAdmin` 失敗は非 admin、`getUserFacilityRole` の error は 500（role を返さない） | 閉じる | `src/app/api/facilities/[id]/my-role/__tests__/` |
 | F-009 | API Route の body 解析（`request.json()` の catch） | 不正な body | 400 を返す。認可には関与しない | 情報のみ | 各 route のテスト |
 | F-010 | データ層の RPC 呼び出し（発注 4 種・レポート・ニュース・価格履歴） | RPC・DB | `error` を投げ、route が 500。行は作られない | 閉じる | 各リポジトリの単体テスト（Supabase エラー時に例外） |
-| F-011 | RLS の認可述語（`is_facility_member` / `is_facility_writer` / `is_admin` / `has_aal2`） | DB 内部 | SQL 関数の例外は文（SELECT / INSERT）ごと失敗する。`has_aal2` は JWT に `aal` が無ければ false | 閉じる | P-010〜P-013、P-030、P-031 の統合テスト |
-| F-012 | 監査トリガー `audit_row_change`（20260906000004） | `audit_log` への INSERT | EXCEPTION 節が無く、記録できなければ元の書き込みごとロールバック（監査が止まると書き込みも止まる。可用性より証跡を優先） | 閉じる | `supabase/migrations/__tests__/add_audit_log.test.ts`、P-060 |
+| F-011 | RLS の認可述語（`is_facility_member` / `is_facility_writer` / `is_admin` / `has_aal2`） | DB 内部 | **その述語が評価されたときだけ**、例外が文ごと失敗になる（2026-09-08 実測。permissive なポリシーは OR で合成されるので、別のポリシーが先に通すと**壊れた述語は呼ばれない**）。`has_aal2` は **TOTP 登録済みの利用者から `aal` を剥いだとき**に false（未登録の利用者には `aal` を見ずに true。20260806000001 の設計） | 閉じる | `supabase/__tests__/fault-injection/db-internal.faultinjection.test.ts` |
+| F-012 | 監査トリガー `audit_row_change`（20260906000004） | `audit_log` への INSERT | EXCEPTION 節が無く、記録できなければ元の書き込みごとロールバック（監査が止まると書き込みも止まる。可用性より証跡を優先）。**2026-09-08 に監査ログを書けない状態を作って実測**: 業務データの INSERT が 23514 で失敗し、行は 1 件も残らなかった | 閉じる | `supabase/__tests__/fault-injection/db-internal.faultinjection.test.ts` |
 | F-013 | 状態遷移トリガー `enforce_status_forward_only`・CHECK 制約 | DB 内部 | 例外で書き込み失敗 | 閉じる | I-010〜I-020 の統合テスト |
 | F-014 | 発注 RPC の `unique_violation` 処理（P-053） | 同時送信 | 鍵で相手の行が見つかったときだけ再送扱い、見つからなければ再 RAISE（P-050 の 23505 を握らない） | 閉じる | `supabase/__tests__/integration/order-idempotency.integration.test.ts` |
 | F-015 | JWT の `user_role` クレーム（`custom_access_token_hook`） | hook の失敗 | Supabase Auth はトークンを発行しない（ログイン失敗）。クレームが null なら RLS は `user_facilities` を毎回引く | 閉じる | `supabase/migrations/__tests__/add_custom_access_token_hook.test.ts`、P-022 |
@@ -95,11 +95,40 @@ hook 側の fail-open は既知の制約として [known-failure-patterns.md](./
 **測らなかったもの**: DB（Postgres）単独の停止、Kong の停止、同時に複数が落ちる場合。
 本番の Supabase（プール・リージョン越し）での時間はローカルと違う。
 
+### 2026-09-08（2 回目。DB の中を壊す）
+
+外から依存を止めても DB の中の例外は起きないので、**DB の中で実際に壊して**測った
+（監査ログに必ず失敗する CHECK を足す／認可述語を例外を投げる版に差し替える）。
+
+| 壊したもの | 結果 |
+| --- | --- |
+| 監査ログに書けなくする（F-012） | 業務データの INSERT が **23514 で失敗**し、`facilities` の行は **0 件**。宣言どおり |
+| 認可述語を例外にする・**staff**（F-011） | **1 件返った**。writer 側のポリシーが先に通し、壊れた述語は呼ばれない |
+| 認可述語を例外にする・**viewer**（F-011） | **P0001 で文ごと失敗**。0 件ではなく失敗（壊れていることに気づける） |
+| `has_aal2` にクレームを渡す（F-011） | 未登録(aal なし)=**true** / 登録済み(aal なし)=**false** / 登録済み(aal1)=**false** / 登録済み(aal2)=**true** |
+
+**分かったこと**
+
+1. **F-012 の強い宣言は本当だった。** 「監査が止まると書き込みも止まる」は実測で確認できた。
+   **記録の残らない書き込みは作れない**（この製品でいちばん強い保証の 1 つ）。
+2. **F-011 の「例外は文ごと失敗する」は条件付きだった。** permissive なポリシーは OR で合成され、
+   別のポリシーが先に通すと**壊れた述語はそもそも評価されない**。
+   「述語が壊れたら必ず落ちる」と読むと、**壊れていることに気づけない場合がある**。
+3. **`has_aal2` の書き方が不正確だった。** 「`aal` が無ければ false」ではなく、
+   **TOTP 登録済みの利用者から `aal` を剥いだときだけ false**。
+   未登録の利用者には `aal` を見ずに true を返す（MFA 未登録の運用を壊さないための設計）。
+   安全上効いてほしい側（登録済みから剥ぐ）は効いている。
+
+**測り方の落とし穴（初回に 2 回踏んだ）**: RLS の USING 句は**行ごと**に評価されるので、
+対象の表が 0 行だと述語は一度も呼ばれず「0 件」が返る。**壊しても何も起きない**のに
+「例外にならなかった」と読めてしまう。行を 1 つ入れてから測る。
+
 ## 限界
 
-- **実際に外部依存を止めて測ったのは 4 行だけ**（F-001〜F-004、2026-09-08）。
-  残りはコードを読んだ判断で、読み違いがあればそのまま「閉じる」と書かれ続ける。
-  初回の実測で **F-004 の依存の書き方が実態と違っていた**（読んでいたときは気づけなかった）。
+- **実測したのは 6 行**（F-001〜F-004・F-011・F-012、2026-09-08）。残り 13 行はコードを読んだ判断で、
+  読み違いがあればそのまま「閉じる」と書かれ続ける。
+  **実測した 6 行のうち 3 行で書き方が実態と違っていた**（F-004 の依存・F-011 の条件・
+  `has_aal2` の説明）。読んでいたときは 3 つとも気づけなかった。
 - **「閉じる」は向きの話で、速さは別。** 判定材料が取れないとき拒否側へ倒れることと、
   そこまでに 1 分待たないことは別の性質で、**この表は向きしか見ていない**（時間は実施記録に）。
 - **同時に複数が落ちたときの合成は見ていない。** 1 つずつは拒否側へ倒れても、
