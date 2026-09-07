@@ -27,7 +27,7 @@
 | Q-001 | 一覧 API（発注・返却・仕入価格・消耗品） | 1 回あたり最大 200 件、offset は 100,000 まで。**回数の制限は無い** | `parsePagination` の 1〜200 と MAX_OFFSET | `src/lib/api-pagination.ts`、`src/app/api/__tests__/orders-client-request-id.test.ts` | 上限あり |
 | Q-002 | 同じ API を短時間に何度も呼ぶ | 1 人あたり毎分 300 回まで。超えると 429。数えられないときは通す（記録できないことを理由に業務を止めない） | `consume_rate_limit()` の固定窓を `requireAuth` の中 1 か所で消費する。値は aidd.config.json の `limits.requestsPerMinute` | `supabase/__tests__/integration/rate-limit-rls-idor.integration.test.ts`、`src/lib/security/__tests__/rate-limit.test.ts` | 上限あり |
 | Q-003 | admin の利用者一覧 | 全ページを取り切る（1 ページ 1,000 件 × 最大 20 ページ = 20,000 人）。2026-09-07 まで**既定の 50 人しか返っておらず、51 人目以降が画面に出ていなかった** | `PAGE_CAP = 20` と `PER_PAGE = 1000` | `src/app/api/admin/users/__tests__/route.test.ts` | 上限あり |
-| Q-004 | 監査ログの参照 | 件数の上限が無い（PostgREST の既定 1,000 行に当たるまで返る） | PostgREST の既定 | 未 | 未測定（#757-32: 監査ログは全表の変更が 1 表に集まるので、いちばん早く大きくなる。#757-19 の計測に足す） |
+| Q-004 | 監査ログの参照 | 1 回 1〜200 件（既定 50、offset は 100,000 まで）。Q-001 の `parsePagination` を使っており、この route だけの上限は持たない。**2026-09-08 に 20 万行で実測**したところ、上限内でも索引が無く毎回 表全体を走査していた（5,791 blocks）ので索引 2 本を足した（5 blocks） | `parsePagination()` と `audit_log_occurred_idx` / `audit_log_actor_occurred_idx` | `scripts/check-append-only-log-indexes.test.sh` | 上限あり |
 
 ### 書き込み（01x）
 
@@ -73,4 +73,4 @@
   ただし**上限に当たって止まった試行はカウンタを進めたまま戻らない**（固定窓の性質。止まった分は外部サービスを呼んでいないので払い戻しの対象ではない）。
 - **値は人が決めたもの**（毎分 300 回・1 日 50 通）で、実運用の数字ではない。
   実施設が使い始めたら実データで見直す（`aidd.config.json` の `decidedOn` が 2 年で期限切れになる）。
-- 残る「未測定」は Q-004（監査ログの参照）だけ。全表の変更が 1 表に集まるので、いちばん早く大きくなる。
+- **「未測定」は無くなった**（Q-004 を 2026-09-08 に実測）。ただし測ったのは**読み方**で、**保持期間（いつ消すか）は未決**。`audit_log` は append-only で消す手段が無く、どこまで増えるかは使い方次第のまま（#757-28）。
