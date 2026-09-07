@@ -1,0 +1,38 @@
+# WHY: 2026-09-07。GitHub のアカウント停止で PR が出せず、未マージのブランチが 40 本たまった。
+#      予行演習（bash scripts/rehearse-merge.sh）で測ると 37 本中 21 本が衝突し、
+#      **その中身は全部「両方の行を残す」だった**。並行して別々の行を足しているだけで、
+#      同じ行を奪い合ってはいない。
+#
+#      それを人が 21 回手で解くのは、間違える機会を 21 回作るだけなので git に任せる。
+#      `merge=union` は衝突箇所で**両方の側の行を残す**（片方を捨てない）。
+#      1 行 1 件の追記型の表・文書にだけ効かせる。
+#
+# 既知の限界（重要）:
+#   - union は**衝突を報告しない**。同じ行を両側が別々に書き換えた場合、
+#     直すのではなく**両方の行が並んで残る**（表なら ID が重複した行が 2 つできる）。
+#     受け止めるのは機械側の検査:
+#       * ルールブック（I / P / TB / E）は `scripts/lib/check-catalog.mjs` が ID の重複を落とす
+#       * テスト一覧は `scripts/check-test-matrix.test.sh` が一覧と 4 値の整合を見る
+#       * 約束カタログは `scripts/check-promise-catalog.test.sh` が双方向に突合する
+#     マージ後は必ず `npm test` と `scripts/*.test.sh` を全部回すこと。
+#   - **並び順は保証されない**。追記型の表は ID 順に並べ直す前提で読む。
+#   - コード・設定（JSON / bash / JS）には**効かせない**。行を足すだけに見えても、
+#     構文が壊れる形で両方残ることがある。そこは人が読んで直す。
+
+# --- ルールブック（1 行 1 件。ID の重複は検査が落とす） ---
+docs/agents/invariant-catalog.md      merge=union
+docs/agents/promise-catalog.md        merge=union
+docs/agents/table-rulebook.md         merge=union
+docs/agents/escaped-defects.md        merge=union
+
+# --- 追記型の棚卸し表 ---
+docs/agents/test-matrix.md            merge=union
+docs/agents/security-test-catalog.md  merge=union
+docs/agents/actuator-inventory.md     merge=union
+docs/agents/portability-inventory.md  merge=union
+docs/agents/undetectable-rules-inventory.md merge=union
+
+# --- 追記型の文書（節を足すだけ。既存の節を書き換える変更は衝突させたいので対象外にしたい
+#     が、git は行単位でしか判定できない。マージ後の目視確認を前提にする） ---
+docs/agents/known-failure-patterns.md merge=union
+docs/agents/decisions.md              merge=union
