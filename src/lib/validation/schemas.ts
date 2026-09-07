@@ -15,6 +15,12 @@ const facilityId = z.string({ error: '施設IDは必須です' }).min(1, { error
 const id = (label: string) =>
   z.string({ error: `${label}の指定は必須です` }).min(1, { error: `${label}の指定は必須です` })
 
+/** 金額。DB の CHECK（I-013）と同じ「0 以上」を入口でも見る */
+const money = (label: string) =>
+  z
+    .number({ error: `${label}は数値で入力してください` })
+    .min(0, { error: `${label}は 0 以上で入力してください` })
+
 /**
  * UUID の形まで見る ID。存在するかは DB の外部キーが見る。
  *
@@ -128,30 +134,93 @@ export const deleteUserSchema = z.object({
   userId: id('利用者'),
 })
 
-/** 症例発注の見出し（case_orders） */
-export const caseOrderHeaderSchema = z.object({
+/**
+ * 施設別の仕入価格（hospital_prices）
+ *
+ * WHY(自由入力が無い): 金額と ID だけ。DB の CHECK（I-013、0 以上）と同じ条件を入口でも見る。
+ *      expectedUpdatedAt は楽観ロック（P-052）で、省略すると従来どおり無条件更新になる
+ */
+export const hospitalPriceInputSchema = z.object({
+  distributorProductId: id('代理店商品'),
   facilityId,
-  procedureName: requiredText('procedureName', '術式名'),
-  patientId: requiredText('patientId', '患者 ID'),
-  patientInitials: requiredText('initials', '患者イニシャル'),
-  doctorName: requiredText('doctorName', '医師名'),
+  purchasePrice: money('仕切値'),
+  deliveryPrice: money('納品価格'),
+  expectedUpdatedAt: z.string().optional(),
 })
 
-/** 短貸発注の見出し（loan_orders） */
-export const loanOrderHeaderSchema = z.object({
+/**
+ * 二重送信対策の鍵（P-053）。未指定は許す（毎回新しい行を作る）。
+ * 指定があれば UUID の形だけを見る。値の意味は DB の部分 UNIQUE が守る
+ */
+const clientRequestId = z
+  .string()
+  .regex(UUID_RE, { error: 'clientRequestId は UUID で指定してください' })
+  .optional()
+
+/** 数量。DB の CHECK（I-010 / I-011、1 以上）と同じ条件を入口でも見る */
+const quantity = z
+  .number({ error: '数量は数値で入力してください' })
+  .int({ error: '数量は整数で入力してください' })
+  .min(1, { error: '数量は 1 以上で入力してください' })
+
+/** 症例発注・短貸返却の明細（JAN が必須） */
+export const janItemSchema = z.object({
+  jan: requiredText('janOrRef', 'JAN'),
+  lot: optionalText('lot', 'ロット'),
+  ubd: optionalText('expiryText', '使用期限'),
+  quantity,
+})
+
+/** 症例発注（case_orders） */
+export const caseOrderInputSchema = z.object({
+  facilityId,
+  caseDatetime: z.string({ error: '症例日時は必須です' }).min(1, { error: '症例日時は必須です' }),
+  procedureName: requiredText('procedureName', '手技名'),
+  patientId: requiredText('patientId', '患者ID'),
+  patientInitials: requiredText('initials', '患者イニシャル'),
+  gender: z.enum(['male', 'female', 'other'], {
+    error: '性別は male / female / other のいずれかを指定してください',
+  }),
+  doctorName: requiredText('doctorName', '担当医師名'),
+  items: z.array(janItemSchema).default([]),
+  clientRequestId,
+})
+
+/** 短貸発注（loan_orders）。明細は品名が必須で JAN は任意 */
+export const loanOrderInputSchema = z.object({
   facilityId,
   procedureName: requiredText('procedureName', '術式名'),
   maker: requiredText('productName', 'メーカー'),
+  items: z
+    .array(
+      z.object({
+        jan: optionalText('janOrRef', 'JAN'),
+        name: requiredText('productName', '品名'),
+        quantity,
+      })
+    )
+    .default([]),
+  clientRequestId,
 })
 
-/** 発注・返却の明細（*_order_items / loan_return_items） */
-export const orderItemSchema = z.object({
-  jan: optionalText('janOrRef', 'JAN'),
-  name: optionalText('productName', '品名'),
-  lot: optionalText('lot', 'ロット'),
-  ubd: optionalText('expiryText', '使用期限'),
+/** 短貸返却（loan_returns） */
+export const loanReturnInputSchema = z.object({
+  facilityId,
+  returnDatetime: z.string({ error: '返却日時は必須です' }).min(1, { error: '返却日時は必須です' }),
+  loanOrderId: z.string().optional(),
+  items: z.array(janItemSchema).default([]),
+  clientRequestId,
+})
+
+/** 消耗品発注（consumable_orders）。明細は消耗品の ID と数量だけ */
+export const consumableOrderInputSchema = z.object({
+  facilityId,
+  items: z
+    .array(z.object({ consumableId: id('消耗品'), quantity }))
+    .default([]),
+  clientRequestId,
 })
 
 export type ConsumableInputParsed = z.infer<typeof consumableInputSchema>
-export type CaseOrderHeaderParsed = z.infer<typeof caseOrderHeaderSchema>
-export type LoanOrderHeaderParsed = z.infer<typeof loanOrderHeaderSchema>
+export type CaseOrderInputParsed = z.infer<typeof caseOrderInputSchema>
+export type LoanOrderInputParsed = z.infer<typeof loanOrderInputSchema>

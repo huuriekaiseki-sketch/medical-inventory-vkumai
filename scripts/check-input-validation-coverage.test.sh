@@ -65,13 +65,17 @@ walk(apiDir)
 const seen = new Set()
 for (const file of routes) {
   const src = fs.readFileSync(file, "utf8")
-  // 本文を読まない route（GET だけ）は対象外
-  if (!src.includes("request.json()")) continue
+  // WHY(2026-09-07): 全 route を parseBody へ移したので request.json() の文字列は
+  //      コメントにしか残らなくなった。「本文を読む」の目印を
+  //      「parseBody を呼ぶ」か「request.json() をコメント以外で呼ぶ」に変える
+  const code = src.replace(/\/\/[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ")
+  const readsBody = /parseBody\s*\(/.test(code) || /request\s*\.\s*json\s*\(/.test(code)
+  if (!readsBody) continue
   const rel = "api/" + path.relative(apiDir, file).split(path.sep).join("/")
   seen.add(rel)
   // WHY: import の有無ではなく parseBody を実際に呼んでいるかで見る。
   //      読み込んだうえで使わない route を捕まえるため
-  const usesParseBody = /parseBody\s*\(/.test(src)
+  const usesParseBody = /parseBody\s*\(/.test(code)
   const hasDisable = src.includes("eslint-disable-next-line no-restricted-syntax")
   if (usesParseBody && pending.has(rel)) console.log("stale-used " + rel)
   if (!usesParseBody && !pending.has(rel)) console.log("new " + rel)
@@ -87,7 +91,7 @@ for (const rel of pending) {
 }
 
 echo "=== scenario 1: 走査対象がある（fail-open 防止） ==="
-COUNT="$(find "$API_DIR" -name 'route.ts' -type f -exec grep -l 'request.json()' {} + 2>/dev/null | wc -l | tr -d ' ')"
+COUNT="$(find "$API_DIR" -name 'route.ts' -type f -exec grep -lE 'parseBody\(|request\.json\(\)' {} + 2>/dev/null | wc -l | tr -d ' ')"
 if [ "$COUNT" -lt 5 ]; then
   assert_fail "本文を読む route が少なすぎる（$COUNT 本）。走査が壊れている疑い"
 else
@@ -140,8 +144,8 @@ fi
 
 echo "=== scenario 4: 借金の件数が増えていない ==="
 PENDING_COUNT="$(node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log((b.pending??[]).length)' "$BASELINE")"
-# 2026-09-07 の実測。**この数字は減らすことしかできない**（16 → マスタ系 7 本・互換・admin 2 本を移して 6）
-MAX_PENDING=6
+# 2026-09-07 の実測。**この数字は減らすことしかできない**（16 → 全 18 本を移して 0。**0 から上げてはいけない**）
+MAX_PENDING=0
 if [ "$PENDING_COUNT" -le "$MAX_PENDING" ]; then
   assert_ok "借金は $PENDING_COUNT 本（基準 $MAX_PENDING 以下）"
 else

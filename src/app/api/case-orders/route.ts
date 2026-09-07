@@ -5,8 +5,9 @@ import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listCaseOrders, createCaseOrder } from '@/lib/case-orders/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parsePagination } from '@/lib/api-pagination'
-import { validateClientRequestId } from '@/lib/client-request-id'
 import type { CaseOrderInput } from '@/types/order'
+import { parseBody } from '@/lib/validation/parse-body'
+import { caseOrderInputSchema } from '@/lib/validation/schemas'
 
 export async function GET(request: NextRequest) {
   const db = await createServerSupabase()
@@ -31,27 +32,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  let body: { facilityId?: string } & Partial<CaseOrderInput>
-  try {
-    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
-    body = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-
-  if (!body.facilityId) return apiError('施設IDは必須です', 400)
-  if (!body.caseDatetime) return apiError('症例日時は必須です', 400)
-  if (!body.procedureName?.trim()) return apiError('手技名は必須です', 400)
-  if (!body.patientId?.trim()) return apiError('患者IDは必須です', 400)
-  if (!body.patientInitials?.trim()) return apiError('患者イニシャルは必須です', 400)
-  const validGenders = ['male', 'female', 'other']
-  if (!body.gender || !validGenders.includes(body.gender)) {
-    return apiError('性別は male / female / other のいずれかを指定してください', 400)
-  }
-  if (!body.doctorName?.trim()) return apiError('担当医師名は必須です', 400)
-  const clientRequestId = validateClientRequestId(body.clientRequestId)
-  if (!clientRequestId.ok) return apiError(clientRequestId.message, 400)
-
+  const parsed = await parseBody(request, caseOrderInputSchema)
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
   const input: CaseOrderInput = {
     caseDatetime: body.caseDatetime,
     procedureName: body.procedureName,
@@ -59,8 +42,8 @@ export async function POST(request: NextRequest) {
     patientInitials: body.patientInitials,
     gender: body.gender,
     doctorName: body.doctorName,
-    items: body.items ?? [],
-    clientRequestId: clientRequestId.value,
+    items: body.items,
+    clientRequestId: body.clientRequestId,
   }
 
   try {

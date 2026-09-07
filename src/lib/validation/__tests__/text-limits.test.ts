@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import limitsConfig from '../../../../aidd.config.json'
 import { TEXT_LIMITS, firstIssueMessage, optionalText, requiredText } from '../text-limits'
-import { caseOrderHeaderSchema, consumableInputSchema } from '../schemas'
+import { caseOrderInputSchema, consumableInputSchema } from '../schemas'
 
 // WHY: issue #757 の 20。2026-09-07 の点検で、API の入口に長さの検査が 1 つも無く
 //      1 MB の術式名が保存できた。ここで固定するのは 3 つ:
@@ -71,12 +71,15 @@ describe('書き込み API の本文の形', () => {
   })
 
   it('症例発注は 1 MB の術式名を弾く（2026-09-07 に実際に通っていた入力）', () => {
-    const parsed = caseOrderHeaderSchema.safeParse({
+    const parsed = caseOrderInputSchema.safeParse({
       facilityId: 'f1',
+      caseDatetime: '2026-09-07T00:00:00.000Z',
       procedureName: 'あ'.repeat(1_000_000),
       patientId: 'P-1',
       patientInitials: 'ZZ',
+      gender: 'other',
       doctorName: '医師',
+      items: [],
     })
     expect(parsed.success).toBe(false)
   })
@@ -84,14 +87,17 @@ describe('書き込み API の本文の形', () => {
   it('医師名は人が決めた上限（100）で弾く', () => {
     const over = {
       facilityId: 'f1',
+      caseDatetime: '2026-09-07T00:00:00.000Z',
       procedureName: '弁置換術',
       patientId: 'P-1',
       patientInitials: 'ZZ',
+      gender: 'other' as const,
+      items: [],
       doctorName: 'あ'.repeat(TEXT_LIMITS.doctorName + 1),
     }
-    expect(caseOrderHeaderSchema.safeParse(over).success).toBe(false)
+    expect(caseOrderInputSchema.safeParse(over).success).toBe(false)
     expect(
-      caseOrderHeaderSchema.safeParse({ ...over, doctorName: 'あ'.repeat(TEXT_LIMITS.doctorName) })
+      caseOrderInputSchema.safeParse({ ...over, doctorName: 'あ'.repeat(TEXT_LIMITS.doctorName) })
         .success
     ).toBe(true)
   })
