@@ -5,8 +5,9 @@ import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listLoanOrders, createLoanOrder } from '@/lib/loan-orders/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parsePagination } from '@/lib/api-pagination'
-import { validateClientRequestId } from '@/lib/client-request-id'
 import type { LoanOrderInput } from '@/types/order'
+import { parseBody } from '@/lib/validation/parse-body'
+import { loanOrderInputSchema } from '@/lib/validation/schemas'
 
 export async function GET(request: NextRequest) {
   const db = await createServerSupabase()
@@ -31,26 +32,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  let body: { facilityId?: string } & Partial<LoanOrderInput>
-  try {
-    body = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-  if (!body.facilityId) return apiError('施設IDは必須です', 400)
-  if (!body.procedureName?.trim()) return apiError('手技名は必須です', 400)
-  if (!body.maker?.trim()) return apiError('メーカー名は必須です', 400)
-  if (body.items && body.items.some((item: { name?: string }) => !item.name?.trim())) {
-    return apiError('品名は必須です', 400)
-  }
-  const clientRequestId = validateClientRequestId(body.clientRequestId)
-  if (!clientRequestId.ok) return apiError(clientRequestId.message, 400)
-
+  const parsed = await parseBody(request, loanOrderInputSchema)
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
   const input: LoanOrderInput = {
     procedureName: body.procedureName,
     maker: body.maker,
-    items: body.items ?? [],
-    clientRequestId: clientRequestId.value,
+    items: body.items,
+    clientRequestId: body.clientRequestId,
   }
   try {
     const db = await createServerSupabase()

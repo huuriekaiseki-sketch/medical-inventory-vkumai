@@ -1,0 +1,81 @@
+{
+  "_comment": "issue #757 の 7 の続き。**認可の本体は RLS ポリシーにあるのに、そこが測れていなかった。** 2026-09-07 に TypeScript 層のテストの効き目を測ったら 62% だった（補強後 76%）。同じ計測を RLS に対して行う。ポリシーを 1 つ壊して、対応するテストが本当に落ちるかを実測する。落ちなければ、そのテストは守っていない。",
+  "_howto": "bash scripts/check-rls-mutation.sh で回す。実 DB が要る（supabase start 済み）。1 件あたり migration 追加 → db push --local → 該当テスト → db reset の 1 巡で、10 件で 10 分ほど。結果は docs/agents/rls-mutation.md に残す。",
+  "_design": "restore は db reset（migration ファイルから作り直す）で行う。元のポリシー定義を手で書き写して戻す方式にすると、その写し自体がズレの発生源になる（2026-09-07 の Codex 指摘と同じ理由）。",
+  "mutants": [
+    {
+      "id": "M-001",
+      "breaks": "施設スコープの読み取り（case_orders）から施設判定を外し、認証済みなら誰でも読めるようにする",
+      "sql": "DROP POLICY IF EXISTS \"facility_member_or_admin\" ON case_orders;\nCREATE POLICY \"facility_member_or_admin\" ON case_orders\n  FOR ALL TO authenticated\n  USING (true)\n  WITH CHECK (true);",
+      "expect": "supabase/__tests__/integration/case-orders-rls-idor.integration.test.ts",
+      "promise": "P-010"
+    },
+    {
+      "id": "M-002",
+      "breaks": "施設スコープの書き込み（case_orders）から aal2 の要求を外す",
+      "sql": "DROP POLICY IF EXISTS \"facility_writer_or_admin\" ON case_orders;\nCREATE POLICY \"facility_writer_or_admin\" ON case_orders\n  FOR ALL TO authenticated\n  USING (is_facility_writer(facility_id) OR is_admin())\n  WITH CHECK (is_facility_writer(facility_id) OR is_admin());",
+      "expect": "supabase/__tests__/integration/require-aal2-for-order-rpcs.integration.test.ts",
+      "promise": "P-030",
+      "note": "2026-09-07 の初回計測で生き残った。RPC 経由しか見ていなかったので、表への直接書き込みのテストを同じファイルに足して倒した"
+    },
+    {
+      "id": "M-003",
+      "breaks": "施設スコープの書き込み（hospital_prices）から書き手判定を外し、閲覧者も書けるようにする",
+      "sql": "DROP POLICY IF EXISTS \"facility_writer_or_admin\" ON hospital_prices;\nCREATE POLICY \"facility_writer_or_admin\" ON hospital_prices\n  FOR ALL TO authenticated\n  USING (is_facility_member(facility_id) OR is_admin())\n  WITH CHECK (is_facility_member(facility_id) OR is_admin());",
+      "expect": "supabase/__tests__/integration/rls-mutation-gaps.integration.test.ts",
+      "promise": "P-020",
+      "note": "2026-09-07 の初回計測で生き残った。専用のテストを足して倒した"
+    },
+    {
+      "id": "M-004",
+      "breaks": "明細（case_order_items）の親経由の施設判定を外す",
+      "sql": "DROP POLICY IF EXISTS \"facility_member_or_admin\" ON case_order_items;\nCREATE POLICY \"facility_member_or_admin\" ON case_order_items\n  FOR ALL TO authenticated\n  USING (true)\n  WITH CHECK (true);",
+      "expect": "supabase/__tests__/integration/order-items-rls-idor.integration.test.ts",
+      "promise": "P-013"
+    },
+    {
+      "id": "M-005",
+      "breaks": "マスタ（products）の書き込みから admin 判定を外し、誰でも書けるようにする",
+      "sql": "DROP POLICY IF EXISTS \"products_write\" ON products;\nCREATE POLICY \"products_write\" ON products\n  FOR ALL TO authenticated\n  USING (true)\n  WITH CHECK (true);",
+      "expect": "supabase/__tests__/integration/master-tables-admin-boundary.integration.test.ts",
+      "promise": "P-021"
+    },
+    {
+      "id": "M-006",
+      "breaks": "施設一覧（facilities）の作成から admin 判定を外す",
+      "sql": "DROP POLICY IF EXISTS \"admin_insert\" ON facilities;\nCREATE POLICY \"admin_insert\" ON facilities\n  FOR INSERT TO authenticated\n  WITH CHECK (true);",
+      "expect": "supabase/__tests__/integration/rls-mutation-gaps.integration.test.ts",
+      "promise": "P-021",
+      "note": "2026-09-07 の初回計測で生き残った。専用のテストを足して倒した"
+    },
+    {
+      "id": "M-007",
+      "breaks": "監査ログ（audit_log）を誰でも読めるようにする",
+      "sql": "DROP POLICY IF EXISTS \"audit_log_select\" ON audit_log;\nCREATE POLICY \"audit_log_select\" ON audit_log\n  FOR SELECT TO authenticated\n  USING (true);",
+      "expect": "supabase/__tests__/integration/audit-log-rls-idor.integration.test.ts",
+      "promise": "P-062"
+    },
+    {
+      "id": "M-008",
+      "breaks": "拒否の記録（access_denials）を誰でも読めるようにする",
+      "sql": "DROP POLICY IF EXISTS \"access_denials_select\" ON access_denials;\nCREATE POLICY \"access_denials_select\" ON access_denials\n  FOR SELECT TO authenticated\n  USING (true);",
+      "expect": "supabase/__tests__/integration/access-denials-rls-idor.integration.test.ts",
+      "promise": "P-063"
+    },
+    {
+      "id": "M-009",
+      "breaks": "価格履歴（price_histories）の直接 INSERT を許す",
+      "sql": "DROP POLICY IF EXISTS \"price_histories_no_insert\" ON price_histories;\nCREATE POLICY \"price_histories_allow_insert\" ON price_histories\n  FOR INSERT TO authenticated\n  WITH CHECK (true);",
+      "expect": "supabase/__tests__/integration/price-histories-rls-idor.integration.test.ts",
+      "promise": "P-051"
+    },
+    {
+      "id": "M-010",
+      "breaks": "回数のカウンタ（rate_limit_counters）を client から読めるようにする",
+      "sql": "GRANT SELECT ON rate_limit_counters TO authenticated;\nCREATE POLICY \"leak\" ON rate_limit_counters\n  FOR SELECT TO authenticated\n  USING (true);\n-- WHY: 新しく GRANT した表は PostgREST のスキーマキャッシュに載っていないため、\n--      再読み込みしないと API 層では見えず、変異が効かない（2026-09-07 実測）\nNOTIFY pgrst, 'reload schema';",
+      "expect": "supabase/__tests__/integration/rls-mutation-gaps.integration.test.ts",
+      "promise": "P-064",
+      "note": "2026-09-07 の初回計測で生き残った。専用のテストを足して倒した"
+    }
+  ]
+}

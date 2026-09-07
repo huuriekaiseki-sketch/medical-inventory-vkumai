@@ -72,6 +72,7 @@
 | I-064 | 施設名は 200 文字以内 | CHECK `facilities_text_length` | 200,000 文字の施設名を作る | 23514 | `supabase/__tests__/integration/text-length-limits.integration.test.ts` | 実装済み |
 | I-065 | マスタの JAN と品番は 64 文字以内、名称・メーカー・仕入先は 200 文字以内 | CHECK `products_text_length` / `categories_text_length` / `distributor_products_text_length` | 5,000 文字の JAN で商品を作る | 23514 | `supabase/__tests__/integration/text-length-limits.integration.test.ts` | 実装済み |
 | I-066 | 既存行が上の上限を破っていない（NOT VALID で入れたので夜間検査で確かめてから VALIDATE する） | 夜間検査 I-051（pg_constraint から NOT VALID を動的に列挙。本番で 0 件を確認したら VALIDATE の migration を出す） | — | 違反 0 件 | 未 | 計画 |
+| I-067 | カテゴリの説明と互換の備考は 1,000 文字以内、拒否の記録の経路は 200 文字以内 | CHECK `categories_description_length` / `product_compatibilities_note_length` / `access_denials_route_length`（20260907000007、NOT VALID） | 1,001 文字の説明でカテゴリを作る。201 文字の経路で拒否を記録する | 23514。ちょうど 1,000 文字と null は通る | `supabase/__tests__/integration/remaining-text-length-limits.integration.test.ts` | 実装済み |
 
 ## 集計をまたぐ（DB 制約にできない。夜間 SELECT 検査 #757 の 9）
 

@@ -5,7 +5,8 @@ import { resolveIsAdmin } from '@/lib/admin-status'
 import { listFacilities, createFacility } from '@/lib/facilities/repository'
 import { listUserFacilities } from '@/lib/user-facilities/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
-import type { FacilityInput } from '@/types/facility'
+import { parseBody } from '@/lib/validation/parse-body'
+import { facilityInputSchema } from '@/lib/validation/schemas'
 
 export async function GET() {
   try {
@@ -30,16 +31,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  let input: FacilityInput
-  try {
-    input = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-
-  if (!input.name?.trim()) {
-    return apiError('施設名は必須です', 400)
-  }
+  const parsed = await parseBody(request, facilityInputSchema)
+  if (!parsed.ok) return parsed.response
+  const input = parsed.data
 
   try {
     const db = await createServerSupabase()

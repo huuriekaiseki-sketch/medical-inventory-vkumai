@@ -1,0 +1,5 @@
+{
+  "_comment": "issue #757 の 20。本文（request.json()）を読むのに parseBody を通していない route の一覧。**2026-09-07 に 0 本になった。**この一覧は増やせない（scripts/check-input-validation-coverage.test.sh が MAX_PENDING で止める）。新しい route が本文を検査せずに読むと落ちる。どうしても移せない事情ができたときだけ、理由を具体的に書いて足す。",
+  "_howto": "移し方: (1) schemas.ts にその route の本文のスキーマを足す（上限の数字は書かない。text-limits.ts の requiredText / optionalText を使う） (2) route で safeParse し、失敗したら firstIssueMessage で 400 (3) この一覧から行を消す (4) bash scripts/check-input-validation-coverage.test.sh",
+  "pending": []
+}

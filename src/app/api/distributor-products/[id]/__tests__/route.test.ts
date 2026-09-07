@@ -27,7 +27,18 @@ const context = { params: Promise.resolve({ id: 'dp1' }) }
 const unauthenticated = () => mockGetUser.mockResolvedValue({ data: { user: null }, error: { message: 'no user' } })
 const authenticated = () => mockGetUser.mockResolvedValue({ data: { user: { id: 'u1', email: 'u1@test.com' } }, error: null })
 
-const validInput = { productId: 'p1', maker: 'maker', supplier: 'supplier', name: 'name', categoryId: 'cat1' }
+// WHY(#757-20): 入数と償還価格は DistributorProductInput の必須項目だが、以前の route は
+//      productId/maker/supplier/name/categoryId しか見ておらず、欠けたまま DB へ渡っていた
+//      （NOT NULL と CHECK quantity >= 1 に当たって 23514 になる）。入口の検証で 400 にする
+const validInput = {
+  productId: 'p1',
+  maker: 'maker',
+  supplier: 'supplier',
+  name: 'name',
+  categoryId: 'cat1',
+  quantity: 10,
+  reimbursementPrice: 1000,
+}
 
 beforeEach(() => {
   vi.clearAllMocks()

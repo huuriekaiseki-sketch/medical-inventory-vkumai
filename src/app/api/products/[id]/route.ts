@@ -4,8 +4,9 @@ import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { getProduct, updateProduct, deleteProduct } from '@/lib/products/repository'
 import { authGuardError, apiError } from '@/lib/api-error'
-import type { ProductInput } from '@/types/product'
 import type { RouteContext } from '@/types/route'
+import { parseBody } from '@/lib/validation/parse-body'
+import { productInputSchema } from '@/lib/validation/schemas'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
@@ -20,20 +21,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PUT(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
-  let input: ProductInput
-  try {
-    input = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'リクエストが不正です' }, { status: 400 })
-  }
-
-  if (!input.jan || !input.ref) {
-    return NextResponse.json({ error: 'JAN と REF は必須です' }, { status: 400 })
-  }
-
-  if (!input.name || !input.name.trim()) {
-    return NextResponse.json({ error: '製品名は必須です' }, { status: 400 })
-  }
+  const parsed = await parseBody(request, productInputSchema)
+  if (!parsed.ok) return parsed.response
+  const input = { ...parsed.data, maker: parsed.data.maker ?? null }
 
   try {
     const db = await createServerSupabase()

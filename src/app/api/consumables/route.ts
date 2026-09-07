@@ -5,7 +5,8 @@ import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listConsumablesByFacility, createConsumable } from '@/lib/consumables/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import { ClientVisibleError } from '@/lib/client-visible-error'
-import type { ConsumableInput } from '@/types/order'
+import { consumableInputSchema } from '@/lib/validation/schemas'
+import { parseBody } from '@/lib/validation/parse-body'
 
 export async function GET(request: NextRequest) {
   const db = await createServerSupabase()
@@ -27,15 +28,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  let body: { facilityId?: string } & Partial<ConsumableInput>
-  try {
-    body = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-  if (!body.facilityId) return apiError('施設IDは必須です', 400)
-  if (!body.name?.trim()) return apiError('品名は必須です', 400)
-  if (!body.purpose?.trim()) return apiError('用途は必須です', 400)
+  // WHY(#757-20): 本文を読む唯一の入口。必須だけでなく長さも見る（以前はどちらも無く、
+  //      1 MB の文字列が DB の CHECK まで素通りしていた）。request.json() の直接呼び出しは
+  //      eslint で禁止してあるので、この経路を飛ばすことはできない
+  const parsed = await parseBody(request, consumableInputSchema)
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
 
   const db = await createServerSupabase()
   let user
@@ -47,11 +45,10 @@ export async function POST(request: NextRequest) {
     return apiError('アクセス権限がありません', 403)
   }
 
-  const trimmedJan = body.jan?.trim()
   try {
     const consumable = await createConsumable(db, body.facilityId, {
       name: body.name,
-      jan: trimmedJan || undefined,
+      jan: body.jan,
       purpose: body.purpose,
     })
     return NextResponse.json({ consumable }, { status: 201 })

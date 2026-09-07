@@ -6,8 +6,9 @@ import { listLoanReturns, createLoanReturn } from '@/lib/loan-returns/repository
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import { ClientVisibleError } from '@/lib/client-visible-error'
 import { parsePagination } from '@/lib/api-pagination'
-import { validateClientRequestId } from '@/lib/client-request-id'
 import type { LoanReturnInput } from '@/types/order'
+import { parseBody } from '@/lib/validation/parse-body'
+import { loanReturnInputSchema } from '@/lib/validation/schemas'
 
 export async function GET(request: NextRequest) {
   const db = await createServerSupabase()
@@ -36,24 +37,13 @@ export async function POST(request: NextRequest) {
   //      loan_returns.loan_order_id（issue #20 Set A）へ紐付けないと「未返却」バッジが
   //      新規返却でも永久に解消されないバグになる（レビュー指摘）。bodyから別フィールドとして
   //      受け取り、createLoanReturn の第4引数としてそのまま渡す
-  let body: { facilityId?: string; loanOrderId?: string } & Partial<LoanReturnInput>
-  try {
-    body = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-  if (!body.facilityId) return apiError('施設IDは必須です', 400)
-  if (!body.returnDatetime) return apiError('返却日時は必須です', 400)
-  if (body.items && body.items.some((item: { jan?: string }) => !item.jan?.trim())) {
-    return apiError('JANは必須です', 400)
-  }
-  const clientRequestId = validateClientRequestId(body.clientRequestId)
-  if (!clientRequestId.ok) return apiError(clientRequestId.message, 400)
-
+  const parsed = await parseBody(request, loanReturnInputSchema)
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
   const input: LoanReturnInput = {
     returnDatetime: body.returnDatetime,
-    items: body.items ?? [],
-    clientRequestId: clientRequestId.value,
+    items: body.items,
+    clientRequestId: body.clientRequestId,
   }
   try {
     const db = await createServerSupabase()

@@ -131,6 +131,52 @@ describe('発注RPCはMFA登録済みユーザーのaal2昇格を要求する(is
     expect(error).toBeNull()
   })
 
+  // WHY(#757-7, M-002): 2026-09-07 に RLS を壊して測ったところ、
+  //      **facility_writer_or_admin から has_aal2() を外しても、このファイルは 1 つも落ちなかった**。
+  //      理由は、ここが RPC 経由しか見ていなかったから。RPC は関数の中にも aal2 の判定を持つので、
+  //      RLS 側を外しても RPC の挙動は変わらない。
+  //      **表を直接叩く経路は RLS だけが守る。**ここを見ていないと、RLS の aal2 は
+  //      いつ消えても誰も気づかない。
+  describe('表への直接書き込みも aal2 を要求する（RPC を通らない経路）', () => {
+    it('MFA登録済み・aal1のセッションでは表へ直接 INSERT できない', async () => {
+      const client = createAnonClient()
+      await signInAtAal1(client, email, TEST_USER_PASSWORD)
+
+      const { error } = await client.from('case_orders').insert({
+        facility_id: facilityId,
+        case_datetime: new Date().toISOString(),
+        procedure_name: 'aal1で直接INSERT',
+        patient_id: 'P-AAL1',
+        patient_initials: 'ZZ',
+        gender: 'other',
+        doctor_name: 'テスト医師',
+      })
+      expect(error).not.toBeNull()
+    })
+
+    it('aal2まで昇格すれば表へ直接 INSERT できる（拒否が aal2 由来であることの対照）', async () => {
+      const client = createAnonClient()
+      await signInAtAal1(client, email, TEST_USER_PASSWORD)
+      await stepUpToAal2(client, factorId, secret)
+
+      const { data, error } = await client
+        .from('case_orders')
+        .insert({
+          facility_id: facilityId,
+          case_datetime: new Date().toISOString(),
+          procedure_name: 'aal2で直接INSERT',
+          patient_id: 'P-AAL2',
+          patient_initials: 'ZZ',
+          gender: 'other',
+          doctor_name: 'テスト医師',
+        })
+        .select('id')
+        .single()
+      expect(error).toBeNull()
+      if (data) await serviceClient.from('case_orders').delete().eq('id', data.id)
+    }, 30_000)
+  })
+
   describe('残りの発注・返却RPC(create_case_order_atomic/create_consumable_order_atomic/create_loan_return_atomic、issue #684)', () => {
     it('create_case_order_atomicはaal1で拒否・aal2で成功する', async () => {
       const aal1Client = createAnonClient()

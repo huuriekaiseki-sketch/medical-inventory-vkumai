@@ -169,7 +169,18 @@
     "render-rulebook-index.sh": "aidd-core",
     "lib/catalog-registry.json": "aidd-vkumai",
     "check-design-answers.test.sh": "aidd-core",
-    "check-rate-limit-coverage.test.sh": "aidd-vkumai"
+    "check-rate-limit-coverage.test.sh": "aidd-vkumai",
+    "check-input-validation-coverage.test.sh": "aidd-vkumai",
+    "check-text-column-limits.test.sh": "aidd-vkumai",
+    "check-text-length-consistency.test.sh": "aidd-vkumai",
+    "check-layer-consistency.test.sh": "aidd-vkumai",
+    "check-text-contrast.test.sh": "aidd-vkumai",
+    "lib/scan-text-columns.mjs": "aidd-vkumai",
+    "lib/scan-db-constraints.mjs": "aidd-vkumai",
+    "lib/extract-api-rules.ts": "aidd-vkumai",
+    "lib/compare-layers.mjs": "aidd-vkumai",
+    "check-rls-mutation.sh": "aidd-vkumai",
+    "lib/rls-mutants.json": "aidd-vkumai"
   },
   "workflowLib": {
     "_comment": ".claude/workflows/lib/ の純粋関数のうち bin/ のスクリプトが node で呼ぶもの。scripts/workflow-lib/ に置く（workflows/ 配下に置くと Workflow として走査されるため）",
@@ -208,7 +219,8 @@
     "scripts/lib/catalog-registry.js": "登録簿（catalog-registry.json）は導入先のリポジトリ側にある。CLAUDE_PROJECT_DIR 優先で解決するので配布物に同梱しない（.json を .js と読む走査の癖でこの名前で出る）",
     "scripts/lib/check-catalog.mjs": "登録簿の説明文がエンジンの場所を案内するだけ（エンジンは共通側、登録簿はアダプター側にあり、実行時は導入先のパスで解決する）",
     "scripts/new-rulebook.sh": "同上（登録簿の説明文が雛形生成の入口を案内する）",
-    "scripts/check-invariant-catalog.test.sh": "登録簿の注記が、エンジンと併存する bespoke 検査の名前を示すだけ"
+    "scripts/check-invariant-catalog.test.sh": "登録簿の注記が、エンジンと併存する bespoke 検査の名前を示すだけ",
+    "scripts/check-no-registry-fetch.test.sh": "npx を使わない理由を説明するコメントが検査の名前を挙げるだけ（実行しない）。この検査自体は共通側の話ではなくリポジトリの CI 事情なので同梱しない"
   },
   "checks": {
     "_comment": "検査（*.test.sh）の層。check-x.sh に対する check-x.test.sh は自動で対象と同じプラグインへ付いていくので、ここに書くのは (1) 対象スクリプトを持たない構造テスト (2) 自動判定を上書きしたいもの の 2 つだけ。上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙（高リスクパスの例・ドメイン語・スタック名）で書かれている検査で、共通側の禁止語検査に引っかかるもの。",

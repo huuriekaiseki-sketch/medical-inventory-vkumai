@@ -5,7 +5,9 @@ import { resolveIsAdmin } from '@/lib/admin-status'
 import { listProducts, createProduct } from '@/lib/products/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parseKeyword } from '@/lib/api-keyword-query'
-import type { ProductInput, ProductsApiErrorResponse, ProductsApiQuery, ProductsApiResponse } from '@/types/product'
+import type { ProductsApiErrorResponse, ProductsApiQuery, ProductsApiResponse } from '@/types/product'
+import { parseBody } from '@/lib/validation/parse-body'
+import { productInputSchema } from '@/lib/validation/schemas'
 
 // WHY: apiError は共通の { error: string } 形式を返すが、ProductsApiErrorResponse型と一致していることを
 //      コンパイル時に保証するため、戻り値をこの型でラップして返す（order.tsの参照実装パターンを踏襲。
@@ -36,20 +38,9 @@ export async function GET(
 }
 
 export async function POST(request: NextRequest) {
-  let input: ProductInput
-  try {
-    input = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-
-  if (!input.jan || !input.ref) {
-    return apiError('JAN と REF は必須です', 400)
-  }
-
-  if (!input.name || !input.name.trim()) {
-    return apiError('製品名は必須です', 400)
-  }
+  const parsed = await parseBody(request, productInputSchema)
+  if (!parsed.ok) return parsed.response
+  const input = { ...parsed.data, maker: parsed.data.maker ?? null }
 
   try {
     const db = await createServerSupabase()

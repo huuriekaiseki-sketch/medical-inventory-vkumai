@@ -4,8 +4,9 @@ import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { getFacility, updateFacility, deleteFacility } from '@/lib/facilities/repository'
 import { authGuardError, apiError } from '@/lib/api-error'
-import type { FacilityInput } from '@/types/facility'
 import type { RouteContext } from '@/types/route'
+import { parseBody } from '@/lib/validation/parse-body'
+import { facilityInputSchema } from '@/lib/validation/schemas'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
@@ -20,16 +21,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PUT(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
-  let input: FacilityInput
-  try {
-    input = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'リクエストが不正です' }, { status: 400 })
-  }
-
-  if (!input.name) {
-    return NextResponse.json({ error: '施設名は必須です' }, { status: 400 })
-  }
+  const parsed = await parseBody(request, facilityInputSchema)
+  if (!parsed.ok) return parsed.response
+  const input = parsed.data
 
   try {
     const db = await createServerSupabase()

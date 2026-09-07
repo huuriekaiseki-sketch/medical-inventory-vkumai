@@ -81,3 +81,6 @@ session-report-*.html
 # ミューテーションテストの生成物（issue #757 の 7）。スコアは docs/agents/mutation-testing.md に残す
 /reports/mutation
 /.stryker-tmp
+
+# 層の突合が一時的に書き出す API 側の規則（issue #757 の 20）
+/.api-rules.json

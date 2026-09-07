@@ -4,7 +4,8 @@ import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listHospitalPrices, createHospitalPrice } from '@/lib/hospital-prices/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
-import type { HospitalPriceInput } from '@/types/hospitalPrice'
+import { parseBody } from '@/lib/validation/parse-body'
+import { hospitalPriceInputSchema } from '@/lib/validation/schemas'
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,18 +29,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  let input: HospitalPriceInput
-  try {
-    input = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-
-  if (!input.distributorProductId || !input.facilityId ||
-      input.purchasePrice === undefined || input.purchasePrice === null ||
-      input.deliveryPrice === undefined || input.deliveryPrice === null) {
-    return apiError('必須項目が未入力です', 400)
-  }
+  const parsed = await parseBody(request, hospitalPriceInputSchema)
+  if (!parsed.ok) return parsed.response
+  const input = parsed.data
 
   try {
     const db = await createServerSupabase()

@@ -9,8 +9,9 @@ import {
   HOSPITAL_PRICE_CONFLICT_MESSAGE,
 } from '@/lib/hospital-prices/repository'
 import { authGuardError, apiError } from '@/lib/api-error'
-import type { HospitalPriceInput } from '@/types/hospitalPrice'
 import type { RouteContext } from '@/types/route'
+import { parseBody } from '@/lib/validation/parse-body'
+import { hospitalPriceInputSchema } from '@/lib/validation/schemas'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
@@ -31,17 +32,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PUT(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
-  let input: HospitalPriceInput
-  try {
-    input = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'リクエストが不正です' }, { status: 400 })
-  }
-
-  if (!input.distributorProductId || !input.facilityId ||
-      input.purchasePrice === undefined || input.deliveryPrice === undefined) {
-    return NextResponse.json({ error: '必須項目が未入力です' }, { status: 400 })
-  }
+  const parsed = await parseBody(request, hospitalPriceInputSchema)
+  if (!parsed.ok) return parsed.response
+  const input = parsed.data
 
   try {
     const db = await createServerSupabase()
