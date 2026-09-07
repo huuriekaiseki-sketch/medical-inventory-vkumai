@@ -132,6 +132,10 @@
     {
       "label": "8 拒否の異常検知（16・24・32 の上）",
       "branch": "feat/denial-anomaly-detection"
+    },
+    {
+      "label": "4/24 監査ログの閲覧 UI（8 の上）",
+      "branch": "feat/audit-log-viewer"
     }
   ]
 }
