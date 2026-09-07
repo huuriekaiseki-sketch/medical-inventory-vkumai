@@ -417,6 +417,49 @@ describe('proxy', () => {
     })
   })
 
+  // WHY(#757-24): Route Handler は自分のパスを知る手段が無いので、拒否の記録に経路を残すには
+  //      proxy が転送リクエストへ付けるしかない。付け忘れると証跡の route が静かに空になる
+  describe('拒否の記録に使う転送ヘッダ', () => {
+    it('通過するリクエストにパスとメソッドを付ける', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc({ id: 'u-1', email: 'u1@example.com' }, false, false) as unknown as ReturnType<
+          typeof createServerClient
+        >
+      )
+
+      const request = new NextRequest(new URL('http://localhost:3000/api/case-orders?facility_id=abc'), {
+        method: 'POST',
+      })
+
+      const response = await proxy(request)
+
+      expect(response?.status).not.toBe(307)
+      expect(response?.headers.get('x-middleware-override-headers')).toContain('x-aidd-route')
+      expect(response?.headers.get('x-middleware-request-x-aidd-route')).toBe('/api/case-orders')
+      expect(response?.headers.get('x-middleware-request-x-aidd-method')).toBe('POST')
+    })
+
+    it('クライアントが送ってきた同名ヘッダは上書きする（偽の経路を証跡に書かせない）', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc({ id: 'u-2', email: 'u2@example.com' }, false, false) as unknown as ReturnType<
+          typeof createServerClient
+        >
+      )
+
+      const request = new NextRequest(new URL('http://localhost:3000/api/loan-orders'), {
+        method: 'GET',
+        headers: { 'x-aidd-route': '/api/harmless', 'x-aidd-method': 'OPTIONS' },
+      })
+
+      const response = await proxy(request)
+
+      expect(response?.headers.get('x-middleware-request-x-aidd-route')).toBe('/api/loan-orders')
+      expect(response?.headers.get('x-middleware-request-x-aidd-method')).toBe('GET')
+    })
+  })
+
   describe('パスマッチング（admin パス）', () => {
     it('名前空間の誤マッチを避ける（/adminfoo は admin パスではない）', async () => {
       // /admin のみ、または /admin/ 配下が正しい admin パス
