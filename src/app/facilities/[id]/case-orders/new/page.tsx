@@ -65,7 +65,7 @@ export default function NewCaseOrderPage({ params }: { params: Promise<{ id: str
       </div>
 
       <div className="mb-8 border-b pb-4" style={{ borderColor: '#072C2C33' }}>
-        <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#FF5F03', fontFamily: 'var(--font-oswald), sans-serif' }}>New Case Order</p>
+        <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#B03F00', fontFamily: 'var(--font-oswald), sans-serif' }}>New Case Order</p>
         <h1 className="text-3xl font-bold" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif', letterSpacing: '0.04em' }}>
           症例発注
         </h1>

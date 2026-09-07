@@ -4,7 +4,7 @@ export default function OtherPage() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       <div className="mb-8 border-b pb-4" style={{ borderColor: '#072C2C33' }}>
-        <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#FF5F03', fontFamily: 'var(--font-oswald), sans-serif' }}>
+        <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#B03F00', fontFamily: 'var(--font-oswald), sans-serif' }}>
           Settings & More
         </p>
         <h1 className="text-3xl font-bold" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif', letterSpacing: '0.04em' }}>

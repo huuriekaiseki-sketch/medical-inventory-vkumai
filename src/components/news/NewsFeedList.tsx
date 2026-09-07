@@ -38,7 +38,7 @@ export function NewsFeedList({ items }: NewsFeedListProps) {
             <span
               className="text-xs font-semibold uppercase tracking-widest px-2 py-0.5 rounded"
               style={{
-                color: item.eventType === 'new_product' ? '#FF5F03' : '#072C2C',
+                color: item.eventType === 'new_product' ? '#B03F00' : '#072C2C',
                 fontFamily: 'var(--font-oswald), sans-serif',
               }}
             >

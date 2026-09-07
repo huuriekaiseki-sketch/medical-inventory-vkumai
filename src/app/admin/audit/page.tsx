@@ -95,7 +95,7 @@ function AuditPageInner() {
       <div className="mb-8 border-b pb-4" style={{ borderColor: '#072C2C33' }}>
         <p
           className="text-xs font-semibold uppercase tracking-widest mb-1"
-          style={{ color: '#FF5F03', fontFamily: 'var(--font-oswald), sans-serif' }}
+          style={{ color: '#B03F00', fontFamily: 'var(--font-oswald), sans-serif' }}
         >
           Audit
         </p>
