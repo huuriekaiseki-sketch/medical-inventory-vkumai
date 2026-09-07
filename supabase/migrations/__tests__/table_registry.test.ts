@@ -34,7 +34,11 @@ describe('新しい表の 4 軸（RLS・ポリシー・権限・監査）を 1 �
     // fail-open 防止。表も権限も取れなくなったらここで落ちる
     expect(facts.size).toBeGreaterThanOrEqual(19)
     expect(readersOf(facts.get('audit_log')!)).toContain('authenticated')
-    expect(writersOf(facts.get('user_facilities')!)).toEqual(['service_role'])
+    // WHY(price_histories を見張り役にする): 「誰も直接は書けない」表なので、
+    //      GRANT の走査が壊れて何でも拾うようになったらここが真っ先に崩れる。
+    //      user_facilities は 2026-09-07 に書き手が変わった（P-035）ので見張り役に向かない。
+    expect(writersOf(facts.get('price_histories')!)).toEqual([])
+    expect(writersOf(facts.get('user_facilities')!)).toContain('authenticated')
   })
 
   it('存在する全テーブルに宣言がある（新しい表はここで必ず止まる）', () => {

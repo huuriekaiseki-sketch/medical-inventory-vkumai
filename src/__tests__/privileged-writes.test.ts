@@ -88,8 +88,10 @@ describe('RLS を通らない書き込みは、必ず宣言と根拠を持つ [P
 
   it('走査そのものが壊れていない（壊れると全件素通りして「合格」に見える）', () => {
     // fail-open 防止。0 件になったら突合が意味を失う
-    expect(rows.length).toBeGreaterThanOrEqual(4)
-    expect(actual.length).toBeGreaterThanOrEqual(4)
+    // 2026-09-07: W-010（所属と役割）は service_role をやめて RLS 経由にしたのでこの表から外れた。
+    //      経路が減るのは良い直り方なので、下限は 3 に下げる（0 になったら突合が意味を失う）。
+    expect(rows.length).toBeGreaterThanOrEqual(3)
+    expect(actual.length).toBeGreaterThanOrEqual(3)
   })
 
   it('service_role を使うファイルはすべて宣言されている（新しい経路はここで必ず止まる）', () => {

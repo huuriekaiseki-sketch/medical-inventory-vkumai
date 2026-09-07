@@ -73,7 +73,7 @@
 
 | ID | テーブル | ポリシー | 読み手 | 書き手 | 監査 | 守るテスト | 状態 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| TB-030 | user_facilities | あり | authenticated / service_role | service_role | あり | `supabase/__tests__/integration/rbac-viewer-role.integration.test.ts` | 実装済み |
+| TB-030 | user_facilities | あり | authenticated / service_role | authenticated / service_role | あり | `supabase/__tests__/integration/permission-change-authz.integration.test.ts` | 実装済み |
 
 ## 追記のみの記録
 

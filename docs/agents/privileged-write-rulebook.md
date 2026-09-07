@@ -33,10 +33,19 @@ RLS 経路（利用者の JWT）は文ごとに `is_facility_writer()` を評価
 
 | ID | 経路 | 何を書くか | 認可の判定 | 判定から書くまで | 隙間に起きうること | 守るテスト | 状態 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| W-010 | `src/app/api/admin/user-facilities/route.ts` | 所属と役割（誰がどの施設で何をできるか） | `requireAdmin` | リクエスト本文の読み取りと検証 | 判定の後に admin を外されても、そのリクエストは書き切る。次のリクエストからは弾かれる（P-023） | `src/app/api/admin/user-facilities/__tests__/route.test.ts` | 実装済み |
 | W-011 | `src/app/api/admin/users/route.ts` | 利用者の作成・削除・招待メール | `requireAdmin` | リクエスト本文の読み取りと検証、招待メールの送信 | 同上。招待メールは送信を伴うので取り消せない（上限は Q-020） | `src/app/api/admin/users/__tests__/route.test.ts` | 実装済み |
 | W-020 | `src/lib/security/access-denial.ts` | 拒否された操作の記録 | 無し | 無し（拒否が起きた場所で即座に記録する） | 記録は誰の権限でもなく「起きた事実」なので判定を持たない。偽の記録を外から作れないことは `record_access_denial()` の EXECUTE が service_role だけである点で守る | `supabase/__tests__/integration/access-denials-rls-idor.integration.test.ts` | 実装済み |
 | W-021 | `src/lib/security/rate-limit.ts` | 回数のカウンタ | 無し | 無し（数える前に判定するものが無い） | 同上。`consume_rate_limit()` の EXECUTE も service_role だけ。カウンタを読めるのも service_role だけ（TB-052） | `supabase/__tests__/integration/rate-limit-rls-idor.integration.test.ts` | 実装済み |
+
+## この表から外れたもの
+
+- **所属と役割の変更（旧 W-010）は 2026-09-07 に `service_role` をやめた。**
+  `user_facilities` に `is_admin() AND has_aal2()` の書き込みポリシーを作り（20260907030000）、
+  管理 API を利用者の JWT に切り替えた（P-035）。認可の再評価が書き込みと同じ文の中で起きるので、
+  **窓が消え、権限の付け替えにも aal2 が要るようになった**。
+  それまでは、マスタの書き込みには aal2 が要るのに（P-033）権限の付け替えには要らず、
+  パスワードだけ奪われた admin が共犯者を admin に昇格させられる状態だった。
+  **この表から行が減るのが、いちばん良い直り方**（窓を狭めるのではなく経路を無くす）。
 
 ## 読み方
 
