@@ -36,3 +36,11 @@ docs/agents/undetectable-rules-inventory.md merge=union
 #     が、git は行単位でしか判定できない。マージ後の目視確認を前提にする） ---
 docs/agents/known-failure-patterns.md merge=union
 docs/agents/decisions.md              merge=union
+
+# --- キー辞書の JSON（行ではなく構造で 3 者マージする） ---
+# ドライバの中身は各 clone の設定にしか置けない（git の仕様）。
+# `bash scripts/setup-merge-drivers.sh` を 1 回実行すること。
+# 設定していない clone では既定の行マージに落ちて、黙って衝突が増えるだけ（壊れはしない）。
+scripts/lib/plugin-layout.json     merge=jsonunion
+scripts/lib/catalog-registry.json  merge=jsonunion
+scripts/lib/merge-queue.json       merge=jsonunion
