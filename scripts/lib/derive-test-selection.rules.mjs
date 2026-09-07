@@ -67,6 +67,9 @@ export const RULES = [
   //      触った人が犯人とは限らないので、変更時ではなく毎回回して早く落とす。
   // WHY(毎回): ルールを外に出す判断はどの PR でも起こりうる。安いので毎回回す。
   { key: 'rule-guard-coverage', label: 'ルールを守る検査の有無', timing: 'always', commands: ['node scripts/lib/check-rule-guard-coverage.mjs --verbose'] },
+  // WHY(毎回): 12 秒で終わる。検査の実効性は「検査を書いた PR」以外でも劣化しうる
+  //      （テスト側を緩めれば no-op でも通るようになる）ので、変更時ではなく毎回回す。
+  { key: 'rule-guard-effective', label: 'ルールを守る検査が効いているか', timing: 'always', commands: ['bash scripts/check-rule-guard-effective.test.sh'] },
   { key: 'table-row-duplicates', label: '棚卸し表の行の重複', timing: 'always', commands: ['node scripts/lib/check-table-row-duplicates.mjs'] },
 
   // ---- 変更時 ----
