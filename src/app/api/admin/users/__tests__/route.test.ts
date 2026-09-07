@@ -36,6 +36,15 @@ vi.mock('@/lib/security/rate-limit', () => ({
 //      個別のテストで false に差し替えて 403 を確かめる。
 const mockAssertAdminAal2 = vi.fn(async () => true)
 
+// WHY(2026-09-07、#757-24・39): 特権操作の記録。監査トリガーは public スキーマにしか付かず
+//      auth.users には届かないので、成功した招待・削除がどこにも残っていなかった。
+//      **route が実際に記録を呼ぶこと**をここで固定する（呼ばなくなっても気づけるように）。
+const mockRecordPrivilegedOperation = vi.fn(async () => {})
+
+vi.mock('@/lib/security/privileged-operation', () => ({
+  recordPrivilegedOperation: (...args: unknown[]) => mockRecordPrivilegedOperation(...(args as [])),
+}))
+
 vi.mock('@/lib/admin-auth', () => ({
   requireAdmin: async () => {
     const result = await mockGetUser()
@@ -255,5 +264,87 @@ describe('特権操作の直前の再確認（W-011）', () => {
     const res = await DELETE(req)
     expect(res.status).toBe(403)
     expect(mockDeleteUser).not.toHaveBeenCalled()
+  })
+})
+
+// 約束カタログ（docs/agents/promise-catalog.md）: P-066 特権操作は成功も失敗も記録に残る
+describe('特権操作の記録 [P-066]', () => {
+  const req = (method: string, body: unknown) =>
+    new NextRequest('http://localhost/api/admin/users', { method, body: JSON.stringify(body) })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    process.env.ADMIN_EMAILS = 'admin@test.com'
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'admin-1', email: 'admin@test.com' } } })
+    mockConsumeInviteQuota.mockResolvedValue({ allowed: true, hitCount: 1, limit: 50, resetAt: null, unmeasured: false })
+    mockAssertAdminAal2.mockResolvedValue(true)
+  })
+
+  it('招待が成功したら succeeded=true とメールを記録する', async () => {
+    mockInviteUserByEmail.mockResolvedValue({ error: null })
+    const res = await POST(req('POST', { email: 'new@test.com' }))
+    expect(res.status).toBe(200)
+    expect(mockRecordPrivilegedOperation).toHaveBeenCalledWith({
+      operation: 'user_invite',
+      succeeded: true,
+      actorId: 'admin-1',
+      targetEmail: 'new@test.com',
+      errorCode: null,
+    })
+  })
+
+  it('招待が失敗しても記録する（succeeded=false と code）', async () => {
+    // WHY: 失敗だけ・成功だけのどちらか一方しか残さないと、乗っ取り後に
+    //      「何を試して何が通ったか」の片側が欠ける
+    mockInviteUserByEmail.mockResolvedValue({ error: { message: 'boom', code: 'email_exists' } })
+    await POST(req('POST', { email: 'dup@test.com' }))
+    expect(mockRecordPrivilegedOperation).toHaveBeenCalledWith({
+      operation: 'user_invite',
+      succeeded: false,
+      actorId: 'admin-1',
+      targetEmail: 'dup@test.com',
+      errorCode: 'email_exists',
+    })
+  })
+
+  it('削除が成功したら succeeded=true と対象の利用者 ID を記録する', async () => {
+    mockDeleteUser.mockResolvedValue({ error: null })
+    const res = await DELETE(req('DELETE', { userId: 'victim-1' }))
+    expect(res.status).toBe(200)
+    expect(mockRecordPrivilegedOperation).toHaveBeenCalledWith({
+      operation: 'user_delete',
+      succeeded: true,
+      actorId: 'admin-1',
+      targetUserId: 'victim-1',
+      errorCode: null,
+    })
+  })
+
+  it('削除が失敗しても記録する', async () => {
+    mockDeleteUser.mockResolvedValue({ error: { message: 'nope', code: 'user_not_found' } })
+    await DELETE(req('DELETE', { userId: 'ghost' }))
+    expect(mockRecordPrivilegedOperation).toHaveBeenCalledWith({
+      operation: 'user_delete',
+      succeeded: false,
+      actorId: 'admin-1',
+      targetUserId: 'ghost',
+      errorCode: 'user_not_found',
+    })
+  })
+
+  it('aal2 で弾かれたときは Auth を呼ばないので記録もしない（拒否は access_denials 側）', async () => {
+    // WHY: 弾かれた分は assertAdminAal2 が access_denials に残す。両方に書くと二重計上になる
+    mockAssertAdminAal2.mockResolvedValue(false)
+    const res = await POST(req('POST', { email: 'blocked@test.com' }))
+    expect(res.status).toBe(403)
+    expect(mockInviteUserByEmail).not.toHaveBeenCalled()
+    expect(mockRecordPrivilegedOperation).not.toHaveBeenCalled()
+  })
+
+  it('上限で弾かれたときも記録しない（メールを送っていないので特権操作が起きていない）', async () => {
+    mockConsumeInviteQuota.mockResolvedValue({ allowed: false, hitCount: 51, limit: 50, resetAt: null, unmeasured: false })
+    const res = await POST(req('POST', { email: 'over@test.com' }))
+    expect(res.status).toBe(429)
+    expect(mockRecordPrivilegedOperation).not.toHaveBeenCalled()
   })
 })

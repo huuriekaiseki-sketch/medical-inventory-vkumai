@@ -714,6 +714,45 @@ export type Database = {
           },
         ]
       }
+      privileged_operations: {
+        Row: {
+          actor_id: string
+          error_code: string | null
+          id: string
+          method: string | null
+          occurred_at: string
+          operation: string
+          route: string | null
+          succeeded: boolean
+          target_email: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          actor_id: string
+          error_code?: string | null
+          id?: string
+          method?: string | null
+          occurred_at?: string
+          operation: string
+          route?: string | null
+          succeeded: boolean
+          target_email?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          actor_id?: string
+          error_code?: string | null
+          id?: string
+          method?: string | null
+          occurred_at?: string
+          operation?: string
+          route?: string | null
+          succeeded?: boolean
+          target_email?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
       product_compatibilities: {
         Row: {
           category_id: string
@@ -1076,6 +1115,19 @@ export type Database = {
       record_issue_url: {
         Args: { log_id: string; url: string }
         Returns: undefined
+      }
+      record_privileged_operation: {
+        Args: {
+          p_actor_id: string
+          p_error_code?: string
+          p_method?: string
+          p_operation: string
+          p_route?: string
+          p_succeeded: boolean
+          p_target_email?: string
+          p_target_user_id?: string
+        }
+        Returns: string
       }
       record_schema_drift: { Args: never; Returns: undefined }
       refresh_schema_baseline_snapshot: {

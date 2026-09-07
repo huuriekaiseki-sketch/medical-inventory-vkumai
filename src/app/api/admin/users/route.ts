@@ -8,6 +8,7 @@ import type { AdminUser } from '@/types/admin'
 import { FACILITY_ROLES, type FacilityRole } from '@/types/role'
 import { parseBody } from '@/lib/validation/parse-body'
 import { deleteUserSchema, inviteInputSchema } from '@/lib/validation/schemas'
+import { recordPrivilegedOperation } from '@/lib/security/privileged-operation'
 
 export async function GET() {
   const user = await requireAdmin()
@@ -86,6 +87,19 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminSupabase()
   const { error } = await admin.auth.admin.inviteUserByEmail(email)
+
+  // WHY(#757-24・39): 監査トリガーは public スキーマにしか付かず、GoTrue が持つ auth.users には
+  //      届かない。2026-09-07 まで**成功した招待は 1 件も記録されていなかった**（弾かれた分だけが
+  //      access_denials に残る非対称な状態で、「誰がいつ誰を招待したか」が追えなかった）。
+  //      成功・失敗の両方を残す（失敗だけだと乗っ取り後に**通った**操作の範囲が分からない）。
+  await recordPrivilegedOperation({
+    operation: 'user_invite',
+    succeeded: !error,
+    actorId: user.id,
+    targetEmail: email,
+    errorCode: error?.code ?? null,
+  })
+
   if (error) return apiError(toClientErrorMessage(error, '招待メールの送信に失敗しました'))
 
   return NextResponse.json({ message: `${email} に招待メールを送信しました` })
@@ -108,6 +122,16 @@ export async function DELETE(request: NextRequest) {
 
   const admin = createAdminSupabase()
   const { error } = await admin.auth.admin.deleteUser(userId)
+
+  // WHY: 上と同じ（#757-24・39）。削除は元に戻せないので、誰が誰を消したかは特に残す必要がある。
+  await recordPrivilegedOperation({
+    operation: 'user_delete',
+    succeeded: !error,
+    actorId: user.id,
+    targetUserId: userId,
+    errorCode: error?.code ?? null,
+  })
+
   if (error) return apiError(toClientErrorMessage(error, 'ユーザーの削除に失敗しました'))
 
   return NextResponse.json({ message: 'ユーザーを削除しました' })

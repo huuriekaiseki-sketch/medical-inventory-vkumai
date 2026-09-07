@@ -36,6 +36,7 @@ RLS 経路（利用者の JWT）は文ごとに `is_facility_writer()` を評価
 | W-011 | `src/app/api/admin/users/route.ts` | 利用者の作成・削除・招待メール | `assertAdminAal2`（特権操作の直前。先頭の `requireAdmin` に加えて） | 本文の読み取りと検証・上限の消費のあと、再確認から Auth API 呼び出しまで | **外部サービスの制約で窓を消せない唯一の経路**。下の「W-011 の限界と、いま守れているもの」を読む | `src/app/api/admin/users/__tests__/route.test.ts` | 実装済み |
 | W-020 | `src/lib/security/access-denial.ts` | 拒否された操作の記録 | 無し | 無し（拒否が起きた場所で即座に記録する） | 記録は誰の権限でもなく「起きた事実」なので判定を持たない。偽の記録を外から作れないことは `record_access_denial()` の EXECUTE が service_role だけである点で守る | `supabase/__tests__/integration/access-denials-rls-idor.integration.test.ts` | 実装済み |
 | W-021 | `src/lib/security/rate-limit.ts` | 回数のカウンタ | 無し | 無し（数える前に判定するものが無い） | 同上。`consume_rate_limit()` の EXECUTE も service_role だけ。カウンタを読めるのも service_role だけ（TB-052） | `supabase/__tests__/integration/rate-limit-rls-idor.integration.test.ts` | 実装済み |
+| W-022 | `src/lib/security/privileged-operation.ts` | 特権操作（Auth 管理 API）の成功・失敗の記録 | 無し | 無し（Auth 呼び出しの直後にその結果を記録する） | W-020 と同じ。記録は誰の権限でもなく「起きた事実」なので判定を持たない。呼び出し側（W-011）が `assertAdminAal2` を通った後にしか呼ばない。偽の記録を外から作れないことは `record_privileged_operation()` の EXECUTE が service_role だけである点で守る。**Auth と記録は同じトランザクションに入らない**ので、Auth 成功・記録失敗が起こりうる（W-011 の限界 8） | `supabase/__tests__/integration/privileged-operations-rls-idor.integration.test.ts` | 実装済み |
 
 ## この表から外れたもの
 
@@ -76,25 +77,38 @@ RLS 経路（利用者の JWT）は文ごとに `is_facility_writer()` を評価
 5. **所属と役割の変更は監査ログに残る。** `user_facilities` は監査対象（TB-030）で、
    P-035 以降は `actor_id` に「誰が権限を配ったか」も入る。
 
+6. **特権操作の成功・失敗を記録する（2026-09-07 に追加）。** 招待・削除は成否によらず
+   `privileged_operations`（TB-043・P-066）に 1 行残る。誰が・誰を・いつ・通ったか・失敗の code。
+   招待は相手がまだ存在せず利用者 ID が無いので、**メールを残す**（人が決めた。読めるのは
+   aal2 の admin だけで、サーバーログには伏せ字で出ない）。
+   それまでは**弾かれた分だけが `access_denials` に残り、通った分は 1 件も残らない**
+   非対称な状態だった（監査トリガーは `public` スキーマにしか付かず `auth.users` に届かないため）。
+
 ### 守れていないもの（未実施。隠さず書く）
 
-6. **`auth.users` の作成・削除は監査ログに残らない。** 監査トリガーは `public` スキーマの
-   表にしか付いておらず、GoTrue が管理する `auth.users` は対象外。
-   「誰がいつ利用者を消したか」はアプリ側からは追えない（Supabase 側のログにはあるが未確認）。
+7. **Studio や service role キーを直に使った `auth.users` の操作は記録されない。**
+   `privileged_operations` に残るのは**このアプリの route を通った分だけ**
+   （[blast-radius](./blast-radius.md) の B-010 と同じ範囲）。Supabase 側のログにはあるが未確認。
    → #757-28（データの残存先）と #757-35（本番設定の棚卸し）で扱う。
-7. **操作トークンや有効期限は無い。** 「この操作を N 分以内に実行してよい」という短命の
+8. **Auth API の呼び出しと記録は同じトランザクションに入らない。**
+   Auth は SQL の外なので「Auth は成功したが記録は失敗した」が起こりうる。
+   記録の失敗で操作は止めない（記録だけ fail-open）ので、**取りこぼしはゼロにならない**。
+   MFA の登録・解除、パスワード再設定はこの route を通らないので対象外。
+9. **操作トークンや有効期限は無い。** 「この操作を N 分以内に実行してよい」という短命の
    トークンを発行して Auth 呼び出しに添える設計にすれば、窓はトークンの寿命に縛られる。
    いまは実装していない（判定と実行が同じリクエスト内なので、効果に対して複雑さが勝る）。
-8. **失敗時の状態を検知して復旧する仕組みは無い。** 招待は送ったが所属を作れなかった、
+10. **失敗時の状態を検知して復旧する仕組みは無い。** 招待は送ったが所属を作れなかった、
    利用者は消したが `user_facilities` の行が残った、のような中間状態は
    [部分成功の棚卸し](./partial-success-inventory.md)（M-xxx）が扱う。
    現状は「次に同じ操作をすれば収束する」までで、**検知して自動で戻す仕組みは無い。**
 
 ### 読み方
 
-**ゼロリスクではない。** ただし残っているのは (6)(7)(8) の 3 つで、
-そのうち (7) は選ばなかった設計、(6)(8) は別の番号で追っている。
+**ゼロリスクではない。** ただし残っているのは (7)〜(10) の 4 つで、
+そのうち (9) は選ばなかった設計、(7)(10) は別の番号で追っており、
+(8) は外部サービスの制約そのもの（Auth と DB が同じトランザクションに入らない）。
 「Supabase の制約だから何もしていない」ではなく、**制約の外側は塞いである**。
+2026-09-07 に (6) が守れている側へ移った（成功した特権操作が 1 件も残っていなかった穴を塞いだ）。
 
 ## 読み方
 
