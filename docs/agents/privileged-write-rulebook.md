@@ -35,7 +35,7 @@ RLS 経路（利用者の JWT）は文ごとに `is_facility_writer()` を評価
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | W-011 | `src/app/api/admin/users/route.ts` | 利用者の作成・削除・招待メール | `assertAdminAal2`（特権操作の直前。先頭の `requireAdmin` に加えて） | 本文の読み取りと検証・上限の消費のあと、再確認から Auth API 呼び出しまで | **外部サービスの制約で窓を消せない唯一の経路**。下の「W-011 の限界と、いま守れているもの」を読む | `src/app/api/admin/users/__tests__/route.test.ts` | 実装済み |
 | W-020 | `src/lib/security/access-denial.ts` | 拒否された操作の記録 | 無し | 無し（拒否が起きた場所で即座に記録する） | 記録は誰の権限でもなく「起きた事実」なので判定を持たない。偽の記録を外から作れないことは `record_access_denial()` の EXECUTE が service_role だけである点で守る | `supabase/__tests__/integration/access-denials-rls-idor.integration.test.ts` | 実装済み |
-| W-021 | `src/lib/security/rate-limit.ts` | 回数のカウンタ | 無し | 無し（数える前に判定するものが無い） | 同上。`consume_rate_limit()` の EXECUTE も service_role だけ。カウンタを読めるのも service_role だけ（TB-052） | `supabase/__tests__/integration/rate-limit-rls-idor.integration.test.ts` | 実装済み |
+| W-021 | `src/lib/security/rate-limit.ts` | 回数のカウンタ（消費と、送れなかった分の払い戻し） | 無し | 無し（数える前に判定するものが無い。払い戻しは外部呼び出しの結果を見た直後） | 同上。`consume_rate_limit()` と `refund_rate_limit()` の EXECUTE は service_role だけ。カウンタを読めるのも service_role だけ（TB-052）。**払い戻しで他人の枠を増やせない**ことは、鍵の作り方（`rate_limit_bucket_key()`）を消費と共有し、0 未満にならないことを実 DB で固定して守る | `supabase/__tests__/integration/rate-limit-rls-idor.integration.test.ts` | 実装済み |
 | W-022 | `src/lib/security/privileged-operation.ts` | 特権操作（Auth 管理 API）の成功・失敗の記録 | 無し | 無し（Auth 呼び出しの直後にその結果を記録する） | W-020 と同じ。記録は誰の権限でもなく「起きた事実」なので判定を持たない。呼び出し側（W-011）が `assertAdminAal2` を通った後にしか呼ばない。偽の記録を外から作れないことは `record_privileged_operation()` の EXECUTE が service_role だけである点で守る。**Auth と記録は同じトランザクションに入らない**ので、Auth 成功・記録失敗が起こりうる（W-011 の限界 8） | `supabase/__tests__/integration/privileged-operations-rls-idor.integration.test.ts` | 実装済み |
 
 ## この表から外れたもの

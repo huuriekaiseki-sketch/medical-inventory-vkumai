@@ -1092,6 +1092,14 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_facility_member: { Args: { p_facility_id: string }; Returns: boolean }
       is_facility_writer: { Args: { p_facility_id: string }; Returns: boolean }
+      rate_limit_bucket_key: {
+        Args: { p_bucket: string; p_window_start: string }
+        Returns: string
+      }
+      rate_limit_window_start: {
+        Args: { p_window_seconds: number }
+        Returns: string
+      }
       record_access_denial: {
         Args: {
           p_actor_id?: string
@@ -1133,6 +1141,13 @@ export type Database = {
       refresh_schema_baseline_snapshot: {
         Args: { new_epoch: string }
         Returns: undefined
+      }
+      refund_rate_limit: {
+        Args: { p_bucket: string; p_window_seconds: number }
+        Returns: {
+          hit_count: number
+          refunded: boolean
+        }[]
       }
       resolve_denial_anomaly_subject: {
         Args: { p_object_name: string }

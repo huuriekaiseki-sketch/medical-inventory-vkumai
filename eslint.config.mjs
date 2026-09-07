@@ -16,6 +16,11 @@ const eslintConfig = defineConfig([
     ".claude/worktrees/**",
     // プラグイン v1 の生成物（issue #420）。正本は .claude/ と scripts/ で、そちらが lint 対象
     "dist/**",
+    // WHY(2026-09-08): `supabase start` が edge runtime の束ねた JS をここへ書き出す。
+    //      .gitignore 済み（リポジトリには入らない）だが eslint は無視しないので、
+    //      **ローカルスタックを起動した人だけ `npm run lint` が 154 件で落ちる**状態だった。
+    //      自分たちが書いたコードではないうえ、消してもまた生成される。
+    "supabase/.temp/**",
   ]),
   // WHY: issue #757 の 5（PII のログ流出）。サーバー側（API Route・データ層・proxy）のログは
   //      施設の外に出る場所で、PostgreSQL の DETAIL には行の中身（患者 ID 等）が入る。

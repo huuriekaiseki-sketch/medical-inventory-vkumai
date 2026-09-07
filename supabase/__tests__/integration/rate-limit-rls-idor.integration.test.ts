@@ -94,3 +94,92 @@ describe('回数の上限（rate_limit_counters / consume_rate_limit） [P-064][
     expect(rpcError?.code).toBe(UNAUTHORIZED)
   })
 })
+
+// 部分成功の棚卸し（docs/agents/partial-success-inventory.md）: M-021 送れなかった分の枠を戻す
+describe('枠の払い戻し（refund_rate_limit） [M-021][Q-020]', () => {
+  const service = createServiceRoleClient()
+
+  it('消費した分を戻すと、その窓であと 1 回多く通る', async () => {
+    // WHY: route の使い方（消費 → 送信が失敗 → 戻す → もう一度押す）をそのままなぞる。
+    //      戻さなければ 3 回目は上限超えで止まる
+    const bucket = `test:${randomUUID()}`
+    const consume = () => service.rpc('consume_rate_limit', { p_bucket: bucket, p_limit: 2, p_window_seconds: 60 })
+
+    const { data: first } = await consume()
+    const { data: second } = await consume()
+    expect([first![0].allowed, second![0].allowed]).toEqual([true, true])
+    expect(second![0].hit_count).toBe(2)
+
+    const { data: refund, error } = await service.rpc('refund_rate_limit', {
+      p_bucket: bucket,
+      p_window_seconds: 60,
+    })
+    expect(error).toBeNull()
+    expect(refund![0]).toEqual({ refunded: true, hit_count: 1 })
+
+    const { data: third } = await consume()
+    expect(third![0].allowed).toBe(true)
+    expect(third![0].hit_count).toBe(2)
+  })
+
+  it('上限で止まった分は戻らない（止まった試行もカウンタを進める。固定窓の性質）', async () => {
+    // WHY: 上限に当たった呼び出しも hits を +1 する。route はその場合 GoTrue を呼ばないので
+    //      払い戻しもしない。**上限に当たり始めると窓が変わるまで戻らない**ことをここで固定する
+    //      （払い戻しがこの性質を打ち消すと誤解されないように）
+    const bucket = `test:${randomUUID()}`
+    const consume = () => service.rpc('consume_rate_limit', { p_bucket: bucket, p_limit: 1, p_window_seconds: 60 })
+    await consume()
+    const { data: blocked } = await consume()
+    expect(blocked![0]).toMatchObject({ allowed: false, hit_count: 2 })
+  })
+
+  it('消費していないバケットは戻せない（refunded=false。他人の行を減らさない）', async () => {
+    const { data, error } = await service.rpc('refund_rate_limit', {
+      p_bucket: `never-used:${randomUUID()}`,
+      p_window_seconds: 60,
+    })
+    expect(error).toBeNull()
+    expect(data![0]).toEqual({ refunded: false, hit_count: null })
+  })
+
+  it('消費より多く戻しても 0 未満にならない（上限を無効化できない）', async () => {
+    // WHY: 負のカウンタを作れると、以後その窓では上限が実質的に効かなくなる
+    const bucket = `test:${randomUUID()}`
+    await service.rpc('consume_rate_limit', { p_bucket: bucket, p_limit: 1, p_window_seconds: 60 })
+    for (let i = 0; i < 5; i++) {
+      await service.rpc('refund_rate_limit', { p_bucket: bucket, p_window_seconds: 60 })
+    }
+    const { data, error } = await service.rpc('refund_rate_limit', { p_bucket: bucket, p_window_seconds: 60 })
+    // GREATEST を外すと CHECK (hits >= 0) に当たって error になる（2026-09-08 に変異で実測）
+    expect(error, `0 未満になろうとした: ${error?.message}`).toBeNull()
+    expect(data![0].hit_count).toBe(0)
+  })
+
+  it('窓の秒数が違えば別の行を見る（消費した窓だけを戻す）', async () => {
+    // WHY: アプリ側が消費と払い戻しで違う窓を渡すと、**減らすつもりのない行**を減らす。
+    //      DB 側でも「別の窓は別の行」であることを固定する
+    const bucket = `test:${randomUUID()}`
+    await service.rpc('consume_rate_limit', { p_bucket: bucket, p_limit: 5, p_window_seconds: 60 })
+    const { data: otherWindow } = await service.rpc('refund_rate_limit', {
+      p_bucket: bucket,
+      p_window_seconds: 3600,
+    })
+    expect(otherWindow![0].refunded).toBe(false)
+  })
+
+  it('client ロールは払い戻しを呼べない（自分の枠を戻し放題にできない）', async () => {
+    const { error } = await createAnonClient().rpc('refund_rate_limit', {
+      p_bucket: `forged:${randomUUID()}`,
+      p_window_seconds: 60,
+    })
+    expect(error?.code).toBe(UNAUTHORIZED)
+  })
+
+  it('窓の秒数は 1 未満にできない', async () => {
+    const { error } = await service.rpc('refund_rate_limit', {
+      p_bucket: `test:${randomUUID()}`,
+      p_window_seconds: 0,
+    })
+    expect(error).not.toBeNull()
+  })
+})
