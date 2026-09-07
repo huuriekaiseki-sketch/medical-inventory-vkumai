@@ -72,6 +72,25 @@ describe('拒否された操作の記録（recordAccessDenial） [P-063]', () =>
     expect(rpc.mock.calls[0][1]).toMatchObject({ p_route: undefined, p_method: undefined })
   })
 
+  // WHY(2026-09-07 のミューテーション計測): 経路の判定は
+  //      `denial.route !== undefined || denial.method !== undefined` で、
+  //      **どちらか一方でも渡されていれば「呼び出し側が明示した」**とみなす。
+  //      これを `&&` に書き換えても全テストが通っていた（片方だけ渡すケースが無かった）。
+  //      `&&` になると、片方だけ明示した呼び出しでヘッダを読みに行き、
+  //      明示した値が上書きされる（記録の経路が実際と違うものになる）。
+  it.each([
+    { label: 'route だけ明示', denial: { route: '/api/x' }, expected: { p_route: '/api/x', p_method: undefined } },
+    { label: 'method だけ明示', denial: { method: 'DELETE' }, expected: { p_route: undefined, p_method: 'DELETE' } },
+  ])('$label でもヘッダを読みに行かない', async ({ denial, expected }) => {
+    headersGet.mockImplementation((name: string) =>
+      name === 'x-aidd-route' ? '/from-header' : name === 'x-aidd-method' ? 'GET' : null
+    )
+    const m = await loadModule()
+    await m.recordAccessDenial({ guard: 'auth', reason: 'unauthenticated', ...denial })
+    expect(headers).not.toHaveBeenCalled()
+    expect(rpc.mock.calls[0][1]).toMatchObject(expected)
+  })
+
   it('ヘッダが読めない実行環境（Route Handler の外）でも記録は続く', async () => {
     headers.mockRejectedValueOnce(new Error('headers() outside request scope'))
     const m = await loadModule()
@@ -99,6 +118,29 @@ describe('拒否された操作の記録（recordAccessDenial） [P-063]', () =>
     rpc.mockRejectedValue(new Error('network down'))
     const m = await loadModule()
     await expect(m.recordAccessDenial({ guard: 'facility', reason: 'forbidden' })).resolves.toBeUndefined()
+  })
+
+  // WHY: PostgREST の失敗は throw ではなく**戻り値の error** に来る。捨てると try/catch にも
+  //      来ないので「記録できていないこと」に誰も気づけない（2026-09-07 に実際に起きた）。
+  //      握りつぶすのは「拒否そのものを止めない」ためであって、黙ることではない。
+  //      2026-09-07 のミューテーション計測では `if (error)` を `if (true)` にしても
+  //      `if (false)` にしても全テストが通っていた＝この分岐は誰も見ていなかった。
+  it('RPC が戻り値の error で失敗したらログに出す（黙って落とさない）', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'permission denied' } })
+    const m = await loadModule()
+    await expect(m.recordAccessDenial({ guard: 'facility', reason: 'forbidden' })).resolves.toBeUndefined()
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(String(spy.mock.calls[0][0])).toContain('record_access_denial')
+    spy.mockRestore()
+  })
+
+  it('成功したときはログに出さない（正常時にログを汚さない）', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const m = await loadModule()
+    await m.recordAccessDenial({ guard: 'facility', reason: 'forbidden' })
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
   })
 
   it('クライアントは使い回す（連続する拒否で作り直さない）', async () => {

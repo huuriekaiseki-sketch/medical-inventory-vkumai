@@ -27,6 +27,14 @@ describe('parsePagination', () => {
     expect(result.ok).toBe(false)
   })
 
+  it('limitが下限(1)ちょうどの場合はok:true', () => {
+    // WHY(2026-09-07 のミューテーション計測): 上限側は 200 / 201 の両側を測っていたのに
+    //      下限側は 0 だけで、`limit < 1` を `limit <= 1` に書き換えても全テストが通っていた。
+    //      その状態だと 1 件だけ取る呼び出しが 400 になる（片側だけの境界は測ったことにならない）。
+    const result = parsePagination(new URLSearchParams('limit=1'))
+    expect(result).toEqual({ ok: true, limit: 1, offset: 0 })
+  })
+
   it('limitが上限(200)ちょうどの場合はok:true', () => {
     const result = parsePagination(new URLSearchParams('limit=200'))
     expect(result).toEqual({ ok: true, limit: 200, offset: 0 })
