@@ -305,6 +305,7 @@
     "check-design-questions.test.sh": "supabase/migrations/ の実データを走査する",
     "check-export-paths.test.sh": "src/ の実コードと依存名を走査する（エクスポート経路が生えた瞬間に落とす ratchet）",
     "check-rule-guard-coverage.test.sh": "突合のエンジンは汎用だが、対象の RULE_DOCS と NOT_RULES が docs/agents 配下の実ファイルで、シナリオ 2 が実態のリポジトリを検査する。対象 doc を設定に出せば共通側へ移せる",
-    "check-rule-guard-effective.test.sh": "no-op 置換の手法自体は汎用だが、対象の検査を common.md の節名から機械抽出しており、sandbox が symlink で見せる top-level もこのリポジトリの構成。対象の抽出元を設定に出せば共通側へ移せる"
+    "check-rule-guard-effective.test.sh": "no-op 置換の手法自体は汎用だが、対象の検査を common.md の節名から機械抽出しており、sandbox が symlink で見せる top-level もこのリポジトリの構成。対象の抽出元を設定に出せば共通側へ移せる",
+    "check-roadmap-staleness.test.sh": "「状態列と成果物の突合」という型は汎用だが、対象が security-test-catalog.md の実データで、EVIDENCE がこのリポジトリの #757 番号とファイル構成。対象と対応表を設定に出せば共通側へ移せる"
   }
 }
