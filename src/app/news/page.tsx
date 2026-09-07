@@ -134,7 +134,7 @@ function NewsPageInner() {
         <div>
           <p
             className="text-xs font-semibold uppercase tracking-widest mb-1"
-            style={{ color: '#FF5F03', fontFamily: 'var(--font-oswald), sans-serif' }}
+            style={{ color: '#B03F00', fontFamily: 'var(--font-oswald), sans-serif' }}
           >
             Information
           </p>

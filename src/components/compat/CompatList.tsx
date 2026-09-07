@@ -53,7 +53,7 @@ export function CompatList({ items, isAdmin, onDelete, hasFilter, isLoading, onA
             type="button"
             onClick={onAddClick}
             className="mt-3 text-sm font-semibold"
-            style={{ color: '#FF5F03' }}
+            style={{ color: '#B03F00' }}
           >
             ＋互換品を追加
           </button>

@@ -41,7 +41,7 @@ export default function CaseOrdersPage({ params }: { params: Promise<{ id: strin
 
       <div className="flex items-end justify-between mb-8 border-b pb-4" style={{ borderColor: '#072C2C33' }}>
         <div>
-          <p className={`${labelClass} mb-1`} style={{ ...labelStyle, color: '#FF5F03' }}>Case Orders</p>
+          <p className={`${labelClass} mb-1`} style={{ ...labelStyle, color: '#B03F00' }}>Case Orders</p>
           <h1 className="text-3xl font-bold" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif', letterSpacing: '0.04em' }}>
             症例発注
           </h1>
