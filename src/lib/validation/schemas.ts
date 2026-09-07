@@ -35,6 +35,21 @@ const uuid = (label: string) =>
     .string({ error: `${label}は必須です` })
     .regex(UUID_RE, { error: `${label}の形式が不正です` })
 
+/**
+ * 二重送信対策の鍵（P-053）。未指定は許す（毎回新しい行を作る）。
+ * 指定があれば UUID の形だけを見る。値の意味は DB の部分 UNIQUE が守る
+ */
+const clientRequestId = z
+  .string()
+  .regex(UUID_RE, { error: 'clientRequestId は UUID で指定してください' })
+  .optional()
+
+/** 数量。DB の CHECK（I-010 / I-011、1 以上）と同じ条件を入口でも見る */
+const quantity = z
+  .number({ error: '数量は数値で入力してください' })
+  .int({ error: '数量は整数で入力してください' })
+  .min(1, { error: '数量は 1 以上で入力してください' })
+
 /** 消耗品の登録（consumables） */
 export const consumableInputSchema = z.object({
   facilityId,
@@ -75,10 +90,10 @@ export const distributorProductInputSchema = z.object({
   maker: requiredText('productName', 'メーカー'),
   supplier: requiredText('supplierName', '仕入先'),
   name: requiredText('productName', '商品名'),
-  quantity: z.number({ error: '入数は数値で入力してください' }).int().min(1, { error: '入数は 1 以上で入力してください' }),
-  reimbursementPrice: z
-    .number({ error: '償還価格は数値で入力してください' })
-    .min(0, { error: '償還価格は 0 以上で入力してください' })
+  // WHY: 共通のヘルパーを使う。素の z.number().min() を書くと DB の CHECK との対応が
+  //      追えなくなり、scripts/check-layer-consistency.test.sh も種類を判定できない
+  quantity,
+  reimbursementPrice: money('償還価格')
     .nullish()
     .transform((v) => v ?? null),
 })
@@ -148,21 +163,6 @@ export const hospitalPriceInputSchema = z.object({
   expectedUpdatedAt: z.string().optional(),
 })
 
-/**
- * 二重送信対策の鍵（P-053）。未指定は許す（毎回新しい行を作る）。
- * 指定があれば UUID の形だけを見る。値の意味は DB の部分 UNIQUE が守る
- */
-const clientRequestId = z
-  .string()
-  .regex(UUID_RE, { error: 'clientRequestId は UUID で指定してください' })
-  .optional()
-
-/** 数量。DB の CHECK（I-010 / I-011、1 以上）と同じ条件を入口でも見る */
-const quantity = z
-  .number({ error: '数量は数値で入力してください' })
-  .int({ error: '数量は整数で入力してください' })
-  .min(1, { error: '数量は 1 以上で入力してください' })
-
 /** 症例発注・短貸返却の明細（JAN が必須） */
 export const janItemSchema = z.object({
   jan: requiredText('janOrRef', 'JAN'),
@@ -216,7 +216,12 @@ export const loanReturnInputSchema = z.object({
 export const consumableOrderInputSchema = z.object({
   facilityId,
   items: z
-    .array(z.object({ consumableId: id('消耗品'), quantity }))
+    .array(
+      z.object({
+        consumableId: id('消耗品'),
+        quantity,
+      })
+    )
     .default([]),
   clientRequestId,
 })
