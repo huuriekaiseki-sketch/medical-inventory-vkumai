@@ -22,6 +22,7 @@ import { randomUUID } from 'crypto'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createFacility, createServiceRoleClient } from './helpers/seed-rls-idor'
+import { enrollAndVerifyTotp, signInAtAal1, stepUpToAal2 } from './helpers/mfa-totp'
 
 const TEST_USER_PASSWORD = 'permission-change-authz-0000'
 
@@ -171,6 +172,94 @@ describe('所属と役割の変更は admin かつ aal2 を要求する [P-035]'
     // admin の JWT で書いたので actor_id が入る（service_role で書いていた頃は null だった）
     expect(rows.some((r) => r.actor_id === admin.id), '誰が変えたかが残っていない').toBe(true)
   }, 60_000)
+
+  // WHY(2026-09-07、RLS ミューテーション M-013 で生き残った): このファイルは
+  //      「MFA **未登録**の admin は書ける」「staff は昇格できない」までしか試しておらず、
+  //      **MFA 登録済みで aal2 に上げていない admin**（＝パスワードだけ奪われた状態）を
+  //      1 件も試していなかった。そのためポリシーから `has_aal2()` を外しても誰も落ちず、
+  //      **この migration の存在理由そのものが守られていなかった**。
+  //
+  //      E-033 はまさにこの状態で起きた事故（パスワードだけ奪われた admin が共犯者を昇格できた）。
+  //      塞いだあと、塞ぎ続けていることを測る手段が無かった。
+  describe('パスワードだけ奪われた admin（MFA 登録済み・aal1）は権限を配れない（M-013 を倒す）', () => {
+    let mfaAdmin: Actor
+    let factorId: string
+    let secret: string
+
+    beforeAll(async () => {
+      mfaAdmin = await createActor('mfa-admin', 'admin')
+      const client = await signIn(mfaAdmin.email)
+      const enrolled = await enrollAndVerifyTotp(client)
+      factorId = enrolled.factorId
+      secret = enrolled.secret
+    }, 120_000)
+
+    afterAll(async () => {
+      if (mfaAdmin) await service.auth.admin.deleteUser(mfaAdmin.id)
+    })
+
+    async function aal1() {
+      const client = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { auth: { autoRefreshToken: false, persistSession: false } },
+      )
+      await signInAtAal1(client, mfaAdmin.email, TEST_USER_PASSWORD)
+      return client
+    }
+
+    it('aal1 では所属を作れない（共犯者を昇格できない）', async () => {
+      const client = await aal1()
+      const { data, error } = await client
+        .from('user_facilities')
+        .insert({ user_id: target.id, facility_id: facilityId, role: 'admin' })
+        .select('user_id')
+      // WITH CHECK で拒否される（error あり）か、0 行で終わる
+      expect(error !== null || (data ?? []).length === 0).toBe(true)
+    })
+
+    it('aal1 では既存の役割を書き換えられない（staff を admin に上げられない）', async () => {
+      const client = await aal1()
+      const { data, error } = await client
+        .from('user_facilities')
+        .update({ role: 'admin' })
+        .eq('user_id', staff.id)
+        .eq('facility_id', facilityId)
+        .select('user_id')
+      expect(error !== null || (data ?? []).length === 0).toBe(true)
+
+      // 実際に変わっていないことまで見る（0 行で終わったのか、書けたのかを取り違えない）
+      const { data: after } = await service
+        .from('user_facilities')
+        .select('role')
+        .eq('user_id', staff.id)
+        .eq('facility_id', facilityId)
+        .single()
+      expect(after!.role).toBe('staff')
+    })
+
+    it('対照: aal2 まで上げれば配れる（admin の権限そのものは設計どおり）', async () => {
+      // WHY(対照が要る): 「0 行」だけを見ていると、そもそも権限が無い状態でも通ってしまう。
+      //      昇格したら通ることまで見て、初めて aal2 が効いていると言える（M-010 の教訓）
+      const client = await aal1()
+      await stepUpToAal2(client, factorId, secret)
+      const { data, error } = await client
+        .from('user_facilities')
+        .update({ role: 'viewer' })
+        .eq('user_id', staff.id)
+        .eq('facility_id', facilityId)
+        .select('user_id')
+      expect(error).toBeNull()
+      expect(data).toHaveLength(1)
+
+      // 後始末（他のテストが staff を前提にしている）
+      await service
+        .from('user_facilities')
+        .update({ role: 'staff' })
+        .eq('user_id', staff.id)
+        .eq('facility_id', facilityId)
+    })
+  })
 
   it('admin は所属を消せる', async () => {
     const { data, error } = await admin.client
