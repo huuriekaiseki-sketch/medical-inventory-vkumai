@@ -8,7 +8,7 @@ import type { AdminUser } from '@/types/admin'
 import { FACILITY_ROLES, type FacilityRole } from '@/types/role'
 import { parseBody } from '@/lib/validation/parse-body'
 import { deleteUserSchema, inviteInputSchema } from '@/lib/validation/schemas'
-import { recordPrivilegedOperation } from '@/lib/security/privileged-operation'
+import { recordPrivilegedOperation, toOperationErrorCode } from '@/lib/security/privileged-operation'
 
 export async function GET() {
   const user = await requireAdmin()
@@ -71,6 +71,12 @@ export async function POST(request: NextRequest) {
   //      対象。2026-09-07 の点検では 8 通を連続で送れた（止まる仕組みが無かった）。
   //      上限は人が決めた値（aidd.config.json の limits.invitesPerDay = 管理者 1 人あたり
   //      毎日 50 通）。超えたら送らずに 429 を返し、access_denials に残す。
+  //
+  // WHY(消費は送信より前・失敗しても戻さない): 送ってしまったメールは取り消せないので、
+  //      数えるのは必ず送信の前に置く。ただし **送信に失敗しても消費は戻らない**ため、
+  //      SMTP が落ちている間に押し直すと**メールは 1 通も出ないまま枠だけが減る**
+  //      （M-021 の実測、2026-09-07: SMTP を止めると GoTrue は 500 を返し利用者行ごと
+  //      ロールバックするので、残るのはこの枠だけ）。戻すかどうかは未決（#757-38）。
   const quota = await consumeInviteQuota(user.id)
   if (!quota.allowed) {
     return apiError('招待メールの 1 日の上限に達しました。明日以降にやり直してください', 429)
@@ -97,7 +103,7 @@ export async function POST(request: NextRequest) {
     succeeded: !error,
     actorId: user.id,
     targetEmail: email,
-    errorCode: error?.code ?? null,
+    errorCode: toOperationErrorCode(error),
   })
 
   if (error) return apiError(toClientErrorMessage(error, '招待メールの送信に失敗しました'))
@@ -129,7 +135,7 @@ export async function DELETE(request: NextRequest) {
     succeeded: !error,
     actorId: user.id,
     targetUserId: userId,
-    errorCode: error?.code ?? null,
+    errorCode: toOperationErrorCode(error),
   })
 
   if (error) return apiError(toClientErrorMessage(error, 'ユーザーの削除に失敗しました'))

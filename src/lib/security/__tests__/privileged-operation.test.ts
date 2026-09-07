@@ -162,3 +162,36 @@ describe('特権操作の記録ヘルパー（recordPrivilegedOperation） [P-06
     expect(rpc).toHaveBeenCalledTimes(2)
   })
 })
+
+// 部分成功の棚卸し（docs/agents/partial-success-inventory.md）: M-021 メール送信だけ失敗したときの記録
+describe('失敗の理由の残し方（toOperationErrorCode） [M-021]', () => {
+  it('code があればそれを残す', async () => {
+    const m = await loadModule()
+    expect(m.toOperationErrorCode({ code: 'email_exists', status: 422 })).toBe('email_exists')
+  })
+
+  it('code が無ければ HTTP の状態を残す（SMTP 障害の GoTrue は code を付けない）', async () => {
+    // WHY: 2026-09-07 にローカルの SMTP を止めて実測した戻り値がこの形
+    //      （status 500 / message "Error sending invite email" / code なし）。
+    //      code だけを見ていると記録に「失敗」しか残らず、理由が追えない
+    const m = await loadModule()
+    expect(m.toOperationErrorCode({ status: 500 })).toBe('http_500')
+  })
+
+  it('code も status も無ければ unknown（記録を空にしない）', async () => {
+    const m = await loadModule()
+    expect(m.toOperationErrorCode({})).toBe('unknown')
+  })
+
+  it('成功（error が無い）なら null', async () => {
+    const m = await loadModule()
+    expect(m.toOperationErrorCode(null)).toBeNull()
+    expect(m.toOperationErrorCode(undefined)).toBeNull()
+  })
+
+  it('100 文字を超える code は切る（DB の CHECK に当たると記録だけが静かに落ちる）', async () => {
+    const m = await loadModule()
+    const long = 'x'.repeat(300)
+    expect(m.toOperationErrorCode({ code: long })).toHaveLength(100)
+  })
+})
