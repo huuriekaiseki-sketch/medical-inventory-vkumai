@@ -1,0 +1,55 @@
+-- supabase/migrations/20260908010000_add_audit_log_read_indexes.sql
+-- issue #757 の 19（規模の実測）・32（量の上限、quota-inventory の Q-004）。
+-- release-order: db-first
+-- lock: 索引 2 本の作成中、audit_log への書き込み（＝**すべての表の変更**）が止まる。
+--       ローカルの実測は 20 万行・79 MB で 2 本合わせて約 350 ms。本番の行数は未計測。
+--       CREATE INDEX CONCURRENTLY は migration がトランザクション内で走るため使えないので、
+--       利用の少ない時間帯に当てる（docs/agents/release-safety-runbook.md）。
+--
+-- WHY(なぜ足すか): 監査ログの画面（/admin/audit）の**既定の問い合わせ**は
+--      「絞り込みなし・新しい順・50 件」で、これを支える索引が 1 本も無かった。
+--      既存の 2 本は (facility_id, occurred_at DESC) と (table_name, row_id) で、
+--      施設で絞ったときにしか効かない。
+--
+--      2026-09-08 に本物と同じ列・同じ索引の複製表 20 万行（79 MB）で実測した:
+--
+--      | 問い合わせ                     | 足す前                          | 足した後            |
+--      | ------------------------------ | ------------------------------- | ------------------- |
+--      | 既定（絞り込みなし・50 件）    | Seq Scan **5,791 blocks** 19.5ms | Index Scan **5** 0.03ms |
+--      | offset 100,000（上限）         | Seq + ディスクへ 10 MB の外部整列 30.4ms | Index Scan 3,135 8.7ms |
+--      | 期間で絞る（直近 1 日）        | Seq Scan 5,791 12.9ms           | Index Scan **5** 0.02ms |
+--      | 退職者で絞る（古い側にしか居ない） | Seq Scan **5,792** 5.9ms       | Index Scan **5** 0.03ms |
+--
+--      **LIMIT 50 でも毎回 表全体を読んでいた**。監査ログは全表の変更が 1 表に集まるので
+--      いちばん早く大きくなる（Q-004）。行数に比例して悪化する形なので、小さいうちに直す。
+--
+-- WHY(書きの代償を測ったうえで足す): audit_log は**いちばん書かれる表**なので、索引は
+--      ただではない。同じ複製表で 2 万行の挿入を比べると 90.8 ms → 125.6 ms（+38%、
+--      1 行あたり約 +1.7 マイクロ秒）。1 回の変更で 1 行しか書かないので、
+--      読みが 1,000 倍速くなる代わりとしては十分に安い。
+--
+-- WHY((table_name, occurred_at DESC) を足さない): 同じ計測で**要らないと分かった**。
+--      table_name で絞る問い合わせは、既存の (table_name, row_id) の bitmap scan か、
+--      下で足す occurred_at の索引で 5〜19 blocks に収まる（一様な場合・古い側に偏った場合の
+--      どちらでも計画器はこの 2 本を選び、3 本目を使わなかった）。
+--      **残る穴**: 「大量にあり、かつ全部古い table_name」で絞ると bitmap が全一致行を
+--      読んで整列する。その形が出たら足す。
+--
+-- design: 上限そのもの（1 ページの件数）は Q-001 の parsePagination（1〜200、既定 50、
+--      offset は 100,000 まで）を使っており、この migration では変えない。
+--      ここで直すのは「上限内で読んでも表全体を走査していた」こと。
+--      **保持期間（いつ消すか）は未決**。audit_log は append-only で消す手段が無く、
+--      data-lifecycle の D-xxx でも「残る」のまま。決めるのは人（#757-28）。
+--
+-- ROLLBACK:
+--   DROP INDEX IF EXISTS audit_log_occurred_idx;
+--   DROP INDEX IF EXISTS audit_log_actor_occurred_idx;
+
+-- 1. 既定の画面（絞り込みなし・新しい順）と期間での絞り込みを支える
+CREATE INDEX IF NOT EXISTS audit_log_occurred_idx ON audit_log (occurred_at DESC);
+
+-- 2. 「この人が何をしたか」を追う（access_denials・privileged_operations と同じ形に揃える）
+CREATE INDEX IF NOT EXISTS audit_log_actor_occurred_idx ON audit_log (actor_id, occurred_at DESC);
+
+-- 索引の追加のみで列・表の変更が無いため refresh_schema_baseline_snapshot は不要
+-- （20260907000003 と同じ判断）。

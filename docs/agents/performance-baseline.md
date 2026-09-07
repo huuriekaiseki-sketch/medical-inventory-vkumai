@@ -47,6 +47,49 @@ ORDERS=12000 bash scripts/measure-scale.sh
 再発は `scripts/check-foreign-key-indexes.test.sh`（CI `hooks-test`）が止める。
 この検査は実測の前に書いていなかったら見つからなかった `distributor_products.product_id` も拾った。
 
+### 2026-09-08（監査ログの読み方。索引を足す前と後）
+
+`audit_log` は全表の変更が 1 表に集まるので、この製品で**いちばん早く大きくなる**（Q-004）。
+本物と同じ列・同じ索引の**複製表**を 20 万行（79 MB）作って測った
+（`audit_log` は append-only で消せないため、本物には入れない）。
+
+| 画面の問い合わせ | 足す前 | 足した後 |
+| --- | --- | --- |
+| 既定（絞り込みなし・新しい順・50 件） | Seq Scan **5,791 blocks** / 19.5 ms | Index Scan **5 blocks** / 0.03 ms |
+| offset 100,000（`parsePagination` の上限） | Seq Scan + **ディスクへ 10 MB の外部整列** / 30.4 ms | Index Scan 3,135 blocks / 8.7 ms |
+| 期間で絞る（直近 1 日） | Seq Scan 5,791 blocks / 12.9 ms | Index Scan **5 blocks** / 0.02 ms |
+| 実行した人で絞る（一様なデータ） | Seq Scan 5,791 blocks / 7.9 ms | Index Scan 80 blocks / 0.15 ms |
+| 実行した人で絞る（**古い側にしか居ない退職者**） | Seq Scan **5,792 blocks** / 5.9 ms | Index Scan **5 blocks** / 0.03 ms |
+| 施設で絞る（既存の索引が効く） | Index Scan 32 blocks / 0.06 ms | 同じ |
+
+**分かったこと**
+
+- **LIMIT 50 でも毎回 表全体を読んでいた。** 既存の索引は
+  `(facility_id, occurred_at DESC)` と `(table_name, row_id)` で、
+  **施設で絞ったときにしか効かない**。画面の既定は絞り込み無しなので、常に全走査だった。
+- **同じ形の 3 表のうち audit_log だけが穴だった。** `access_denials` と
+  `privileged_operations` には最初から `(occurred_at DESC)` と `(actor_id, occurred_at DESC)` が
+  あり、先に作った audit_log にだけ無い。**作った順で片方だけ抜けた**形。
+- **一様なデータでは穴が見えにくい。** 「実行した人で絞る」は一様なら索引なしでも 7.9 ms で、
+  索引を足しても計画器は `occurred_at` の索引で済ませた。差が出たのは
+  **古い側にしか記録の無い退職者**を探したとき（5,792 blocks → 5 blocks）。
+  *測り方を偏らせないと、要る索引が要らなく見える。*
+- **深い位置（offset 100,000）は 20 万行の時点で既にディスクへこぼれていた**（外部整列 10 MB）。
+
+**書きの代償も測った**: 同じ複製表への 2 万行の挿入が 90.8 ms → 125.6 ms（**+38%**、
+1 行あたり約 +1.7 マイクロ秒）。1 回の変更で 1 行しか書かないので、読みが約 1,000 倍
+（5,791 → 5 blocks）速くなる代わりとしては安い。
+
+**足さなかったもの**: `(table_name, occurred_at DESC)`。一様な場合も古い側に偏った場合も、
+計画器は既存の `(table_name, row_id)` の bitmap か `occurred_at` の索引を選び、
+5〜19 blocks に収まった。**残る穴**は「大量にあり、かつ全部古い table_name」で、
+その形が出たら足す。
+
+**やったこと**: `supabase/migrations/20260908010000_add_audit_log_read_indexes.sql` で索引 2 本を追加。
+再発は `scripts/check-append-only-log-indexes.test.sh`（CI `hooks-test`）が止める
+（append-only の印＝`_immutable()` トリガーで記録表を機械的に見つけ、
+`occurred_at` / `actor_id` の索引を要求する）。
+
 ## 索引を足すときに止まるもの
 
 `CREATE INDEX` は作成中その表への書き込みを止める。migration はトランザクション内で走るため
@@ -61,7 +104,7 @@ ORDERS=12000 bash scripts/measure-scale.sh
 - 発注以外の一覧（返却・消耗品・仕入価格）と横断履歴 `listOrders`。同じ複合索引の形なので
   速いと見込んでいるが未測定
 - 施設が多いとき（テナント数の増加）。今は 1 施設に大量データを入れる形でしか測っていない
-- 監査ログ（`audit_log`）の増え方。全表の変更が 1 表に集まるので、いちばん早く大きくなる
+- 監査ログの**保持期間**。読み方は 2026-09-08 に測ったが、`audit_log` は append-only で消す手段が無く、どこまで増えるかは「使い方次第」のまま。いつ消すかは未決（#757-28）
 - 本番の実データ量。ここの数字はローカルの目安であって、本番の性能ではない
 
 ## 更新の引き金

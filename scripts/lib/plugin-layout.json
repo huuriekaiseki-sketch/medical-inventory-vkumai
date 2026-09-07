@@ -282,6 +282,7 @@
     "check-plugin-check-coverage.test.sh": "プラグインの層の表そのものを検査する。中心リポジトリだけが持つ（build-plugin.test.sh と同じ扱い）",
     "check-fail-open.test.sh": "src/ の実コードと docs/agents/fail-open-inventory.md の実データを走査する。走査の型は汎用だが対象がこのリポジトリの構成",
     "check-flaky-tests.test.sh": "テスト実行コマンドと JSON レポートの形がこのスタック固有",
+    "check-append-only-log-indexes.test.sh": "supabase/migrations/ の実データから append-only の記録表と索引を突合する。表の顔ぶれ（3 表）の期待値もこのリポジトリのもの",
     "check-foreign-key-indexes.test.sh": "supabase/migrations/ の実データから FK 列と索引を突合する",
     "check-human-bypass-inventory.test.sh": "docs/agents/human-bypass-inventory.md の実データを検査する",
     "check-input-validation-coverage.test.sh": "src/app/api/ の route 構成とスキーマの置き場がこのスタック固有",
