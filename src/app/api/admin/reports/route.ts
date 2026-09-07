@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
+import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import { isValidDateString } from '@/lib/jst-date-range'
 import { fetchOrderAmountReport } from '@/lib/reports/repository'
 import type {
@@ -27,8 +27,8 @@ export async function GET(
   let user
   try {
     user = await requireAuth(db)
-  } catch {
-    return reportsApiError('認証が必要です', 401)
+  } catch (e) {
+    return authGuardError(e)
   }
 
   // WHY: requireAdmin()(admin-auth.ts)は未認証/非adminをどちらもnullで返し401/403を区別できない。

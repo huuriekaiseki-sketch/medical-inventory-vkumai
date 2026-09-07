@@ -3,14 +3,14 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { getFacility, updateFacility, deleteFacility } from '@/lib/facilities/repository'
-import { apiError } from '@/lib/api-error'
+import { authGuardError, apiError } from '@/lib/api-error'
 import type { FacilityInput } from '@/types/facility'
 import type { RouteContext } from '@/types/route'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   const db = await createServerSupabase()
-  try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+  try { await requireAuth(db) } catch (e) { return authGuardError(e) }
   const facility = await getFacility(db, id)
   if (!facility) {
     return NextResponse.json({ error: '施設が見つかりません' }, { status: 404 })
@@ -34,7 +34,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     const isAdmin = await resolveIsAdmin(db, user)
     if (!isAdmin) return apiError('権限がありません', 403)
     const facility = await updateFacility(db, id, input)
@@ -57,7 +57,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     const isAdmin = await resolveIsAdmin(db, user)
     if (!isAdmin) return apiError('権限がありません', 403)
     await deleteFacility(db, id)

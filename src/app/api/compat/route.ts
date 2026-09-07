@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listCompatibilities, createCompatibility, listProductsInCategory, categoryExists } from '@/lib/compatibilities/repository'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
+import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import type { ProductCompatibilityInput } from '@/types/compatibility'
 
 // WHY: category_id/product_id_1/product_id_2 はDB上uuid型のためAPI層で形式チェックしておくと
@@ -15,7 +15,7 @@ const MAX_NOTE_LENGTH = 500
 export async function GET(request: NextRequest) {
   try {
     const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { await requireAuth(db) } catch (e) { return authGuardError(e) }
 
     const categoryId = request.nextUrl.searchParams.get('categoryId') ?? undefined
     const keyword = request.nextUrl.searchParams.get('keyword') ?? undefined
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
 
     const isAdmin = await resolveIsAdmin(db, user)
     if (!isAdmin) return apiError('権限がありません', 403)

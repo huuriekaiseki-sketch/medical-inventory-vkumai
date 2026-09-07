@@ -162,7 +162,8 @@
     "log-find-av-precision.sh": "aidd-core",
     "verify-agent-progress-transcript.sh": "aidd-core",
     "lib/verify-agent-progress-transcript.ts": "aidd-core",
-    "check-design-answers.test.sh": "aidd-core"
+    "check-design-answers.test.sh": "aidd-core",
+    "check-rate-limit-coverage.test.sh": "aidd-vkumai"
   },
   "workflowLib": {
     "_comment": ".claude/workflows/lib/ の純粋関数のうち bin/ のスクリプトが node で呼ぶもの。scripts/workflow-lib/ に置く（workflows/ 配下に置くと Workflow として走査されるため）",

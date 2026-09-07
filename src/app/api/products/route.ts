@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listProducts, createProduct } from '@/lib/products/repository'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
+import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parseKeyword } from '@/lib/api-keyword-query'
 import type { ProductInput, ProductsApiErrorResponse, ProductsApiQuery, ProductsApiResponse } from '@/types/product'
 
@@ -19,7 +19,7 @@ export async function GET(
 ): Promise<NextResponse<ProductsApiResponse> | NextResponse<ProductsApiErrorResponse>> {
   try {
     const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return productsApiError('認証が必要です', 401) }
+    try { await requireAuth(db) } catch (e) { return authGuardError(e) }
 
     const kw = parseKeyword(request.nextUrl.searchParams)
     if (!kw.ok) return kw.response
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     const isAdmin = await resolveIsAdmin(db, user)
     if (!isAdmin) return apiError('権限がありません', 403)
     const product = await createProduct(db, input)

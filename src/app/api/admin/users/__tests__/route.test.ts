@@ -24,6 +24,13 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
+const mockConsumeInviteQuota = vi.fn(async () => ({
+  allowed: true, hitCount: 1, limit: 50, resetAt: null, unmeasured: false,
+}))
+vi.mock('@/lib/security/rate-limit', () => ({
+  consumeInviteQuota: (...args: unknown[]) => mockConsumeInviteQuota(...(args as [])),
+}))
+
 vi.mock('@/lib/admin-auth', () => ({
   requireAdmin: async () => {
     const result = await mockGetUser()
@@ -118,6 +125,22 @@ describe('POST /api/admin/users', () => {
     const res = await POST(req)
     expect(res.status).toBe(200)
     expect(mockInviteUserByEmail).toHaveBeenCalledWith('new@test.com')
+  })
+
+  // WHY(#757-32 Q-020): 招待メールは外へ出ていく唯一の経路。上限を超えたら**送らずに**
+  //      429 を返す（人の回答「拒否して記録に残す」）。記録は access_denials 側で確かめる
+  it('1 日の上限を超えたら送らずに 429 を返す', async () => {
+    mockInviteUserByEmail.mockResolvedValue({ error: null })
+    mockConsumeInviteQuota.mockResolvedValueOnce({
+      allowed: false, hitCount: 51, limit: 50, resetAt: null, unmeasured: false,
+    })
+    const req = new NextRequest('http://localhost/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'over@test.com' }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(429)
+    expect(mockInviteUserByEmail).not.toHaveBeenCalledWith('over@test.com')
   })
 
   it('email 未指定は 400 を返す', async () => {

@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { deleteCompatibility } from '@/lib/compatibilities/repository'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
+import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import type { RouteContext } from '@/types/route'
 
 // WHY: idはDB上uuid型のため、不正形式のまま渡すとPostgres側の生のパースエラーが
@@ -15,7 +15,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
 
     const isAdmin = await resolveIsAdmin(db, user)
     if (!isAdmin) return apiError('権限がありません', 403)
