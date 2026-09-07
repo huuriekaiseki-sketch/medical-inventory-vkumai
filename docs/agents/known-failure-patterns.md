@@ -465,7 +465,8 @@ DELETE、RPC関数）をレビューする際は、以下を**攻撃者視点**�
 | クリーンインストール | CI 全ジョブの `npm ci`（`npm install` は `scripts/check-no-registry-fetch.test.sh` で禁止） | package.json と lockfile の不整合、PC だけで動く依存状態 | lockfile に既に入った悪意ある部品 |
 | ロックファイルの出所 | `scripts/check-lockfile-integrity.test.sh`（hooks-test） | レジストリ外の出所、integrity 欠落、git / file / http 指定 | レジストリ上の正規パッケージ内部の悪意 |
 | 既知脆弱性 | CI `dependency-audit` ジョブ（`npm audit --omit=dev --audit-level=high`） | 公開済み脆弱性 | 未公表の攻撃、登録されていない悪意あるコード |
-| Dependabot | `.github/dependabot.yml`（weekly） | 古い版の放置 | 新版そのものの侵害 |
+| Dependabot | `.github/dependabot.yml`（weekly） | 古い版の放置（minor / patch） | 新版そのものの侵害。major は人が判断するまで open のまま |
+| 月次の棚卸し | `docs/agents/dependency-update-runbook.md`（SessionStart `check-dependency-update-staleness.sh` と maintenance-digest が期限を警告） | major の保留理由・Dependabot の停止・`outdated` の表示ずれ | 棚卸しの中身の妥当性 |
 
 **入ってしまったら:** 疑いのある変更を含むデプロイを止め、安全だったコミットへ戻し、侵害期間中に
 読まれた可能性のある認証情報（GitHub・Supabase・DB・外部 API）をローテーションし、信頼できる
