@@ -128,6 +128,10 @@
     {
       "label": "32 回数の上限の実装（24・design-questions の上）",
       "branch": "feat/rate-limit"
+    },
+    {
+      "label": "8 拒否の異常検知（16・24・32 の上）",
+      "branch": "feat/denial-anomaly-detection"
     }
   ]
 }
