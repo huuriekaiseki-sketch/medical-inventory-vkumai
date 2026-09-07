@@ -196,7 +196,8 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
         patch: { status: 'submitted' },
       },
       case_order_items: {
-        facilityId: null, // 明細は facility_id 列を持たない（後述の「読み手」テストで扱う）
+        // 明細は facility_id 列を持たないが、20260907000001 でトリガーが親からたどる
+        facilityId: 'fixture',
         insert: async () => ({ case_order_id: caseOrderId, jan: `A${tag}`, quantity: 1 }),
         patch: { quantity: 3 },
       },
@@ -206,7 +207,7 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
         patch: { status: 'submitted' },
       },
       consumable_order_items: {
-        facilityId: null,
+        facilityId: 'fixture', // 親からたどる（20260907000001）
         insert: async () => ({
           consumable_order_id: consumableOrderId,
           consumable_id: consumableId,
@@ -224,7 +225,7 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
         patch: { status: 'submitted' },
       },
       loan_order_items: {
-        facilityId: null,
+        facilityId: 'fixture', // 親からたどる（20260907000001）
         insert: async () => ({ loan_order_id: loanOrderId, name: 'ダミー明細', quantity: 1 }),
         patch: { quantity: 5 },
       },
@@ -234,7 +235,7 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
         patch: { status: 'returned' },
       },
       loan_return_items: {
-        facilityId: null,
+        facilityId: 'fixture', // 親からたどる（20260907000001）
         insert: async () => ({ loan_return_id: loanReturnId, jan: `A${tag}`, quantity: 1 }),
         patch: { quantity: 6 },
       },
@@ -297,7 +298,19 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
         continue
       }
       const inserted_ = inserted as Record<string, unknown>
-      let rows = await newRows(table, before)
+
+      // WHY(自分の行だけを数える): vitest は統合テストのファイルを並列で走らせるので、
+      //      同じ表への他ファイルの書き込みが「増えた監査行」に混ざる。
+      //      実際に case_order_items / consumable_order_items で 2 行になり誤検知した。
+      //      増分から**今書いた行のものだけ**を取り出して数える。
+      const isOurs = (r: AuditRow): boolean => {
+        if (c.hasRowId !== false) return r.row_id === (inserted_.id as string)
+        const body = (r.new_data ?? r.old_data) ?? {}
+        return body.user_id === inserted_.user_id && body.facility_id === inserted_.facility_id
+      }
+      const ourNewRows = async (from: Set<string>) => (await newRows(table, from)).filter(isOurs)
+
+      let rows = await ourNewRows(before)
       if (rows.length !== 1 || rows[0].action !== 'INSERT') {
         problems.push(`${table}: INSERT で ${rows.length} 行（期待 1 行 / INSERT）`)
       } else {
@@ -324,7 +337,7 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
       if (updateError) {
         problems.push(`${table}: UPDATE 自体に失敗（${(updateError as { message: string }).message}）`)
       } else {
-        rows = await newRows(table, before)
+        rows = await ourNewRows(before)
         if (rows.length !== 1 || rows[0].action !== 'UPDATE') {
           problems.push(`${table}: UPDATE で ${rows.length} 行（期待 1 行 / UPDATE）`)
         }
@@ -336,7 +349,7 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
       if (deleteError) {
         problems.push(`${table}: DELETE 自体に失敗（${(deleteError as { message: string }).message}）`)
       } else {
-        rows = await newRows(table, before)
+        rows = await ourNewRows(before)
         if (rows.length !== 1 || rows[0].action !== 'DELETE') {
           problems.push(`${table}: DELETE で ${rows.length} 行（期待 1 行 / DELETE）`)
         } else if (rows[0].old_data === null) {
@@ -353,7 +366,7 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
   //      is_facility_member(facility_id)) なので、facility_id が入らない行は
   //      全体管理者にしか見えない。明細（*_items）は facility_id 列を持たないため、
   //      ここに構造的な差がある。推測で書かず、実際に読んで測る。
-  it('施設の人はヘッダの監査行を読めるが、明細の監査行は読めない（facility_id が入らないため）', async () => {
+  it('施設の人はヘッダも明細も監査行を読める（明細は親から facility_id をたどる）', async () => {
     const order = await service
       .from('loan_orders')
       .insert({ facility_id: facilityId, procedure_name: 'ダミー術式4', maker: 'ダミーメーカー' })
@@ -372,12 +385,49 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
       return (data ?? []).length
     }
 
-    // ヘッダは facility_id が入るので、その施設の人が読める
+    // ヘッダは自分の facility_id が入る
     expect(await readable(staff.client, 'loan_orders', orderId)).toBe(1)
-    // 明細は facility_id が入らないので、その施設の人には見えない（service_role では見える）
+    // 明細は列を持たないが、トリガーが親（loan_orders）からたどって入れる
     expect(await readable(service, 'loan_order_items', itemId)).toBe(1)
-    expect(await readable(staff.client, 'loan_order_items', itemId)).toBe(0)
+    expect(await readable(staff.client, 'loan_order_items', itemId)).toBe(1)
 
     await service.from('loan_orders').delete().eq('id', orderId)
+  }, 60_000)
+
+  // WHY: 親ごと消したときだけは親からたどれない（PostgreSQL は親の DELETE のあとに
+  //      カスケードで子を消すので、子の AFTER DELETE が走る時点で親の行が無い）。
+  //      これは 20260907000001 のコメントに「あえて残す限界」と書いた挙動であり、
+  //      書いただけで確かめないと本当かどうか分からないのでここで測る。
+  //      施設の人が「その発注が消えた」ことは親の DELETE 監査行から追える。
+  it('親ごと削除したときは明細の監査行の facility_id が null になる（親の行には入る）', async () => {
+    const order = await service
+      .from('loan_orders')
+      .insert({ facility_id: facilityId, procedure_name: 'ダミー術式5', maker: 'ダミーメーカー' })
+      .select('id')
+      .single()
+    const orderId = (order.data as { id: string }).id
+    const item = await service
+      .from('loan_order_items')
+      .insert({ loan_order_id: orderId, name: 'ダミー明細3', quantity: 1 })
+      .select('id')
+      .single()
+    const itemId = (item.data as { id: string }).id
+
+    await service.from('loan_orders').delete().eq('id', orderId)
+
+    const facilityOf = async (table: string, rowId: string) => {
+      const { data } = await service
+        .from('audit_log')
+        .select('facility_id')
+        .eq('table_name', table)
+        .eq('row_id', rowId)
+        .eq('action', 'DELETE')
+      const rows = (data ?? []) as Array<{ facility_id: string | null }>
+      expect(rows).toHaveLength(1)
+      return rows[0].facility_id
+    }
+
+    expect(await facilityOf('loan_order_items', itemId)).toBeNull()
+    expect(await facilityOf('loan_orders', orderId)).toBe(facilityId)
   }, 60_000)
 })

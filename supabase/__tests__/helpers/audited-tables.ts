@@ -76,20 +76,34 @@ export function auditedTablesFromMigrations(): Set<string> {
     const sql = stripComments(readMigration(file))
     if (!sql.includes('audit_row_change')) continue
 
+    // WHY(出現順に処理する): 1 つの migration が「外して付け直す」ことがある
+    //      （20260907000001 が明細 4 表を DROP → CREATE している）。
+    //      作成をまとめて処理してから削除をまとめて処理すると、削除が後勝ちになって
+    //      「付け直したのに外れている」と誤って読む（実際にこれで誤検知した）。
+    const events: Array<{ at: number; add?: string[]; remove?: string }> = []
+
     for (const block of sql.matchAll(/foreach\s+\w+\s+in\s+array\s+array\[([^\]]*)\]/g)) {
-      for (const name of block[1].matchAll(/'([a-z_][a-z0-9_]*)'/g)) audited.add(name[1])
+      events.push({
+        at: block.index ?? 0,
+        add: [...block[1].matchAll(/'([a-z_][a-z0-9_]*)'/g)].map((m) => m[1]),
+      })
     }
 
     for (const t of sql.matchAll(
       /create trigger\s+"?[a-z0-9_]+"?\s+after[^;]*?\son\s+((?:"?public"?\.)?"?[a-z_][a-z0-9_]*"?)[^;]*?audit_row_change/g,
     )) {
-      audited.add(normalizeTableName(t[1]))
+      events.push({ at: t.index ?? 0, add: [normalizeTableName(t[1])] })
     }
 
     for (const t of sql.matchAll(
       /drop trigger\s+(?:if exists\s+)?"?[a-z0-9_]+_audit"?\s+on\s+((?:"?public"?\.)?"?[a-z_][a-z0-9_]*"?)/g,
     )) {
-      audited.delete(normalizeTableName(t[1]))
+      events.push({ at: t.index ?? 0, remove: normalizeTableName(t[1]) })
+    }
+
+    for (const e of events.sort((a, b) => a.at - b.at)) {
+      if (e.add) for (const name of e.add) audited.add(name)
+      if (e.remove) audited.delete(e.remove)
     }
   }
   return audited
