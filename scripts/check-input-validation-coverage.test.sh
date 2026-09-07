@@ -140,8 +140,8 @@ fi
 
 echo "=== scenario 4: 借金の件数が増えていない ==="
 PENDING_COUNT="$(node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log((b.pending??[]).length)' "$BASELINE")"
-# 2026-09-07 の実測。**この数字は減らすことしかできない**
-MAX_PENDING=16
+# 2026-09-07 の実測。**この数字は減らすことしかできない**（16 → マスタ系 7 本・互換・admin 2 本を移して 6）
+MAX_PENDING=6
 if [ "$PENDING_COUNT" -le "$MAX_PENDING" ]; then
   assert_ok "借金は $PENDING_COUNT 本（基準 $MAX_PENDING 以下）"
 else

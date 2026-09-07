@@ -19,9 +19,12 @@ ALTER TABLE categories
     description IS NULL OR length(description) <= 1000
   ) NOT VALID;
 
+-- WHY: 500 は API が既に手書きで効かせていた値（src/app/api/compat/route.ts の MAX_NOTE_LENGTH）。
+--      DB だけ 1,000 にすると 2 か所で食い違うので、いま効いている値をそのまま採る
+--      （人の判断: 表に無い値は「現在の値のまま確定する」）
 ALTER TABLE product_compatibilities
   ADD CONSTRAINT product_compatibilities_note_length CHECK (
-    note IS NULL OR length(note) <= 1000
+    note IS NULL OR length(note) <= 500
   ) NOT VALID;
 
 -- 拒否の記録の経路。20260907000002 の注記どおり 200 文字に収める

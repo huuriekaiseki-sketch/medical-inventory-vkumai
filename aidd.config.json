@@ -73,7 +73,9 @@
       "purpose": 1000,
       "doctorName": 100,
       "expiryText": 100,
-      "supplierName": 200
+      "supplierName": 200,
+      "note": 500,
+      "emailAddress": 254
     },
     "requestsPerMinute": 300,
     "invitesPerDay": 50

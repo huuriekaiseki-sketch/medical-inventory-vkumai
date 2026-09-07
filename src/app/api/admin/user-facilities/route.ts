@@ -2,26 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/server'
 import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { requireAdmin } from '@/lib/admin-auth'
-import { FACILITY_ROLES, type FacilityRole } from '@/types/role'
+import { parseBody } from '@/lib/validation/parse-body'
+import { userFacilityAssignSchema, userFacilityRemoveSchema } from '@/lib/validation/schemas'
 
 export async function POST(request: NextRequest) {
   const user = await requireAdmin()
   if (!user) return apiError('権限がありません', 403)
 
-  let userId: string | undefined, facilityId: string | undefined, role: FacilityRole | undefined
-  try {
-    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
-    const body = await request.json()
-    userId = body.userId
-    facilityId = body.facilityId
-    role = body.role
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-  if (!userId || !facilityId) return apiError('userId と facilityId は必須です', 400)
-  if (role !== undefined && !FACILITY_ROLES.includes(role)) {
-    return apiError(`role は ${FACILITY_ROLES.map((r) => `'${r}'`).join('・')} のいずれかのみ指定できます`, 400)
-  }
+  const parsed = await parseBody(request, userFacilityAssignSchema)
+  if (!parsed.ok) return parsed.response
+  const { userId, facilityId, role } = parsed.data
 
   const admin = createAdminSupabase()
   const { error } = await admin
@@ -40,16 +30,9 @@ export async function DELETE(request: NextRequest) {
   const user = await requireAdmin()
   if (!user) return apiError('権限がありません', 403)
 
-  let userId: string, facilityId: string
-  try {
-    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
-    const body = await request.json()
-    userId = body.userId
-    facilityId = body.facilityId
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-  if (!userId || !facilityId) return apiError('userId と facilityId は必須です', 400)
+  const parsed = await parseBody(request, userFacilityRemoveSchema)
+  if (!parsed.ok) return parsed.response
+  const { userId, facilityId } = parsed.data
 
   const admin = createAdminSupabase()
   const { error } = await admin

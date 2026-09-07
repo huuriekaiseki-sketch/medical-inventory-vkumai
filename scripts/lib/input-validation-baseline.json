@@ -2,21 +2,29 @@
   "_comment": "issue #757 の 20。本文（request.json()）を読むのに zod スキーマを通していない route の一覧（2026-09-07 時点の借金）。**この一覧は減らすことしかできない。**新しい route がここに載っていない状態で本文を検査せずに読むと scripts/check-input-validation-coverage.test.sh が落ちる。1 本ずつ src/lib/validation/schemas.ts のスキーマへ移し、移したらこの一覧から消す。消し忘れも検知する（一覧にあるのに実はスキーマを使っている＝陳腐化）。",
   "_howto": "移し方: (1) schemas.ts にその route の本文のスキーマを足す（上限の数字は書かない。text-limits.ts の requiredText / optionalText を使う） (2) route で safeParse し、失敗したら firstIssueMessage で 400 (3) この一覧から行を消す (4) bash scripts/check-input-validation-coverage.test.sh",
   "pending": [
-    { "route": "api/compat/route.ts", "why": "JAN 2 つを受けるだけ。文字数は janOrRef で決まっている" },
-    { "route": "api/products/route.ts", "why": "商品マスタ。productInputSchema は用意済みで未適用" },
-    { "route": "api/products/[id]/route.ts", "why": "同上（更新）" },
-    { "route": "api/distributor-products/route.ts", "why": "代理店商品。distributorProductInputSchema は用意済みで未適用" },
-    { "route": "api/distributor-products/[id]/route.ts", "why": "同上（更新）" },
-    { "route": "api/facilities/route.ts", "why": "施設。facilityInputSchema は用意済みで未適用" },
-    { "route": "api/facilities/[id]/route.ts", "why": "同上（更新）" },
-    { "route": "api/categories/[id]/route.ts", "why": "カテゴリの更新。作成側は移行済み" },
-    { "route": "api/case-orders/route.ts", "why": "症例発注。caseOrderHeaderSchema は用意済み。明細の配列を含むので移行の影響が大きい" },
-    { "route": "api/loan-orders/route.ts", "why": "短貸発注。loanOrderHeaderSchema は用意済み。同上" },
-    { "route": "api/loan-returns/route.ts", "why": "短貸返却。明細の配列を含む" },
-    { "route": "api/consumable-orders/route.ts", "why": "消耗品発注。明細の配列を含む" },
-    { "route": "api/hospital-prices/route.ts", "why": "仕入価格。自由入力が無く数値と ID だけ" },
-    { "route": "api/hospital-prices/[id]/route.ts", "why": "同上（更新。楽観ロックの版も受ける）" },
-    { "route": "api/admin/users/route.ts", "why": "招待メール。email の形式検証が要る（文字数だけの話ではない）" },
-    { "route": "api/admin/user-facilities/route.ts", "why": "所属の付け外し。ID と役割だけで自由入力が無い" }
+    {
+      "route": "api/case-orders/route.ts",
+      "why": "症例発注。caseOrderHeaderSchema は用意済み。明細の配列を含むので移行の影響が大きい"
+    },
+    {
+      "route": "api/loan-orders/route.ts",
+      "why": "短貸発注。loanOrderHeaderSchema は用意済み。同上"
+    },
+    {
+      "route": "api/loan-returns/route.ts",
+      "why": "短貸返却。明細の配列を含む"
+    },
+    {
+      "route": "api/consumable-orders/route.ts",
+      "why": "消耗品発注。明細の配列を含む"
+    },
+    {
+      "route": "api/hospital-prices/route.ts",
+      "why": "仕入価格。自由入力が無く数値と ID だけ"
+    },
+    {
+      "route": "api/hospital-prices/[id]/route.ts",
+      "why": "同上（更新。楽観ロックの版も受ける）"
+    }
   ]
 }

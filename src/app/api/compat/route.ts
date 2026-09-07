@@ -4,13 +4,14 @@ import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listCompatibilities, createCompatibility, listProductsInCategory, categoryExists } from '@/lib/compatibilities/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
-import type { ProductCompatibilityInput } from '@/types/compatibility'
+import { parseBody } from '@/lib/validation/parse-body'
+import { compatibilityInputSchema } from '@/lib/validation/schemas'
 
 // WHY: category_id/product_id_1/product_id_2 はDB上uuid型のためAPI層で形式チェックしておくと
-// 不正値をFK違反として捕捉する前に400で弾ける（SPEC Part2 Set D参照）
+// 不正値をFK違反として捕捉する前に400で弾ける（SPEC Part2 Set D参照）。
+// POST の本文は compatibilityInputSchema が見る。この正規表現は GET のクエリ用に残す
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_KEYWORD_LENGTH = 100
-const MAX_NOTE_LENGTH = 500
 
 export async function GET(request: NextRequest) {
   try {
@@ -44,33 +45,15 @@ export async function POST(request: NextRequest) {
     const isAdmin = await resolveIsAdmin(db, user)
     if (!isAdmin) return apiError('権限がありません', 403)
 
-    let input: ProductCompatibilityInput
-    try {
-      // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
-      input = await request.json()
-    } catch {
-      return apiError('リクエストが不正です', 400)
-    }
-
-    const { categoryId, productId1, productId2 } = input
-    const note = input.note ?? null
-
-    if (!categoryId || !productId1 || !productId2) {
-      return apiError('categoryId, productId1, productId2 は必須です', 400)
-    }
-
-    if (!UUID_RE.test(categoryId) || !UUID_RE.test(productId1) || !UUID_RE.test(productId2)) {
-      return apiError('IDの形式が不正です', 400)
-    }
+    const parsed = await parseBody(request, compatibilityInputSchema)
+    if (!parsed.ok) return parsed.response
+    const { categoryId, productId1, productId2 } = parsed.data
+    const note = parsed.data.note ?? null
 
     // WHY: 正規化前（DB挿入前）の生の値で自己参照を判定する。
     // product_id_1 < product_id_2 の正規化はrepository層の責務のため、ここでは順序を問わない一致のみ見る。
     if (productId1 === productId2) {
       return apiError('同じ製品同士は互換登録できません', 400)
-    }
-
-    if (note !== null && (typeof note !== 'string' || note.length > MAX_NOTE_LENGTH)) {
-      return apiError('備考は500文字以内の文字列で入力してください', 400)
     }
 
     // WHY: listProductsInCategory はカテゴリが存在しなくても単に空配列を返すため、

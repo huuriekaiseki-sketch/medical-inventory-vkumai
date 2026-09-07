@@ -4,8 +4,9 @@ import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { getDistributorProduct, updateDistributorProduct, deleteDistributorProduct } from '@/lib/distributor-products/repository'
 import { authGuardError, apiError } from '@/lib/api-error'
-import type { DistributorProductInput } from '@/types/distributorProduct'
 import type { RouteContext } from '@/types/route'
+import { parseBody } from '@/lib/validation/parse-body'
+import { distributorProductInputSchema } from '@/lib/validation/schemas'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
@@ -20,17 +21,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PUT(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
-  let input: DistributorProductInput
-  try {
-    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
-    input = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'リクエストが不正です' }, { status: 400 })
-  }
-
-  if (!input.productId || !input.maker || !input.supplier || !input.name || !input.categoryId) {
-    return NextResponse.json({ error: '必須項目が未入力です' }, { status: 400 })
-  }
+  const parsed = await parseBody(request, distributorProductInputSchema)
+  if (!parsed.ok) return parsed.response
+  const input = parsed.data
 
   try {
     const db = await createServerSupabase()

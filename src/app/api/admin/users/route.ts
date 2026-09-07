@@ -6,6 +6,8 @@ import { consumeInviteQuota } from '@/lib/security/rate-limit'
 import { asEnum } from '@/lib/mapping'
 import type { AdminUser } from '@/types/admin'
 import { FACILITY_ROLES, type FacilityRole } from '@/types/role'
+import { parseBody } from '@/lib/validation/parse-body'
+import { deleteUserSchema, inviteInputSchema } from '@/lib/validation/schemas'
 
 export async function GET() {
   const user = await requireAdmin()
@@ -47,15 +49,9 @@ export async function POST(request: NextRequest) {
   const user = await requireAdmin()
   if (!user) return apiError('権限がありません', 403)
 
-  let email: string | undefined
-  try {
-    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
-    const body = await request.json()
-    email = body.email?.trim()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-  if (!email) return apiError('email は必須です', 400)
+  const parsed = await parseBody(request, inviteInputSchema)
+  if (!parsed.ok) return parsed.response
+  const { email } = parsed.data
 
   // WHY(#757-32 Q-020): 招待メールは外に出ていく唯一の経路で、従量課金と迷惑メール判定の
   //      対象。2026-09-07 の点検では 8 通を連続で送れた（止まる仕組みが無かった）。
@@ -77,15 +73,9 @@ export async function DELETE(request: NextRequest) {
   const user = await requireAdmin()
   if (!user) return apiError('権限がありません', 403)
 
-  let userId: string
-  try {
-    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
-    const body = await request.json()
-    userId = body.userId
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-  if (!userId) return apiError('userId は必須です', 400)
+  const parsed = await parseBody(request, deleteUserSchema)
+  if (!parsed.ok) return parsed.response
+  const { userId } = parsed.data
   if (userId === user.id) return apiError('自分自身は削除できません', 400)
 
   const admin = createAdminSupabase()

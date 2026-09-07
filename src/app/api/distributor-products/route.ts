@@ -5,8 +5,9 @@ import { resolveIsAdmin } from '@/lib/admin-status'
 import { listDistributorProducts, createDistributorProduct } from '@/lib/distributor-products/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parseKeyword } from '@/lib/api-keyword-query'
+import { parseBody } from '@/lib/validation/parse-body'
+import { distributorProductInputSchema } from '@/lib/validation/schemas'
 import type {
-  DistributorProductInput,
   DistributorProductsApiErrorResponse,
   DistributorProductsApiQuery,
   DistributorProductsApiResponse,
@@ -52,17 +53,9 @@ export async function GET(
 }
 
 export async function POST(request: NextRequest) {
-  let input: DistributorProductInput
-  try {
-    // eslint-disable-next-line no-restricted-syntax -- #757-20 の移行待ち（scripts/lib/input-validation-baseline.json）。parseBody へ移したらこの行を消す
-    input = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-
-  if (!input.productId || !input.maker || !input.supplier || !input.name || !input.categoryId) {
-    return apiError('必須項目が未入力です', 400)
-  }
+  const parsed = await parseBody(request, distributorProductInputSchema)
+  if (!parsed.ok) return parsed.response
+  const input = parsed.data
 
   try {
     const db = await createServerSupabase()
