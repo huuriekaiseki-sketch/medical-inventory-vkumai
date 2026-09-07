@@ -70,6 +70,7 @@
 | 障害注入（外部依存停止） | ⬜ 未整備 | 節目 | 依存 major 更新、外部公開前 | Supabase 停止・タイムアウト時に UI / API Route がハングせず失敗を返すか未確認 | — | fault-injection | Chaos Engineering（縮小版） | — |
 | 障害注入（外部依存停止） | 🟡 | 節目 | 依存 major 更新、外部公開前。認可・認証・MFA の判定材料を取る箇所に触れた PR は手元で回す | 判定材料（Auth・MFA API・認可 RPC）が取れないときに拒否側へ倒れることは、モックでエラーを注入する単体テストと `docs/agents/fail-open-inventory.md`（F-xxx）+ 構造テストで固定した（issue #757 の 31。proxy の MFA ガードが開いていたのを修正）。未整備: Supabase を実際に止めて UI / API Route がハングせず失敗を返すことの実測 | `docs/agents/fail-open-inventory.md`、`scripts/check-fail-open.test.sh`、`src/__tests__/proxy.test.ts` | fault-injection | Chaos Engineering（縮小版） | `bash scripts/check-fail-open.test.sh` |
 | 復旧手順（ランブック） | 🟡 | 節目 | 障害発生時、公開前 | Workflow 中断の再開手順と recovery-queue はあるが、本番 DB・認証（MFA/AAL2）障害時の手順は無い | `docs/agents/workflow-resume-runbook.md`、`docs/agents/recovery-queue.md` | runbook | SRE ランブック | — |
+| 復旧手順（ランブック） | 🟡 | 節目 | 障害発生時、公開前 | Workflow 中断の再開手順と recovery-queue、リリース順序（DB が先・縮めるは後）と混在期間・ロールバックの手順（2026-09-06、#757-13・25）はある。本番 DB・認証（MFA/AAL2）障害時の手順とバックアップ復元の実演（#757-11・23）は無い | `docs/agents/workflow-resume-runbook.md`、`docs/agents/recovery-queue.md`、`docs/agents/release-safety-runbook.md`、`scripts/check-migration-release-safety.test.sh` | runbook | SRE ランブック | — |
 
 ## 節目のイベント
 
