@@ -29,6 +29,16 @@ paths:
   - ポリシーを作らない表（SECURITY DEFINER 関数からしか触らない表）は、
     **実 DB で「読める人・読めない人」を測る統合テスト**も必須（静的検査は GRANT の文字列しか見られない）
 
+- **新しい施設ロールを足すときは 4 軸すべてを決める（2026-09-07）。**
+  読む / 書く / マスタを書く / 画面の書き込み UI。決めた内容は
+  [`docs/agents/role-rulebook.md`](../../docs/agents/role-rulebook.md)（R-xxx）に 1 行書く。
+  「どのロールが何をできるか」は DB の CHECK・`is_facility_writer()`・`is_admin()`・
+  `useFacilityRole.ts` の **4 か所**に別々にあり、互いの一致を誰も見ていなかった
+  （viewer 追加時に TypeScript 側の更新漏れで誤表示が 2 回起きている）。
+  `supabase/migrations/__tests__/role_registry.test.ts` が 4 か所と宣言を両方向で突き合わせ、
+  `supabase/__tests__/integration/role-capabilities.integration.test.ts` が表を読んで
+  **全ロールを実 DB で実測する**（行を足せば自動で測定対象になる）。
+
 - **`supabase/` を触ったら `bash scripts/run-integration-tests.sh` で全件を通す。**
   素の `npm run test:integration` ではなくこのラッパーを使うと、結果が
   `logs/integration-runs.jsonl` に機械的に記録される（通ったことにはできない。記録するのは exit code）。
