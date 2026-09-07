@@ -500,3 +500,53 @@ E2E の既定ユーザーは `is_admin()` が真の admin で、施設一覧に�
 **How to apply:** 新しい検査を書いたら、対象スクリプトを層の表に足すか、`checks` に層を書くか、
 `checksNotDistributed` に理由を書く。どれもしなければ `npm test` の hook 回帰が落ちる。
 共通側（aidd-core）に置くものは fixture からこのリポジトリの語彙（ドメイン語・スタック名）を外す。
+
+## なぜブランチ運用ルールの機械検知を warning のみにし、検知できない範囲を残したか
+
+**結論: 止めずに警告する。検知できない範囲は消さずに書いて残す。**
+
+`docs/agents/common.md`「ブランチ運用ルール」の本体は 3 行だが、
+その 3 行を守らせる hook には**それぞれ検知できない範囲がある**。
+2026-09-07 に common.md を常時ロードの上限まで圧縮した際、
+ルールは残し、この理由の記述をここへ移した。
+
+### `check-branch-pr-status.sh`（マージ済みブランチ上での作業）
+
+`git branch --show-current` → `gh pr list --head <branch> --state merged` が空でなければ
+セッション開始時に警告する。実際に issue-20-orders-list-page 等で、マージ済みブランチ上で
+気づかず並行作業が続き、重複・陳腐化した worktree が複数残った実害があったため入れた。
+
+**検知できない範囲**: 「別 issue の**未マージ** PR が乗っている」ケース（マージ前の分岐）は対象外で、
+引き続き人手の確認に依存する。マージ済みかどうかは `gh` で分かるが、
+「この未マージ PR は別の issue のものだ」は機械には判定できないため。
+
+### `check-local-main-freshness.sh`（ローカル main の遅れ、issue #499）
+
+FETCH_HEAD の更新時刻が既定 24 時間（`LOCAL_MAIN_STALE_HOURS` で変更可）より古いか、
+`git rev-list --count main..origin/main` が 1 以上なら警告する。
+**fetch 自体は hook 内で実行しない**ので、ネットワークアクセス無し・オフラインでも動く。
+
+worktree 環境では `.git` がファイルで FETCH_HEAD の実体が worktree 固有パスにあるため、
+`git rev-parse --git-path FETCH_HEAD` で実パスを解決している
+（`.git/FETCH_HEAD` と決め打ちすると存在しないパスを見て誤判定する）。
+
+**検知できない範囲**: これは**近似判定**で、実際にリモートで何が起きているかは見ていない。
+前回 fetch 時点の情報を基準にするため、**fetch 直後に他者が push した場合は検知できない**。
+
+### `scripts/create-worktree.sh`（.env の引き継ぎ）
+
+`git worktree` は git 管理外ファイル（`.env.local`・`.env.test` 等、`.gitignore` 対象）を
+新規 worktree へ引き継がないため、素の `git worktree add` だけで作ると
+`NEXT_PUBLIC_SUPABASE_URL` 等が欠落し Runtime Error になる（発生源: supabase-env-config-325893 セッション）。
+このスクリプトは `origin/main` 起点での branch 作成と `.env` のコピーをまとめて行う。
+
+**検知できない範囲**: Claude Code 本体の EnterWorktree ツール経由で worktree を作った場合は
+このスクリプトを経由しないため、同じ欠落が起きうる。**ツール内部の挙動でこのリポジトリからは制御できない**。
+その場合は手動で `.env.local` / `.env.test` をコピーする必要がある。
+
+### なぜ block しないか
+
+3 つとも「危険な操作」ではなく「**後で手戻りになる状態**」を指すもので、
+正当なケースが実在する（意図的に既存ブランチへ積む、オフラインで作業する）。
+止めると回避手段を探させることになり、[`actuator-inventory.md`](./actuator-inventory.md) の
+warning-only 群と同じ判断になる。
