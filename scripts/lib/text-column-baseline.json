@@ -1,0 +1,13 @@
+{
+  "_comment": "issue #757 の 20。長さの CHECK も固定語の CHECK も無い TEXT 列のうち、上限を付けなくてよいと判断したもの（2026-09-07 時点）。**この一覧は増やせない。**新しい列がここに載っていない状態で上限なしで増えると scripts/check-text-column-limits.test.sh が落ちる。載せるときは「なぜ利用者が入れる自由入力ではないのか」を書く。",
+  "_howto": "上限を付けるなら supabase/migrations に CHECK を足し（値は aidd.config.json の limits.textLength から選ぶ）、この一覧から行を消す。消し忘れも検知する。",
+  "exempt": [
+    { "column": "access_denials.method", "why": "サーバーが proxy のヘッダから入れる HTTP メソッド。利用者は書けない（RPC は service_role のみ）" },
+    { "column": "audit_log.actor_role", "why": "トリガーが current_user から入れる。利用者は書けない（append-only）" },
+    { "column": "audit_log.changed_columns", "why": "トリガーが列名の配列を入れる。利用者は書けない" },
+    { "column": "audit_log.table_name", "why": "トリガーが TG_TABLE_NAME を入れる。利用者は書けない" },
+    { "column": "schema_baseline_snapshots.epoch", "why": "migration が自分のタイムスタンプを入れる。利用者は書けない" },
+    { "column": "schema_drift_log.issue_url", "why": "GitHub Actions が作った issue の URL。利用者は書けない" },
+    { "column": "schema_drift_log.object_name", "why": "検知した表名・不変条件 ID・拒否の伏せ字。すべてサーバーが作る" }
+  ]
+}
