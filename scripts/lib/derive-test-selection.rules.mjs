@@ -211,6 +211,21 @@ export const RULES = [
   },
   { key: 'schema-drift', label: 'スキーマドリフト検知', timing: 'milestone', event: '日次 cron（自動）' },
   {
+    key: 'flaky',
+    label: 'フレーキー検知',
+    timing: 'milestone',
+    event: '週次 cron（自動。日曜 20:00 UTC）。同時実行・冪等性の統合テストや検知スクリプト自体に触れた PR は手元で回す',
+    // 揺れやすい統合テスト（並列・同時送信）と検知の仕組み自体に触れた PR はローカル実行に昇格させる
+    trigger: ctx => {
+      const hits = anyPath(
+        ctx.files,
+        /^supabase\/__tests__\/integration\/[^/]*(concurrency|idempotency)[^/]*\.ts$|^scripts\/check-flaky-tests\.sh$|^scripts\/lib\/flaky-[^/]+\.(mjs|sh)$|^\.github\/workflows\/flaky-detection\.yml$/,
+      )
+      return { hit: hits.length > 0, why: `揺れやすいテストか検知の仕組みに触れた: ${hits.join(', ')}` }
+    },
+    commands: ['bash scripts/check-flaky-tests.sh --runs 3 --config vitest.integration.config.ts', 'bash scripts/check-flaky-tests.test.sh'],
+  },
+  {
     key: 'fault-injection-drill',
     label: 'fault injection 訓練（ゲート）',
     timing: 'milestone',

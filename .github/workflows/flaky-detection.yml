@@ -1,0 +1,115 @@
+name: Flaky Test Detection
+
+# WHY: issue #757 の 14（フレーキー検知）。同時実行（P-050 / P-052）・冪等性（P-053）の統合テストは
+# 実 DB で並列に走るため揺れやすく、揺れは「たまたま通った緑」を生む（Free プランでは赤 check でも
+# マージできるので、緑の信頼性そのものが防御線になる）。毎 PR で N 回回すと Actions 無料枠が枯渇する
+# ため週次にし、同じスクリプト（scripts/check-flaky-tests.sh）を手元でも使えるようにする。
+# 揺れ・常時失敗が見つかったら `[flaky]` 接頭辞の issue を作る（同じ suite の open issue があれば
+# コメントで追記）。issue を状態源にして重複作成を防ぐ（schema-drift-check.yml と同じ型）。
+on:
+  schedule:
+    - cron: '0 20 * * 0' # 日曜 20:00 UTC = 月曜 05:00 JST。平日の作業前に結果が出ている
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: '実行回数（unit）'
+        default: '5'
+      integration_runs:
+        description: '実行回数（integration）'
+        default: '3'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: flaky-detection
+  cancel-in-progress: false
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run unit tests N times
+        id: flaky
+        env:
+          # WHY: 入力は run: に直接展開せず env 経由で渡す（式展開によるコマンド注入の型を避ける）
+          RUNS: ${{ github.event.inputs.runs || '5' }}
+        run: |
+          set +e
+          bash scripts/check-flaky-tests.sh --runs "$RUNS" --out flaky-out
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flaky-unit
+          path: flaky-out/
+          retention-days: 30
+      - name: Open or update issue
+        if: steps.flaky.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUITE: unit
+          STATUS: ${{ steps.flaky.outputs.status }}
+        run: bash scripts/lib/flaky-issue.sh flaky-out/flaky-report.md
+      - name: Fail the job when flaky or failing tests were found
+        if: steps.flaky.outputs.status != '0'
+        run: exit 1
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - uses: supabase/setup-cli@v3
+        with:
+          version: latest
+      # WHY: e2e/env-guard.ts の許可ホストは 127.0.0.1 / localhost のみ。本番の接続情報は一切渡さない
+      - name: Start local Supabase
+        run: |
+          supabase start
+          supabase db reset
+      - name: Export local Supabase connection info
+        run: |
+          echo "SUPABASE_API_URL=$(supabase status -o json | jq -r '.API_URL')" >> "$GITHUB_ENV"
+          echo "SUPABASE_ANON_KEY=$(supabase status -o json | jq -r '.ANON_KEY')" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$(supabase status -o json | jq -r '.SERVICE_ROLE_KEY')" >> "$GITHUB_ENV"
+      - name: Run integration tests N times
+        id: flaky
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_API_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
+          RUNS: ${{ github.event.inputs.integration_runs || '3' }}
+        run: |
+          set +e
+          bash scripts/check-flaky-tests.sh --runs "$RUNS" --config vitest.integration.config.ts --out flaky-out
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flaky-integration
+          path: flaky-out/
+          retention-days: 30
+      - name: Open or update issue
+        if: steps.flaky.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUITE: integration
+          STATUS: ${{ steps.flaky.outputs.status }}
+        run: bash scripts/lib/flaky-issue.sh flaky-out/flaky-report.md
+      - name: Fail the job when flaky or failing tests were found
+        if: steps.flaky.outputs.status != '0'
+        run: exit 1
