@@ -17,6 +17,7 @@ set -euo pipefail
 #   HOOK_LIVE_DRILL_DOC         既定 docs/agents/hook-live-drill.md
 #   UPSTREAM_DOCS_REVIEW_DOC    既定 docs/agents/upstream-docs-review.md
 #   DEPENDENCY_UPDATE_DOC       既定 docs/agents/dependency-update-runbook.md（issue #757 の 21 で追加。4 つ目）
+#   ACCESS_REVIEW_DOC           既定 docs/agents/access-review-runbook.md（issue #757 の 36 で追加。5 つ目）
 #   MAINTENANCE_DIGEST_PLAIN=1  JSON でなく人が読む素のテキストで出す（手動実行用）
 
 command -v jq >/dev/null 2>&1 || exit 0
@@ -77,6 +78,7 @@ BODY="$(
   line_for "hook 実走ドリル" "${HOOK_LIVE_DRILL_DOC:-docs/agents/hook-live-drill.md}" "手順: docs/agents/hook-live-drill.md「## 手順」"
   line_for "公式 docs 差分確認" "${UPSTREAM_DOCS_REVIEW_DOC:-docs/agents/upstream-docs-review.md}" "手順: docs/agents/upstream-docs-review.md「## 手順（1〜2 時間）」"
   line_for "依存の月次棚卸し" "${DEPENDENCY_UPDATE_DOC:-docs/agents/dependency-update-runbook.md}" "手順: docs/agents/dependency-update-runbook.md「## 手順（30 分）」"
+  line_for "鍵・権限の四半期棚卸し" "${ACCESS_REVIEW_DOC:-docs/agents/access-review-runbook.md}" "手順: docs/agents/access-review-runbook.md「## 手順（30 分）」"
 )"
 # サブシェル内の加算は親に戻らないため、本文の ⚠ を数え直す
 OVERDUE="$(printf '%s\n' "$BODY" | grep -c '⚠' || true)"
