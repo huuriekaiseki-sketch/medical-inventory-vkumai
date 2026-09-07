@@ -144,6 +144,10 @@
     {
       "label": "20 画面の操作性（7 の上）",
       "branch": "feat/a11y-check"
+    },
+    {
+      "label": "20 入口の入力検証（20 入力の長さの上限・a11y の上）",
+      "branch": "feat/input-validation"
     }
   ]
 }
