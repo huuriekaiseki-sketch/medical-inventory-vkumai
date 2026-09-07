@@ -63,6 +63,9 @@ export const RULES = [
   { key: 'dependency-audit', label: '依存監査（既知脆弱性）', timing: 'always', commands: ['npm audit --omit=dev --audit-level=high'] },
   { key: 'lockfile-integrity', label: 'ロックファイルの出所', timing: 'always', commands: ['bash scripts/check-lockfile-integrity.test.sh'] },
   { key: 'docs-integrity', label: 'docs 整合性', timing: 'always', commands: ['node scripts/lib/check-docs-integrity.mjs'] },
+  // WHY(毎回): merge=union の重複は「マージした PR」ではなく「次に表を触った PR」で表面化する。
+  //      触った人が犯人とは限らないので、変更時ではなく毎回回して早く落とす。
+  { key: 'table-row-duplicates', label: '棚卸し表の行の重複', timing: 'always', commands: ['node scripts/lib/check-table-row-duplicates.mjs'] },
 
   // ---- 変更時 ----
   {
