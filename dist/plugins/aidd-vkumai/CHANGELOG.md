@@ -16,5 +16,12 @@
   `CLAUDE_PROJECT_DIR` 優先に（スクリプト位置基準だとプラグインでは導入先を指さない）
 - 2026-09-06: `bin/` のスクリプトの `$SCRIPT_DIR/lib/` 参照を `../scripts/lib/` へ書き換え、gap 判定の JS を
   `scripts/workflow-lib/` に同梱。derive（04 表の機械導出）は同梱対象から外した（KNOWN-LIMITS）
+- **2026-09-07: 検査（`*.test.sh`）を同梱するようにした。** それまでは hook 本体だけを配っており、
+  その hook を守る検査と、hook を持たない構造テスト（カタログの形・索引の抜け・設定の形）は 1 本も
+  配っていなかった。派生先には「止める仕組み」だけが渡り、「その仕組みが壊れていないことを確かめる手段」が
+  渡っていなかった。対象スクリプトを持つ検査は対象と同じプラグインへ自動で付いていき、対象を持たない
+  構造テストは層の表の `checks` に書く。配らないものは `checksNotDistributed` に**理由つきで**書き、
+  未分類の検査があると `scripts/check-plugin-check-coverage.test.sh` が落ちる。
+  aidd-core は 74 → 107 ファイル、aidd-vkumai は 31 → 39 ファイルになった
 - 2026-09-06: 配布形態 (a) へ移行。marketplace `aidd-plugins`（非公開）に生成物を置き、`aidd-core--v0.1.0` /
   `aidd-vkumai--v0.1.0` をタグ付け。manifest の生成元注記を `metadata` へ、`author` を追加

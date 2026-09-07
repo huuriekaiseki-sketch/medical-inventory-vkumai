@@ -225,6 +225,44 @@ function build(outRoot) {
     if (name.startsWith('_')) continue
     copyText(plugin, `.claude/workflows/lib/${name}`, `scripts/workflow-lib/${name}`)
   }
+  // 検査（*.test.sh）を同梱する（issue #757 の 19 の教訓）。
+  // WHY: これまで hook 本体だけを配り、その hook を守る検査と、hook を持たない構造テスト
+  //      （カタログの形・索引の抜け・秘密情報の走査）は 1 本も配っていなかった。
+  //      派生先には「止める仕組み」だけが渡り、「その仕組みが壊れていないことを確かめる手段」が
+  //      渡らない状態だった。ルールを配るなら、そのルールの検査も一緒に配る。
+  //
+  //      対象スクリプトを持つ検査（check-x.sh に対する check-x.test.sh）は、
+  //      対象と同じプラグインへ自動的に付いていく（層の表に二重登録しない）。
+  //      対象を持たない構造テストだけを layout.checks に書く。
+  const testOwners = {}
+  const declareTest = (base, plugin) => {
+    const t = base + '.test.sh'
+    if (!existsSync(path.join(SOURCE, 'scripts', t))) return
+    ;(testOwners[t] ??= new Set()).add(plugin)
+  }
+  for (const [name, plugin] of Object.entries(layout.hookScripts)) declareTest(name.replace(/\.sh$/, ''), plugin)
+  for (const [name, owners] of Object.entries(layout.supportScripts)) {
+    for (const plugin of (Array.isArray(owners) ? owners : [owners])) {
+      declareTest(name.replace(/\.(sh|mjs|ts|jq)$/, ''), plugin)
+    }
+  }
+  for (const [name, plugin] of Object.entries(layout.bin ?? {})) declareTest(name.replace(/\.sh$/, ''), plugin)
+  // layout.checks は「対象を持たない構造テスト」の宣言と、自動で決まった層の上書きを兼ねる。
+  // 上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙で書かれている検査
+  // （高リスクパスの例・ドメイン語・スタック名）。共通側に固有語は置けないのでアダプター側へ回す。
+  for (const [name, owners] of Object.entries(layout.checks ?? {})) {
+    if (name.startsWith('_')) continue
+    testOwners[name] = new Set(Array.isArray(owners) ? owners : [owners])
+  }
+  // 配らない検査（理由つき）。中身が導入先に無いものを検査していて、配ると必ず落ちるもの
+  for (const name of Object.keys(layout.checksNotDistributed ?? {})) {
+    if (name.startsWith('_')) continue
+    delete testOwners[name]
+  }
+  for (const [name, plugins] of Object.entries(testOwners)) {
+    for (const plugin of plugins) copyText(plugin, 'scripts/' + name, 'scripts/' + name, null, 0o755)
+  }
+
   // 7 項目のファイル（対応版・変更履歴・既知の制約・移行手順・破壊的変更・実証結果）を両プラグインの
   // ルートへ。設定スキーマは schema/、導入先ひな形は templates/ へ（いずれも共通側）
   const rd = layout.releaseDocs
@@ -282,6 +320,19 @@ function build(outRoot) {
       const p = path.join(outRoot, plugin, r)
       if (!isText(p)) continue
       if (closureSkip.some(s => r === s || r.startsWith(s))) continue
+      // 検査（*.test.sh）は fixture として存在しないファイル名を書く（scripts/check-a.sh のような
+      // 架空の名前を一時ディレクトリに作って検知力を試す）。それを実行時参照と見なすと
+      // 際限なく allowUnresolvedReferences が増えるので、検査については
+      // 「対象スクリプトが同梱されているか」だけを見る（本当に困るのはそこだけ）。
+      if (/\.test\.sh$/.test(r)) {
+        const subject = r.replace(/\.test\.sh$/, '.sh')
+        // bin/ へ置き換えられるスクリプト（進捗記録など）は scripts/ ではなく bin/ に同梱される
+        const asBinSubject = 'bin/' + path.posix.basename(subject)
+        if (existsSync(path.join(SOURCE, subject)) && !have.has(subject) && !have.has(asBinSubject)) {
+          fail(`${plugin}/${r}: 対象の ${subject} が同じプラグインに無い（検査だけ配っても動かない）`)
+        }
+        continue
+      }
       const text = readFileSync(p, 'utf8')
       const refs = new Set()
       for (const m of text.matchAll(/scripts\/((?:lib\/)?[A-Za-z0-9_.-]+\.(?:sh|mjs|ts|jq|py))/g)) refs.add(`scripts/${m[1]}`)

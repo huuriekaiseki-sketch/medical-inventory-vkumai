@@ -114,7 +114,6 @@
     "check-claude-md-size.sh": "aidd-core",
     "check-stale-worktrees.sh": "aidd-core",
     "check-empty-session-report.sh": "aidd-core",
-    "check-plugin-integrity.sh": "aidd-core",
     "check-upstream-docs-review-staleness.sh": "aidd-core",
     "check-subagent-model-force.sh": "aidd-core",
     "reinject-aidd-run-state.sh": "aidd-core",
@@ -162,10 +161,7 @@
     "summarize-instructions-loaded.sh": "aidd-core",
     "log-find-av-precision.sh": "aidd-core",
     "verify-agent-progress-transcript.sh": "aidd-core",
-    "lib/verify-agent-progress-transcript.ts": "aidd-core",
-    "lib/rehearse-merge.mjs": "aidd-core",
-    "rehearse-merge.sh": "aidd-core",
-    "lib/merge-queue.json": "aidd-vkumai"
+    "lib/verify-agent-progress-transcript.ts": "aidd-core"
   },
   "workflowLib": {
     "_comment": ".claude/workflows/lib/ の純粋関数のうち bin/ のスクリプトが node で呼ぶもの。scripts/workflow-lib/ に置く（workflows/ 配下に置くと Workflow として走査されるため）",
@@ -182,7 +178,6 @@
     "check-agent-progress-gap.sh": "aidd-core"
   },
   "allowUnresolvedReferences": {
-    "scripts/build-plugin.sh": "check-plugin-integrity.sh の説明文と是正案内が中心リポジトリ側の生成コマンドを示すだけ（配布物には同梱しない）",
     "scripts/derive-test-selection.sh": "check-handoff-format.sh の警告文が導入先の derive を案内するだけ（実行しない）",
     "scripts/check-handoff-format.sh": "handoff-format スキル本文が Stop hook 名を説明するだけ",
     "scripts/log-find-av-precision.sh": "check-find-av-precision-recorded.sh の警告文が呼び方を案内するだけ",
@@ -201,5 +196,49 @@
     "scripts/lib/derive-test-selection.mjs": "derive は導入先の .claude/workflows/lib/router-risk.js に依存するため v1.0 では同梱しない（KNOWN-LIMITS）。案内文の参照のみ",
     "scripts/lib/merge-queue.js": "順番ファイル（merge-queue.json）は導入先のリポジトリ側にある。CLAUDE_PROJECT_DIR 優先で解決するので共通側には同梱しない（.json を .js と読む走査の癖でこの名前で出る）",
     "scripts/rehearse-merge.sh": "順番ファイルの説明文が、共通側にある実行スクリプトの名前を案内するだけ"
+  },
+  "checks": {
+    "_comment": "検査（*.test.sh）の層。check-x.sh に対する check-x.test.sh は自動で対象と同じプラグインへ付いていくので、ここに書くのは (1) 対象スクリプトを持たない構造テスト (2) 自動判定を上書きしたいもの の 2 つだけ。上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙（高リスクパスの例・ドメイン語・スタック名）で書かれている検査で、共通側の禁止語検査に引っかかるもの。",
+    "check-session-start-matchers.test.sh": "aidd-core",
+    "check-hook-doc-pointers.test.sh": "aidd-core",
+    "check-skill-size.test.sh": "aidd-core",
+    "check-no-registry-fetch.test.sh": "aidd-vkumai",
+    "check-docs-issue-refs.test.sh": "aidd-core",
+    "codex-config-separation.test.sh": "aidd-core",
+    "codex-agents-sandbox.test.sh": "aidd-core"
+  },
+  "checksNotDistributed": {
+    "_comment": "配らない検査と、その理由。導入先に存在しないもの（このリポジトリの docs・カタログ・スキーマ）を検査していて、配ると必ず落ちるものだけをここに書く。「面倒だから」で足さない。",
+    "check-test-matrix.test.sh": "docs/agents/test-matrix.md の実データを検査する。形式は汎用だが、行の中身は導入先ごとに違う（形式だけを配るには雛形が要る。#535）",
+    "check-promise-catalog.test.sh": "同上（promise-catalog.md の実データ）",
+    "check-invariant-catalog.test.sh": "同上（invariant-catalog.md の実データ）",
+    "check-docs-integrity.test.sh": "同上（docs/agents 配下の実データ）",
+    "check-secret-leak.test.sh": "Supabase の鍵の形と src/lib/supabase/server.ts の存在を前提にする。走査の型は汎用なので、鍵の種類を設定に出せたら配れる",
+    "check-pii-leak.test.sh": "許可ドメインと追跡ファイルの構成がこのリポジトリ固有",
+    "check-lockfile-integrity.test.sh": "npm の package-lock.json 前提（禁止語 npm を含む）",
+    "check-eval-fixtures-neutral.test.sh": "scripts/eval-fixtures/ の実データを検査する",
+    "check-eval-runs-freshness.test.sh": "docs/agents/eval-runs.jsonl の実データを検査する",
+    "check-aidd-graph-rendered.test.sh": ".claude/workflows/graph/ の実データを検査する",
+    "build-plugin.test.sh": "プラグインの生成そのものを検査する。中心リポジトリだけが持つ",
+    "create-worktree.test.sh": "git worktree と .env の運用がこのリポジトリ固有",
+    "derive-test-selection.test.sh": "ルール表（固有）とセットで意味を持つ。エンジンだけ配っても検査できない",
+    "schema-drift-reconcile.test.sh": "Supabase のスキーマドリフト検知が前提",
+    "eval-sweep-recall.test.sh": "eval fixture とモデル呼び出しが前提",
+    "eval-workflow-prompts.test.sh": "同上",
+    "statusline.test.sh": "個人設定の statusline。配布対象外",
+    "subagent-statusline.test.sh": "同上",
+    "codex-skip-marker-deny.test.sh": "Codex 用ラッパー。v1 の配布対象外（plugin-layout の他の Codex 項目と同じ扱い）",
+    "check-branch-tool-ownership.test.sh": "ブランチ命名規約（codex/* claude/*）がこのリポジトリの運用",
+    "log-subagent-hook-skeleton.test.sh": "subagent hook の骨格記録。導入先の agents 構成に依存する",
+    "check-run-manifest-presence.test.sh": "fixture が高リスクパスの実例（このリポジトリのドメイン語）で書かれていて共通側に置けず、対象の hook は共通側にあるためアダプター側にも回せない。fixture を中立化できたら共通側へ移す",
+    "check-domain-decisions-suggest.test.sh": "同上（ドメイン語の提案そのものを検査している）",
+    "check-skip-marker-write.test.sh": "同上（fixture がこのリポジトリのコマンド体系を含む）",
+    "reinject-aidd-run-state.test.sh": "同上（fixture が観測ファイルの実データ形式を含む）",
+    "check-handoff-format.test.sh": "同上（fixture の 04 表にスタック名が入る）",
+    "harvest-journal-events.test.sh": "同上（fixture にリポジトリ名が入る）",
+    "check-agent-baseline-freshness.test.sh": "対象の check-agent-baseline-freshness.sh 自体を配っていない（CI ワークフローと docs/agents/baselines/ の構成が前提）。配るなら先に対象を層の表へ",
+    "snapshot-agent-baseline.test.sh": "同上（baselines の取り方がこのリポジトリの agents 構成に依存する）",
+    "check-verify-claims-fail-open-streak.test.sh": "対象は共通側にあるが、検査は logs/ の実データ形式と連続回数のしきい値に依存する。しきい値を設定に出せたら配れる",
+    "check-plugin-check-coverage.test.sh": "プラグインの層の表そのものを検査する。中心リポジトリだけが持つ（build-plugin.test.sh と同じ扱い）"
   }
 }
