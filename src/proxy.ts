@@ -10,6 +10,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveIsAdmin } from '@/lib/admin-status'
+import { DENIAL_METHOD_HEADER, DENIAL_ROUTE_HEADER } from '@/lib/security/denial-headers'
 
 const PUBLIC_PATHS = ['/login', '/auth/callback']
 
@@ -18,8 +19,19 @@ const PUBLIC_PATHS = ['/login', '/auth/callback']
 // currentLevelと異なる間は/mfa-challenge以外へのアクセスを許さない。
 const MFA_CHALLENGE_PATH = '/mfa-challenge'
 
+// WHY(#757-24): Route Handler は自分のパスとメソッドを知る手段を持たないので、拒否の記録
+//      （access_denials）に経路を残すには proxy が転送リクエストへ付けるしかない。
+//      クライアントが同じ名前で送ってきても必ず上書きし、証跡に偽の経路を書かせない。
+//      cookie を差し替えた後の request から作るので、Supabase の セッション更新とも両立する。
+function forwardedHeaders(request: NextRequest): Headers {
+  const headers = new Headers(request.headers)
+  headers.set(DENIAL_ROUTE_HEADER, request.nextUrl.pathname)
+  headers.set(DENIAL_METHOD_HEADER, request.method)
+  return headers
+}
+
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request })
+  let supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders(request) } })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,7 +43,7 @@ export async function proxy(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({ request })
+          supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders(request) } })
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )
