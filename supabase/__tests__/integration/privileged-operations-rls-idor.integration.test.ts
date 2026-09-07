@@ -195,7 +195,7 @@ describe('特権操作の記録（privileged_operations） [P-066]', () => {
     expect(after).toHaveLength(before!.length)
   })
 
-  // WHY(2026-09-07、RLS ミューテーション M-011 で生き残った): ここまでのテストは
+  // WHY(2026-09-07、RLS ミューテーション RM-011 で生き残った): ここまでのテストは
   //      「admin でない利用者」「anon」しか試しておらず、**aal2 に上げていない admin** を
   //      試していなかった。そのためポリシーから `has_aal2()` を外しても 1 件も落ちず、
   //      「読み手は aal2 の admin だけ」という約束（P-066）が実質守られていなかった。
@@ -205,7 +205,7 @@ describe('特権操作の記録（privileged_operations） [P-066]', () => {
   //
   //      `has_aal2()` は TOTP 未登録なら TRUE を返す設計（#623）なので、
   //      aal1 を作るには**登録済みの利用者でサインインしたまま昇格しない**必要がある。
-  describe('aal2 に上げていない admin は読めない（M-011 を倒す）', () => {
+  describe('aal2 に上げていない admin は読めない（RM-011 を倒す）', () => {
     const PASSWORD = 'Passw0rd!aal1-priv'
     const mfaEmail = `priv-mfa-admin-${marker}@example.test`
     let mfaAdminId: string
@@ -253,7 +253,7 @@ describe('特権操作の記録（privileged_operations） [P-066]', () => {
     it('対照: aal2 まで上げれば読める（admin の権限そのものは設計どおり）', async () => {
       // WHY(対照が要る): 「0 件」だけを見ていると、行が存在しないだけでも通ってしまう。
       //      同じ利用者が昇格したら読めることまで見て、初めて aal2 が効いていると言える
-      //      （M-010 の教訓: 空の表に対して「読めない」を確かめても何も確かめていない）
+      //      （RM-010 の教訓: 空の表に対して「読めない」を確かめても何も確かめていない）
       const client = await aal1()
       await stepUpToAal2(client, factorId, secret)
       const { data, error } = await client.from('privileged_operations').select('id, target_email')

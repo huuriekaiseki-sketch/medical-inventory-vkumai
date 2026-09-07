@@ -172,6 +172,188 @@
       "_note": "bespoke な src/__tests__/privileged-writes.test.ts も残す（宣言とコードの突合・ガードの実在確認はエンジンの範囲外）",
       "purpose": "service_role で書く経路 1 つ = 1 行。RLS を通らないので、認可はアプリ側のガードにしか無い",
       "limits": "アプリのコードしか見ない（Studio・CLI・migration からの書き込みは対象外）。ガードを呼んでいることは見るが、その判定が正しいかは見ない"
+    },
+    {
+      "id": "threat-model",
+      "file": "docs/agents/threat-model.md",
+      "idPrefix": "T",
+      "columns": 8,
+      "statusColumn": 8,
+      "states": [
+        "守られている",
+        "一部",
+        "未"
+      ],
+      "idBands": [
+        0,
+        10,
+        20,
+        30,
+        40,
+        50,
+        60,
+        70,
+        80
+      ],
+      "purpose": "攻撃者・資産・信頼境界の一覧。どの約束（P）・不変条件（I）がその脅威を守るかを紐づける",
+      "limits": "脅威を思いつけた範囲しか載らない。守る側の ID が紐づいていても、その検査が実際に効いているかは見ない",
+      "_note": "守る検査の列は P-xxx / I-xxx の ID であってファイルパスではないので、evidenceColumn を持たない。ID の突合は専用の構造テストが行う"
+    },
+    {
+      "id": "fail-open",
+      "file": "docs/agents/fail-open-inventory.md",
+      "idPrefix": "F",
+      "columns": 6,
+      "evidenceColumn": 6,
+      "statusColumn": 5,
+      "states": [
+        "閉じる",
+        "開く",
+        "通す",
+        "止める",
+        "情報を出さない",
+        "一部",
+        "情報のみ"
+      ],
+      "idBands": [
+        0,
+        10
+      ],
+      "purpose": "材料（DB・Auth・ネットワーク）が取れないときに、その制御点が拒否側と許可側のどちらへ倒れるか",
+      "limits": "実際に外部依存を止めて測ったのは一部だけで、多くはコードを読んだ判断。同時に複数が落ちたときの合成は見ていない"
+    },
+    {
+      "id": "data-lifecycle",
+      "file": "docs/agents/data-lifecycle-inventory.md",
+      "idPrefix": "D",
+      "columns": 7,
+      "evidenceColumn": 6,
+      "statusColumn": 7,
+      "states": [
+        "消える",
+        "残る",
+        "残らない",
+        "未確認"
+      ],
+      "planRequiredStates": [
+        "未確認"
+      ],
+      "planPattern": "#757-[0-9]+",
+      "idBands": [
+        0,
+        10,
+        20,
+        30,
+        40
+      ],
+      "purpose": "個人情報がどこに残り、いつ・誰が消すか。削除・退会の後に何が残るか",
+      "limits": "ダッシュボード側（Vercel / Supabase のログ保持期間・バックアップ）は未確認のまま。外部サービスの内部保持は見えない"
+    },
+    {
+      "id": "human-bypass",
+      "file": "docs/agents/human-bypass-inventory.md",
+      "idPrefix": "H",
+      "columns": 6,
+      "statusColumn": 6,
+      "states": [
+        "記録される",
+        "記録されない",
+        "一部",
+        "不可"
+      ],
+      "idBands": [
+        0,
+        10
+      ],
+      "purpose": "安全装置を人が意図して迂回できる経路と、その迂回が記録に残るか",
+      "limits": "迂回を禁止しない（緊急時に必要なことがある）。記録されない経路は、迂回した本人が言わない限り分からない"
+    },
+    {
+      "id": "partial-success",
+      "file": "docs/agents/partial-success-inventory.md",
+      "idPrefix": "M",
+      "columns": 7,
+      "evidenceColumn": 6,
+      "statusColumn": 7,
+      "states": [
+        "原子的",
+        "収束する",
+        "中間状態あり",
+        "未確認"
+      ],
+      "evidenceRequiredStates": [
+        "原子的",
+        "収束する"
+      ],
+      "planRequiredStates": [
+        "中間状態あり",
+        "未確認"
+      ],
+      "planPattern": "#757-[0-9]+",
+      "idBands": [
+        0,
+        10,
+        20,
+        30,
+        40
+      ],
+      "purpose": "複数段の書き込みが途中で止まったときに何が残り、再試行で収束するか",
+      "limits": "段の分け方は人が書く。実際に途中で止めて測ったのは一部で、多くは経路を読んだ判断"
+    },
+    {
+      "id": "access-path",
+      "file": "docs/agents/access-path-inventory.md",
+      "idPrefix": "X",
+      "columns": 8,
+      "statusColumn": 8,
+      "states": [
+        "検査あり",
+        "一部",
+        "未",
+        "対象外"
+      ],
+      "planRequiredStates": [
+        "未"
+      ],
+      "planPattern": "#757-[0-9]+",
+      "idBands": [
+        0,
+        10,
+        20,
+        30
+      ],
+      "purpose": "データへ届く経路を鍵の所在ごとに並べ、同じ攻撃をどの経路にも流せるようにする",
+      "limits": "経路は思いつけた範囲しか載らない。新しい経路（Webhook・エクスポート・外部連携）が増えても自動では気づかない",
+      "_note": "同じ攻撃を流す検査の列は P-xxx の ID であってファイルパスではないので、evidenceColumn を持たない。ID の突合は専用の構造テストが行う"
+    },
+    {
+      "id": "blast-radius",
+      "file": "docs/agents/blast-radius.md",
+      "idPrefix": "B",
+      "columns": 7,
+      "statusColumn": 7,
+      "states": [
+        "限定済み",
+        "広い",
+        "要縮小",
+        "未測定"
+      ],
+      "planRequiredStates": [
+        "要縮小",
+        "未測定"
+      ],
+      "planPattern": "#757-[0-9]+",
+      "idBands": [
+        0,
+        10,
+        20
+      ],
+      "purpose": "立場ごと（乗っ取られた admin・漏れた鍵）に、読める・書ける範囲と痕跡の残り方",
+      "limits": "「立場」の切り方は人が決める。実測したのは aal1 の admin だけで、他は経路を読んだ判断",
+      "evidenceColumn": 6,
+      "evidenceRequiredStates": [
+        "限定済み"
+      ]
     }
   ]
 }

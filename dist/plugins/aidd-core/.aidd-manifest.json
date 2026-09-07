@@ -77,7 +77,7 @@
     "scripts/lib/aidd-config.sh": "602a4dbea32a067cf69ea486f41bfc354c380f5fe5dbb47e667eecb7417bc6c0",
     "scripts/lib/aidd-config.test.sh": "6b91cb5b02f30b8705c004fceca8413d2d004e3bcf59b78049a560ea9b857b58",
     "scripts/lib/canonical-event.ts": "374f540d160b1f30a8e9586b481b991d782bbb265af4e18787d82868a799f0b5",
-    "scripts/lib/check-catalog.mjs": "633fed01199c322708d9ecc3e6f8a5811ed2df1507b54191cad9cb665d1e788b",
+    "scripts/lib/check-catalog.mjs": "7315ce8862f248e1b58f576fe84ba529fe444ccc194b4501d86070d81acb85af",
     "scripts/lib/gate-effectiveness-summary.ts": "6d704753c32f573b7b52a19273b6f67c017a314aefd84accea66a3f73f56e692",
     "scripts/lib/harvest-journal-events.ts": "63fb76382f15c8051a4956e33f9255091b0077625a76cf5eaa9d429c9d8f8029",
     "scripts/lib/model-pricing.ts": "34ab4d65b17c14aa48ddb235b6a27ccc9f4a2205e41344c27d664b5d379a10f8",

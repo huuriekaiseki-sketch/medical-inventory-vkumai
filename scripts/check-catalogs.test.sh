@@ -118,6 +118,44 @@ else
   assert_fail "正しい fixture を違反にした" "$OUT"
 fi
 
+echo '=== scenario 4b: エスケープしたパイプ（\|）は区切りにしない。正しい markdown を違反にしない ==='
+# WHY(2026-09-07): fail-open-inventory.md を登録しようとしたら列数の違反が 6 件出た。
+#      中身は `` `error \|\| !user` `` のように **markdown のエスケープで内容としてのパイプ**を
+#      書いた行で、描画すれば 1 セルになる。素の split('|') は区切りと区別できず、
+#      **正しい表を違反と報告していた**。登録済みの 7 件がたまたま使っていなかったので気づけなかった。
+cat > "$WORK/escaped.md" <<'EOF'
+| ID | 内容 | 守るテスト | 状態 |
+| --- | --- | --- | --- |
+| Z-001 | `error \|\| !user` で拒否する | `package.json` | 済み |
+
+## 限界
+
+表の形（列・ID・状態の語彙）しか見ないので、書かれている中身が正しいかは見ない。
+EOF
+OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/escaped.md" --root "$REPO_ROOT")"
+if [ "$(printf '%s\n' "$OUT" | tail -n1)" = "violations=0" ]; then
+  assert_ok "エスケープしたパイプを含む行を誤検知しない"
+else
+  assert_fail "エスケープしたパイプで列数を誤判定した" "$OUT"
+fi
+
+# 逆に、エスケープしていない素のパイプは今までどおり列がずれるので違反になる
+cat > "$WORK/raw-pipe.md" <<'EOF'
+| ID | 内容 | 守るテスト | 状態 |
+| --- | --- | --- | --- |
+| Z-001 | error || !user で拒否する | `package.json` | 済み |
+
+## 限界
+
+表の形（列・ID・状態の語彙）しか見ないので、書かれている中身が正しいかは見ない。
+EOF
+OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/raw-pipe.md" --root "$REPO_ROOT")"
+if printf '%s\n' "$OUT" | grep -q 'columns:'; then
+  assert_ok "エスケープしていない素のパイプは今までどおり違反"
+else
+  assert_fail "素のパイプを見逃した" "$OUT"
+fi
+
 echo "=== scenario 5: 行が 1 つも無いルールブックは違反にする（空の登録を許さない） ==="
 printf '| ID | 内容 |\n| --- | --- |\n\n## 限界\n\n表の形しか見ないので、中身が正しいかは見ない。\n' > "$WORK/empty.md"
 OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/empty.md" --root "$REPO_ROOT")"
