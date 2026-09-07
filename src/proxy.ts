@@ -41,7 +41,10 @@ export async function proxy(request: NextRequest) {
   )
 
   // トークンリフレッシュ（updateSession パターン）
-  const { data: { user } } = await supabase.auth.getUser()
+  // WHY: error は user null と同じ扱い（未認証として /login へ）。error を捨てても挙動は同じだが、
+  //      「認可の判定材料はエラーを受け取る」規約（scripts/check-fail-open.test.sh）に揃える
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  const user = userError ? null : userData.user
 
   const pathname = request.nextUrl.pathname
 
@@ -52,8 +55,17 @@ export async function proxy(request: NextRequest) {
 
   // MFAガード（aal1のまま保護ページへ進ませない）
   if (user && pathname !== MFA_CHALLENGE_PATH) {
-    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== aal.nextLevel) {
+    const { data: aal, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    // WHY(issue #757 の 31、fail-open の総点検): 以前は error を捨て、aal が取れなければガードを
+    //      素通りさせていた。Supabase Auth の MFA API が落ちている間、MFA 登録済み利用者の aal1
+    //      セッションが保護ページを読めてしまう（DB は書き込みだけ aal2 を要求するので、読みは
+    //      RLS で止まらない）。判定材料が取れないときは「昇格が要る」側に倒し、/mfa-challenge へ
+    //      送る（同ページは MFA API のエラーを利用者に表示し、データは出さない）。
+    //      docs/agents/fail-open-inventory.md の F-004
+    if (aalError || !aal) {
+      return NextResponse.redirect(new URL(MFA_CHALLENGE_PATH, request.url))
+    }
+    if (aal.nextLevel === 'aal2' && aal.currentLevel !== aal.nextLevel) {
       return NextResponse.redirect(new URL(MFA_CHALLENGE_PATH, request.url))
     }
   }

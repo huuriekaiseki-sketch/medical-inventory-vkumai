@@ -237,10 +237,17 @@ export const RULES = [
     key: 'fault-injection',
     label: '障害注入（外部依存停止）',
     timing: 'milestone',
-    status: 'not-ready',
     event: '依存 major 更新、外部公開前',
-    trigger: ctx => ({ hit: ctx.risks.includes('external_side_effect'), why: 'リスク申告 external_side_effect' }),
-    commands: ['(個別テスト) Supabase 停止・タイムアウト時に UI / API Route が失敗を返すことを Assert する'],
+    // 認可・認証・MFA の判定材料を取る箇所（fail-open 棚卸しの対象）に触れた PR は手元実行に昇格
+    trigger: ctx => {
+      const hits = anyPath(
+        ctx.files,
+        /^src\/proxy\.ts$|^src\/lib\/(admin-status|admin-auth)\.ts$|^src\/lib\/supabase\/require-[^/]+\.ts$|^src\/hooks\/useFacilityRole\.ts$|^src\/app\/(mfa-challenge|account\/mfa)\/|^docs\/agents\/fail-open-inventory\.md$/,
+      )
+      const hit = ctx.risks.includes('external_side_effect') || hits.length > 0
+      return { hit, why: ctx.risks.includes('external_side_effect') ? 'リスク申告 external_side_effect' : `認可・認証・MFA の判定材料を取る箇所に触れた: ${hits.join(', ')}` }
+    },
+    commands: ['bash scripts/check-fail-open.test.sh', 'npx vitest run src/__tests__/proxy.test.ts src/lib/supabase/__tests__ src/lib/__tests__/admin-status.test.ts'],
   },
   { key: 'runbook', label: '復旧手順（ランブック）', timing: 'milestone', event: '障害発生時、公開前' },
 ]

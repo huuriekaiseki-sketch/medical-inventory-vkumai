@@ -18,9 +18,11 @@ export default function MfaChallengePage() {
     async function init() {
       const supabase = createSupabaseBrowserClient()
 
-      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      // WHY: error のときは aal2 達成とみなさず、下の listFactors で「MFA 情報の取得に失敗」を出す
+      //      （fail-open の総点検、issue #757 の 31）
+      const { data: aal, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
       if (cancelled) return
-      if (aal && aal.currentLevel === aal.nextLevel) {
+      if (!aalError && aal && aal.currentLevel === aal.nextLevel) {
         // 既にaal2達成済み(このページに来る必要がない)ならトップへ戻す
         router.push('/')
         return

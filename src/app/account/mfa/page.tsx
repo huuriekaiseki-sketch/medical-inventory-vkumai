@@ -54,7 +54,12 @@ export default function MfaSettingsPage() {
     // 全factorはdata.allから取得する必要がある。
     const unverified = existingFactors.all.filter(f => f.factor_type === 'totp' && f.status === 'unverified')
     for (const factor of unverified) {
-      await supabase.auth.mfa.unenroll({ factorId: factor.id })
+      // WHY: 掃除に失敗したまま enroll すると未確認 factor が積み上がる（#609 の再発）。失敗は表示して止める
+      const { error: cleanupError } = await supabase.auth.mfa.unenroll({ factorId: factor.id })
+      if (cleanupError) {
+        setError('古いMFA設定の削除に失敗しました。')
+        return
+      }
     }
 
     const { data, error: enrollError } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
