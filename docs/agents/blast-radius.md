@@ -15,7 +15,7 @@
   - 要縮小: 広すぎる。`#757-N` を必ず書く
   - 未測定: 測っていない。`#757-N` を必ず書く
 - 「止めるもの」列はバッククォートでテスト・仕組みのパスを書く。無い行は `未`。
-  `scripts/check-blast-radius.test.sh`（CI `hooks-test`）が列数・ID・状態・パスの実在・
+  `scripts/lib/check-catalog.mjs`（登録簿 `scripts/lib/catalog-registry.json` の `blast-radius`。CI `hooks-test`）が列数・ID・状態・パスの実在・
   「限定済み」のテスト必須・`#757-N` の有無を検査する。
 - **更新の引き金**: 新しい鍵・ロール・外部連携の追加、RLS ポリシーの緩和、テナント数の桁が変わったとき、
   実際のインシデント。
