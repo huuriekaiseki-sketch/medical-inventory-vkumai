@@ -31,6 +31,11 @@ vi.mock('@/lib/security/rate-limit', () => ({
   consumeInviteQuota: (...args: unknown[]) => mockConsumeInviteQuota(...(args as [])),
 }))
 
+// WHY(2026-09-07、W-011): 特権操作の直前に admin と aal2 を再確認する
+//      `assertAdminAal2` を足した。既定は true（MFA 未登録の運用は変わらない）で、
+//      個別のテストで false に差し替えて 403 を確かめる。
+const mockAssertAdminAal2 = vi.fn(async () => true)
+
 vi.mock('@/lib/admin-auth', () => ({
   requireAdmin: async () => {
     const result = await mockGetUser()
@@ -40,6 +45,7 @@ vi.mock('@/lib/admin-auth', () => ({
     if (!result?.data?.user || !adminEmails.includes(email)) return null
     return result.data.user
   },
+  assertAdminAal2: (...args: unknown[]) => mockAssertAdminAal2(...(args as [])),
 }))
 
 const ADMIN_EMAIL = 'admin@test.com'
@@ -47,6 +53,7 @@ const ADMIN_ID = 'admin-user-id'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockAssertAdminAal2.mockResolvedValue(true)
   process.env.ADMIN_EMAILS = ADMIN_EMAIL
   mockGetUser.mockResolvedValue({
     data: { user: { id: ADMIN_ID, email: ADMIN_EMAIL } },
@@ -221,5 +228,32 @@ describe('DELETE /api/admin/users', () => {
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error).toBe('自分自身は削除できません')
+  })
+})
+
+// WHY(W-011): Supabase Auth の管理 API は service_role でしか呼べず、RLS のトランザクションに
+//      統合できない。隙間を消せないので、特権操作の**直前**にもう一度確かめて窓を狭めている。
+//      その再確認が実際に効いていること（＝ Auth API を呼ぶ前に止まること）を固定する。
+describe('特権操作の直前の再確認（W-011）', () => {
+  it('aal2 でなければ招待メールを送らずに 403 を返す', async () => {
+    mockAssertAdminAal2.mockResolvedValue(false)
+    const req = new NextRequest('http://localhost/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'new@example.test' }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(403)
+    expect(mockInviteUserByEmail).not.toHaveBeenCalled()
+  })
+
+  it('aal2 でなければ利用者を削除せずに 403 を返す', async () => {
+    mockAssertAdminAal2.mockResolvedValue(false)
+    const req = new NextRequest('http://localhost/api/admin/users', {
+      method: 'DELETE',
+      body: JSON.stringify({ userId: '11111111-1111-1111-1111-111111111111' }),
+    })
+    const res = await DELETE(req)
+    expect(res.status).toBe(403)
+    expect(mockDeleteUser).not.toHaveBeenCalled()
   })
 })

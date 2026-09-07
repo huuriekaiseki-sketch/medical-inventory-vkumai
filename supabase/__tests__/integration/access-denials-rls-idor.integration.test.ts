@@ -154,4 +154,34 @@ describe('拒否された操作の記録（access_denials） [P-063]', () => {
       recordAccessDenial({ guard: 'auth', reason: 'forbidden', actorId: 'not-a-uuid' })
     ).resolves.toBeUndefined()
   })
+
+  // WHY(W-011): Supabase Auth の管理 API は RLS のトランザクションに統合できないので、
+  //      特権操作の直前に admin と aal2 を再確認して窓を狭めている（`assertAdminAal2`）。
+  //      そこで弾いた拒否が**記録として残る**ことを実 DB で確かめる。
+  //      語彙は 20260907040000 で `aal2_required` を足した（自由文字列にすると数えられなくなる）。
+  it('aal2 で弾いた拒否を記録できる（W-011 の再確認が証跡に残る）', async () => {
+    const { error } = await serviceClient.rpc('record_access_denial', {
+      p_guard: 'admin',
+      p_reason: 'aal2_required',
+      p_route: '/api/admin/users',
+      p_method: 'DELETE',
+      p_actor_id: null,
+      p_facility_id: null,
+    })
+    expect(error, `aal2_required を記録できない: ${error?.message}`).toBeNull()
+
+    const { data } = await serviceClient
+      .from('access_denials')
+      .select('guard, reason, route, method')
+      .eq('reason', 'aal2_required')
+      .order('occurred_at', { ascending: false })
+      .limit(1)
+    expect(data).toHaveLength(1)
+    expect(data![0]).toMatchObject({
+      guard: 'admin',
+      reason: 'aal2_required',
+      route: '/api/admin/users',
+      method: 'DELETE',
+    })
+  })
 })

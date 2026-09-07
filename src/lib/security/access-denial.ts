@@ -32,6 +32,9 @@ export type DenialReason =
   | 'forbidden'
   | 'not_admin'
   | 'rate_limited'
+  // admin ではあるが aal2 へ昇格していない（W-011 の実行直前の再確認で弾いた分）。
+  // DB 側の語彙は migration 20260907040000 で広げてある（片方だけだと CHECK 違反になる）
+  | 'aal2_required'
 
 export interface AccessDenial {
   guard: DenialGuard

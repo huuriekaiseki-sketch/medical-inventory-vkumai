@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/server'
 import { apiError, toClientErrorMessage } from '@/lib/api-error'
-import { requireAdmin } from '@/lib/admin-auth'
+import { assertAdminAal2, requireAdmin } from '@/lib/admin-auth'
 import { consumeInviteQuota } from '@/lib/security/rate-limit'
 import { asEnum } from '@/lib/mapping'
 import type { AdminUser } from '@/types/admin'
@@ -75,6 +75,15 @@ export async function POST(request: NextRequest) {
     return apiError('招待メールの 1 日の上限に達しました。明日以降にやり直してください', 429)
   }
 
+  // WHY(W-011、実行直前の再確認): Supabase Auth の管理 API は service_role でしか呼べず、
+  //      SQL の中に入れられないので RLS のトランザクションに統合できない
+  //      （P-035 でやった「経路を無くす」が使えない唯一の場所）。
+  //      隙間を消せないので、**送信の直前**でもう一度 admin と aal2 を確かめて窓を狭める。
+  //      招待メールは送ってしまうと取り消せないので、確認は必ず送信より前に置く。
+  if (!(await assertAdminAal2(user.id))) {
+    return apiError('権限がありません（多要素認証が必要です）', 403)
+  }
+
   const admin = createAdminSupabase()
   const { error } = await admin.auth.admin.inviteUserByEmail(email)
   if (error) return apiError(toClientErrorMessage(error, '招待メールの送信に失敗しました'))
@@ -90,6 +99,12 @@ export async function DELETE(request: NextRequest) {
   if (!parsed.ok) return parsed.response
   const { userId } = parsed.data
   if (userId === user.id) return apiError('自分自身は削除できません', 400)
+
+  // WHY(W-011、実行直前の再確認): 上と同じ理由。利用者の削除は元に戻せないので、
+  //      判定から実行までの窓をできるだけ短くする。
+  if (!(await assertAdminAal2(user.id))) {
+    return apiError('権限がありません（多要素認証が必要です）', 403)
+  }
 
   const admin = createAdminSupabase()
   const { error } = await admin.auth.admin.deleteUser(userId)
