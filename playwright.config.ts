@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test'
 import { loadEnvConfig } from '@next/env'
 import { assertTestSupabaseEnv } from './e2e/env-guard'
+import { buildProjects } from './e2e/project-isolation'
 
 // E2Eは本番の .env.local ではなく .env.test のみを読む。
 // NODE_ENV=test のとき @next/env は .env.local を読み込まない（Next.js公式仕様）ため、
@@ -36,10 +37,7 @@ export default defineConfig({
       NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
     },
   },
-  projects: [
-    {
-      name: 'chromium',
-      use: { browserName: 'chromium' },
-    },
-  ],
+  // 攻撃 spec（P-017）だけを単独プロジェクトに分け、他の spec をその後ろに並べる。
+  // 理由と却下案は e2e/project-isolation.ts を参照。
+  projects: buildProjects(),
 })
