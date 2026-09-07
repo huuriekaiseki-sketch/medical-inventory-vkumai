@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database.generated'
 import { recordAccessDenial } from '@/lib/security/access-denial'
+import { logServerError } from '@/lib/log-safe'
 import limitsConfig from '../../../aidd.config.json'
 
 // WHY: issue #757 の 32（量の上限、quota-inventory の Q-002）。
@@ -101,14 +102,50 @@ export async function consumeUserRequestQuota(userId: string): Promise<RateLimit
   return result
 }
 
+const INVITE_WINDOW_SECONDS = 24 * 60 * 60
+
+const inviteBucket = (adminUserId: string) => `invite:${adminUserId}`
+
 /**
  * 招待メールの 1 日あたりの上限を消費し、超えていれば拒否として記録する。
  * WHY: メールは外に出ていく唯一の経路で、従量課金と迷惑メール判定の対象（Q-020）。
  */
 export async function consumeInviteQuota(adminUserId: string): Promise<RateLimitResult> {
-  const result = await consumeRateLimit(`invite:${adminUserId}`, INVITES_PER_DAY, 24 * 60 * 60)
+  const result = await consumeRateLimit(inviteBucket(adminUserId), INVITES_PER_DAY, INVITE_WINDOW_SECONDS)
   if (!result.allowed) {
     await recordAccessDenial({ guard: 'rate_limit', reason: 'rate_limited', actorId: adminUserId })
   }
   return result
+}
+
+/**
+ * 消費した招待の枠を 1 つ戻す。**メールが出ていないことが確実なときだけ**呼ぶ。
+ *
+ * WHY(2026-09-08 に人が決めた): 枠は送信の前に消費する（送ってしまったメールは取り消せない）。
+ *      そのため SMTP が落ちている間に押し直すと、メールが 1 通も出ないまま枠だけが減っていた
+ *      （M-021 の実測、2026-09-07）。GoTrue が 5xx を返した＝送れていないと分かる場合だけ戻す。
+ *      422（既に登録済み）のような利用者側の誤りは戻さない（同じ操作の連打を抑止し続けるため）。
+ *
+ * 戻り値は「実際に減らせたか」。失敗しても呼び出し側は続行してよい（枠が 1 つ減ったままになるだけで、
+ * 業務は止まらない）。ただし**黙って捨てない**: PostgREST の失敗は戻り値の error に来るので、
+ * 捨てると誰も気づけない。
+ */
+export async function refundInviteQuota(adminUserId: string): Promise<boolean> {
+  try {
+    const db = serviceRoleClient()
+    if (!db) return false
+    const { data, error } = await db.rpc('refund_rate_limit', {
+      p_bucket: inviteBucket(adminUserId),
+      p_window_seconds: INVITE_WINDOW_SECONDS,
+    })
+    if (error) {
+      logServerError('refund_rate_limit', error)
+      return false
+    }
+    const row = Array.isArray(data) ? data[0] : data
+    return row?.refunded === true
+  } catch (error) {
+    logServerError('refund_rate_limit', error)
+    return false
+  }
 }

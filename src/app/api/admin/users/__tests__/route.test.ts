@@ -27,12 +27,15 @@ vi.mock('@/lib/supabase/server', () => ({
 const mockConsumeInviteQuota = vi.fn(async () => ({
   allowed: true, hitCount: 1, limit: 50, resetAt: null, unmeasured: false,
 }))
-// WHY(Q-020・M-021): 差し替えるのは consumeInviteQuota だけにし、**それ以外の名前を
-//      route が呼んだら即座に落とす**。「送信に失敗したら枠を戻す」を後から足すときは、
-//      払い戻し用の別の関数がここに現れる。呼ばれた回数だけを見ていると、
-//      別名の関数が増えてもテストは緑のままになる（見えない変更になる）。
+const mockRefundInviteQuota = vi.fn(async () => true)
+// WHY(Q-020・M-021): 差し替えるのは数え方の 2 つだけにし、**それ以外の名前を route が呼んだら
+//      即座に落とす**。呼ばれた回数だけを見ていると、別名の関数が増えても
+//      テストは緑のままになる（枠の増減が静かに変わる）。
 vi.mock('@/lib/security/rate-limit', () => new Proxy(
-  { consumeInviteQuota: (...args: unknown[]) => mockConsumeInviteQuota(...(args as [])) },
+  {
+    consumeInviteQuota: (...args: unknown[]) => mockConsumeInviteQuota(...(args as [])),
+    refundInviteQuota: (...args: unknown[]) => mockRefundInviteQuota(...(args as [])),
+  },
   {
     get(target, prop: string) {
       if (prop in target) return target[prop as keyof typeof target]
@@ -412,18 +415,46 @@ describe('招待の回数制限を数える順番 [Q-020]', () => {
     expect(order).toEqual(['quota', 'invite'])
   })
 
-  it('メール送信に失敗しても消費は取り消されない（枠だけが減る。#757-38 で戻すかを決める）', async () => {
-    // WHY(M-021 の実測、2026-09-07): SMTP を止めると GoTrue は利用者行ごとロールバックするので、
-    //      auth 側には何も残らない。**残るのはこの枠だけ**で、SMTP 障害中に押し直すと
-    //      メールが 1 通も出ないまま 1 日 50 通の枠が減っていく。
-    //      いま戻していないことを固定する。戻す実装を足すと、上の Proxy が
-    //      「rate-limit の未知の関数」で落ちる（同じモジュールに払い戻しが増えるため）
+  // WHY(M-021 の実測 → 2026-09-08 に人が決めた): SMTP を止めると GoTrue は利用者行ごと
+  //      ロールバックするので auth 側には何も残らず、**残るのは消費済みの枠だけ**だった。
+  //      メールが出ていないことが確実な 5xx のときだけ戻す。
+  //      「戻す・戻さない」の線引きが動いたらここが落ちる。
+  it.each([
+    ['SMTP 障害（500）', { message: 'Error sending invite email', status: 500 }, true],
+    ['既に登録済み（422）', { message: 'email address already registered', status: 422, code: 'email_exists' }, false],
+    ['status が読めない失敗', { message: 'boom' }, false],
+  ])('%s → 枠を戻すか: %s', async (_label, inviteError, shouldRefund) => {
     mockConsumeInviteQuota.mockResolvedValue({ allowed: true, hitCount: 1, limit: 50, resetAt: null, unmeasured: false })
-    mockInviteUserByEmail.mockResolvedValue({ error: { message: 'Error sending invite email', status: 500 } })
+    mockInviteUserByEmail.mockResolvedValue({ error: inviteError })
 
-    await POST(req({ email: 'smtp-down@test.com' }))
+    await POST(req({ email: 'retry@test.com' }))
 
     expect(mockConsumeInviteQuota).toHaveBeenCalledTimes(1)
-    expect(mockConsumeInviteQuota).toHaveBeenCalledWith('admin-1')
+    if (shouldRefund) {
+      expect(mockRefundInviteQuota).toHaveBeenCalledWith('admin-1')
+    } else {
+      expect(mockRefundInviteQuota).not.toHaveBeenCalled()
+    }
+  })
+
+  it('成功したときは枠を戻さない（メールが出ているので当然）', async () => {
+    mockConsumeInviteQuota.mockResolvedValue({ allowed: true, hitCount: 1, limit: 50, resetAt: null, unmeasured: false })
+    mockInviteUserByEmail.mockResolvedValue({ error: null })
+
+    const res = await POST(req({ email: 'ok@test.com' }))
+
+    expect(res.status).toBe(200)
+    expect(mockRefundInviteQuota).not.toHaveBeenCalled()
+  })
+
+  it('払い戻し自体が失敗しても 5xx の応答は返る（記録の失敗で業務を止めない）', async () => {
+    mockConsumeInviteQuota.mockResolvedValue({ allowed: true, hitCount: 1, limit: 50, resetAt: null, unmeasured: false })
+    mockRefundInviteQuota.mockResolvedValueOnce(false)
+    mockInviteUserByEmail.mockResolvedValue({ error: { message: 'Error sending invite email', status: 500 } })
+
+    const res = await POST(req({ email: 'refund-fails@test.com' }))
+
+    expect(mockRefundInviteQuota).toHaveBeenCalledTimes(1)
+    expect(res.status).toBeGreaterThanOrEqual(400)
   })
 })

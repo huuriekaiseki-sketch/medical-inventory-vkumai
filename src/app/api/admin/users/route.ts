@@ -2,13 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/server'
 import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { assertAdminAal2, requireAdmin } from '@/lib/admin-auth'
-import { consumeInviteQuota } from '@/lib/security/rate-limit'
+import { consumeInviteQuota, refundInviteQuota } from '@/lib/security/rate-limit'
 import { asEnum } from '@/lib/mapping'
 import type { AdminUser } from '@/types/admin'
 import { FACILITY_ROLES, type FacilityRole } from '@/types/role'
 import { parseBody } from '@/lib/validation/parse-body'
 import { deleteUserSchema, inviteInputSchema } from '@/lib/validation/schemas'
 import { recordPrivilegedOperation, toOperationErrorCode } from '@/lib/security/privileged-operation'
+
+/**
+ * 「メールが出ていないことが確実」と言えるか。
+ *
+ * WHY(status だけで判断し message を見ない): GoTrue の文言は版で変わるうえ、
+ *      文字列一致は書き方を変えられると外れる。5xx は外部サービス側の失敗という
+ *      種類の情報で、文言より安定している。status が無い（判断できない）ときは戻さない
+ *      ＝**枠が減ったままになる側**へ倒す（多く戻すより、戻し過ぎない方が安全）。
+ */
+function isSendFailure(error: { status?: number } | null): boolean {
+  return typeof error?.status === 'number' && error.status >= 500
+}
 
 export async function GET() {
   const user = await requireAdmin()
@@ -72,11 +84,11 @@ export async function POST(request: NextRequest) {
   //      上限は人が決めた値（aidd.config.json の limits.invitesPerDay = 管理者 1 人あたり
   //      毎日 50 通）。超えたら送らずに 429 を返し、access_denials に残す。
   //
-  // WHY(消費は送信より前・失敗しても戻さない): 送ってしまったメールは取り消せないので、
-  //      数えるのは必ず送信の前に置く。ただし **送信に失敗しても消費は戻らない**ため、
-  //      SMTP が落ちている間に押し直すと**メールは 1 通も出ないまま枠だけが減る**
-  //      （M-021 の実測、2026-09-07: SMTP を止めると GoTrue は 500 を返し利用者行ごと
-  //      ロールバックするので、残るのはこの枠だけ）。戻すかどうかは未決（#757-38）。
+  // WHY(消費は送信より前・送れなかったときだけ戻す): 送ってしまったメールは取り消せないので、
+  //      数えるのは必ず送信の前に置く。ただし M-021 の実測（2026-09-07、SMTP を止めて 3/3）で
+  //      **GoTrue は送信に失敗すると利用者行ごとロールバックする**ことが分かり、
+  //      残るのは消費済みの枠だけだった（メールは 1 通も出ないのに枠が減る）。
+  //      2026-09-08 に人が「送信失敗だけ戻す」と決めたので、下の 5xx のときだけ払い戻す。
   const quota = await consumeInviteQuota(user.id)
   if (!quota.allowed) {
     return apiError('招待メールの 1 日の上限に達しました。明日以降にやり直してください', 429)
@@ -106,7 +118,13 @@ export async function POST(request: NextRequest) {
     errorCode: toOperationErrorCode(error),
   })
 
-  if (error) return apiError(toClientErrorMessage(error, '招待メールの送信に失敗しました'))
+  if (error) {
+    // WHY(2026-09-08 に人が決めた): 5xx は「GoTrue の中で送れなかった」＝メールが出ていないことが
+    //      確実な場合。このときだけ枠を戻す。422（既に登録済み）などの利用者側の誤りは戻さない
+    //      （戻すと同じ相手への連打が枠を消費しなくなり、上限が抑止として効かなくなる）。
+    if (isSendFailure(error)) await refundInviteQuota(user.id)
+    return apiError(toClientErrorMessage(error, '招待メールの送信に失敗しました'))
+  }
 
   return NextResponse.json({ message: `${email} に招待メールを送信しました` })
 }

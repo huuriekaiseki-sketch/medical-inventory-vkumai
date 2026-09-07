@@ -169,3 +169,68 @@ describe('回数の上限（rate limit） [P-064][Q-002]', () => {
     expect(rpc).not.toHaveBeenCalled()
   })
 })
+
+// 部分成功の棚卸し（docs/agents/partial-success-inventory.md）: M-021 送れなかった分の枠を戻す
+describe('招待の枠の払い戻し（refundInviteQuota） [M-021][Q-020]', () => {
+  beforeEach(() => {
+    rpc.mockReset()
+    recordAccessDenial.mockReset()
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'
+  })
+
+  it('消費と同じバケット・同じ窓を指して戻す（違う行を減らさない）', async () => {
+    // WHY: 払い戻しが別のバケットを減らすと、**他人の枠を静かに増やす**ことになる。
+    //      窓の秒数も消費と同じでなければ DB 側で別の行の鍵になる
+    rpc.mockResolvedValue({ data: [{ refunded: true, hit_count: 0 }], error: null })
+    const m = await loadModule()
+    await m.consumeInviteQuota('admin-1')
+    const consumeArgs = rpc.mock.calls[0][1]
+
+    rpc.mockClear()
+    await m.refundInviteQuota('admin-1')
+    const refundArgs = rpc.mock.calls[0][1]
+
+    expect(rpc.mock.calls[0][0]).toBe('refund_rate_limit')
+    expect(refundArgs.p_bucket).toBe(consumeArgs.p_bucket)
+    expect(refundArgs.p_window_seconds).toBe(consumeArgs.p_window_seconds)
+  })
+
+  it('減らせたら true', async () => {
+    rpc.mockResolvedValue({ data: [{ refunded: true, hit_count: 3 }], error: null })
+    const m = await loadModule()
+    await expect(m.refundInviteQuota('admin-1')).resolves.toBe(true)
+  })
+
+  it('窓が変わって行が無ければ false（新しい窓の行を減らさない）', async () => {
+    rpc.mockResolvedValue({ data: [{ refunded: false, hit_count: null }], error: null })
+    const m = await loadModule()
+    await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
+  })
+
+  it('RPC が戻り値の error で失敗したら false を返し、ログに出す（黙って落とさない）', async () => {
+    // WHY: PostgREST の失敗は throw ではなく戻り値の error に来る。捨てると
+    //      「払い戻せていないこと」に誰も気づけない（2026-09-07 に access-denial.ts で起きた形）
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'permission denied' } })
+    const m = await loadModule()
+    await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
+    expect(String(spy.mock.calls[0]?.[0])).toContain('refund_rate_limit')
+    spy.mockRestore()
+  })
+
+  it('例外を投げても呼び出し側を止めない（枠が 1 つ減ったままになるだけ）', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    rpc.mockRejectedValue(new Error('network down'))
+    const m = await loadModule()
+    await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
+    spy.mockRestore()
+  })
+
+  it('service role の環境変数が無い実行環境では呼ばない', async () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+    const m = await loadModule()
+    await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
+    expect(rpc).not.toHaveBeenCalled()
+  })
+})
