@@ -105,13 +105,31 @@
 
 ### 機械での突合
 
-`scripts/check-layer-consistency.test.sh`（CI `hooks-test`）が DB と API を突き合わせる。
-DB の CHECK がある列は `scripts/lib/layer-map.json` で分類する。
+`scripts/check-layer-consistency.test.sh`（CI `hooks-test`）が DB と API を**値まで**突き合わせる。
 
-- `api: "<スキーマ名>.<フィールド名>"` … 利用者が値を送れる列。zod 側に同じ種類の規則が要る
-- `serverOnly: "理由"` … 利用者が送れない列（状態遷移・記録用・サーバーが入れる）
+両側とも実物から自動で取り出す。**手で書き写す場所を作らない。**
 
-**新しい CHECK を足したら対応表に 1 行足す。足さないと落ちる。**
+| 側 | 取り出し方 |
+| --- | --- |
+| DB | `scripts/lib/scan-db-constraints.mjs` が migration を適用順に畳み込み、CHECK を列挙する |
+| API | `scripts/lib/extract-api-rules.ts` が zod スキーマを**実行時に内省**して実際の値を取り出す |
+
+対応付けは命名規約から導く（列名 `snake_case` → フィールド名 `camelCase`）。
+人が書くのは `scripts/lib/layer-map.json` の 2 つだけ。
+
+- `tables` … 表 → zod スキーマ名（規約で導けない対応）
+- `columns` … 規約から外れるものだけ
+  - `api: "<スキーマ名>.<フィールド名>"` … 名前が規約と違う対応
+  - `serverOnly: "理由"` … 利用者が送れない列（恒久。**期限は付けない**）
+  - `exception: "理由", until: "YYYY-MM-DD"` … 一時的に揃っていないことを認める。
+    **期限は必須で、過ぎたら落ちる**
+
+比べるのは種類ではなく**値**。長さ 500 対 1,000、下限 0 対 1、固定語の顔ぶれの違いを名指しする。
+
+**恒久の分類（serverOnly）に期限を付けない理由**: 監査ログの列が将来 API から書けるように
+なることはない。恒久の分類に期限を付けると、意味の無い更新作業が毎年発生する。
+期限が要るのは「今は揃っていないが、いずれ揃える」ものだけ。
+
 UI 層はまだ対象外（入れるときは対応表に `ui` のキーを足す）。
 
 ## 答えの置き場所（派生先リポジトリはここだけ書き換える）

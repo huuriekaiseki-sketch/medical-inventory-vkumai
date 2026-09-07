@@ -1,64 +1,34 @@
 {
-  "_comment": "issue #757 の 20。DB が守っている条件（CHECK）が、API の入口（zod スキーマ）でも同じ形で見られているかの対応表。2026-09-07 に見つけた実害 8 件のうち 6 件が層の間の食い違いだった（API が DB より緩い・厳しい、型の必須項目を API が見ていない）。新しい CHECK を足したらここに 1 行足す。足さないと scripts/check-layer-consistency.test.sh が落ちる。",
-  "_howto": "列ごとに次のどちらかを書く。(a) api: \"<スキーマ名>.<フィールド名>\" … 利用者が値を送れる列。zod 側に同じ種類の規則があることを検査する。(b) serverOnly: \"理由\" … 利用者が送れない列（サーバーが入れる・状態遷移・記録用）。理由を具体的に書く。",
-  "_kinds": "maxLength は requiredText / optionalText、min は money / quantity、enum は z.enum を使う。ヘルパー名で種類を判定するので、生の .max() / .min() を書くとこの検査を通らない",
+  "_comment": "issue #757 の 20。DB（migration の CHECK）と API（zod スキーマ）の突合で、**規約から導けない部分だけ**を人が書く表。両側の条件は実物から自動抽出する（scan-db-constraints.mjs / extract-api-rules.ts）。列 → フィールドの対応は snake_case → camelCase で自動。ここに書くのは表 → スキーマの対応と、規約から外れる列だけ。",
+  "_howto": "tables: 表名 → zod スキーマ名。columns: 列ごとに次のいずれか。(a) api: \"<スキーマ名>.<フィールド名>\" … 規約と違う名前の対応 (b) serverOnly: \"理由\" … 利用者が送れない列（恒久。期限は不要） (c) exception: \"理由\", until: \"YYYY-MM-DD\" … 一時的に揃っていないことを認める（**期限必須。過ぎたら落ちる**）",
+  "_why_expiry": "serverOnly は恒久の分類なので期限を付けない（監査ログの列が将来 API から書けるようになることはない）。期限が要るのは exception だけ。恒久の分類に期限を付けると、意味の無い更新作業が毎年発生する",
+
+  "tables": {
+    "case_orders": "caseOrderInputSchema",
+    "case_order_items": "janItemSchema",
+    "loan_orders": "loanOrderInputSchema",
+    "loan_order_items": "loanOrderInputSchema",
+    "loan_return_items": "janItemSchema",
+    "consumable_order_items": "consumableOrderInputSchema",
+    "consumables": "consumableInputSchema",
+    "categories": "categoryInputSchema",
+    "facilities": "facilityInputSchema",
+    "products": "productInputSchema",
+    "distributor_products": "distributorProductInputSchema",
+    "hospital_prices": "hospitalPriceInputSchema",
+    "product_compatibilities": "compatibilityInputSchema",
+    "user_facilities": "userFacilityAssignSchema"
+  },
+
   "columns": {
-    "case_orders.procedure_name": { "api": "caseOrderInputSchema.procedureName" },
-    "case_orders.patient_id": { "api": "caseOrderInputSchema.patientId" },
-    "case_orders.patient_initials": { "api": "caseOrderInputSchema.patientInitials" },
-    "case_orders.doctor_name": { "api": "caseOrderInputSchema.doctorName" },
-    "case_orders.gender": { "api": "caseOrderInputSchema.gender" },
     "case_orders.status": { "serverOnly": "状態は RPC とトリガー（I-020）が進める。利用者は送れない" },
-
-    "case_order_items.jan": { "api": "janItemSchema.jan" },
-    "case_order_items.lot": { "api": "janItemSchema.lot" },
-    "case_order_items.ubd": { "api": "janItemSchema.ubd" },
-    "case_order_items.quantity": { "api": "janItemSchema.quantity" },
-    "case_order_items.unit_price": { "serverOnly": "発注時の単価スナップショット。RPC が価格表から写す" },
-
-    "loan_orders.procedure_name": { "api": "loanOrderInputSchema.procedureName" },
-    "loan_orders.maker": { "api": "loanOrderInputSchema.maker" },
     "loan_orders.status": { "serverOnly": "同上（I-020）" },
-
-    "loan_order_items.jan": { "api": "loanOrderInputSchema.jan" },
-    "loan_order_items.name": { "api": "loanOrderInputSchema.name" },
-    "loan_order_items.quantity": { "api": "loanOrderInputSchema.quantity" },
-    "loan_order_items.unit_price": { "serverOnly": "同上" },
-
-    "loan_return_items.jan": { "api": "janItemSchema.jan" },
-    "loan_return_items.lot": { "api": "janItemSchema.lot" },
-    "loan_return_items.ubd": { "api": "janItemSchema.ubd" },
-    "loan_return_items.quantity": { "api": "janItemSchema.quantity" },
     "loan_returns.status": { "serverOnly": "同上（I-020）" },
-
-    "consumable_order_items.quantity": { "api": "consumableOrderInputSchema.quantity" },
-    "consumable_order_items.unit_price": { "serverOnly": "同上" },
     "consumable_orders.status": { "serverOnly": "同上（I-020）" },
 
-    "consumables.name": { "api": "consumableInputSchema.name" },
-    "consumables.jan": { "api": "consumableInputSchema.jan" },
-    "consumables.purpose": { "api": "consumableInputSchema.purpose" },
-
-    "categories.name": { "api": "categoryInputSchema.name" },
-    "categories.description": { "api": "categoryInputSchema.description" },
-
-    "facilities.name": { "api": "facilityInputSchema.name" },
-
-    "products.jan": { "api": "productInputSchema.jan" },
-    "products.ref": { "api": "productInputSchema.ref" },
-
-    "distributor_products.maker": { "api": "distributorProductInputSchema.maker" },
-    "distributor_products.supplier": { "api": "distributorProductInputSchema.supplier" },
-    "distributor_products.name": { "api": "distributorProductInputSchema.name" },
-    "distributor_products.quantity": { "api": "distributorProductInputSchema.quantity" },
-    "distributor_products.reimbursement_price": { "api": "distributorProductInputSchema.reimbursementPrice" },
-
-    "hospital_prices.purchase_price": { "api": "hospitalPriceInputSchema.purchasePrice" },
-    "hospital_prices.delivery_price": { "api": "hospitalPriceInputSchema.deliveryPrice" },
-
-    "product_compatibilities.note": { "api": "compatibilityInputSchema.note" },
-
-    "user_facilities.role": { "api": "userFacilityAssignSchema.role" },
+    "case_order_items.unit_price": { "serverOnly": "発注時の単価スナップショット。RPC が価格表から写す" },
+    "loan_order_items.unit_price": { "serverOnly": "同上" },
+    "consumable_order_items.unit_price": { "serverOnly": "同上" },
 
     "access_denials.guard": { "serverOnly": "拒否の記録。record_access_denial() だけが書く" },
     "access_denials.reason": { "serverOnly": "同上" },
