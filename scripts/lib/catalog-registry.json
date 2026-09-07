@@ -50,6 +50,28 @@
       ],
       "_note": "状態列は実施タイミング（4 語）。守るテストが 未 の行があるので evidenceRequiredStates は置かない",
       "purpose": "auth / RLS / 施設境界 / admin 境界 / AAL2 / RPC 契約の約束。守るテストの名前に ID を書いて双方向に突合する"
+    },
+    {
+      "id": "quota-inventory",
+      "file": "docs/agents/quota-inventory.md",
+      "idPrefix": "Q",
+      "columns": 6,
+      "evidenceColumn": 5,
+      "statusColumn": 6,
+      "states": [
+        "上限あり",
+        "上限なし（意図）",
+        "要設定",
+        "未測定"
+      ],
+      "evidenceRequiredStates": [
+        "上限あり"
+      ],
+      "planRequiredStates": [
+        "要設定",
+        "未測定"
+      ],
+      "planPattern": "#757-[0-9]+"
     }
   ]
 }

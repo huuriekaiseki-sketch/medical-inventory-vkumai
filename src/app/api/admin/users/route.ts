@@ -11,10 +11,23 @@ export async function GET() {
   if (!user) return apiError('権限がありません', 403)
 
   const admin = createAdminSupabase()
-  const { data, error } = await admin.auth.admin.listUsers()
-  if (error) return apiError(toClientErrorMessage(error, 'ユーザー一覧の取得に失敗しました'))
 
-  const userIds = data.users.map(u => u.id)
+  // WHY(#757-32): listUsers() は既定で 1 ページ 50 件しか返さない。51 人目からは
+  //      画面にも API にも出ず、admin が「いないはずの利用者」を見落とす（2026-09-07 に
+  //      60 人作って実測: 既定 50 件、perPage 指定で 60 件）。全ページを取り切る。
+  //      PAGE_CAP は取り切れない量になったときの安全弁（そこまで増えたら一覧ではなく検索が要る）。
+  const PER_PAGE = 1000
+  const PAGE_CAP = 20
+  type AuthUser = Awaited<ReturnType<typeof admin.auth.admin.listUsers>>['data']['users'][number]
+  const users: AuthUser[] = []
+  for (let page = 1; page <= PAGE_CAP; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: PER_PAGE })
+    if (error) return apiError(toClientErrorMessage(error, 'ユーザー一覧の取得に失敗しました'))
+    users.push(...data.users)
+    if (data.users.length < PER_PAGE) break
+  }
+
+  const userIds = users.map(u => u.id)
 
   // Bulk fetch all facility assignments in one query
   const { data: facilityRows, error: facilityError } = await admin
@@ -32,14 +45,14 @@ export async function GET() {
     facilityMap.set(row.user_id, list)
   }
 
-  const users: AdminUser[] = data.users.map(u => ({
+  const result: AdminUser[] = users.map(u => ({
     id: u.id,
     email: u.email ?? '',
     lastSignInAt: u.last_sign_in_at ?? null,
     facilities: facilityMap.get(u.id) ?? [],
   }))
 
-  return NextResponse.json({ users })
+  return NextResponse.json({ users: result })
 }
 
 export async function POST(request: NextRequest) {
