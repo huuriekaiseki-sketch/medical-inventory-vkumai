@@ -105,6 +105,43 @@ bash scripts/rehearse-merge.sh --json                   # 機械可読（CI 用�
 **判断は変わらない**。層の表も 1 行 1 件の表なので、断片化すれば衝突は消える。
 ただしこの波を捌くのが先で、捌いた後も同じ表で衝突が続くようなら着手する。
 
+## 2026-09-07 の実行結果（40 本を main へ入れた）
+
+**衝突を手で解く前に、衝突が起きない形にした。** 予行演習の 21 件は中身が全部「別々の行を足しただけ」
+だったので、git に任せた。
+
+| 段階 | 衝突 |
+|---|---|
+| 何もしない | 21 / 37 |
+| `.gitattributes` に `merge=union`（追記型の表・文書 11 ファイル） | **14 / 37** |
+| `merge=jsonunion`（キー辞書の JSON を構造で 3 者マージ） | 手で解いたのは **7 回だけ** |
+
+union が効いたのは test-matrix・security-test-catalog・actuator-inventory・invariant-catalog・
+decisions・known-failure-patterns。jsonunion が効いたのは plugin-layout.json（10 本ぶん）。
+
+**手で解いた 7 回**は、どれも「両方の変更が必要」だった:
+`admin-auth.ts`（fail-closed 化と拒否の記録）／`plugin-layout.json` 2 回（節ごと足した分）／
+`eslint.config.mjs`・`derive-test-selection.rules.mjs` 3 回（隣接による偽の衝突）／
+`maintenance-digest.sh` と `.test.sh`（定期作業が 3 → 7 本に増えた）／`db-schema.md`・`settings.json`。
+
+**union の限界も実測どおり出た。** 衝突を報告しない代わりに、同じ行を両側が別々に書き換えると
+両方が残る。実際に `I-052`（不変条件）と test-matrix の 3 行、catalog-registry の 2 エントリが
+重複したが、**ID 重複・derive キー重複・limits 未記入の検査が全部捕まえた**。
+機械側の受けがあれば union は安全に使える、という設計の裏が取れた。
+
+**合流して初めて出た穴が 10 種類**あった（個々のブランチでは緑だった）。詳細は
+`docs/agents/escaped-defects.md` の E-031 / E-032 と、コミット `0f3607b`。
+特に版番号の衝突（`20260907000001` が 2 本）は `db reset` が止まって初めて分かる型で、
+ファイル名の並びを見ているだけでは気づけない。
+
+検証: 全 63 migration が素の DB に通り、`npm test` 226 files / 1877 件、
+`run-integration-tests.sh` 35 files / 234 件、`scripts/*.test.sh` 97 本すべて緑。
+
+**次に同じ波が来たら**: 先に `bash scripts/rehearse-merge.sh` で衝突を数え、
+「両方の行を残す」で解けるファイルを `.gitattributes` に足してから並べる。
+新しい clone・worktree では `bash scripts/setup-merge-drivers.sh` を 1 回実行する
+（マージドライバの中身は git の仕様で配れない）。
+
 ## 更新の引き金
 
 - 並行ブランチが 3 本を超えたとき（マージ前に 1 回回す）
