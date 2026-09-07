@@ -796,6 +796,27 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_limit_counters: {
+        Row: {
+          bucket: string
+          hits: number
+          updated_at: string
+          window_start: string
+        }
+        Insert: {
+          bucket: string
+          hits?: number
+          updated_at?: string
+          window_start: string
+        }
+        Update: {
+          bucket?: string
+          hits?: number
+          updated_at?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       schema_baseline_snapshots: {
         Row: {
           applied_at: string
@@ -915,6 +936,15 @@ export type Database = {
           detail: Json
           drift_type: string
           object_name: string
+        }[]
+      }
+      consume_rate_limit: {
+        Args: { p_bucket: string; p_limit: number; p_window_seconds: number }
+        Returns: {
+          allowed: boolean
+          hit_count: number
+          limit_value: number
+          reset_at: string
         }[]
       }
       create_case_order_atomic: {

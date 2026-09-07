@@ -8,7 +8,7 @@ import {
   deleteHospitalPrice,
   HOSPITAL_PRICE_CONFLICT_MESSAGE,
 } from '@/lib/hospital-prices/repository'
-import { apiError } from '@/lib/api-error'
+import { authGuardError, apiError } from '@/lib/api-error'
 import type { HospitalPriceInput } from '@/types/hospitalPrice'
 import type { RouteContext } from '@/types/route'
 
@@ -16,7 +16,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   const db = await createServerSupabase()
   let user
-  try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+  try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
   const price = await getHospitalPrice(db, id)
   if (!price) {
     return NextResponse.json({ error: '病院別価格が見つかりません' }, { status: 404 })
@@ -46,7 +46,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     const existing = await getHospitalPrice(db, id)
     if (!existing) {
       return NextResponse.json({ error: '価格情報が見つかりません' }, { status: 404 })
@@ -90,7 +90,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     const existing = await getHospitalPrice(db, id)
     if (!existing) {
       return NextResponse.json({ error: '病院別価格が見つかりません' }, { status: 404 })

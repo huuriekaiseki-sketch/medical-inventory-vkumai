@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listOrders } from '@/lib/orders/repository'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
+import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parsePagination } from '@/lib/api-pagination'
 import { isValidDateString } from '@/lib/jst-date-range'
 import type { OrderKind, OrdersApiErrorResponse, OrdersApiQuery, OrdersApiResponse } from '@/types/order'
@@ -21,8 +21,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<OrdersApiR
   let user
   try {
     user = await requireAuth(db)
-  } catch {
-    return ordersApiError('認証が必要です', 401)
+  } catch (e) {
+    return authGuardError(e)
   }
 
   const params = request.nextUrl.searchParams

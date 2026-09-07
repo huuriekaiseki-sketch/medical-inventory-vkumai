@@ -5,7 +5,7 @@ import { listUserFacilities } from '@/lib/user-facilities/repository'
 import { getFacilityOrderSummary } from '@/lib/dashboard/facility-summary'
 import { getLoanOutstandingCount } from '@/lib/dashboard/loan-outstanding'
 import { listRecentPriceHistories } from '@/lib/price-histories/repository'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
+import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import type { DashboardData, DashboardFacilitySummary, LoanOutstandingSummary } from '@/types/dashboard'
 
 export async function GET() {
@@ -15,8 +15,8 @@ export async function GET() {
     let user
     try {
       user = await requireAuth(db)
-    } catch {
-      return apiError('認証が必要です', 401)
+    } catch (e) {
+      return authGuardError(e)
     }
 
     // WHY: 自分が所属する施設のみを対象にすることで施設間データ隔離を担保する（issue #460）。

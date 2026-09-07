@@ -7,6 +7,19 @@ export function apiError(message: string, status = 500) {
   return NextResponse.json({ error: message }, { status })
 }
 
+// WHY(#757-32 Q-002): requireAuth は「未認証」と「回数の上限を超えた」の 2 つで throw する。
+//      route ごとに catch を書くと、必ずどれかが上限を 401 のまま返して原因が分からなくなるので、
+//      投げられたエラーから応答を作る場所を 1 か所にする。
+//      429 を返すのは、人が決めた「拒否して記録に残す」（黙って通さない・黙って捨てない）ため。
+//      構造テスト scripts/check-rate-limit-coverage.test.sh が、requireAuth を使う route が
+//      この関数を通しているかを機械検査する。
+export function authGuardError(error: unknown) {
+  if (error instanceof Error && error.message === 'RATE_LIMITED') {
+    return apiError('リクエストが多すぎます。しばらく待ってからやり直してください', 429)
+  }
+  return apiError('認証が必要です', 401)
+}
+
 // WHY: Supabase/Postgresの生エラーメッセージにはテーブル名・制約名が含まれうるため、
 //      クライアントに返す前に必ずこの関数を通してスキーマ情報の漏洩を防ぐ。
 //      ClientVisibleErrorのインスタンス(repository層が明示的に翻訳済みと保証した安全なメッセージ)

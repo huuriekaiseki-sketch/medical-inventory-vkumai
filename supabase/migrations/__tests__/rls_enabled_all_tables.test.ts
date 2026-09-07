@@ -24,6 +24,10 @@ const INTENTIONALLY_POLICYLESS_TABLES = new Set([
   // SECURITY DEFINER関数からのみ書き込まれ、クライアントロールへの直接公開はしない
   'schema_baseline_snapshots',
   'schema_drift_log',
+  // 回数の上限を数えるカウンタ（20260907000005、issue #757 の 32）。consume_rate_limit()
+  // （SECURITY DEFINER・service_role のみ EXECUTE）からしか触らない。利用者に自分の
+  // カウンタを見せる必要も、書き換えさせる理由も無いので policy を 1 つも作らない
+  'rate_limit_counters',
 ])
 
 /** SQLからコメント・$$本体・文字列リテラルを除去し、DDL文だけを走査可能にする */

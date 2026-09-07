@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/server'
 import { apiError, toClientErrorMessage } from '@/lib/api-error'
 import { requireAdmin } from '@/lib/admin-auth'
+import { consumeInviteQuota } from '@/lib/security/rate-limit'
 import { asEnum } from '@/lib/mapping'
 import type { AdminUser } from '@/types/admin'
 import { FACILITY_ROLES, type FacilityRole } from '@/types/role'
@@ -67,6 +68,15 @@ export async function POST(request: NextRequest) {
     return apiError('リクエストが不正です', 400)
   }
   if (!email) return apiError('email は必須です', 400)
+
+  // WHY(#757-32 Q-020): 招待メールは外に出ていく唯一の経路で、従量課金と迷惑メール判定の
+  //      対象。2026-09-07 の点検では 8 通を連続で送れた（止まる仕組みが無かった）。
+  //      上限は人が決めた値（aidd.config.json の limits.invitesPerDay = 管理者 1 人あたり
+  //      毎日 50 通）。超えたら送らずに 429 を返し、access_denials に残す。
+  const quota = await consumeInviteQuota(user.id)
+  if (!quota.allowed) {
+    return apiError('招待メールの 1 日の上限に達しました。明日以降にやり直してください', 429)
+  }
 
   const admin = createAdminSupabase()
   const { error } = await admin.auth.admin.inviteUserByEmail(email)

@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listDistributorProducts, createDistributorProduct } from '@/lib/distributor-products/repository'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
+import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import { parseKeyword } from '@/lib/api-keyword-query'
 import type {
   DistributorProductInput,
@@ -28,7 +28,7 @@ export async function GET(
 ): Promise<NextResponse<DistributorProductsApiResponse> | NextResponse<DistributorProductsApiErrorResponse>> {
   try {
     const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return distributorProductsApiError('認証が必要です', 401) }
+    try { await requireAuth(db) } catch (e) { return authGuardError(e) }
 
     const params = request.nextUrl.searchParams
     const kw = parseKeyword(params)
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     const isAdmin = await resolveIsAdmin(db, user)
     if (!isAdmin) return apiError('権限がありません', 403)
     const item = await createDistributorProduct(db, input)

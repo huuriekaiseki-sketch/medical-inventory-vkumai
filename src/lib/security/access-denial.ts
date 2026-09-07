@@ -24,8 +24,13 @@ import { DENIAL_METHOD_HEADER, DENIAL_ROUTE_HEADER } from '@/lib/security/denial
 //   - route / method は proxy が転送リクエストへ付けたヘッダから取る。proxy を通らない
 //     呼び出し（テスト・スクリプト）では null のまま
 
-export type DenialGuard = 'auth' | 'facility' | 'admin' | 'proxy_admin'
-export type DenialReason = 'unauthenticated' | 'facility_id_required' | 'forbidden' | 'not_admin'
+export type DenialGuard = 'auth' | 'facility' | 'admin' | 'proxy_admin' | 'rate_limit'
+export type DenialReason =
+  | 'unauthenticated'
+  | 'facility_id_required'
+  | 'forbidden'
+  | 'not_admin'
+  | 'rate_limited'
 
 export interface AccessDenial {
   guard: DenialGuard

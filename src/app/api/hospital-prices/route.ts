@@ -3,14 +3,14 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listHospitalPrices, createHospitalPrice } from '@/lib/hospital-prices/repository'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
+import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import type { HospitalPriceInput } from '@/types/hospitalPrice'
 
 export async function GET(request: NextRequest) {
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     const facilityId = request.nextUrl.searchParams.get('facilityId')
     let grantedFacilityId: string | null
     try {
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     try {
       await requireFacilityAccess(db, user, input.facilityId)
     } catch (e) {
