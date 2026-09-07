@@ -24,7 +24,7 @@ import {
   createServiceRoleClient,
   type SeededUser,
 } from './helpers/seed-rls-idor'
-import { auditedTablesFromMigrations } from '../helpers/audited-tables'
+import { auditedTablesFromMigrations } from '../helpers/table-facts'
 
 type AuditRow = {
   id: string

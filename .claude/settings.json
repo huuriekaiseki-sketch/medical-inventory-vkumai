@@ -95,6 +95,9 @@
       "Bash(bash scripts/check-blocked-issues-staleness.test.sh*)",
       "Bash(scripts/check-fault-injection-drill-staleness.sh *)",
       "Bash(bash scripts/check-fault-injection-drill-staleness.test.sh*)",
+      "Bash(scripts/check-integration-freshness.sh *)",
+      "Bash(bash scripts/check-integration-freshness.test.sh*)",
+      "Bash(bash scripts/run-integration-tests.sh*)",
       "Bash(scripts/check-claude-md-size.sh *)",
       "Bash(bash scripts/check-claude-md-size.test.sh*)",
       "Bash(scripts/check-stale-worktrees.sh*)",
@@ -232,6 +235,11 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-subagent-model-force.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-integration-freshness.sh",
             "timeout": 10
           }
         ]

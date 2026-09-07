@@ -1,6 +1,13 @@
 import { readFileSync, readdirSync } from 'fs'
 import path from 'path'
 import { describe, it, expect } from 'vitest'
+// RLSは有効だがCREATE POLICYを意図的に持たない（=deny-all、SECURITY DEFINER関数経由でのみ
+// 読み書きする）テーブルの許可リスト。
+// WHY(2026-09-07に正本を移した): 元々ここに直接書いていたが、同じ判断が
+//      audit_trigger_coverage.test.ts の「監査から外す表」と別々に存在し、新しい表を作る人が
+//      どちらも書き忘れても両方とも緑のままだった。表を作るときに決める4軸（RLS・ポリシー・
+//      権限・監査）を1枚にまとめ、正本を table-registry.ts に置いた。ここはそれを読むだけ。
+import { INTENTIONALLY_POLICYLESS_TABLES } from '../../__tests__/helpers/table-registry'
 
 // WHY: RLS有効化の防御は現状2層ある:
 //      1) 各migration個別の静的テスト（create_product_compatibilities.test.ts 等）
@@ -16,15 +23,6 @@ import { describe, it, expect } from 'vitest'
 //      npm test＝CI / test jobで毎PR実行される）
 
 const MIGRATIONS_DIR = path.resolve(__dirname, '..')
-
-// RLSは有効だがCREATE POLICYを意図的に持たない（=deny-all、SECURITY DEFINER関数経由での
-// み読み書きする）テーブル。新規追加時は理由をコメントで添えること。
-const INTENTIONALLY_POLICYLESS_TABLES = new Set([
-  // スキーマドリフト検知の内部テーブル（20260714000001）。record_schema_drift()等の
-  // SECURITY DEFINER関数からのみ書き込まれ、クライアントロールへの直接公開はしない
-  'schema_baseline_snapshots',
-  'schema_drift_log',
-])
 
 /** SQLからコメント・$$本体・文字列リテラルを除去し、DDL文だけを走査可能にする */
 function stripNonDdl(sql: string): string {

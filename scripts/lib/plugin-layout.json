@@ -72,6 +72,7 @@
     "check-empty-session-report.sh": "aidd-core",
     "check-upstream-docs-review-staleness.sh": "aidd-core",
     "check-subagent-model-force.sh": "aidd-core",
+    "check-integration-freshness.sh": "aidd-vkumai",
     "reinject-aidd-run-state.sh": "aidd-core",
     "maintenance-digest.sh": "aidd-core",
     "check-skip-marker-write.sh": "aidd-core",
@@ -95,6 +96,7 @@
   "supportScripts": {
     "lib/resolve-log-dir.sh": ["aidd-core", "aidd-vkumai"],
     "lib/aidd-config.sh": ["aidd-core", "aidd-vkumai"],
+    "run-integration-tests.sh": "aidd-vkumai",
     "harvest-journal-events.sh": "aidd-core",
     "otel-debug-collector.mjs": "aidd-core",
     "lib/pr-numbers-from-transcript.jq": "aidd-core",
@@ -139,6 +141,7 @@
     "scripts/check-skip-marker-write.sh": "check-direct-ddl-execution.sh のコメントが同型ゲートを示すだけ",
     "scripts/check-constraint-coverage.sh": "derive のルール表が 04 表に出すコマンド案内（導入先が実行する）",
     "scripts/check-lockfile-integrity.test.sh": "同上",
+    "scripts/check-no-registry-fetch.test.sh": "run-integration-tests.sh / check-rls-mutation.sh の WHY コメントが「なぜ npx を使わないか」の出典として名前を挙げるだけ（実行はしない）",
     "scripts/lib/check-docs-integrity.mjs": "同上",
     "scripts/check-generated-supabase-types.sh": "同上",
     "scripts/eval-workflow-prompts.sh": "同上",

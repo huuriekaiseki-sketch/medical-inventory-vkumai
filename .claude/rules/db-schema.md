@@ -5,6 +5,27 @@ paths:
 
 # DBスキーマ変更ルール
 
+- **新しいテーブルを作るときは 4 軸すべてを決める（2026-09-07）。**
+  (1) RLS を有効にするか  (2) ポリシーを作るか  (3) **誰が読み書きできるか**  (4) 監査対象にするか。
+  決めた内容は `supabase/__tests__/helpers/table-registry.ts` に 1 エントリ書く。
+  書かないと `supabase/migrations/__tests__/table_registry.test.ts` が
+  「宣言が無い」で落ちる（`npm test` に含まれるので毎 PR）。宣言と migration の実態がずれても落ちる。
+  - 特に (3) は 2026-09-07 まで**どの検査も見ていなかった**。その結果 `schema_drift_log` は
+    作られてから 2 か月間 GRANT が 1 行も無く、service_role でも読めなかった。
+    RLS のバイパス（service_role）とテーブル権限は別の話で、**GRANT を書かなければ誰も読めない**
+  - **`REVOKE ALL ON TABLE <t> FROM PUBLIC, anon, authenticated, service_role;` を先に書いてから
+    必要な GRANT だけを書く**。Supabase の既定権限（`ALTER DEFAULT PRIVILEGES`）が効くかは
+    環境で変わり、実測でも効いている表と効いていない表の両方があった。既定に答えを委ねない
+  - ポリシーを作らない表（SECURITY DEFINER 関数からしか触らない表）は、
+    **実 DB で「読める人・読めない人」を測る統合テスト**も必須（静的検査は GRANT の文字列しか見られない）
+
+- **`supabase/` を触ったら `bash scripts/run-integration-tests.sh` で全件を通す。**
+  素の `npm run test:integration` ではなくこのラッパーを使うと、結果が
+  `logs/integration-runs.jsonl` に機械的に記録される（通ったことにはできない。記録するのは exit code）。
+  記録が無い・前回が赤・前回から `supabase/` が変わっている、のいずれかなら
+  SessionStart hook（`scripts/check-integration-freshness.sh`）が次のセッションで警告する。
+  2026-09-07 に統合テストが 2 件、いつからか分からないほど前から赤いまま放置されていたのが理由
+
 - **DBスキーマ変更は必ず `supabase/migrations/` 配下のマイグレーションファイル経由で行う。**
   `execute_sql` 等による直接実行・直接DDL適用は禁止（ローカル・リモート問わず）。
   `supabase db execute`・`psql`直接実行、およびMCP経由のexecute_sql系ツール呼び出しは
