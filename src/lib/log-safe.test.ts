@@ -67,6 +67,65 @@ describe('redactForLog', () => {
     expect(redactForLog(42).message).toBe('42')
     expect(redactForLog(null).message).toBe('null')
   })
+
+  // WHY(2026-09-07 のミューテーション計測): ここから下は「効き目 62%」の内訳を埋める分。
+  //      それまでのテストは**幸せな形**（details も hint も name も code も揃っている
+  //      PostgREST のエラー）しか通しておらず、`hadDetails` の式や各フォールバックを
+  //      別の値に書き換えても 1 件も落ちなかった。境目を 1 つずつ固定する。
+
+  it.each([
+    { label: 'どちらも無い', input: {}, expected: false },
+    { label: 'details だけ', input: { details: 'x' }, expected: true },
+    { label: 'hint だけ', input: { hint: 'x' }, expected: true },
+    { label: '両方ある', input: { details: 'x', hint: 'y' }, expected: true },
+    { label: 'details が null', input: { details: null }, expected: false },
+    { label: 'hint が null', input: { hint: null }, expected: false },
+    { label: 'details が空文字（値はある）', input: { details: '' }, expected: true },
+  ])('hadDetails: $label → $expected', ({ input, expected }) => {
+    // WHY(4 通り全部を測る): `details != null || hint != null` は `&&` にしても
+    //      `true` 固定にしても `false` 固定にしても、片方しか試さないテストでは落ちない。
+    expect(redactForLog(input).hadDetails).toBe(expected)
+    // Error の形でも同じ（Error 専用の分岐は消したので、同じ経路を通る）
+    expect(redactForLog(Object.assign(new Error('x'), input)).hadDetails).toBe(expected)
+  })
+
+  it('name が無い・文字列でないオブジェクトは Object に落とす', () => {
+    expect(redactForLog({ message: 'x' }).name).toBe('Object')
+    expect(redactForLog({ name: 123, message: 'x' }).name).toBe('Object')
+    expect(redactForLog({ name: 'PostgrestError', message: 'x' }).name).toBe('PostgrestError')
+  })
+
+  it('code が無い・文字列でなければ undefined にする（数値の code を混ぜない）', () => {
+    expect(redactForLog({ message: 'x' }).code).toBeUndefined()
+    expect(redactForLog({ code: 23514, message: 'x' }).code).toBeUndefined()
+    expect(redactForLog({ code: '23514', message: 'x' }).code).toBe('23514')
+  })
+
+  it('message が無い・文字列でなければ空文字にする（中身を素通しにしない）', () => {
+    // WHY: ここを `typeof o.message === 'string' ? o.message : ''` から素通しに変えると、
+    //      オブジェクトがそのままログに出る。そこに行の中身が入りうるので、
+    //      伏せ字を通らない経路を作らない。
+    expect(redactForLog({ name: 'X' }).message).toBe('')
+    expect(redactForLog({ name: 'X', message: { patientId: PATIENT_ID } }).message).toBe('')
+    expect(redactForLog({ name: 'X', message: `id=${PATIENT_ID}` }).message).toBe(`id=${PATIENT_ID}`)
+  })
+
+  it('プリミティブは typeof を name にし、hadDetails は必ず false', () => {
+    expect(redactForLog('boom')).toEqual({ name: 'string', message: 'boom', hadDetails: false })
+    expect(redactForLog(42).name).toBe('number')
+    expect(redactForLog(undefined).name).toBe('undefined')
+    expect(redactForLog(undefined).hadDetails).toBe(false)
+    expect(redactForLog(null).name).toBe('object')
+  })
+
+  it('Error と同じ形のプレーンオブジェクトは同じ結果になる（Error 専用の分岐を消した根拠）', () => {
+    const shape = { name: 'Error', message: `user ${EMAIL} not found`, code: '23505', details: 'x' }
+    const fromError = redactForLog(
+      Object.assign(new Error(shape.message), { code: shape.code, details: shape.details }),
+    )
+    expect(fromError).toEqual(redactForLog(shape))
+    expect(fromError.message).toBe('user [email] not found')
+  })
 })
 
 describe('logServerError', () => {

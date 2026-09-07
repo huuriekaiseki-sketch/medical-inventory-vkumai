@@ -30,11 +30,11 @@
   "thresholds": {
     "high": 90,
     "low": 80,
-    "break": 75
+    "break": 94
   },
   "timeoutMS": 20000,
   "concurrency": 4,
   "tempDirName": ".stryker-tmp",
   "cleanTempDir": true,
-  "_thresholds_comment": "break は実測値の少し下に置く ratchet。下げてはいけない（docs/agents/mutation-testing.md）。2026-09-07 実測 76.19%"
+  "_thresholds_comment": "break は実測値の少し下に置く ratchet。下げてはいけない（docs/agents/mutation-testing.md）。2026-09-07 実測 95.80%。残り 16 件の内訳と「殺さないと決めた種類」は同ドキュメントの限界の節にある"
 }

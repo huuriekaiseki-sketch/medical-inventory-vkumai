@@ -35,15 +35,13 @@ export type SafeLogRecord = {
  * PostgREST のエラー（{ code, message, details, hint }）も Error も文字列も受ける。
  */
 export function redactForLog(error: unknown): SafeLogRecord {
-  if (error instanceof Error) {
-    const withCode = error as Error & { code?: unknown; details?: unknown; hint?: unknown }
-    return {
-      name: error.name,
-      code: typeof withCode.code === 'string' ? withCode.code : undefined,
-      message: scrubLogText(error.message),
-      hadDetails: withCode.details != null || withCode.hint != null,
-    }
-  }
+  // WHY(Error 専用の分岐を持たない): 2026-09-07 のミューテーション計測で、
+  //      `if (error instanceof Error) { ... }` を**丸ごと空にしても全テストが通った**。
+  //      テストの穴ではなく、その分岐が冗長だったため（Error もオブジェクトなので、
+  //      下の分岐が name / code / message / details / hint を同じように読み、同じ結果を返す）。
+  //      分岐を消すと、Error の name が文字列でない異常な形（`err.name = 123`）でも
+  //      'Object' に落ちるようになり、**型どおりの値しか出さない**ぶんむしろ安全側になる。
+  //      Error と同じ形のプレーンオブジェクトが同じ結果になることは log-safe.test.ts が固定する。
   if (error && typeof error === 'object') {
     const o = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown; name?: unknown }
     return {

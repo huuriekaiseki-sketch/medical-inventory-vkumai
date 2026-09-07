@@ -135,6 +135,24 @@ describe('回数の上限（rate limit） [P-064][Q-002]', () => {
     expect(recordAccessDenial).not.toHaveBeenCalled()
   })
 
+  // WHY(2026-09-07 のミューテーション計測): `if (error) return unmeasured` を消しても
+  //      全テストが通っていた。エラー時は data が null なので、後ろの `if (!row)` が
+  //      同じ結果に落としてしまい、区別がつかなかったため。
+  //      ここで固定したいのは「**error があるなら data があっても信じない**」という意図。
+  //      これが無いと、将来 RPC が部分的な結果とエラーを同時に返す形になったとき、
+  //      壊れた数値を上限判定に使ってしまう（上限を超えているのに通す、が起きうる）。
+  it('error と data が同時に返っても数値を信じない（数えられなかった扱い）', async () => {
+    rpc.mockResolvedValue({
+      data: [{ allowed: false, hit_count: 999, limit_value: 1, reset_at: '2026-09-07T00:00:00Z' }],
+      error: { message: 'partial failure' },
+    })
+    const m = await loadModule()
+    const r = await m.consumeUserRequestQuota('user-1')
+    expect(r.unmeasured).toBe(true)
+    expect(r.allowed).toBe(true)
+    expect(r.hitCount).toBeNull()
+  })
+
   it('RPC が例外を投げても通す（拒否の仕組みが可用性の穴にならない）', async () => {
     rpc.mockRejectedValue(new Error('network down'))
     const m = await loadModule()
