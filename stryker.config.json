@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "issue #757 の 7（ミューテーションテスト）。テストが緑でも修正が効いていない型の失敗がこのリポジトリで 5 回以上再発している。1,760 件あるテストが本当に拒否条件を守っているかを機械で測る。対象は認可の判断が書かれている場所だけに絞る（全体に掛けると時間と情報量の両方で割に合わない）。",
+  "packageManager": "npm",
+  "testRunner": "vitest",
+  "vitest": {
+    "configFile": "vitest.config.ts"
+  },
+  "reporters": [
+    "html",
+    "clear-text",
+    "progress"
+  ],
+  "htmlReporter": {
+    "fileName": "reports/mutation/index.html"
+  },
+  "coverageAnalysis": "perTest",
+  "mutate": [
+    "src/lib/supabase/require-auth.ts",
+    "src/lib/supabase/require-facility-access.ts",
+    "src/lib/admin-status.ts",
+    "src/lib/admin-auth.ts",
+    "src/lib/security/rate-limit.ts",
+    "src/lib/security/access-denial.ts",
+    "src/lib/api-error.ts",
+    "src/lib/api-pagination.ts",
+    "src/lib/log-safe.ts",
+    "src/lib/audit/repository.ts"
+  ],
+  "thresholds": {
+    "high": 90,
+    "low": 80,
+    "break": 75
+  },
+  "timeoutMS": 20000,
+  "concurrency": 4,
+  "tempDirName": ".stryker-tmp",
+  "cleanTempDir": true,
+  "_thresholds_comment": "break は実測値の少し下に置く ratchet。下げてはいけない（docs/agents/mutation-testing.md）。2026-09-07 実測 76.19%"
+}

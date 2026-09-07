@@ -16,7 +16,8 @@
     "loop-summary": "bash scripts/summarize-loop-observability.sh",
     "find-av-precision-summary": "bash scripts/summarize-find-av-precision.sh",
     "eval:workflows": "bash scripts/eval-workflow-prompts.sh",
-    "ai:check": "npm run typecheck && npm run lint && npm run test && npm run test:e2e"
+    "ai:check": "npm run typecheck && npm run lint && npm run test && npm run test:e2e",
+    "test:mutation": "stryker run"
   },
   "dependencies": {
     "@next/env": "16.2.12",
@@ -28,6 +29,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
@@ -42,5 +45,8 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "qs": "6.16.0"
   }
 }

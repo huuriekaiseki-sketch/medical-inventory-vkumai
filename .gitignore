@@ -77,3 +77,7 @@ session-report-*.html
 # pooler接続文字列（パスワードは含まないが本番プロジェクトの識別情報）を含むため常に除外する。
 # 2026-08-26時点で過去に誤ってコミットされていたことが判明（履歴には残るが今後の再混入を防ぐ）
 /supabase/.temp/
+
+# ミューテーションテストの生成物（issue #757 の 7）。スコアは docs/agents/mutation-testing.md に残す
+/reports/mutation
+/.stryker-tmp

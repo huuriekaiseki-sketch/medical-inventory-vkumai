@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# WHY(issue #741): 期限付きの定期作業が 3 つあり（fault-injection 訓練、hook 実走ドリル、公式 docs
-# 差分確認）、それぞれ SessionStart hook が個別に期限切れを警告している。ただし SessionStart は
+# WHY(issue #741): 期限付きの定期作業が 4 つあり（fault-injection 訓練、hook 実走ドリル、公式 docs
+# 差分確認、テストの効き目の計測 = issue #757 の 7）、それぞれ SessionStart hook が個別に期限切れを警告している。ただし SessionStart は
 # 「たまたま始めたセッション」でしか鳴らず、「いつやるか」は人の記憶に残っていた。Claude Code の
 # `Setup` hook（`claude -p --maintenance` で発火、matcher `maintenance`）を定期作業の入口にし、
-# 3 つの予定日と経過日数を 1 つのダイジェストで出す。手動実行（`bash scripts/maintenance-digest.sh`）
+# それぞれの予定日と経過日数を 1 つのダイジェストで出す。手動実行（`bash scripts/maintenance-digest.sh`）
 # でも同じ出力が得られる。
 #
 # 判定は各ランブックの「## 次回実施予定日」直下の YYYY-MM-DD（既存の staleness hook と同じ書式）。
@@ -18,6 +18,7 @@ set -euo pipefail
 #   UPSTREAM_DOCS_REVIEW_DOC    既定 docs/agents/upstream-docs-review.md
 #   DEPENDENCY_UPDATE_DOC       既定 docs/agents/dependency-update-runbook.md（issue #757 の 21 で追加。4 つ目）
 #   ACCESS_REVIEW_DOC           既定 docs/agents/access-review-runbook.md（issue #757 の 36 で追加。5 つ目）
+#   MUTATION_TESTING_DOC        既定 docs/agents/mutation-testing.md
 #   MAINTENANCE_DIGEST_PLAIN=1  JSON でなく人が読む素のテキストで出す（手動実行用）
 
 command -v jq >/dev/null 2>&1 || exit 0
@@ -79,6 +80,7 @@ BODY="$(
   line_for "公式 docs 差分確認" "${UPSTREAM_DOCS_REVIEW_DOC:-docs/agents/upstream-docs-review.md}" "手順: docs/agents/upstream-docs-review.md「## 手順（1〜2 時間）」"
   line_for "依存の月次棚卸し" "${DEPENDENCY_UPDATE_DOC:-docs/agents/dependency-update-runbook.md}" "手順: docs/agents/dependency-update-runbook.md「## 手順（30 分）」"
   line_for "鍵・権限の四半期棚卸し" "${ACCESS_REVIEW_DOC:-docs/agents/access-review-runbook.md}" "手順: docs/agents/access-review-runbook.md「## 手順（30 分）」"
+  line_for "テストの効き目の計測" "${MUTATION_TESTING_DOC:-docs/agents/mutation-testing.md}" "手順: docs/agents/mutation-testing.md「## 使い方」"
 )"
 # サブシェル内の加算は親に戻らないため、本文の ⚠ を数え直す
 OVERDUE="$(printf '%s\n' "$BODY" | grep -c '⚠' || true)"

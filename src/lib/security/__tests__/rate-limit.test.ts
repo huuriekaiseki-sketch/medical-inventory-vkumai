@@ -77,6 +77,55 @@ describe('回数の上限（rate limit） [P-064][Q-002]', () => {
     })
   })
 
+  // WHY(#757-7): ミューテーションテストで、利用者の bucket 名と招待の拒否記録が
+  //      1 つも検査されていないことが分かった（変異が生き残った）
+  it('利用者の上限は user:<id> の bucket で数える', async () => {
+    rpc.mockResolvedValue({
+      data: [{ allowed: true, hit_count: 1, limit_value: 300, reset_at: '2026-09-07T00:01:00Z' }],
+      error: null,
+    })
+    const m = await loadModule()
+    await m.consumeUserRequestQuota('user-42')
+    expect(rpc).toHaveBeenCalledWith('consume_rate_limit', {
+      p_bucket: 'user:user-42',
+      p_limit: limitsConfig.limits.requestsPerMinute,
+      p_window_seconds: 60,
+    })
+  })
+
+  it('招待の上限を超えたら拒否として記録される', async () => {
+    rpc.mockResolvedValue({
+      data: [{ allowed: false, hit_count: 51, limit_value: 50, reset_at: '2026-09-08T00:00:00Z' }],
+      error: null,
+    })
+    const m = await loadModule()
+    const r = await m.consumeInviteQuota('admin-1')
+    expect(r.allowed).toBe(false)
+    expect(recordAccessDenial).toHaveBeenCalledWith({
+      guard: 'rate_limit',
+      reason: 'rate_limited',
+      actorId: 'admin-1',
+    })
+  })
+
+  it('招待が上限内なら記録しない', async () => {
+    rpc.mockResolvedValue({
+      data: [{ allowed: true, hit_count: 1, limit_value: 50, reset_at: '2026-09-08T00:00:00Z' }],
+      error: null,
+    })
+    const m = await loadModule()
+    await m.consumeInviteQuota('admin-1')
+    expect(recordAccessDenial).not.toHaveBeenCalled()
+  })
+
+  it('行が返ってこないときは数えられなかった扱いにする', async () => {
+    rpc.mockResolvedValue({ data: [], error: null })
+    const m = await loadModule()
+    const r = await m.consumeUserRequestQuota('user-1')
+    expect(r.unmeasured).toBe(true)
+    expect(r.allowed).toBe(true)
+  })
+
   it('DB がエラーを返したら通す（fail-open）が、数えられなかったことを返す', async () => {
     rpc.mockResolvedValue({ data: null, error: { message: 'boom' } })
     const m = await loadModule()

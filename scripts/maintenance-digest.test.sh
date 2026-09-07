@@ -1,6 +1,6 @@
 #!/bin/bash
 # WHY: scripts/maintenance-digest.sh（Setup hook、matcher maintenance。issue #741）の回帰テスト。
-# 実物のランブック 3 本を書き換えず、環境変数で一時ファイルへ差し替えて決定的に検証する。
+# 実物のランブック 4 本を書き換えず、環境変数で一時ファイルへ差し替えて決定的に検証する。
 # あわせて .claude/settings.json に Setup(maintenance) の登録があることを検査する
 # （settings 側の登録が落ちるとダイジェスト自体が呼ばれなくなるため）。
 #
@@ -24,18 +24,19 @@ write_doc() { printf '# x\n\n## 次回実施予定日\n\n%s（目安）\n' "$2" 
 
 run_digest() {
   set +e
-  OUT="$(FAULT_INJECTION_DRILL_DOC="$WORK/fi.md" HOOK_LIVE_DRILL_DOC="$WORK/hl.md" UPSTREAM_DOCS_REVIEW_DOC="$WORK/ud.md" DEPENDENCY_UPDATE_DOC="$WORK/du.md" ACCESS_REVIEW_DOC="$WORK/ar.md" \
+  OUT="$(FAULT_INJECTION_DRILL_DOC="$WORK/fi.md" HOOK_LIVE_DRILL_DOC="$WORK/hl.md" UPSTREAM_DOCS_REVIEW_DOC="$WORK/ud.md" DEPENDENCY_UPDATE_DOC="$WORK/du.md" ACCESS_REVIEW_DOC="$WORK/ar.md" MUTATION_TESTING_DOC="$WORK/mt.md" \
     bash "$SCRIPT" < /dev/null 2>&1)"
   EXIT_CODE=$?
   set -e
 }
 
-echo "=== scenario 1: 5 本とも期限前 → 超過なしのダイジェスト（次の期限一覧） ==="
+echo "=== scenario 1: 6 本とも期限前 → 超過なしのダイジェスト（次の期限一覧） ==="
 write_doc "$WORK/fi.md" "$(iso_offset 30)"
 write_doc "$WORK/hl.md" "$(iso_offset 60)"
 write_doc "$WORK/ud.md" "$(iso_offset 10)"
 write_doc "$WORK/du.md" "$(iso_offset 20)"
 write_doc "$WORK/ar.md" "$(iso_offset 90)"
+write_doc "$WORK/mt.md" "$(iso_offset 45)"
 run_digest
 [ "$EXIT_CODE" -eq 0 ] && ok "exit 0" || ng "exit $EXIT_CODE"
 contains "$OUT" "systemMessage" "Setup hook の JSON を返す"
@@ -67,7 +68,7 @@ contains "$OUT" "公式 docs 差分確認: ランブックが見つかりませ�
 [ "$EXIT_CODE" -eq 0 ] && ok "exit 0（block しない）" || ng "exit $EXIT_CODE"
 
 echo "=== scenario 5: MAINTENANCE_DIGEST_PLAIN=1 → JSON でなく素のテキスト ==="
-PLAIN="$(FAULT_INJECTION_DRILL_DOC="$WORK/fi.md" HOOK_LIVE_DRILL_DOC="$WORK/hl.md" UPSTREAM_DOCS_REVIEW_DOC="$WORK/ud.md" DEPENDENCY_UPDATE_DOC="$WORK/du.md" ACCESS_REVIEW_DOC="$WORK/ar.md" MAINTENANCE_DIGEST_PLAIN=1 bash "$SCRIPT" < /dev/null)"
+PLAIN="$(FAULT_INJECTION_DRILL_DOC="$WORK/fi.md" HOOK_LIVE_DRILL_DOC="$WORK/hl.md" UPSTREAM_DOCS_REVIEW_DOC="$WORK/ud.md" DEPENDENCY_UPDATE_DOC="$WORK/du.md" ACCESS_REVIEW_DOC="$WORK/ar.md" MUTATION_TESTING_DOC="$WORK/mt.md" MAINTENANCE_DIGEST_PLAIN=1 bash "$SCRIPT" < /dev/null)"
 not_contains "$PLAIN" "systemMessage" "素のテキストには JSON キーが無い"
 contains "$PLAIN" "定期メンテナンスのダイジェスト" "見出し行がある"
 
@@ -79,12 +80,17 @@ else
   ng "settings.json が見つからない"
 fi
 
-echo "=== scenario 7: 実態のランブック 5 本すべてから日付を読める（書式の回帰） ==="
+echo "=== scenario 7: 実態のランブック 6 本すべてから日付を読める（書式の回帰） ==="
 REAL="$(MAINTENANCE_DIGEST_PLAIN=1 bash "$SCRIPT" < /dev/null)"
-not_contains "$REAL" "読み取れません" "実態の 5 本は日付を読める"
-not_contains "$REAL" "見つかりません" "実態の 5 本は存在する"
+not_contains "$REAL" "読み取れません" "実態の 6 本は日付を読める"
+not_contains "$REAL" "見つかりません" "実態の 6 本は存在する"
+# WHY(#757-7): 定期作業を足したのに一覧へ出ていない、という抜けを検知する
+contains "$REAL" "fault injection 訓練" "一覧に fault injection 訓練が出る"
+contains "$REAL" "hook 実走ドリル" "一覧に hook 実走ドリルが出る"
+contains "$REAL" "公式 docs 差分確認" "一覧に公式 docs 差分確認が出る"
 contains "$REAL" "依存の月次棚卸し" "依存の棚卸しが実態のダイジェストに出る"
 contains "$REAL" "鍵・権限の四半期棚卸し" "鍵・権限の棚卸しが実態のダイジェストに出る"
+contains "$REAL" "テストの効き目の計測" "一覧にテストの効き目の計測が出る"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
