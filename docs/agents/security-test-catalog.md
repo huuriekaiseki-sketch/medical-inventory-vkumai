@@ -37,7 +37,7 @@
 | 観点 | 何を確かめるか | 状態 | 引き金 / 対応 |
 |---|---|---|---|
 | ミューテーションテスト | RLS 条件・認可判定・hook の拒否条件を意図的に壊し、テストが検知するか | 計画 #757-7 | 依存追加は ask hook の手順。RLS/IDOR と約束カタログのテストに限定 |
-| プロパティテスト | 入力をランダム生成し「他施設は返らない」「在庫は負にならない」を大量検証 | 引き金付き | 不変条件カタログ（#757-3）ができたら、その ID ごとに 1 本 |
+| プロパティテスト | 入力をランダム生成し「他施設は返らない」「在庫は負にならない」を大量検証 | 実装済み（一部） | #757-6。数量（I-010）・単価（I-012）・状態遷移（I-020）を `supabase/__tests__/integration/invariant-properties.integration.test.ts` で。`fast-check@4.9.0`（dev のみ）。残りの I-xxx と「他施設は返らない」（P-xxx）は引き金付き。運用と限界は [`property-testing.md`](./property-testing.md) |
 | 未テスト経路の自動検出 | route・RPC・管理関数・古い migration を列挙し、守るテストの有無を出す | 実装済み（一部） | route は P-017、RPC は P-043（migration を畳み込んで公開関数を列挙、2026-09-06）。Storage policy・pg_cron は対象がまだ無い |
 | 差分テスト（UI / API / RPC / CLI） | 同じ操作の結果と拒否条件が経路で一致するか | 実装済み（一部） | `access-path-inventory.md`（X-xxx 17 経路、鍵の所在 8 種、2026-09-06、#757-26）。API Route / 画面 / PostgREST / RPC / migration / pg_cron / Auth hook / CI は同じ拒否条件を P-xxx で実測済み。service role・Studio・管理画面の「読み取りが記録されない」は #757-24、preview 環境と復元は #757-35・23 |
 | 状態遷移の網羅 | 招待中→有効→無効→再招待、注文の状態を全組み合わせで | 引き金付き | 招待フロー・注文状態を触る PR |

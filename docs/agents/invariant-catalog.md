@@ -25,9 +25,9 @@
 
 | ID | 不変条件 | 守る場所 | 破る操作 | 期待 | 守るテスト | 状態 |
 | --- | --- | --- | --- | --- | --- | --- |
-| I-010 | 発注明細（症例・消耗品・短貸）の数量は 1 以上 | CHECK `*_order_items_quantity_positive`（20260906000003） | 発注 RPC に quantity 0 / -1 の明細を渡す | 23514。ヘッダも残らない（RPC は 1 トランザクション） | `supabase/__tests__/integration/business-invariants.integration.test.ts`、`supabase/migrations/__tests__/add_business_invariant_checks.test.ts` | 実装済み |
+| I-010 | 発注明細（症例・消耗品・短貸）の数量は 1 以上 | CHECK `*_order_items_quantity_positive`（20260906000003） | 発注 RPC に quantity 0 / -1 の明細を渡す | 23514。ヘッダも残らない（RPC は 1 トランザクション） | `supabase/__tests__/integration/business-invariants.integration.test.ts`、`supabase/migrations/__tests__/add_business_invariant_checks.test.ts`。NUMERIC / INTEGER の境界は `supabase/__tests__/integration/invariant-properties.integration.test.ts` | 実装済み |
 | I-011 | 返却明細の数量は 1 以上 | CHECK `loan_return_items_quantity_positive` | 返却 RPC に quantity 0 の明細を渡す | 23514 | `supabase/__tests__/integration/business-invariants.integration.test.ts`、`supabase/migrations/__tests__/add_business_invariant_checks.test.ts` | 実装済み |
-| I-012 | 明細の単価スナップショットは 0 以上。NULL（金額データなし）は許す | CHECK `*_order_items_unit_price_nonnegative` | service_role で unit_price -1 を直接 INSERT | 23514。NULL は通る | `supabase/__tests__/integration/business-invariants.integration.test.ts`、`supabase/migrations/__tests__/add_business_invariant_checks.test.ts` | 実装済み |
+| I-012 | 明細の単価スナップショットは 0 以上。NULL（金額データなし）は許す | CHECK `*_order_items_unit_price_nonnegative` | service_role で unit_price -1 を直接 INSERT | 23514。NULL は通る | `supabase/__tests__/integration/business-invariants.integration.test.ts`、`supabase/migrations/__tests__/add_business_invariant_checks.test.ts`。格納後の値と丸めの境界は `supabase/__tests__/integration/invariant-properties.integration.test.ts` | 実装済み |
 | I-013 | 施設別価格の仕切値・納品価格は 0 以上 | CHECK `hospital_prices_prices_nonnegative` | 負の価格で INSERT / UPDATE | 23514 | `supabase/__tests__/integration/business-invariants.integration.test.ts`、`supabase/migrations/__tests__/add_business_invariant_checks.test.ts` | 実装済み |
 | I-014 | 代理店商品の入数は 1 以上、償還価格は 0 以上（NULL 可） | CHECK `distributor_products_quantity_positive` / `distributor_products_reimbursement_price_nonnegative` | service_role で quantity 0 / reimbursement_price -1 を INSERT | 23514 | `supabase/__tests__/integration/business-invariants.integration.test.ts`、`supabase/migrations/__tests__/add_business_invariant_checks.test.ts` | 実装済み |
 | I-015 | 納品価格は仕切値以上（粗利が負にならない）。**対象外**: 戦略的な赤字納入がありうるため制約にしない。負の粗利は夜間検査で件数だけ出す（I-051） | — | — | — | 未 | 対象外 |
@@ -36,7 +36,7 @@
 
 | ID | 不変条件 | 守る場所 | 破る操作 | 期待 | 守るテスト | 状態 |
 | --- | --- | --- | --- | --- | --- | --- |
-| I-020 | 発注（3 種）と返却の状態は前にしか進まない（draft → submitted / returned）。draft 以外からは変えられない | トリガー `enforce_status_forward_only`（BEFORE UPDATE OF status、check_violation） | service_role で submitted → draft に UPDATE | 23514。status は submitted のまま | `supabase/__tests__/integration/business-invariants.integration.test.ts`、`supabase/migrations/__tests__/add_business_invariant_checks.test.ts` | 実装済み |
+| I-020 | 発注（3 種）と返却の状態は前にしか進まない（draft → submitted / returned）。draft 以外からは変えられない | トリガー `enforce_status_forward_only`（BEFORE UPDATE OF status、check_violation） | service_role で submitted → draft に UPDATE | 23514。status は submitted のまま | `supabase/__tests__/integration/business-invariants.integration.test.ts`、`supabase/migrations/__tests__/add_business_invariant_checks.test.ts`。順番の組み合わせは `supabase/__tests__/integration/invariant-properties.integration.test.ts` | 実装済み |
 | I-021 | 状態の値は決められた語だけ（draft / submitted、返却は draft / returned） | CHECK（20260624000000 の `status IN (...)`） | 未知の status で INSERT | 23514 | 未 | 計画 |
 
 ## 関係の個数
