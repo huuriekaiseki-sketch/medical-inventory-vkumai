@@ -1,5 +1,19 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
+
+// WHY(#757-7): ミューテーションテストで、拒否の記録（guard / reason の中身）と
+//      回数の上限の分岐が 1 つも検査されていないことが分かった（変異が生き残った）。
+//      呼ばれたこと・何を渡したか・上限を超えたら止まることを固定する。
+const recordAccessDenial = vi.fn()
+const consumeUserRequestQuota = vi.fn()
+
+vi.mock('@/lib/security/access-denial', () => ({
+  recordAccessDenial: (...args: unknown[]) => recordAccessDenial(...args),
+}))
+vi.mock('@/lib/security/rate-limit', () => ({
+  consumeUserRequestQuota: (...args: unknown[]) => consumeUserRequestQuota(...args),
+}))
+
 import { requireAuth } from '@/lib/supabase/require-auth'
 
 function makeDb(user: User | null, error: Error | null = null): SupabaseClient {
@@ -10,12 +24,22 @@ function makeDb(user: User | null, error: Error | null = null): SupabaseClient {
   } as unknown as SupabaseClient
 }
 
+const allowed = { allowed: true, hitCount: 1, limit: 300, resetAt: null, unmeasured: false }
+const denied = { allowed: false, hitCount: 301, limit: 300, resetAt: null, unmeasured: false }
+
+const USER = { id: 'u-1', email: 'test@example.com' } as User
+
+beforeEach(() => {
+  recordAccessDenial.mockReset()
+  consumeUserRequestQuota.mockReset().mockResolvedValue(allowed)
+})
+
 // P-001（docs/agents/promise-catalog.md）: 未認証の呼び出しは requireAuth が UNAUTHORIZED で止める
 describe('requireAuth (P-001)', () => {
   it('認証済みユーザーを返す', async () => {
-    const user = { id: 'u-1', email: 'test@example.com' } as User
-    const result = await requireAuth(makeDb(user))
-    expect(result).toBe(user)
+    const result = await requireAuth(makeDb(USER))
+    expect(result).toBe(USER)
+    expect(recordAccessDenial).not.toHaveBeenCalled()
   })
 
   it('user が null の場合 UNAUTHORIZED をスロー', async () => {
@@ -23,7 +47,34 @@ describe('requireAuth (P-001)', () => {
   })
 
   it('error がある場合 UNAUTHORIZED をスロー', async () => {
-    const user = { id: 'u-1', email: 'test@example.com' } as User
-    await expect(requireAuth(makeDb(user, new Error('session error')))).rejects.toThrow('UNAUTHORIZED')
+    await expect(requireAuth(makeDb(USER, new Error('session error')))).rejects.toThrow('UNAUTHORIZED')
+  })
+
+  it('未認証の拒否は guard=auth / reason=unauthenticated で記録される', async () => {
+    await expect(requireAuth(makeDb(null))).rejects.toThrow('UNAUTHORIZED')
+    expect(recordAccessDenial).toHaveBeenCalledWith({ guard: 'auth', reason: 'unauthenticated' })
+  })
+
+  it('未認証のときは回数を数えない（数えるのは認証を通った人だけ）', async () => {
+    await expect(requireAuth(makeDb(null))).rejects.toThrow('UNAUTHORIZED')
+    expect(consumeUserRequestQuota).not.toHaveBeenCalled()
+  })
+})
+
+// P-064: 回数の上限を超えた分は止まる
+describe('requireAuth の回数の上限 (P-064)', () => {
+  it('認証を通った人の ID で数える', async () => {
+    await requireAuth(makeDb(USER))
+    expect(consumeUserRequestQuota).toHaveBeenCalledWith('u-1')
+  })
+
+  it('上限を超えたら RATE_LIMITED で止める', async () => {
+    consumeUserRequestQuota.mockResolvedValue(denied)
+    await expect(requireAuth(makeDb(USER))).rejects.toThrow('RATE_LIMITED')
+  })
+
+  it('数えられなかったとき（fail-open）は通す', async () => {
+    consumeUserRequestQuota.mockResolvedValue({ ...allowed, unmeasured: true })
+    await expect(requireAuth(makeDb(USER))).resolves.toBe(USER)
   })
 })
