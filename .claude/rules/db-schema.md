@@ -7,9 +7,13 @@ paths:
 
 - **新しいテーブルを作るときは 4 軸すべてを決める（2026-09-07）。**
   (1) RLS を有効にするか  (2) ポリシーを作るか  (3) **誰が読み書きできるか**  (4) 監査対象にするか。
-  決めた内容は `supabase/__tests__/helpers/table-registry.ts` に 1 エントリ書く。
-  書かないと `supabase/migrations/__tests__/table_registry.test.ts` が
-  「宣言が無い」で落ちる（`npm test` に含まれるので毎 PR）。宣言と migration の実態がずれても落ちる。
+  決めた内容は [`docs/agents/table-rulebook.md`](../../docs/agents/table-rulebook.md)（TB-xxx）に 1 行書く。
+  **決めごとの正本はこの 1 枚だけ**で、`rls_enabled_all_tables` も `audit_trigger_coverage` も
+  ここを読む（同じ判断を 2 か所に置かない）。書かないと
+  `supabase/migrations/__tests__/table_registry.test.ts` が「宣言が無い」で落ちる
+  （`npm test` に含まれるので毎 PR）。宣言と migration の実態がずれても落ちる。
+  表の**形**は汎用エンジン `scripts/lib/check-catalog.mjs` が見る（登録は `scripts/lib/catalog-registry.json`、
+  索引は [`docs/agents/rulebooks.md`](../../docs/agents/rulebooks.md)）。
   - 特に (3) は 2026-09-07 まで**どの検査も見ていなかった**。その結果 `schema_drift_log` は
     作られてから 2 か月間 GRANT が 1 行も無く、service_role でも読めなかった。
     RLS のバイパス（service_role）とテーブル権限は別の話で、**GRANT を書かなければ誰も読めない**

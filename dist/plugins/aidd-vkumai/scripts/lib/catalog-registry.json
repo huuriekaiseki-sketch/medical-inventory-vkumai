@@ -50,6 +50,31 @@
       ],
       "_note": "状態列は実施タイミング（4 語）。守るテストが 未 の行があるので evidenceRequiredStates は置かない",
       "purpose": "auth / RLS / 施設境界 / admin 境界 / AAL2 / RPC 契約の約束。守るテストの名前に ID を書いて双方向に突合する"
+    },
+    {
+      "id": "table",
+      "file": "docs/agents/table-rulebook.md",
+      "idPrefix": "TB",
+      "columns": 8,
+      "evidenceColumn": 7,
+      "statusColumn": 8,
+      "states": [
+        "実装済み",
+        "計画",
+        "対象外"
+      ],
+      "evidenceRequiredStates": [
+        "実装済み"
+      ],
+      "idBands": [
+        10,
+        20,
+        30,
+        40,
+        50
+      ],
+      "_note": "bespoke な supabase/migrations/__tests__/table_registry.test.ts も残す（宣言と migration の実態の突合はエンジンの範囲外）。エンジンは形、bespoke は中身",
+      "purpose": "新しいテーブルを作るときに決める 4 軸（RLS・ポリシー・誰が読み書きできるか・監査）の正本"
     }
   ]
 }
