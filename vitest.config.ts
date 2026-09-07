@@ -19,6 +19,10 @@ export default defineConfig({
       '**/node_modules/**',
       '**/.claude/worktrees/**',
       '**/*.integration.test.ts',
+      // WHY(2026-09-08): 障害注入の測定は **docker のコンテナを止める**。既定の include は
+      //      `*.test.ts` に当たるので、除外しないと `npm test` が依存を止めにいく。
+      //      起動は bash scripts/measure-fail-open.sh（vitest.fault-injection.config.ts）だけ
+      '**/*.faultinjection.test.ts',
       // フレーキー検知（scripts/check-flaky-tests.test.sh）の RED 方向 fixture。意図的に落ちるテストなので
       // 通常の npm test では回さない（scripts/eval-fixtures/flaky/vitest.config.mjs だけが拾う）
       '**/scripts/eval-fixtures/**',

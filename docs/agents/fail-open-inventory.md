@@ -33,7 +33,7 @@ hook 側の fail-open は既知の制約として [known-failure-patterns.md](./
 | F-001 | `requireAuth`（`src/lib/supabase/require-auth.ts`） | Supabase Auth（`getUser`） | `error \|\| !user` で `UNAUTHORIZED` → route が 401 | 閉じる | `src/lib/supabase/__tests__/require-auth.test.ts` |
 | F-002 | `requireFacilityAccess`（`src/lib/supabase/require-facility-access.ts`） | RPC `is_facility_member`・DB | `error \|\| !data` で `FORBIDDEN` → 403。admin 判定は F-003 | 閉じる | `src/lib/supabase/__tests__/require-facility-access.test.ts`（RPC error のとき FORBIDDEN） |
 | F-003 | `resolveIsAdmin`（`src/lib/admin-status.ts`） | RPC `get_admin_status`・DB | `error \|\| !data \|\| 0 件` で非 admin。`ADMIN_EMAILS` フォールバックは「DB に admin が 0 件」と**確認できた**ときだけ効く（RPC が落ちているときは効かない） | 閉じる | `src/lib/__tests__/admin-status.test.ts`（RPC エラー時は false） |
-| F-004 | proxy の MFA ガード（`src/proxy.ts`） | Supabase Auth MFA API（`getAuthenticatorAssuranceLevel`） | **2026-09-06 まで開いていた**（error を捨て、aal が取れなければ素通り）。今は `error \|\| !aal` で `/mfa-challenge` へ送る。`/mfa-challenge` 自体は通す（ループしない） | 閉じる | `src/__tests__/proxy.test.ts`（MFA API がエラー / data null → /mfa-challenge） |
+| F-004 | proxy の MFA ガード（`src/proxy.ts`） | **手元の JWT の `aal` クレーム**（`getAuthenticatorAssuranceLevel` は GoTrue を呼ばない。2026-09-08 に GoTrue を止めて実測: **2 ms で成功**） | **2026-09-06 まで開いていた**（error を捨て、aal が取れなければ素通り）。今は `error \|\| !aal` で `/mfa-challenge` へ送る。GoTrue の停止では失敗しない（トークンが無い・壊れているときだけ失敗する） | 閉じる | `src/__tests__/proxy.test.ts`（MFA API がエラー / data null → /mfa-challenge） |
 | F-005 | proxy の未認証ガード・admin ガード（`src/proxy.ts`） | Supabase Auth・RPC | `getUser` の error は未認証扱いで `/login`。admin は F-003 | 閉じる | `src/__tests__/proxy.test.ts`（getUser がエラー → /login、admin RPC 不成立 → /login） |
 | F-006 | `requireAdmin`（`src/lib/admin-auth.ts`） | Supabase Auth・RPC | `error \|\| !user` で null（route が 403）。admin は F-003 | 閉じる | `src/lib/__tests__/admin-auth.test.ts` |
 | F-007 | 画面のロール判定（`src/hooks/useFacilityRole.ts`） | `/api/facilities/[id]/my-role` | fetch 失敗で `role: null`、`canWrite: false`（ボタンを出さない）。防御は DB 側 | 閉じる（UI） | `src/hooks/__tests__/` |
@@ -48,7 +48,7 @@ hook 側の fail-open は既知の制約として [known-failure-patterns.md](./
 | F-016 | MFA チャレンジ画面（`src/app/mfa-challenge/page.tsx`） | MFA API | aal が取れなければ「達成済み」とみなさず、factor 一覧の取得失敗を表示する。データは出さない | 閉じる（UI） | — |
 | F-017 | MFA 設定画面（`src/app/account/mfa/page.tsx`） | MFA API | 一覧・登録・検証・解除の各 error を表示して止まる。未確認 factor の掃除失敗も止める | 情報のみ | — |
 | F-018 | 一覧・詳細の取得（画面の `.catch`） | API・ネットワーク | エラー文言を表示し、データを出さない | 情報のみ | 各画面のテスト |
-| F-019 | Supabase 全停止 | DB・Auth | F-001〜F-006 がすべて拒否側に倒れる。画面は F-018 でエラー表示。発注はできない（可用性の損失。#757-8 の監視で気づく） | 閉じる | 上記の合成。実測（Supabase を止めて叩く）は「障害注入（外部依存停止）」の節目で |
+| F-019 | Supabase の停止（PostgREST 単独 / GoTrue 単独） | DB・Auth | **2026-09-08 に実測**: 判定はすべて拒否側へ倒れたが、**倒れるまでに 55〜75 秒かかる**（下の実施記録）。向きは正しく、遅さが別の壊れ方になる | 閉じる | `supabase/__tests__/fault-injection/fail-open.faultinjection.test.ts` |
 
 ## 見つけた穴（2026-09-06）
 
@@ -58,11 +58,50 @@ hook 側の fail-open は既知の制約として [known-failure-patterns.md](./
 - 同型の「`error` を捨てる destructuring」が `layout.tsx`・`admin-auth.ts`・`account/mfa`（掃除の
   unenroll）にあった。挙動上の穴ではなかったが、規約に揃えた（構造テストが以後の新規発生を止める）。
 
+## 実測の記録（依存を実際に止める）
+
+`bash scripts/measure-fail-open.sh` で測る（CI では回さない。test-matrix の
+「障害注入（外部依存停止）」＝節目）。**出力そのものが成果物**なので、結果をここへ書き写す。
+
+### 2026-09-08（初回。PostgREST 単独停止 / GoTrue 単独停止）
+
+| 制御点 | 平常時 | PostgREST 停止 | GoTrue 停止 |
+| --- | --- | --- | --- |
+| `requireAuth`（F-001） | 通す 18 ms | 通す **18,493 ms** | 拒否 **54,336 ms** |
+| `resolveIsAdmin`（F-003） | 非 admin 10 ms | 非 admin **75,389 ms** | — |
+| `requireFacilityAccess`（F-002） | 通す 2 ms | 拒否 **55,297 ms** | — |
+| `mfa.getAuthenticatorAssuranceLevel`（F-004） | — | — | **成功 2 ms**（呼んでいない） |
+
+**分かったこと（3 つとも読んでいたときは見えなかった）**
+
+1. **向きは全部正しい。** 認可の判定はどれも拒否側へ倒れ、`getUser` の失敗は
+   例外ではなく**戻り値の `error`** で来た（`error \|\| !user` の前提が成り立っている）。
+2. **遅さが別の壊れ方になる。** 拒否するまでに 55〜75 秒かかる。`supabase-js` の fetch に
+   タイムアウトが無く、Kong が居ない upstream を長く待つため。Vercel の関数はその前に
+   打ち切られるので、利用者から見ると 504 になる。
+   **`requireAuth` は全 route が通る**（Q-002 の回数を数えるため RPC を呼ぶ）ので、
+   PostgREST が落ちると認可に関係ない読み取りまで 18 秒待たされる。
+   何秒で諦めるかは人が決める値（未決）。
+3. **F-004 の「止まるもの」が実態と違っていた。** `getAuthenticatorAssuranceLevel()` は
+   GoTrue を呼ばず、手元の JWT の `aal` クレームを読むだけ（GoTrue 停止中に 2 ms で成功）。
+   穴ではない（aal2 のトークンを持つ人が通るのは正しい）が、
+   **「Auth が落ちたら MFA ガードが閉じる」という読み方は誤り**だった。
+
+**あわせて観測されたこと**: PostgREST 停止中は `record_access_denial` も失敗する
+（`An invalid response was received from the upstream server`）。設計どおり操作は止めないが、
+**外部依存が落ちている間の拒否は 1 件も記録に残らない**。
+「記録が無い ＝ 起きていない」と読めないことの実例で、監視（#757-8）の前提に関わる。
+
+**測らなかったもの**: DB（Postgres）単独の停止、Kong の停止、同時に複数が落ちる場合。
+本番の Supabase（プール・リージョン越し）での時間はローカルと違う。
+
 ## 限界
 
-- **実際に外部依存を止めて測ったものは少ない。** ほとんどはコードを読んだ判断で、
-  「Supabase を止めて叩く」実測は F-019 の 1 行と「障害注入」の節目に委ねている。
-  読み違いがあれば、そのまま「閉じる」と書かれ続ける。
+- **実際に外部依存を止めて測ったのは 4 行だけ**（F-001〜F-004、2026-09-08）。
+  残りはコードを読んだ判断で、読み違いがあればそのまま「閉じる」と書かれ続ける。
+  初回の実測で **F-004 の依存の書き方が実態と違っていた**（読んでいたときは気づけなかった）。
+- **「閉じる」は向きの話で、速さは別。** 判定材料が取れないとき拒否側へ倒れることと、
+  そこまでに 1 分待たないことは別の性質で、**この表は向きしか見ていない**（時間は実施記録に）。
 - **同時に複数が落ちたときの合成は見ていない。** 1 つずつは拒否側へ倒れても、
   組み合わさると別の経路が開くことがある（例: 認可 RPC が落ちた状態で画面のロール判定も落ちる）。
 - **「情報のみ」は防御ではない。** 画面側の制御点（F-009・F-017・F-018）は

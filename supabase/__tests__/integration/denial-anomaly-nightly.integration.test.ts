@@ -43,10 +43,10 @@ describe('拒否の異常検知（check_denial_anomalies / record_denial_anomali
     expect(error).toBeNull()
   }
 
-  async function anomaliesFor(subject: string, threshold = 5) {
+  async function anomaliesFor(subject: string, threshold = 5, windowSeconds = 3600) {
     const { data, error } = await service.rpc('check_denial_anomalies', {
       p_threshold: threshold,
-      p_window_seconds: 3600,
+      p_window_seconds: windowSeconds,
       p_lookback_seconds: 86400,
     })
     expect(error).toBeNull()
@@ -79,12 +79,24 @@ describe('拒否の異常検知（check_denial_anomalies / record_denial_anomali
     expect(await anomaliesFor(actorSubject, 100)).toHaveLength(0)
   })
 
+  // WHY(窓を 60 秒にする理由。2026-09-08 に実際に落ちた): 未認証の拒否は actor_id が null なので
+  //      **全テスト・全実行で同じ 1 つのバケツ**に入る。`access_denials` は append-only で
+  //      消せないため、手元の DB では過去の実行分が積み上がる。
+  //      1 時間窓で「増えたこと」を見ると、山が別の時間帯にあるときは増えず、
+  //      before と after が同じ値になって落ちる（実測: 22:00 に 20 件・23:00 に 8 件で
+  //      両方 22 になった）。**測りたいのは「guard でまとめて数えるか」**であって
+  //      「積み上がった総量」ではないので、いま作った 6 件だけが入る短い窓で見る。
   it('未認証の拒否は guard ごとにまとめて数える', async () => {
-    const before = await anomaliesFor('anonymous:auth', 5)
+    const WINDOW = 60
     for (let i = 0; i < 6; i++) await denyOnce(null, 'auth', 'unauthenticated')
-    const after = await anomaliesFor('anonymous:auth', 5)
+    const after = await anomaliesFor('anonymous:auth', 5, WINDOW)
+
+    // **「増えたこと」ではなく「まとめられていること」を見る。**
+    // 直前に足した 6 件が 1 行にまとまり、guard と reason で数えられていれば性質は満たされる
     expect(after).toHaveLength(1)
-    expect(Number(after[0].hits)).toBeGreaterThan(Number(before[0]?.hits ?? 0))
+    expect(Number(after[0].hits)).toBeGreaterThanOrEqual(6)
+    expect(Object.keys(after[0].detail.guards)).toEqual(['auth'])
+    expect(Object.keys(after[0].detail.reasons)).toEqual(['unauthenticated'])
   })
 
   it('記録は冪等（2 回呼んでも未解決の行は 1 つ）', async () => {
