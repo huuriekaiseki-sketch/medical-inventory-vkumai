@@ -41,7 +41,7 @@
     "scripts/check-text-length-consistency.test.sh": "51d18fb08b7eaee725cb8fc9f176baf1ffb1d91f52d2848636bd21232ee1435c",
     "scripts/lib/aidd-config.sh": "602a4dbea32a067cf69ea486f41bfc354c380f5fe5dbb47e667eecb7417bc6c0",
     "scripts/lib/aidd-config.test.sh": "6b91cb5b02f30b8705c004fceca8413d2d004e3bcf59b78049a560ea9b857b58",
-    "scripts/lib/catalog-registry.json": "b545f2603ac4905a646382c261293d206216375a957fc02f4ecd703f91e9af5b",
+    "scripts/lib/catalog-registry.json": "97418fd50b477d97abd35bd9e4d8c64017e5f4e487b02b1fb8618610466bc0bd",
     "scripts/lib/compare-layers.mjs": "ade5fe7da45fabd947be8206f764ff8396a48945712d742c556b33535900e0ca",
     "scripts/lib/extract-api-rules.ts": "42277ee68e58b9d6df914e71ad1f17b1d40ca7fdb9725869ead763ec6ef14a26",
     "scripts/lib/merge-queue.json": "185be9b2103ef56325b8490d847fd3849c139b35bab286b90d95664bba989da9",
