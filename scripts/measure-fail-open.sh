@@ -33,6 +33,10 @@ command -v docker > /dev/null 2>&1 || {
 }
 
 CONTAINERS=("supabase_rest_${PROJECT}" "supabase_auth_${PROJECT}")
+DB_CONTAINER="supabase_db_${PROJECT}"
+# WHY: DB の中を壊す測定（F-011 / F-012）は、壊す前に「戻し方」をここへ書く。
+#      プロセスごと落ちてテストの finally が走らなかったときの**最後の砦**
+RESTORE_FILE="$REPO_ROOT/.aidd/fault-injection-restore.sql"
 
 restore() {
   echo "--- 後始末: 止めたコンテナを起動し直す"
@@ -41,6 +45,18 @@ restore() {
   done
   # 起動直後は接続を受け付けないことがあるので少し待つ
   sleep 3
+
+  if [ -f "$RESTORE_FILE" ]; then
+    echo "--- 後始末: DB の中に壊したものが残っている。復元 SQL を適用する"
+    if docker cp "$RESTORE_FILE" "$DB_CONTAINER:/tmp/fault-restore.sql" > /dev/null 2>&1 &&
+       docker exec "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+         -f /tmp/fault-restore.sql > /dev/null 2>&1; then
+      echo "  復元しました: $RESTORE_FILE"
+      rm -f "$RESTORE_FILE"
+    else
+      echo "  **復元に失敗しました。手で当ててください**: $RESTORE_FILE" >&2
+    fi
+  fi
 }
 # **測定が途中で落ちても必ず戻す。** 止めっぱなしは以後のすべての作業を壊す
 trap restore EXIT INT TERM
