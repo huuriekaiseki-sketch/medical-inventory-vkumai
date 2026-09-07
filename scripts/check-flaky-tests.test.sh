@@ -62,7 +62,65 @@ OUT="$(cd "$REPO_ROOT" && bash "$CHECK" --runs 2 --config "$FIXTURE_CONFIG" --ou
 STATUS=$?
 set -e
 assert_eq "$STATUS" "0" "揺れなしで exit 0"
-assert_contains "$OUT" "結果: 揺れなし・常時失敗なし" "結果行"
+assert_contains "$OUT" "結果: 常時失敗なし" "結果行"
+# WHY(2026-09-07): 以前は「結果: 揺れなし・常時失敗なし」とだけ出していた。
+#      判定は passed > 0 かつ failed > 0 なので、1 回あたり p で揺れるテストを N 回で
+#      捕まえられる確率は 1 - p^N - (1-p)^N。**N=3 ではコイン投げの揺れですら 25% 見逃す**。
+#      その数字を出さずに「揺れなし」と書くと、読み手は「揺れが無い」と受け取る
+#      （同じ日に p ≈ 5〜10% の揺れが実在したのに 5 回の実行では出なかった）。
+assert_contains "$OUT" "回では見つからなかった" "「見つからなかった」であって「無い」ではないと書く"
+assert_contains "$OUT" "検知力" "この回数の検知力を出す"
+
+echo "=== scenario 3b: 検知力の数字が回数によって変わる（固定文でない） ==="
+set +e
+OUT2="$(cd "$REPO_ROOT" && bash "$CHECK" --runs 3 --config "$FIXTURE_CONFIG" --out "$WORK/s3b" -- scripts/eval-fixtures/flaky/stable.test.mjs 2>&1)"
+set -e
+# N=2 の最大は 50%、N=3 の最大は 75%（1 - 2*0.5^N）
+assert_contains "$OUT" "最大でも 50%" "N=2 の検知力"
+assert_contains "$OUT2" "最大でも 75%" "N=3 の検知力"
+
+echo "=== scenario 3c: 同じ回にまとまって落ちたら環境事故として括る（exit 4） ==="
+# WHY(2026-09-07 の実データ): 統合テストを 10 回回したら「揺れるテスト 35 件」と出たが、
+#      実際は**2 回目の実行だけでまとめて落ちた 1 件の環境事故**だった
+#      （ローカル Supabase の Auth が不調。"Database error querying schema" 等）。
+#      35 件の独立した揺れとして報告すると、直す先を 35 個探すことになる。
+mkdir -p "$WORK/s3c"
+# 3 回分のレポートを作る。2 回目だけ 6 件が落ちる（閾値 5 件以上）
+make_report() {
+  local out="$1" failing="$2" n
+  local rows=""
+  for n in 1 2 3 4 5 6; do
+    if [ "$failing" = "yes" ]; then
+      rows="$rows{\"fullName\":\"t$n\",\"status\":\"failed\",\"failureMessages\":[\"Database error querying schema\"]},"
+    else
+      rows="$rows{\"fullName\":\"t$n\",\"status\":\"passed\",\"failureMessages\":[]},"
+    fi
+  done
+  printf '{"testResults":[{"name":"/x/env.test.ts","status":"passed","assertionResults":[%s]}]}\n' "${rows%,}" > "$out"
+}
+make_report "$WORK/s3c/run-1.json" no
+make_report "$WORK/s3c/run-2.json" yes
+make_report "$WORK/s3c/run-3.json" no
+set +e
+OUT="$(cd "$REPO_ROOT" && node "$AGG" "$WORK/s3c/run-1.json" "$WORK/s3c/run-2.json" "$WORK/s3c/run-3.json" 2>&1)"
+STATUS=$?
+set -e
+assert_eq "$STATUS" "4" "環境事故のみなら exit 4（揺れの 1 とは分ける）"
+assert_contains "$OUT" "揺れるテスト（flaky）: 0 件" "揺れとしては数えない"
+assert_contains "$OUT" "環境事故とみられるもの: 6 件" "環境事故としてまとめる"
+assert_contains "$OUT" "2 回目だけでまとめて落ちている" "どの回かを名指しする"
+
+echo "=== scenario 3d: 閾値未満なら普通の揺れとして扱う（括りすぎない） ==="
+mkdir -p "$WORK/s3d"
+printf '{"testResults":[{"name":"/x/a.test.ts","status":"passed","assertionResults":[{"fullName":"t1","status":"passed","failureMessages":[]},{"fullName":"t2","status":"passed","failureMessages":[]}]}]}\n' > "$WORK/s3d/run-1.json"
+printf '{"testResults":[{"name":"/x/a.test.ts","status":"passed","assertionResults":[{"fullName":"t1","status":"failed","failureMessages":["boom"]},{"fullName":"t2","status":"failed","failureMessages":["boom"]}]}]}\n' > "$WORK/s3d/run-2.json"
+set +e
+OUT="$(cd "$REPO_ROOT" && node "$AGG" "$WORK/s3d/run-1.json" "$WORK/s3d/run-2.json" 2>&1)"
+STATUS=$?
+set -e
+assert_eq "$STATUS" "1" "2 件だけなら揺れとして exit 1"
+assert_contains "$OUT" "揺れるテスト（flaky）: 2 件" "括らずに揺れとして出す"
+assert_contains "$OUT" "環境事故とみられるもの: 0 件" "環境事故にはしない"
 
 echo "=== scenario 4: 集計の境界（レポート不読・ファイル全体の失敗・引数不正） ==="
 mkdir -p "$WORK/s4"
