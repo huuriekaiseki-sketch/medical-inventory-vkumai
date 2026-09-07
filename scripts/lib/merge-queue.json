@@ -96,6 +96,38 @@
     {
       "label": "18 ロックを取る DDL の注記（19 の上）",
       "branch": "feat/migration-lock-safety"
+    },
+    {
+      "label": "20 入力の長さの上限",
+      "branch": "feat/input-length-limits"
+    },
+    {
+      "label": "16 夜間の不変条件チェック",
+      "branch": "feat/nightly-invariant-check"
+    },
+    {
+      "label": "5 ログの伏せ字",
+      "branch": "feat/pii-log-hygiene"
+    },
+    {
+      "label": "9 秘密情報の走査",
+      "branch": "feat/secret-scan"
+    },
+    {
+      "label": "10 セキュリティヘッダ",
+      "branch": "feat/security-headers"
+    },
+    {
+      "label": "32 上限の棚卸し（19・24 の上）",
+      "branch": "feat/quota-inventory"
+    },
+    {
+      "label": "作る前に聞く質問（20・32 の上）",
+      "branch": "feat/design-questions"
+    },
+    {
+      "label": "32 回数の上限の実装（24・design-questions の上）",
+      "branch": "feat/rate-limit"
     }
   ]
 }
