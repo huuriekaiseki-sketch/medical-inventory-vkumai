@@ -27,9 +27,20 @@ vi.mock('@/lib/supabase/server', () => ({
 const mockConsumeInviteQuota = vi.fn(async () => ({
   allowed: true, hitCount: 1, limit: 50, resetAt: null, unmeasured: false,
 }))
-vi.mock('@/lib/security/rate-limit', () => ({
-  consumeInviteQuota: (...args: unknown[]) => mockConsumeInviteQuota(...(args as [])),
-}))
+// WHY(Q-020・M-021): 差し替えるのは consumeInviteQuota だけにし、**それ以外の名前を
+//      route が呼んだら即座に落とす**。「送信に失敗したら枠を戻す」を後から足すときは、
+//      払い戻し用の別の関数がここに現れる。呼ばれた回数だけを見ていると、
+//      別名の関数が増えてもテストは緑のままになる（見えない変更になる）。
+vi.mock('@/lib/security/rate-limit', () => new Proxy(
+  { consumeInviteQuota: (...args: unknown[]) => mockConsumeInviteQuota(...(args as [])) },
+  {
+    get(target, prop: string) {
+      if (prop in target) return target[prop as keyof typeof target]
+      if (typeof prop === 'symbol' || prop === 'then' || prop === '__esModule') return undefined
+      throw new Error(`rate-limit の未知の関数を呼んでいる: ${String(prop)}（Q-020 の数え方が変わった）`)
+    },
+  },
+))
 
 // WHY(2026-09-07、W-011): 特権操作の直前に admin と aal2 を再確認する
 //      `assertAdminAal2` を足した。既定は true（MFA 未登録の運用は変わらない）で、
@@ -41,7 +52,9 @@ const mockAssertAdminAal2 = vi.fn(async () => true)
 //      **route が実際に記録を呼ぶこと**をここで固定する（呼ばなくなっても気づけるように）。
 const mockRecordPrivilegedOperation = vi.fn(async () => {})
 
-vi.mock('@/lib/security/privileged-operation', () => ({
+vi.mock('@/lib/security/privileged-operation', async (importOriginal) => ({
+  // toOperationErrorCode は純粋関数なので本物を使う（記録に残る文字列まで route の性質として測る）
+  ...(await importOriginal<typeof import('@/lib/security/privileged-operation')>()),
   recordPrivilegedOperation: (...args: unknown[]) => mockRecordPrivilegedOperation(...(args as [])),
 }))
 
@@ -346,5 +359,71 @@ describe('特権操作の記録 [P-066]', () => {
     const res = await POST(req('POST', { email: 'over@test.com' }))
     expect(res.status).toBe(429)
     expect(mockRecordPrivilegedOperation).not.toHaveBeenCalled()
+  })
+
+  it('SMTP 障害のように code が無い失敗でも、理由が記録に残る（http_500）', async () => {
+    // WHY(M-021 の実測、2026-09-07): ローカルの SMTP を止めて招待すると GoTrue は
+    //      status 500 / message "Error sending invite email" を返すが **code は付かない**。
+    //      code だけを残していた頃は、記録を見ても「メールが出せなかった」のか
+    //      「既に登録済み」なのか区別できなかった
+    mockInviteUserByEmail.mockResolvedValue({ error: { message: 'Error sending invite email', status: 500 } })
+    await POST(req('POST', { email: 'smtp-down@test.com' }))
+    expect(mockRecordPrivilegedOperation).toHaveBeenCalledWith({
+      operation: 'user_invite',
+      succeeded: false,
+      actorId: 'admin-1',
+      targetEmail: 'smtp-down@test.com',
+      errorCode: 'http_500',
+    })
+  })
+})
+
+// 割り当ての棚卸し（docs/agents/quota-inventory.md）: Q-020 招待メールは送る前に数える
+describe('招待の回数制限を数える順番 [Q-020]', () => {
+  const req = (body: unknown) =>
+    new NextRequest('http://localhost/api/admin/users', { method: 'POST', body: JSON.stringify(body) })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    process.env.ADMIN_EMAILS = 'admin@test.com'
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'admin-1', email: 'admin@test.com' } } })
+    mockAssertAdminAal2.mockResolvedValue(true)
+  })
+
+  // WHY: 送ってしまったメールは取り消せないので、数えるのは必ず送信より前でなければならない。
+  //      順番が入れ替わると「51 通目を送ってから 429 を返す」になり、上限が守れていない状態で
+  //      テストは緑のままになる（呼ばれた回数だけを見ていると気づけない形）
+  it.each([
+    ['成功したとき', { error: null }],
+    ['メール送信が失敗したとき', { error: { message: 'Error sending invite email', status: 500 } }],
+  ])('%s も、消費（consumeInviteQuota）は送信より先に起きる', async (_label, inviteResult) => {
+    const order: string[] = []
+    mockConsumeInviteQuota.mockImplementation(async () => {
+      order.push('quota')
+      return { allowed: true, hitCount: 1, limit: 50, resetAt: null, unmeasured: false }
+    })
+    mockInviteUserByEmail.mockImplementation(async () => {
+      order.push('invite')
+      return inviteResult
+    })
+
+    await POST(req({ email: 'order@test.com' }))
+
+    expect(order).toEqual(['quota', 'invite'])
+  })
+
+  it('メール送信に失敗しても消費は取り消されない（枠だけが減る。#757-38 で戻すかを決める）', async () => {
+    // WHY(M-021 の実測、2026-09-07): SMTP を止めると GoTrue は利用者行ごとロールバックするので、
+    //      auth 側には何も残らない。**残るのはこの枠だけ**で、SMTP 障害中に押し直すと
+    //      メールが 1 通も出ないまま 1 日 50 通の枠が減っていく。
+    //      いま戻していないことを固定する。戻す実装を足すと、上の Proxy が
+    //      「rate-limit の未知の関数」で落ちる（同じモジュールに払い戻しが増えるため）
+    mockConsumeInviteQuota.mockResolvedValue({ allowed: true, hitCount: 1, limit: 50, resetAt: null, unmeasured: false })
+    mockInviteUserByEmail.mockResolvedValue({ error: { message: 'Error sending invite email', status: 500 } })
+
+    await POST(req({ email: 'smtp-down@test.com' }))
+
+    expect(mockConsumeInviteQuota).toHaveBeenCalledTimes(1)
+    expect(mockConsumeInviteQuota).toHaveBeenCalledWith('admin-1')
   })
 })

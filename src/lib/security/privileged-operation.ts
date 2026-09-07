@@ -43,6 +43,24 @@ export interface PrivilegedOperationRecord {
   errorCode?: string | null
 }
 
+/** DB 側の CHECK（error_code は 100 文字まで）。超えると記録だけが静かに落ちる */
+const ERROR_CODE_MAX = 100
+
+/**
+ * 失敗の理由を 1 語で残す。
+ *
+ * WHY(M-021 の実測、2026-09-07): ローカルの SMTP を止めて招待すると GoTrue は
+ *      status 500 / message "Error sending invite email" を返すが、**`code` は付かない**。
+ *      `error.code` だけを見ていると記録には「失敗」としか残らず、
+ *      「メールが出せなかった」のか「既に登録済み（email_exists）」なのかが後から区別できない。
+ *      code が無いときは HTTP の状態を代わりに残す。本文は入れない（PII が混ざりうるため）。
+ */
+export function toOperationErrorCode(error: { code?: string; status?: number } | null | undefined): string | null {
+  if (!error) return null
+  const code = error.code ?? (typeof error.status === 'number' ? `http_${error.status}` : 'unknown')
+  return code.slice(0, ERROR_CODE_MAX)
+}
+
 // access-denial.ts と同じ理由で使い回す（毎回 createClient すると内部の fetch 設定を組み立て直す）
 let cached: ReturnType<typeof createClient<Database>> | null | undefined
 
