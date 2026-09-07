@@ -26,10 +26,6 @@ const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
 const columns = new Set()
 const lengthGuarded = new Set()
 const enumBounded = new Set()
-/** CREATE TABLE 内のインライン CHECK は表名が取りにくいので列名だけで持つ */
-const inlineLength = new Set()
-const inlineEnum = new Set()
-
 const strip = (sql) =>
   sql
     // 関数本体（$$ ... $$）は DDL ではないので丸ごと除く
@@ -50,12 +46,32 @@ for (const f of files) {
       const c = line.trim().match(TEXTISH)
       if (c) columns.add(`${table}.${c[1].toLowerCase()}`)
     }
+    // WHY(2026-09-07): インライン CHECK も**表に紐づけて**持つ。以前は列名だけで持っていたため、
+    //      別の表に同じ列名で上限を付けると、上限の無い表の列まで「上限あり」と誤判定した
+    //      （privileged_operations.method に length(method) <= 10 を足したら
+    //      access_denials.method が guarded になり、一覧の消し忘れとして報告された）。
+    //      CREATE TABLE の本体はここで表名つきに取れているので、同じ場所で紐づければよい。
+    for (const c of m[2].matchAll(/(?:char_)?length\s*\(\s*"?([a-z_][a-z0-9_]*)"?\s*\)\s*<=/gi)) {
+      lengthGuarded.add(`${table}.${c[1].toLowerCase()}`)
+    }
+    for (const c of m[2].matchAll(/check\s*\(\s*"?([a-z_][a-z0-9_]*)"?\s+in\s*\(/gi)) {
+      enumBounded.add(`${table}.${c[1].toLowerCase()}`)
+    }
   }
 
-  for (const m of sql.matchAll(
-    /alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?"?(?:public\.)?"?([a-z_][a-z0-9_]*)"?\s+add\s+column\s+(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\s+(text|varchar|character\s+varying)/gi
+  // WHY(2026-09-07): 1 つの ALTER TABLE に ADD COLUMN が複数ある形
+  //      （`ADD COLUMN name TEXT, ADD COLUMN maker TEXT;`）で、以前は **1 つ目しか拾えていなかった**。
+  //      2 つ目以降の前に `alter table` が無いため、文全体を取ってからその中を走査する。
+  //      これで `products.maker` が走査に一度も出ていなかったのが直る（上限の有無すら見えていなかった）。
+  for (const stmt of sql.matchAll(
+    /alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?"?(?:public\.)?"?([a-z_][a-z0-9_]*)"?([\s\S]*?);/gi
   )) {
-    columns.add(`${m[1].toLowerCase()}.${m[2].toLowerCase()}`)
+    const table = stmt[1].toLowerCase()
+    for (const c of stmt[2].matchAll(
+      /add\s+column\s+(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\s+(text|varchar|character\s+varying)/gi
+    )) {
+      columns.add(`${table}.${c[1].toLowerCase()}`)
+    }
   }
 
   for (const m of sql.matchAll(
@@ -82,22 +98,17 @@ for (const f of files) {
     }
   }
 
-  // CREATE TABLE 内のインライン CHECK（表名を伴わないので列名だけで持つ）
-  for (const c of sql.matchAll(/(?:char_)?length\s*\(\s*"?([a-z_][a-z0-9_]*)"?\s*\)\s*<=/gi)) {
-    inlineLength.add(c[1].toLowerCase())
-  }
-  for (const c of sql.matchAll(/check\s*\(\s*"?([a-z_][a-z0-9_]*)"?\s+in\s*\(/gi)) {
-    inlineEnum.add(c[1].toLowerCase())
-  }
+  // WHY(2026-09-07 に削除): ここには「表名を伴わないインライン CHECK を列名だけで持つ」
+  //      処理があった。表をまたいで誤判定するため、CREATE TABLE の解析の中で
+  //      表名つきに紐づける形へ移した（上を参照）。
 }
 
 const guarded = []
 const bounded = []
 const unguarded = []
 for (const key of [...columns].sort()) {
-  const col = key.split('.')[1]
-  if (lengthGuarded.has(key) || inlineLength.has(col)) guarded.push(key)
-  else if (enumBounded.has(key) || inlineEnum.has(col)) bounded.push(key)
+  if (lengthGuarded.has(key)) guarded.push(key)
+  else if (enumBounded.has(key)) bounded.push(key)
   else unguarded.push(key)
 }
 

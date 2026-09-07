@@ -121,12 +121,21 @@ describe('不変条件は代表値ではなく境界で成り立つ（プロパ�
   //      「**格納された値**」についての条件（カタログの I-012 も「単価スナップショットは 0 以上」）。
   //      この取り違えは代表値テスト（-1 を送って 23514）では永久に出てこない。
   it('I-012 通ったなら格納された単価は必ず 0 以上（NUMERIC の丸めを含む）', async () => {
+    // WHY(枝ごとに生成器を分ける): 最初は `fc.double({ min: -1e6, max: 1e6 })` の 1 本にしていたが、
+    //      2026-09-07 の実行で **25 回とも「はっきり負の値」が出ず**、空振り検知（hits.rejected > 0）
+    //      が落ちた。fast-check は端の値（0・非正規化数）へ寄せるので、範囲だけ与えても
+    //      両方の枝に届く保証が無い。**揺れるテストになった**（property-testing.md の限界そのもの）。
+    //      値は乱数のまま、枝への到達だけを構造で保証する。
     const hits = { accepted: 0, rejected: 0 }
     await fc.assert(
       fc.asyncProperty(
         fc.oneof(
           fc.constant(null),
-          fc.double({ min: -1e6, max: 1e6, noNaN: true, noDefaultInfinity: true }),
+          // 通る側（0 以上、および scale で 0.00 に丸まる微小な負）
+          fc.double({ min: 0, max: 1e6, noNaN: true, noDefaultInfinity: true }),
+          fc.double({ min: -0.004, max: 0, noNaN: true, noDefaultInfinity: true }),
+          // 止まる側（丸めても負のまま）
+          fc.double({ min: -1e6, max: -0.01, noNaN: true, noDefaultInfinity: true }),
         ),
         async (unitPrice) => {
           const { data, error } = await serviceClient

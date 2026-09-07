@@ -82,6 +82,7 @@
 | TB-040 | price_histories | あり | authenticated / service_role | なし | 価格の履歴そのもの。append-only で「誰がいつ何を」を既に持っており、監査行を足すと同じ事実が二重に残る | `supabase/__tests__/integration/price-histories-rls-idor.integration.test.ts` | 実装済み |
 | TB-041 | audit_log | あり | authenticated / service_role | なし | 監査ログ自身。自分への INSERT でまた自分に書くと無限に増える（append-only トリガーで UPDATE / DELETE は別途拒否している） | `supabase/__tests__/integration/audit-log-rls-idor.integration.test.ts` | 実装済み |
 | TB-042 | access_denials | あり | authenticated / service_role | なし | 拒否そのものの記録。append-only で、記録は SECURITY DEFINER の record_access_denial() 経由でしか増えない | `supabase/__tests__/integration/access-denials-rls-idor.integration.test.ts` | 実装済み |
+| TB-043 | privileged_operations | あり | authenticated / service_role | なし | 特権操作（Auth 管理 API）の成功・失敗の記録。監査トリガーは public スキーマにしか付かず auth.users に届かないので、この表がその代わりになる。append-only で record_privileged_operation() 経由でしか増えない。**メールを含むため読み手は aal2 の admin だけ** | `supabase/__tests__/integration/privileged-operations-rls-idor.integration.test.ts` | 実装済み |
 
 ## 監視の裏方
 

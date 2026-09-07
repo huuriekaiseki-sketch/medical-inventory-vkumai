@@ -39,6 +39,11 @@
     "rate_limit_counters.bucket": { "serverOnly": "回数のカウンタ。consume_rate_limit() だけが書く" },
     "rate_limit_counters.hits": { "serverOnly": "同上" },
     "schema_drift_log.drift_type": { "serverOnly": "ドリフト検知。record_* 関数だけが書く" },
-    "schema_drift_log.event_kind": { "serverOnly": "同上" }
+    "schema_drift_log.event_kind": { "serverOnly": "同上" },
+
+    "privileged_operations.operation": { "serverOnly": "特権操作の記録。record_privileged_operation() だけが書く（EXECUTE は service_role のみ）" },
+    "privileged_operations.target_email": { "serverOnly": "同上。招待先のメールはサーバーが検証済みの値を写す（利用者が直接この表へ送る経路は無い）" },
+    "privileged_operations.error_code": { "serverOnly": "同上。GoTrue が返した code をサーバーが写す" },
+    "privileged_operations.route": { "serverOnly": "同上（proxy のヘッダから取る）" }
   }
 }
