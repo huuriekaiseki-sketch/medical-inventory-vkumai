@@ -18,6 +18,7 @@ import {
   type SeededUser,
 } from './helpers/seed-rls-idor'
 import { recordAccessDenial } from '@/lib/security/access-denial'
+import { enrollAndVerifyTotp, signInAtAal1, stepUpToAal2 } from './helpers/mfa-totp'
 
 const UNAUTHORIZED = '42501'
 
@@ -114,6 +115,69 @@ describe('拒否された操作の記録（access_denials） [P-063]', () => {
 
     const asAnon = await createAnonClient().from('access_denials').select('id')
     expect(asAnon.error).not.toBeNull()
+  })
+
+  // WHY(2026-09-07、RLS ミューテーション M-012 で生き残った): ここまでのテストは
+  //      「staff は読めない」「anon は読めない」までで、**MFA 登録済みで aal2 に上げていない admin**
+  //      を試していなかった（既存のコメントにも「MFA 登録済み・aal1 で読めないことは
+  //      blast-radius が測る」と書いてあるが、blast-radius はこの表を見ていない）。
+  //      そのためポリシーから `has_aal2()` を外しても 1 件も落ちなかった。
+  //
+  //      拒否の記録は「誰がどこで弾かれたか」の一覧なので、読み手が緩むと
+  //      乗っ取り側が「自分の総当たりがどこまで見えているか」を確認できてしまう。
+  describe('aal2 に上げていない admin は読めない（M-012 を倒す）', () => {
+    const PASSWORD = 'Passw0rd!aal1-denials'
+    const mfaEmail = `denial-mfa-admin-${marker}@example.test`
+    let mfaAdminId: string
+    let factorId: string
+    let secret: string
+
+    beforeAll(async () => {
+      const { data: user, error } = await serviceClient.auth.admin.createUser({
+        email: mfaEmail,
+        password: PASSWORD,
+        email_confirm: true,
+      })
+      if (error || !user.user) throw new Error(`ユーザー作成失敗: ${error?.message}`)
+      mfaAdminId = user.user.id
+      const { error: linkError } = await serviceClient
+        .from('user_facilities')
+        .insert({ user_id: mfaAdminId, facility_id: facilityA.id, role: 'admin' })
+      if (linkError) throw new Error(`所属作成失敗: ${linkError.message}`)
+
+      const client = createAnonClient()
+      await signInAtAal1(client, mfaEmail, PASSWORD)
+      const enrolled = await enrollAndVerifyTotp(client)
+      factorId = enrolled.factorId
+      secret = enrolled.secret
+    }, 60_000)
+
+    afterAll(async () => {
+      await serviceClient.auth.admin.deleteUser(mfaAdminId)
+    })
+
+    async function aal1() {
+      const client = createAnonClient()
+      await signInAtAal1(client, mfaEmail, PASSWORD)
+      return client
+    }
+
+    it('aal1 の admin は 1 件も読めない', async () => {
+      const client = await aal1()
+      const { data, error } = await client.from('access_denials').select('id')
+      expect(error).toBeNull()
+      expect(data).toEqual([])
+    })
+
+    it('対照: aal2 まで上げれば読める（admin の権限そのものは設計どおり）', async () => {
+      // WHY(対照が要る): 表が空でも「0 件」は返る。昇格したら読めることまで見て、
+      //      初めて aal2 が効いていると言える（M-010 の教訓）
+      const client = await aal1()
+      await stepUpToAal2(client, factorId, secret)
+      const { data, error } = await client.from('access_denials').select('id')
+      expect(error).toBeNull()
+      expect((data ?? []).length).toBeGreaterThan(0)
+    })
   })
 
   it('service_role でも書き換え・削除できない（append-only）', async () => {

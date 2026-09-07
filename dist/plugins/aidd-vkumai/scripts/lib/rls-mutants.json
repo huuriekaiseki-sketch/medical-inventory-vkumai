@@ -65,9 +65,10 @@
     {
       "id": "M-009",
       "breaks": "価格履歴（price_histories）の直接 INSERT を許す",
-      "sql": "DROP POLICY IF EXISTS \"price_histories_no_insert\" ON price_histories;\nCREATE POLICY \"price_histories_allow_insert\" ON price_histories\n  FOR INSERT TO authenticated\n  WITH CHECK (true);",
+      "sql": "DROP POLICY IF EXISTS \"price_histories_no_insert\" ON price_histories;\nCREATE POLICY \"price_histories_allow_insert\" ON price_histories\n  FOR INSERT TO authenticated\n  WITH CHECK (true);\n-- WHY(GRANT も渡す): price_histories は GRANT SELECT だけで INSERT の GRANT が無い。\n--      ポリシーだけ緩めても GRANT が先に拒否するので、変異が**何も変えない**（等価変異）。\nGRANT INSERT ON price_histories TO authenticated;\n-- 新しく渡した権限は PostgREST のスキーマキャッシュに載るまで API 層に効かない（M-010 と同じ）\nNOTIFY pgrst, 'reload schema';",
       "expect": "supabase/__tests__/integration/price-histories-rls-idor.integration.test.ts",
-      "promise": "P-051"
+      "promise": "P-051",
+      "note": "2026-09-07 の 2 回目の計測で生き残った。**変異が自分の宣言を実装できていなかった**（ポリシーだけ緩めても GRANT が先に拒否するので何も変わらない等価変異）。GRANT INSERT も渡す形に直して実効化した。**守っているのがポリシーなのか GRANT なのかを取り違えていた例**で、テスト側も 42501 を期待していたため、両方が同じ思い込みに乗っていた"
     },
     {
       "id": "M-010",
@@ -76,6 +77,38 @@
       "expect": "supabase/__tests__/integration/rls-mutation-gaps.integration.test.ts",
       "promise": "P-064",
       "note": "2026-09-07 の初回計測で生き残った。専用のテストを足して倒した"
+    },
+    {
+      "id": "M-011",
+      "breaks": "特権操作の記録（privileged_operations）の読み取りから aal2 の要求を外し、パスワードだけの admin でも読めるようにする",
+      "sql": "DROP POLICY IF EXISTS \"privileged_operations_select\" ON privileged_operations;\nCREATE POLICY \"privileged_operations_select\" ON privileged_operations\n  FOR SELECT TO authenticated\n  USING (is_admin());",
+      "expect": "supabase/__tests__/integration/privileged-operations-rls-idor.integration.test.ts",
+      "promise": "P-066",
+      "note": "2026-09-07 に表を追加したので変異も足した（rls-mutation.md の更新の引き金「RLS ポリシーを足したり変えたりしたとき」）。この表は招待先のメールを持つので、読み手の条件が緩むと PII が広がる"
+    },
+    {
+      "id": "M-012",
+      "breaks": "拒否の記録（access_denials）の読み取りから aal2 の要求だけを外す（admin 判定は残す）",
+      "sql": "DROP POLICY IF EXISTS \"access_denials_select\" ON access_denials;\nCREATE POLICY \"access_denials_select\" ON access_denials\n  FOR SELECT TO authenticated\n  USING (is_admin());",
+      "expect": "supabase/__tests__/integration/access-denials-rls-idor.integration.test.ts",
+      "promise": "P-063",
+      "note": "M-008 は is_admin() を丸ごと外す変異で、**aal2 だけを外す形は測っていなかった**。M-011 で同じ穴が見つかったので同型のポリシー全部に変異を足した（2026-09-07）。初回は生き残った"
+    },
+    {
+      "id": "M-013",
+      "breaks": "所属と役割の変更（user_facilities）から aal2 の要求だけを外す（admin 判定は残す）",
+      "sql": "DROP POLICY IF EXISTS \"admin_write\" ON user_facilities;\nCREATE POLICY \"admin_write\" ON user_facilities\n  FOR ALL TO authenticated\n  USING (is_admin())\n  WITH CHECK (is_admin());",
+      "expect": "supabase/__tests__/integration/permission-change-authz.integration.test.ts",
+      "promise": "P-035",
+      "note": "同上。**E-033（パスワードだけ奪われた admin が共犯者を昇格できた事故）を塞いだ本体**なので、ここが緩むと同じ事故に戻る。初回は生き残った（この migration の存在理由そのものが測れていなかった）"
+    },
+    {
+      "id": "M-014",
+      "breaks": "マスタ（products）の書き込みから aal2 の要求だけを外す（admin 判定は残す）",
+      "sql": "DROP POLICY IF EXISTS \"products_write\" ON products;\nCREATE POLICY \"products_write\" ON products\n  FOR ALL TO authenticated\n  USING (is_admin())\n  WITH CHECK (is_admin());",
+      "expect": "supabase/__tests__/integration/blast-radius.integration.test.ts",
+      "promise": "P-033",
+      "note": "同上。M-005 は admin 判定を外す変異で、aal2 だけを外す形は測っていなかった。初回から倒せていた"
     }
   ]
 }
