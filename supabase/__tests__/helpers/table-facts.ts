@@ -206,7 +206,7 @@ export function auditedTablesFromMigrations(): Set<string> {
     if (!sql.includes('audit_row_change')) continue
 
     // WHY(出現順に処理する): 1 つの migration が「外して付け直す」ことがある
-    //      （20260907000001 が明細 4 表を DROP → CREATE している）。
+    //      （20260907008000 が明細 4 表を DROP → CREATE している）。
     //      作成をまとめて処理してから削除をまとめて処理すると、削除が後勝ちになって
     //      「付け直したのに外れている」と誤って読む（実際にこれで誤検知した）。
     const events: Array<{ at: number; add?: string[]; remove?: string }> = []

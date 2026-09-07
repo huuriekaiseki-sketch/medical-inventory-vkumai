@@ -1,4 +1,6 @@
--- supabase/migrations/20260907000001_audit_items_facility_id.sql
+-- supabase/migrations/20260907008000_audit_items_facility_id.sql
+-- release-order: db-first
+--   （トリガーの挙動だけを変える。アプリ側の変更は無く、古いアプリでも壊れない）
 -- issue #757 の 24（監査証跡の完全性）。約束カタログ P-060 / P-062。
 --
 -- WHY: 明細（*_items）の監査行が、その施設の人に 1 件も見えていなかった。

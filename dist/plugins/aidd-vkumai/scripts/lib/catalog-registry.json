@@ -21,79 +21,8 @@
         20,
         30,
         40,
-        50
-      ],
-      "_note": "bespoke な scripts/check-invariant-catalog.test.sh も残す（ID がテスト本文に実在するかの双方向突合はエンジンの範囲外）",
-      "purpose": "業務データが「どの経路から書かれても」満たしていなければならない条件。守る場所は原則 DB"
-    },
-    {
-      "id": "promise",
-      "file": "docs/agents/promise-catalog.md",
-      "idPrefix": "P",
-      "columns": 9,
-      "evidenceColumn": 8,
-      "statusColumn": 9,
-      "states": [
-        "毎回",
-        "変更時",
-        "節目",
-        "一度きり"
-      ],
-      "idBands": [
-        0,
-        10,
-        20,
-        30,
-        40,
         50,
         60
-      ],
-      "_note": "状態列は実施タイミング（4 語）。守るテストが 未 の行があるので evidenceRequiredStates は置かない",
-      "purpose": "auth / RLS / 施設境界 / admin 境界 / AAL2 / RPC 契約の約束。守るテストの名前に ID を書いて双方向に突合する"
-    },
-    {
-      "id": "quota-inventory",
-      "file": "docs/agents/quota-inventory.md",
-      "idPrefix": "Q",
-      "columns": 6,
-      "evidenceColumn": 5,
-      "statusColumn": 6,
-      "states": [
-        "上限あり",
-        "上限なし（意図）",
-        "要設定",
-        "未測定"
-      ],
-      "evidenceRequiredStates": [
-        "上限あり"
-      ],
-      "planRequiredStates": [
-        "要設定",
-        "未測定"
-      ],
-      "planPattern": "#757-[0-9]+"
-    },
-    {
-      "id": "invariant",
-      "file": "docs/agents/invariant-catalog.md",
-      "idPrefix": "I",
-      "columns": 7,
-      "evidenceColumn": 6,
-      "statusColumn": 7,
-      "states": [
-        "実装済み",
-        "計画",
-        "対象外"
-      ],
-      "evidenceRequiredStates": [
-        "実装済み"
-      ],
-      "idBands": [
-        10,
-        20,
-        30,
-        40,
-        50
       ],
       "_note": "bespoke な scripts/check-invariant-catalog.test.sh も残す（ID がテスト本文に実在するかの双方向突合はエンジンの範囲外）",
       "purpose": "業務データが「どの経路から書かれても」満たしていなければならない条件。守る場所は原則 DB",
@@ -124,6 +53,29 @@
       "_note": "状態列は実施タイミング（4 語）。守るテストが 未 の行があるので evidenceRequiredStates は置かない",
       "purpose": "auth / RLS / 施設境界 / admin 境界 / AAL2 / RPC 契約の約束。守るテストの名前に ID を書いて双方向に突合する",
       "limits": "守るテストの ID 文字列が実在するかは見るが、そのテストが本当に約束を守っているか（効き目）は見ない。効き目は RLS ミューテーションで別に測る"
+    },
+    {
+      "id": "quota-inventory",
+      "file": "docs/agents/quota-inventory.md",
+      "idPrefix": "Q",
+      "columns": 6,
+      "evidenceColumn": 5,
+      "statusColumn": 6,
+      "states": [
+        "上限あり",
+        "上限なし（意図）",
+        "要設定",
+        "未測定"
+      ],
+      "evidenceRequiredStates": [
+        "上限あり"
+      ],
+      "planRequiredStates": [
+        "要設定",
+        "未測定"
+      ],
+      "planPattern": "#757-[0-9]+",
+      "limits": "上限があるかしか見ない。値が妥当かも、上限を通らない経路があるかも見ない。外部サービス側の既定はここからは確かめられない"
     },
     {
       "id": "table",

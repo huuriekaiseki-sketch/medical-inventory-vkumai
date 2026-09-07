@@ -1,4 +1,6 @@
 -- supabase/migrations/20260907010000_grant_schema_drift_log_read.sql
+-- release-order: db-first
+--   （権限を足すだけ。古いアプリは読まないので影響しない）
 -- issue #757 の 24 の作業中に発見。
 --
 -- WHY: `schema_drift_log` は 20260714000001 で作られて以来、テーブルへの GRANT が

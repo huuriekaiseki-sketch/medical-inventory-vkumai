@@ -1,4 +1,5 @@
 -- supabase/migrations/20260907000002_add_access_denials.sql
+-- lock: 新設した表への CREATE INDEX なので、既存の業務表は一切ロックしない（作った直後で 0 行。止まる時間は無い）
 -- issue #757 の 24（監査証跡の完全性）の残りのうち、アプリ境界で拒否された操作の記録。
 -- 約束カタログ P-063。
 -- release-order: db-first

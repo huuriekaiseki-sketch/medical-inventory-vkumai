@@ -196,7 +196,7 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
         patch: { status: 'submitted' },
       },
       case_order_items: {
-        // 明細は facility_id 列を持たないが、20260907000001 でトリガーが親からたどる
+        // 明細は facility_id 列を持たないが、20260907008000 でトリガーが親からたどる
         facilityId: 'fixture',
         insert: async () => ({ case_order_id: caseOrderId, jan: `A${tag}`, quantity: 1 }),
         patch: { quantity: 3 },
@@ -207,7 +207,7 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
         patch: { status: 'submitted' },
       },
       consumable_order_items: {
-        facilityId: 'fixture', // 親からたどる（20260907000001）
+        facilityId: 'fixture', // 親からたどる（20260907008000）
         insert: async () => ({
           consumable_order_id: consumableOrderId,
           consumable_id: consumableId,
@@ -225,7 +225,7 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
         patch: { status: 'submitted' },
       },
       loan_order_items: {
-        facilityId: 'fixture', // 親からたどる（20260907000001）
+        facilityId: 'fixture', // 親からたどる（20260907008000）
         insert: async () => ({ loan_order_id: loanOrderId, name: 'ダミー明細', quantity: 1 }),
         patch: { quantity: 5 },
       },
@@ -235,7 +235,7 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
         patch: { status: 'returned' },
       },
       loan_return_items: {
-        facilityId: 'fixture', // 親からたどる（20260907000001）
+        facilityId: 'fixture', // 親からたどる（20260907008000）
         insert: async () => ({ loan_return_id: loanReturnId, jan: `A${tag}`, quantity: 1 }),
         patch: { quantity: 6 },
       },
@@ -396,7 +396,7 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
 
   // WHY: 親ごと消したときだけは親からたどれない（PostgreSQL は親の DELETE のあとに
   //      カスケードで子を消すので、子の AFTER DELETE が走る時点で親の行が無い）。
-  //      これは 20260907000001 のコメントに「あえて残す限界」と書いた挙動であり、
+  //      これは 20260907008000 のコメントに「あえて残す限界」と書いた挙動であり、
   //      書いただけで確かめないと本当かどうか分からないのでここで測る。
   //      施設の人が「その発注が消えた」ことは親の DELETE 監査行から追える。
   it('親ごと削除したときは明細の監査行の facility_id が null になる（親の行には入る）', async () => {

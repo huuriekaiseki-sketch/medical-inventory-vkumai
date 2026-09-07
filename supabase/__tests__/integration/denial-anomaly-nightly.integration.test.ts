@@ -120,11 +120,16 @@ describe('拒否の異常検知（check_denial_anomalies / record_denial_anomali
   it('object_name に利用者の ID がそのまま出ない（anon キーで読める view を通るため）', async () => {
     await service.rpc('record_denial_anomalies', { p_threshold: 5, p_window_seconds: 3600, p_lookback_seconds: 86400 })
 
+    // WHY(未解決だけを見る): 直前のテストが 1 度 resolved にしており、その行は履歴として残る。
+    //      解決済みの行は部分 UNIQUE（WHERE resolved_at IS NULL）の対象外なので、
+    //      再検知は**新しい行**として増える。全件を数えると 2 行になり、
+    //      「1 行だけのはず」という前提が崩れる（2026-09-07 のマージ時に実測して発見）。
     const { data } = await service
       .from('schema_drift_log')
       .select('object_name, detail')
       .eq('drift_type', 'denial_anomaly')
       .eq('object_name', actorSubject)
+      .is('resolved_at', null)
     expect(data).toHaveLength(1)
     expect(data![0].object_name).not.toContain(actor)
     // 実 ID は detail（view に出ない列）にだけある

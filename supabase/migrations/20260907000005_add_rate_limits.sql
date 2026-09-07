@@ -113,3 +113,9 @@ ALTER TABLE access_denials ADD CONSTRAINT access_denials_reason_check
   CHECK (reason IN ('unauthenticated', 'facility_id_required', 'forbidden', 'not_admin', 'rate_limited'));
 
 SELECT refresh_schema_baseline_snapshot('20260907000005');
+
+-- ROLLBACK:
+--   DROP FUNCTION consume_rate_limit(TEXT, INTEGER, INTEGER);
+--   DROP TABLE rate_limit_counters;
+--   access_denials の guard / reason の CHECK を 20260907000002 の値に戻す
+--   （rate_limit / rate_limited の行を先に消してから）→ refresh_schema_baseline_snapshot を再実行

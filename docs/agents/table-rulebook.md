@@ -91,7 +91,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | TB-050 | schema_drift_log | スキーマドリフト検知の内部テーブル。record_schema_drift() 等の SECURITY DEFINER 関数からのみ書き込み、クライアントロールへ直接は公開しない | service_role | なし | 監視そのものの記録であって、業務上の変更ではない。ここが動くのは検知が走ったときだけ | `supabase/__tests__/integration/schema-drift-rpc-authz.integration.test.ts` | 実装済み |
 | TB-051 | schema_baseline_snapshots | スキーマドリフト検知の内部テーブル。refresh_schema_baseline_snapshot() からのみ書き込み、クライアントロールへ直接は公開しない | service_role | なし | 同じく監視の裏方であって業務上の変更ではない。ここが変わるのはスキーマそのものを直したときだけ | `supabase/__tests__/integration/schema-drift-rpc-authz.integration.test.ts` | 実装済み |
-| TB-052 | rate_limit_counters | 回数を数えるだけのカウンタ。consume_rate_limit()（SECURITY DEFINER・service_role のみ EXECUTE）からしか触らない。利用者に自分のカウンタを見せる理由も書き換えさせる理由も無い | なし | なし | 監視の裏方であって業務上の変更ではない。数え直しは毎分起きるので監査に残すと大量のノイズになる | `supabase/__tests__/integration/rate-limit-rls-idor.integration.test.ts` | 実装済み |
+| TB-052 | rate_limit_counters | 回数を数えるだけのカウンタ。consume_rate_limit()（SECURITY DEFINER・service_role のみ EXECUTE）からしか触らない。利用者に自分のカウンタを見せる理由も書き換えさせる理由も無い | service_role | なし | 監視の裏方であって業務上の変更ではない。数え直しは毎分起きるので監査に残すと大量のノイズになる | `supabase/__tests__/integration/rate-limit-rls-idor.integration.test.ts` | 実装済み |
 
 ## 限界
 

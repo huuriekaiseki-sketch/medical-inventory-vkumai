@@ -2,6 +2,7 @@ import { headers } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database.generated'
 import { DENIAL_METHOD_HEADER, DENIAL_ROUTE_HEADER } from '@/lib/security/denial-headers'
+import { logServerError } from '@/lib/log-safe'
 
 // WHY: issue #757 の 24。拒否された操作は audit_log の行トリガーに来ないので、
 //      アプリの認可ガードが弾いた瞬間にここで記録する（P-063）。
@@ -79,7 +80,11 @@ export async function recordAccessDenial(denial: AccessDenial): Promise<void> {
         : await routeFromHeaders()
     // WHY: 省略可の引数は undefined で渡す（SQL 側が DEFAULT NULL を持つ）。
     //      null を渡すと生成型（p_route?: string）と食い違う
-    await db.rpc('record_access_denial', {
+    // WHY(error を受け取る): PostgREST の失敗は throw ではなく戻り値の error に来るので、
+    //      捨てると try/catch にも来ず、**記録できていないことに誰も気づけない**
+    //      （2026-09-07 のマージ後に check-fail-open.test.sh が捕まえた）。
+    //      握りつぶすのは「拒否そのものを止めない」ためであって、黙ることではない。
+    const { error } = await db.rpc('record_access_denial', {
       p_guard: denial.guard,
       p_reason: denial.reason,
       p_route: ctx.route ?? undefined,
@@ -87,6 +92,7 @@ export async function recordAccessDenial(denial: AccessDenial): Promise<void> {
       p_actor_id: denial.actorId ?? undefined,
       p_facility_id: denial.facilityId ?? undefined,
     })
+    if (error) logServerError('record_access_denial', error)
   } catch {
     // WHY: 記録の失敗は握りつぶす（上のコメント参照）。ここで throw すると
     //      「記録できないと拒否できない」になり、可用性の穴になる
