@@ -173,7 +173,7 @@ describe('所属と役割の変更は admin かつ aal2 を要求する [P-035]'
     expect(rows.some((r) => r.actor_id === admin.id), '誰が変えたかが残っていない').toBe(true)
   }, 60_000)
 
-  // WHY(2026-09-07、RLS ミューテーション M-013 で生き残った): このファイルは
+  // WHY(2026-09-07、RLS ミューテーション RM-013 で生き残った): このファイルは
   //      「MFA **未登録**の admin は書ける」「staff は昇格できない」までしか試しておらず、
   //      **MFA 登録済みで aal2 に上げていない admin**（＝パスワードだけ奪われた状態）を
   //      1 件も試していなかった。そのためポリシーから `has_aal2()` を外しても誰も落ちず、
@@ -181,7 +181,7 @@ describe('所属と役割の変更は admin かつ aal2 を要求する [P-035]'
   //
   //      E-033 はまさにこの状態で起きた事故（パスワードだけ奪われた admin が共犯者を昇格できた）。
   //      塞いだあと、塞ぎ続けていることを測る手段が無かった。
-  describe('パスワードだけ奪われた admin（MFA 登録済み・aal1）は権限を配れない（M-013 を倒す）', () => {
+  describe('パスワードだけ奪われた admin（MFA 登録済み・aal1）は権限を配れない（RM-013 を倒す）', () => {
     let mfaAdmin: Actor
     let factorId: string
     let secret: string
@@ -240,7 +240,7 @@ describe('所属と役割の変更は admin かつ aal2 を要求する [P-035]'
 
     it('対照: aal2 まで上げれば配れる（admin の権限そのものは設計どおり）', async () => {
       // WHY(対照が要る): 「0 行」だけを見ていると、そもそも権限が無い状態でも通ってしまう。
-      //      昇格したら通ることまで見て、初めて aal2 が効いていると言える（M-010 の教訓）
+      //      昇格したら通ることまで見て、初めて aal2 が効いていると言える（RM-010 の教訓）
       const client = await aal1()
       await stepUpToAal2(client, factorId, secret)
       const { data, error } = await client

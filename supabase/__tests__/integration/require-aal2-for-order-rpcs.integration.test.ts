@@ -131,7 +131,7 @@ describe('発注RPCはMFA登録済みユーザーのaal2昇格を要求する(is
     expect(error).toBeNull()
   })
 
-  // WHY(#757-7, M-002): 2026-09-07 に RLS を壊して測ったところ、
+  // WHY(#757-7, RM-002): 2026-09-07 に RLS を壊して測ったところ、
   //      **facility_writer_or_admin から has_aal2() を外しても、このファイルは 1 つも落ちなかった**。
   //      理由は、ここが RPC 経由しか見ていなかったから。RPC は関数の中にも aal2 の判定を持つので、
   //      RLS 側を外しても RPC の挙動は変わらない。

@@ -4,14 +4,14 @@
   "_design": "restore は db reset（migration ファイルから作り直す）で行う。元のポリシー定義を手で書き写して戻す方式にすると、その写し自体がズレの発生源になる（2026-09-07 の Codex 指摘と同じ理由）。",
   "mutants": [
     {
-      "id": "M-001",
+      "id": "RM-001",
       "breaks": "施設スコープの読み取り（case_orders）から施設判定を外し、認証済みなら誰でも読めるようにする",
       "sql": "DROP POLICY IF EXISTS \"facility_member_or_admin\" ON case_orders;\nCREATE POLICY \"facility_member_or_admin\" ON case_orders\n  FOR ALL TO authenticated\n  USING (true)\n  WITH CHECK (true);",
       "expect": "supabase/__tests__/integration/case-orders-rls-idor.integration.test.ts",
       "promise": "P-010"
     },
     {
-      "id": "M-002",
+      "id": "RM-002",
       "breaks": "施設スコープの書き込み（case_orders）から aal2 の要求を外す",
       "sql": "DROP POLICY IF EXISTS \"facility_writer_or_admin\" ON case_orders;\nCREATE POLICY \"facility_writer_or_admin\" ON case_orders\n  FOR ALL TO authenticated\n  USING (is_facility_writer(facility_id) OR is_admin())\n  WITH CHECK (is_facility_writer(facility_id) OR is_admin());",
       "expect": "supabase/__tests__/integration/require-aal2-for-order-rpcs.integration.test.ts",
@@ -19,7 +19,7 @@
       "note": "2026-09-07 の初回計測で生き残った。RPC 経由しか見ていなかったので、表への直接書き込みのテストを同じファイルに足して倒した"
     },
     {
-      "id": "M-003",
+      "id": "RM-003",
       "breaks": "施設スコープの書き込み（hospital_prices）から書き手判定を外し、閲覧者も書けるようにする",
       "sql": "DROP POLICY IF EXISTS \"facility_writer_or_admin\" ON hospital_prices;\nCREATE POLICY \"facility_writer_or_admin\" ON hospital_prices\n  FOR ALL TO authenticated\n  USING (is_facility_member(facility_id) OR is_admin())\n  WITH CHECK (is_facility_member(facility_id) OR is_admin());",
       "expect": "supabase/__tests__/integration/rls-mutation-gaps.integration.test.ts",
@@ -27,21 +27,21 @@
       "note": "2026-09-07 の初回計測で生き残った。専用のテストを足して倒した"
     },
     {
-      "id": "M-004",
+      "id": "RM-004",
       "breaks": "明細（case_order_items）の親経由の施設判定を外す",
       "sql": "DROP POLICY IF EXISTS \"facility_member_or_admin\" ON case_order_items;\nCREATE POLICY \"facility_member_or_admin\" ON case_order_items\n  FOR ALL TO authenticated\n  USING (true)\n  WITH CHECK (true);",
       "expect": "supabase/__tests__/integration/order-items-rls-idor.integration.test.ts",
       "promise": "P-013"
     },
     {
-      "id": "M-005",
+      "id": "RM-005",
       "breaks": "マスタ（products）の書き込みから admin 判定を外し、誰でも書けるようにする",
       "sql": "DROP POLICY IF EXISTS \"products_write\" ON products;\nCREATE POLICY \"products_write\" ON products\n  FOR ALL TO authenticated\n  USING (true)\n  WITH CHECK (true);",
       "expect": "supabase/__tests__/integration/master-tables-admin-boundary.integration.test.ts",
       "promise": "P-021"
     },
     {
-      "id": "M-006",
+      "id": "RM-006",
       "breaks": "施設一覧（facilities）の作成から admin 判定を外す",
       "sql": "DROP POLICY IF EXISTS \"admin_insert\" ON facilities;\nCREATE POLICY \"admin_insert\" ON facilities\n  FOR INSERT TO authenticated\n  WITH CHECK (true);",
       "expect": "supabase/__tests__/integration/rls-mutation-gaps.integration.test.ts",
@@ -49,29 +49,29 @@
       "note": "2026-09-07 の初回計測で生き残った。専用のテストを足して倒した"
     },
     {
-      "id": "M-007",
+      "id": "RM-007",
       "breaks": "監査ログ（audit_log）を誰でも読めるようにする",
       "sql": "DROP POLICY IF EXISTS \"audit_log_select\" ON audit_log;\nCREATE POLICY \"audit_log_select\" ON audit_log\n  FOR SELECT TO authenticated\n  USING (true);",
       "expect": "supabase/__tests__/integration/audit-log-rls-idor.integration.test.ts",
       "promise": "P-062"
     },
     {
-      "id": "M-008",
+      "id": "RM-008",
       "breaks": "拒否の記録（access_denials）を誰でも読めるようにする",
       "sql": "DROP POLICY IF EXISTS \"access_denials_select\" ON access_denials;\nCREATE POLICY \"access_denials_select\" ON access_denials\n  FOR SELECT TO authenticated\n  USING (true);",
       "expect": "supabase/__tests__/integration/access-denials-rls-idor.integration.test.ts",
       "promise": "P-063"
     },
     {
-      "id": "M-009",
+      "id": "RM-009",
       "breaks": "価格履歴（price_histories）の直接 INSERT を許す",
-      "sql": "DROP POLICY IF EXISTS \"price_histories_no_insert\" ON price_histories;\nCREATE POLICY \"price_histories_allow_insert\" ON price_histories\n  FOR INSERT TO authenticated\n  WITH CHECK (true);\n-- WHY(GRANT も渡す): price_histories は GRANT SELECT だけで INSERT の GRANT が無い。\n--      ポリシーだけ緩めても GRANT が先に拒否するので、変異が**何も変えない**（等価変異）。\nGRANT INSERT ON price_histories TO authenticated;\n-- 新しく渡した権限は PostgREST のスキーマキャッシュに載るまで API 層に効かない（M-010 と同じ）\nNOTIFY pgrst, 'reload schema';",
+      "sql": "DROP POLICY IF EXISTS \"price_histories_no_insert\" ON price_histories;\nCREATE POLICY \"price_histories_allow_insert\" ON price_histories\n  FOR INSERT TO authenticated\n  WITH CHECK (true);\n-- WHY(GRANT も渡す): price_histories は GRANT SELECT だけで INSERT の GRANT が無い。\n--      ポリシーだけ緩めても GRANT が先に拒否するので、変異が**何も変えない**（等価変異）。\nGRANT INSERT ON price_histories TO authenticated;\n-- 新しく渡した権限は PostgREST のスキーマキャッシュに載るまで API 層に効かない（RM-010 と同じ）\nNOTIFY pgrst, 'reload schema';",
       "expect": "supabase/__tests__/integration/price-histories-rls-idor.integration.test.ts",
       "promise": "P-051",
       "note": "2026-09-07 の 2 回目の計測で生き残った。**変異が自分の宣言を実装できていなかった**（ポリシーだけ緩めても GRANT が先に拒否するので何も変わらない等価変異）。GRANT INSERT も渡す形に直して実効化した。**守っているのがポリシーなのか GRANT なのかを取り違えていた例**で、テスト側も 42501 を期待していたため、両方が同じ思い込みに乗っていた"
     },
     {
-      "id": "M-010",
+      "id": "RM-010",
       "breaks": "回数のカウンタ（rate_limit_counters）を client から読めるようにする",
       "sql": "GRANT SELECT ON rate_limit_counters TO authenticated;\nCREATE POLICY \"leak\" ON rate_limit_counters\n  FOR SELECT TO authenticated\n  USING (true);\n-- WHY: 新しく GRANT した表は PostgREST のスキーマキャッシュに載っていないため、\n--      再読み込みしないと API 層では見えず、変異が効かない（2026-09-07 実測）\nNOTIFY pgrst, 'reload schema';",
       "expect": "supabase/__tests__/integration/rls-mutation-gaps.integration.test.ts",
@@ -79,7 +79,7 @@
       "note": "2026-09-07 の初回計測で生き残った。専用のテストを足して倒した"
     },
     {
-      "id": "M-011",
+      "id": "RM-011",
       "breaks": "特権操作の記録（privileged_operations）の読み取りから aal2 の要求を外し、パスワードだけの admin でも読めるようにする",
       "sql": "DROP POLICY IF EXISTS \"privileged_operations_select\" ON privileged_operations;\nCREATE POLICY \"privileged_operations_select\" ON privileged_operations\n  FOR SELECT TO authenticated\n  USING (is_admin());",
       "expect": "supabase/__tests__/integration/privileged-operations-rls-idor.integration.test.ts",
@@ -87,15 +87,15 @@
       "note": "2026-09-07 に表を追加したので変異も足した（rls-mutation.md の更新の引き金「RLS ポリシーを足したり変えたりしたとき」）。この表は招待先のメールを持つので、読み手の条件が緩むと PII が広がる"
     },
     {
-      "id": "M-012",
+      "id": "RM-012",
       "breaks": "拒否の記録（access_denials）の読み取りから aal2 の要求だけを外す（admin 判定は残す）",
       "sql": "DROP POLICY IF EXISTS \"access_denials_select\" ON access_denials;\nCREATE POLICY \"access_denials_select\" ON access_denials\n  FOR SELECT TO authenticated\n  USING (is_admin());",
       "expect": "supabase/__tests__/integration/access-denials-rls-idor.integration.test.ts",
       "promise": "P-063",
-      "note": "M-008 は is_admin() を丸ごと外す変異で、**aal2 だけを外す形は測っていなかった**。M-011 で同じ穴が見つかったので同型のポリシー全部に変異を足した（2026-09-07）。初回は生き残った"
+      "note": "RM-008 は is_admin() を丸ごと外す変異で、**aal2 だけを外す形は測っていなかった**。RM-011 で同じ穴が見つかったので同型のポリシー全部に変異を足した（2026-09-07）。初回は生き残った"
     },
     {
-      "id": "M-013",
+      "id": "RM-013",
       "breaks": "所属と役割の変更（user_facilities）から aal2 の要求だけを外す（admin 判定は残す）",
       "sql": "DROP POLICY IF EXISTS \"admin_write\" ON user_facilities;\nCREATE POLICY \"admin_write\" ON user_facilities\n  FOR ALL TO authenticated\n  USING (is_admin())\n  WITH CHECK (is_admin());",
       "expect": "supabase/__tests__/integration/permission-change-authz.integration.test.ts",
@@ -103,12 +103,12 @@
       "note": "同上。**E-033（パスワードだけ奪われた admin が共犯者を昇格できた事故）を塞いだ本体**なので、ここが緩むと同じ事故に戻る。初回は生き残った（この migration の存在理由そのものが測れていなかった）"
     },
     {
-      "id": "M-014",
+      "id": "RM-014",
       "breaks": "マスタ（products）の書き込みから aal2 の要求だけを外す（admin 判定は残す）",
       "sql": "DROP POLICY IF EXISTS \"products_write\" ON products;\nCREATE POLICY \"products_write\" ON products\n  FOR ALL TO authenticated\n  USING (is_admin())\n  WITH CHECK (is_admin());",
       "expect": "supabase/__tests__/integration/blast-radius.integration.test.ts",
       "promise": "P-033",
-      "note": "同上。M-005 は admin 判定を外す変異で、aal2 だけを外す形は測っていなかった。初回から倒せていた"
+      "note": "同上。RM-005 は admin 判定を外す変異で、aal2 だけを外す形は測っていなかった。初回から倒せていた"
     }
   ]
 }

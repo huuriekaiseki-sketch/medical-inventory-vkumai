@@ -54,6 +54,16 @@ bash scripts/log-manual-override.sh --safeguard H-009 --actor masanori --reason 
 - 記録は追記のみ。月次サマリ（`scripts/gate-effectiveness-monthly-check.sh` の型）に「先月の手動迂回 N 件」を足すのは次の段階
 - 監査ログ側の対応行は `audit_log` を `actor_role in ('postgres', 'service_role')` と `occurred_at` で引く
 
+## 限界
+
+- **迂回を禁止しない。** 緊急時に安全装置の横を通る必要はあるので、目的は「通れなくする」
+  ではなく「通ったことが残る」。**残らない経路が 5 件あり、そこは本人が言わない限り分からない。**
+- **記録されない経路は、この表に載っていること自体が唯一の防御**という状態。
+  読まれなければ効かない（[`undetectable-rules-inventory.md`](./undetectable-rules-inventory.md) と同じ性質）。
+- **人の判断の質は見ない。** 「記録される」経路でも、記録された理由が妥当かは誰も検査しない。
+- **思いつけた迂回路しか載らない。** 新しい安全装置を足すと、その横を通る道も同時に生まれるが、
+  この表へ足すのは人の作業。
+
 ## 更新の引き金
 
 - 安全装置を足したとき（hook・CI ジョブ・RLS ポリシー・トリガー）: その装置の行を足し、「人が迂回する経路」を 1 つ以上書く

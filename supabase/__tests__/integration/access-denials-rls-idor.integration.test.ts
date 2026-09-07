@@ -117,7 +117,7 @@ describe('拒否された操作の記録（access_denials） [P-063]', () => {
     expect(asAnon.error).not.toBeNull()
   })
 
-  // WHY(2026-09-07、RLS ミューテーション M-012 で生き残った): ここまでのテストは
+  // WHY(2026-09-07、RLS ミューテーション RM-012 で生き残った): ここまでのテストは
   //      「staff は読めない」「anon は読めない」までで、**MFA 登録済みで aal2 に上げていない admin**
   //      を試していなかった（既存のコメントにも「MFA 登録済み・aal1 で読めないことは
   //      blast-radius が測る」と書いてあるが、blast-radius はこの表を見ていない）。
@@ -125,7 +125,7 @@ describe('拒否された操作の記録（access_denials） [P-063]', () => {
   //
   //      拒否の記録は「誰がどこで弾かれたか」の一覧なので、読み手が緩むと
   //      乗っ取り側が「自分の総当たりがどこまで見えているか」を確認できてしまう。
-  describe('aal2 に上げていない admin は読めない（M-012 を倒す）', () => {
+  describe('aal2 に上げていない admin は読めない（RM-012 を倒す）', () => {
     const PASSWORD = 'Passw0rd!aal1-denials'
     const mfaEmail = `denial-mfa-admin-${marker}@example.test`
     let mfaAdminId: string
@@ -171,7 +171,7 @@ describe('拒否された操作の記録（access_denials） [P-063]', () => {
 
     it('対照: aal2 まで上げれば読める（admin の権限そのものは設計どおり）', async () => {
       // WHY(対照が要る): 表が空でも「0 件」は返る。昇格したら読めることまで見て、
-      //      初めて aal2 が効いていると言える（M-010 の教訓）
+      //      初めて aal2 が効いていると言える（RM-010 の教訓）
       const client = await aal1()
       await stepUpToAal2(client, factorId, secret)
       const { data, error } = await client.from('access_denials').select('id')
