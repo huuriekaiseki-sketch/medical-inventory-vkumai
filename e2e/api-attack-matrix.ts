@@ -114,4 +114,9 @@ export const ATTACK_MATRIX: Record<string, RouteAttacks> = {
     DELETE: { body: { userId: RANDOM_UUID, facilityId: FACILITY_A }, query: { userId: RANDOM_UUID, facilityId: FACILITY_A } },
   },
   '/api/admin/reports': { GET: { query: { facilityId: FACILITY_A, facility_id: FACILITY_A } } },
+  // WHY: 監査ログの閲覧（issue #757 の 4・24）。他施設の ID を指定しても、admin でない
+  //      利用者には 403 が返り、施設 A の記録が 1 行も見えないことを確かめる
+  '/api/admin/audit': {
+    GET: { query: { kind: 'changes', facility_id: FACILITY_A }, note: '他施設の監査ログを覗けない' },
+  },
 }
