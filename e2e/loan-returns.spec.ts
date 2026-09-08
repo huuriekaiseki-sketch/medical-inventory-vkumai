@@ -487,4 +487,74 @@ test.describe('未返却の通し（発注 → 未返却 → 対象を選んで�
 
     await context.close()
   })
+
+  // WHY(E-056 の残り): 返却だけでなく**発注**も取り消せるようにした（20260908070000）。
+  //      間違えた短貸発注は、返す物が無いのに**永久に「未返却」として残る**（返却もできない）。
+  //      取り消しは横断の発注履歴（/orders）から行う。3 種が 1 か所に出る唯一の画面。
+  test('間違えた短貸発注を取り消すと、未返却から消える', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: CROSS_FACILITY_USER_A_AUTH_PATH })
+    const page = await context.newPage()
+    const facilityId = fixtures!.facilityAId
+    const suffix = uniqueSuffix()
+    const procedureName = `E2E発注取り消し術式-${suffix}`
+    const maker = `E2E発注取り消しメーカー-${suffix}`
+
+    const before = await readOutstanding(page)
+
+    // 1. 発注する
+    await page.goto(`/facilities/${facilityId}/loan-orders/new`)
+    await page.waitForLoadState('networkidle')
+    await page.getByLabel('手技名').fill(procedureName)
+    await page.getByLabel('メーカー').fill(maker)
+    await page.getByPlaceholder('JAN').first().fill(fixtures!.productJan!)
+    await page.getByPlaceholder('品名').first().fill(`E2E発注取り消し品名-${suffix}`)
+    const [orderRes] = await Promise.all([
+      page.waitForResponse(
+        (res) => res.url().includes('/api/loan-orders') && res.request().method() === 'POST'
+      ),
+      page.getByRole('button', { name: '発注する' }).click(),
+    ])
+    expect(orderRes.status(), await orderRes.text()).toBe(201)
+    expect(await readOutstanding(page), '発注しても未返却が増えない').toBe(before + 1)
+
+    // 2. 発注履歴から取り消す
+    await page.goto(`/orders?facilityId=${facilityId}&kind=loan_order`)
+    await page.waitForLoadState('networkidle')
+    const row = page.getByRole('row', { name: new RegExp(procedureName) })
+    await expect(row).toBeVisible()
+    await expect(row.getByText('未返却')).toBeVisible()
+
+    page.once('dialog', (d) => d.accept())
+    const [cancelRes] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/api/loan-orders/') && r.request().method() === 'PATCH'
+      ),
+      row.getByRole('button', { name: '取り消す' }).click(),
+    ])
+    expect(cancelRes.status(), `取り消しに失敗: ${await cancelRes.text()}`).toBe(200)
+
+    // 3. 行は消えず「取り消し済」になり、未返却バッジも消える
+    await page.goto(`/orders?facilityId=${facilityId}&kind=loan_order`)
+    await page.waitForLoadState('networkidle')
+    const after = page.getByRole('row', { name: new RegExp(procedureName) })
+    await expect(after, '取り消したら一覧から消えてしまった').toBeVisible()
+    await expect(after).toContainText('取り消し済')
+    await expect(after.getByText('未返却'), '取り消したのに未返却のまま').toHaveCount(0)
+    await expect(
+      after.getByRole('button', { name: '取り消す' }),
+      '取り消し済なのにもう一度取り消せる'
+    ).toHaveCount(0)
+
+    // 4. ダッシュボードの件数も戻る
+    expect(await readOutstanding(page), '取り消したのに未返却件数が減らない').toBe(before)
+
+    // 5. 返却フォームの対象からも消える（返す物が無い発注が候補に出ない）
+    await page.goto(`/facilities/${facilityId}/loan-returns/new`)
+    await page.waitForLoadState('networkidle')
+    await expect(
+      page.getByLabel('対象の短貸発注').getByRole('option', { name: `${procedureName}（${maker}）` })
+    ).toHaveCount(0)
+
+    await context.close()
+  })
 })

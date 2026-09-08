@@ -37,11 +37,20 @@ export const ATTACK_MATRIX: Record<string, RouteAttacks> = {
   '/auth/callback': { GET: { skip: 'OAuth コールバック。code 無しでは Supabase へ行かずリダイレクトするだけで施設データに触れない' } },
 
   // 施設スコープ（発注・返却・消耗品・仕入価格）
+  '/api/loan-orders/[id]': {
+    PATCH: { pathId: 'loanOrderA', body: { facilityId: FACILITY_A, action: 'cancel' }, note: '施設 A の**実在する**短貸発注を他施設の利用者が取り消せないこと（E-056）' },
+  },
   '/api/loan-orders': {
     POST: { body: { facilityId: FACILITY_A, procedureName: '攻撃テスト用術式', maker: '攻撃テスト用メーカー', items: [] } },
   },
+  '/api/case-orders/[id]': {
+    PATCH: { pathId: 'random', body: { facilityId: FACILITY_A, action: 'cancel' }, note: '施設 A の発注を勝手に取り消せない（E-056）。id は存在しない UUID で、認可が先に 403 を返すこと' },
+  },
   '/api/case-orders': {
     POST: { body: { facilityId: FACILITY_A, caseDatetime: ISO, procedureName: '攻撃テスト用術式', patientId: 'ATTACK-0000', patientInitials: 'ZZ', gender: 'other', doctorName: '攻撃テスト用医師', items: [] } },
+  },
+  '/api/consumable-orders/[id]': {
+    PATCH: { pathId: 'random', body: { facilityId: FACILITY_A, action: 'cancel' }, note: '施設 A の発注を勝手に取り消せない（E-056）。id は存在しない UUID で、認可が先に 403 を返すこと' },
   },
   '/api/consumable-orders': {
     POST: { body: { facilityId: FACILITY_A, items: [{ consumableId: RANDOM_UUID, quantity: 1 }] }, note: 'consumableId は存在しない UUID。認可が先に 403 を返すこと' },

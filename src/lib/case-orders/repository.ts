@@ -6,7 +6,8 @@ import type { CaseOrder, CaseOrderInput, CaseOrderItem } from '@/types/order'
 import { toRepositoryError } from '@/lib/invariant-error'
 
 const GENDERS = ['male', 'female', 'other'] as const
-const STATUSES = ['draft', 'submitted'] as const
+// WHY(cancelled、2026-09-08・E-056): 間違えた発注を取り消せるようにした。行は消さず状態で表す
+const STATUSES = ['draft', 'submitted', 'cancelled'] as const
 
 interface CaseOrderItemRow {
   id?: unknown

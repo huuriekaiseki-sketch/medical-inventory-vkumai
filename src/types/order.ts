@@ -7,7 +7,8 @@ export type CaseOrder = {
   patientInitials: string
   gender: 'male' | 'female' | 'other'
   doctorName: string
-  status: 'draft' | 'submitted'
+  /** cancelled は 2026-09-08 に足した取り消し状態（E-056）。行は消さず状態で表す */
+  status: 'draft' | 'submitted' | 'cancelled'
   items: CaseOrderItem[]
   createdAt: string
   updatedAt: string
@@ -96,7 +97,8 @@ export type ConsumablesApiErrorResponse = {
 export type ConsumableOrder = {
   id: string
   facilityId: string
-  status: 'draft' | 'submitted'
+  /** cancelled は 2026-09-08 に足した取り消し状態（E-056）。行は消さず状態で表す */
+  status: 'draft' | 'submitted' | 'cancelled'
   items: ConsumableOrderItem[]
   createdAt: string
   updatedAt: string
@@ -128,7 +130,8 @@ export type LoanOrder = {
   facilityId: string
   procedureName: string
   maker: string
-  status: 'draft' | 'submitted'
+  /** cancelled は 2026-09-08 に足した取り消し状態（E-056）。行は消さず状態で表す */
+  status: 'draft' | 'submitted' | 'cancelled'
   items: LoanOrderItem[]
   createdAt: string
   updatedAt: string

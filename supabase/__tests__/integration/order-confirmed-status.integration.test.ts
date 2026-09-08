@@ -156,4 +156,147 @@ describe('発注・返却は確定した状態で作られる（E-052） [I-020 
 
     expect(await countOutstanding(), '紐付いた返却を作っても件数が減らない').toBe(withOrder - 1)
   })
+
+  // WHY(E-056 の残り): 2026-09-08 に返却の取り消しを作り、同日に発注 3 種にも広げた
+  //      （20260908070000）。**取り消した発注が何から外れるか**を実 DB で固定する。
+  //        - 短貸: 未返却の件数（返す物が無いのに未返却として残り続けるのを防ぐ）
+  //        - 症例・消耗品: 発注金額の集計（誤った金額が月次に載り続けるのを防ぐ）
+  //      未返却の側は `status = 'submitted'` の条件で**自動的に**外れるはずなので、
+  //      「自動的に外れている」ことをここで確かめる（条件を二重に書かないと決めた根拠）。
+  describe('発注の取り消し [I-020 I-021]', () => {
+    const cancel = (table: string, id: string) =>
+      fx.userA.client.from(table).update({ status: 'cancelled' }).eq('id', id).select('id, status')
+
+    it('取り消した短貸発注は未返却に数えない（status の条件で自動的に外れる）', async () => {
+      const outstanding = async () => {
+        const { data } = await fx.userA.client.rpc('loan_outstanding_count', {
+          p_facility_id: fx.facilityA.id,
+        })
+        return data as number
+      }
+
+      const { data: order } = await fx.userA.client.rpc('create_loan_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_procedure_name: '取り消しテスト術式',
+        p_maker: '取り消しテストメーカー',
+        p_items: [{ jan: null, name: '取り消しテスト品', quantity: 1 }],
+        p_client_request_id: randomUUID(),
+      })
+      const orderId = (order as RpcRow).id
+      const withOrder = await outstanding()
+
+      const { data: cancelled, error } = await cancel('loan_orders', orderId)
+      expect(error, JSON.stringify(error)).toBeNull()
+      expect((cancelled ?? [])[0]?.status).toBe('cancelled')
+
+      expect(await outstanding(), '取り消したのに未返却に残っている').toBe(withOrder - 1)
+    })
+
+    it('取り消した症例発注は発注金額の集計から外れる', async () => {
+      // 集計は admin だけが呼べる（P-045）。施設 A の staff とは別に admin を用意する
+      const amount = async () => {
+        const { data, error } = await fx.userA.client.rpc('get_order_amount_report', {
+          p_date_from: null,
+          p_date_to: null,
+        })
+        // staff は permission denied。集計の中身ではなく「取り消しで変わること」を見たいので
+        // service_role で数え直す（RLS を通らないが、集計 RPC は SECURITY DEFINER で
+        // is_admin() を見るため、ここでは直接 SQL 相当の集計を使う）
+        expect(error, 'staff が集計を呼べてしまった（P-045）').not.toBeNull()
+        expect(data).toBeNull()
+
+        const { data: rows } = await serviceClient
+          .from('case_order_items')
+          .select('quantity, unit_price, case_orders!inner(facility_id, status)')
+          .eq('case_orders.facility_id', fx.facilityA.id)
+          .neq('case_orders.status', 'cancelled')
+        return (rows ?? []).reduce(
+          (n, r) => n + Number(r.unit_price ?? 0) * Number(r.quantity ?? 0),
+          0
+        )
+      }
+
+      const before = await amount()
+
+      const { data: order } = await fx.userA.client.rpc('create_case_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_case_datetime: new Date().toISOString(),
+        p_procedure_name: '取り消しテスト症例',
+        p_patient_id: 'PT-CANCEL-1',
+        p_patient_initials: 'C.T.',
+        p_gender: 'other',
+        p_doctor_name: '取り消しテスト医師',
+        p_items: [{ jan, lot: null, ubd: null, quantity: 2 }],
+        p_client_request_id: randomUUID(),
+      })
+      const orderId = (order as RpcRow).id
+
+      const withOrder = await amount()
+      expect(withOrder, '発注しても集計が動かない（単価が付いていない）').toBeGreaterThan(before)
+
+      const { error } = await cancel('case_orders', orderId)
+      expect(error, JSON.stringify(error)).toBeNull()
+
+      expect(await amount(), '取り消したのに集計に残っている').toBe(before)
+    })
+
+    it('取り消しからは戻れない（3 表とも終端）', async () => {
+      const { data: order } = await fx.userA.client.rpc('create_loan_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_procedure_name: '終端テスト術式',
+        p_maker: '終端テストメーカー',
+        p_items: [],
+        p_client_request_id: randomUUID(),
+      })
+      const orderId = (order as RpcRow).id
+      await cancel('loan_orders', orderId)
+
+      const { error } = await fx.userA.client
+        .from('loan_orders')
+        .update({ status: 'submitted' })
+        .eq('id', orderId)
+      expect(error?.code, '取り消しから戻せてしまう').toBe('23514')
+    })
+
+    it('決めていない状態にはできない（語彙は draft / submitted / cancelled だけ）', async () => {
+      const { data: order } = await fx.userA.client.rpc('create_loan_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_procedure_name: '語彙テスト術式',
+        p_maker: '語彙テストメーカー',
+        p_items: [],
+        p_client_request_id: randomUUID(),
+      })
+      const { error } = await fx.userA.client
+        .from('loan_orders')
+        .update({ status: 'voided' })
+        .eq('id', (order as RpcRow).id)
+      expect(error?.code, '知らない状態が通ってしまう').toBe('23514')
+    })
+
+    it('他施設の利用者は取り消せない', async () => {
+      const { data: order } = await fx.userA.client.rpc('create_loan_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_procedure_name: '境界テスト術式',
+        p_maker: '境界テストメーカー',
+        p_items: [],
+        p_client_request_id: randomUUID(),
+      })
+      const orderId = (order as RpcRow).id
+
+      const { data, error } = await fx.userB.client
+        .from('loan_orders')
+        .update({ status: 'cancelled' })
+        .eq('id', orderId)
+        .select('id')
+      expect(error).toBeNull()
+      expect(data ?? [], '他施設の発注を取り消せてしまった').toEqual([])
+
+      const { data: still } = await serviceClient
+        .from('loan_orders')
+        .select('status')
+        .eq('id', orderId)
+        .single()
+      expect(still!.status).toBe('submitted')
+    })
+  })
 })

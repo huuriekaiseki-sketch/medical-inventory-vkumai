@@ -233,6 +233,12 @@ export const loanReturnCancelSchema = z.object({
   action: z.literal('cancel', { error: 'action は cancel のみ指定できます' }),
 })
 
+/** 発注 3 種の取り消し（E-056）。返却と同じ形で、**できるのは取り消しだけ** */
+export const orderCancelSchema = z.object({
+  facilityId,
+  action: z.literal('cancel', { error: 'action は cancel のみ指定できます' }),
+})
+
 /** 消耗品発注（consumable_orders）。明細は消耗品の ID と数量だけ */
 export const consumableOrderInputSchema = z.object({
   facilityId,

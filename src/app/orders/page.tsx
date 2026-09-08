@@ -245,7 +245,19 @@ function OrdersPageInner() {
 
       {!error && !ordersLoading && items.length > 0 && (
         <>
-          <OrderHistoryTable items={items} />
+          {/* WHY(E-056): 取り消しは施設 ID を要求するので、施設が選ばれているときだけ出す。
+              取り消した行は消さず「取り消し済」にして、その場で表示だけ差し替える */}
+          <OrderHistoryTable
+            items={items}
+            facilityId={facilityId ?? undefined}
+            onCancelled={(id) =>
+              setItems((prev) =>
+                prev.map((o) =>
+                  o.id === id ? { ...o, status: 'cancelled', unreturned: false } : o
+                )
+              )
+            }
+          />
           {/* WHY: APIは総件数を返さないため、返却件数がLIMIT未満なら「次へ」を無効化する
               （返却件数=LIMITのときのみ次ページが存在しうると判定する簡易実装） */}
           <div className="mt-4 flex items-center justify-between">

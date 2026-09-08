@@ -5,7 +5,8 @@ import { KEYWORD_SCAN_LIMIT, type OrderRepositoryFilter } from '@/lib/orders/lis
 import type { LoanOrder, LoanOrderInput, LoanOrderItem } from '@/types/order'
 import { toRepositoryError } from '@/lib/invariant-error'
 
-const STATUSES = ['draft', 'submitted'] as const
+// WHY(cancelled、2026-09-08・E-056): 間違えた発注を取り消せるようにした。行は消さず状態で表す
+const STATUSES = ['draft', 'submitted', 'cancelled'] as const
 
 interface LoanOrderItemRow {
   id?: unknown
