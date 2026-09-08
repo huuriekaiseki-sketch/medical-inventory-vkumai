@@ -71,7 +71,8 @@ export const ATTACK_MATRIX: Record<string, RouteAttacks> = {
   '/api/facilities/[id]': {
     GET: { pathId: 'facilityA', note: '2026-09-06 実測: facilities の RLS により未所属の施設は 404（P-021 の「参照は非分離」はマスタ一覧の話で、行単位では所属施設のみ）' },
     PUT: { pathId: 'facilityA', body: { name: '攻撃テストで改名' } },
-    DELETE: { pathId: 'facilityA' },
+    // DELETE は 2026-09-08 に消した（E-055）。`facilities` に DELETE の RLS ポリシーが無く、
+    // admin が叩いても 0 行になって実在する施設に 404 を返す「使えない道」だった。
   },
   '/api/facilities/[id]/my-role': {
     GET: { pathId: 'facilityA', note: '未所属なら role null。施設 A の存在は施設マスタとして非分離' },
