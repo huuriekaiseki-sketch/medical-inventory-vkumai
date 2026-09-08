@@ -33,9 +33,11 @@ const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
  * 決着したらこの表から消す（消すと自動的に検査が厳しくなる）。
  */
 const PENDING_CONTRAST: ReadonlyArray<{ fg: string; bg: string; ratio: string; why: string }> = [
-  { fg: '#ffffff', bg: '#ff5f03', ratio: '3.04', why: 'ボタンの地色。直すには地色を濃くするので見た目が変わる' },
-  { fg: '#6b7280', bg: '#edeade', ratio: '4.01', why: '本文の灰色が地色の上で 0.5 足りない。38 ファイルに影響' },
-  { fg: '#9ca3af', bg: '#ffffff', ratio: '2.53', why: '補足文の薄い灰色。3 ファイル' },
+  // 2026-09-08: 人が「3 つとも直す」と決めたので空にした。
+  //   白文字 on #ff5f03 → 地色を #b03f00 へ（比 5.90）
+  //   #6b7280 on #edeade → #4b5563 へ（比 6.27）
+  //   #9ca3af on #ffffff → #6b7280 へ（比 4.83）
+  // **空にしたので、同じ配色が戻ってきたら即座に失敗する。**
 ]
 
 /**
@@ -50,11 +52,8 @@ const PENDING_CONTRAST: ReadonlyArray<{ fg: string; bg: string; ratio: string; w
  *      配色 + タグ + class の署名で重複を潰し、行数に依存しない単位で数える。
  */
 const PENDING_COUNT: Record<string, number> = {
-  // 2026-09-08 実測（基準を 0 にして出た値そのまま。緩めない）
-  '/products': 2,
-  '/categories': 1,
-  '/distributor-products': 2,
-  '/news': 1,
+  // 2026-09-08: 判断待ちを 3 つとも直したので全画面 0。
+  // ここに行を足すのは「新しい判断待ちを作る」ことなので、人が決めるまでやらない。
 }
 
 function isPending(fg: unknown, bg: unknown): boolean {

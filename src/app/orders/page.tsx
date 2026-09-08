@@ -234,11 +234,11 @@ function OrdersPageInner() {
       )}
 
       {!error && ordersLoading && (
-        <p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>読み込み中...</p>
       )}
 
       {!error && !ordersLoading && items.length === 0 && (
-        <p className="text-sm" style={{ color: '#6B7280' }}>
+        <p className="text-sm" style={{ color: '#4B5563' }}>
           {hasFilter ? '条件に一致する発注がありません' : '発注履歴がありません'}
         </p>
       )}
@@ -276,7 +276,7 @@ function OrdersPageInner() {
 
 export default function OrdersPage() {
   return (
-    <Suspense fallback={<p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>}>
+    <Suspense fallback={<p className="text-sm" style={{ color: '#4B5563' }}>読み込み中...</p>}>
       <OrdersPageInner />
     </Suspense>
   )

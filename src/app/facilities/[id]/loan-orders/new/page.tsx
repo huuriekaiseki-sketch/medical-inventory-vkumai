@@ -51,14 +51,14 @@ export default function NewLoanOrderPage({ params }: { params: Promise<{ id: str
   }
 
   const labelClass = 'block text-xs font-semibold uppercase tracking-widest mb-1'
-  const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+  const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
   const inputClass = 'border rounded px-3 py-2 text-sm w-full'
   const inputStyle = { borderColor: '#E5E7EB' }
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <div className="mb-6">
-        <Link href={`/facilities/${id}/loan-orders`} className="text-sm hover:underline" style={{ color: '#6B7280' }}>
+        <Link href={`/facilities/${id}/loan-orders`} className="text-sm hover:underline" style={{ color: '#4B5563' }}>
           ← 短貸発注一覧に戻る
         </Link>
       </div>
@@ -84,9 +84,9 @@ export default function NewLoanOrderPage({ params }: { params: Promise<{ id: str
         <div className="mb-6">
           <p className={labelClass} style={labelStyle}>発注物品</p>
           <div className="flex gap-2 mb-1 px-1">
-            <span className="text-xs font-semibold w-28" style={{ color: '#6B7280' }}>JAN（任意）</span>
-            <span className="text-xs font-semibold flex-1" style={{ color: '#6B7280' }}>品名</span>
-            <span className="text-xs font-semibold w-16" style={{ color: '#6B7280' }}>数量</span>
+            <span className="text-xs font-semibold w-28" style={{ color: '#4B5563' }}>JAN（任意）</span>
+            <span className="text-xs font-semibold flex-1" style={{ color: '#4B5563' }}>品名</span>
+            <span className="text-xs font-semibold w-16" style={{ color: '#4B5563' }}>数量</span>
           </div>
           {items.map((row, i) => (
             <div key={i} className="flex gap-2 mb-2 items-center">
@@ -99,7 +99,7 @@ export default function NewLoanOrderPage({ params }: { params: Promise<{ id: str
           <button type="button" onClick={addRow} className="text-sm px-3 py-1 rounded border" style={{ borderColor: '#072C2C', color: '#072C2C' }}>+ 行を追加</button>
         </div>
         <div className="flex justify-end gap-3">
-          <Link href={`/facilities/${id}/loan-orders`} className="px-4 py-2 text-sm rounded border inline-block" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>
+          <Link href={`/facilities/${id}/loan-orders`} className="px-4 py-2 text-sm rounded border inline-block" style={{ borderColor: '#E5E7EB', color: '#4B5563' }}>
             キャンセル
           </Link>
           <button type="submit" disabled={submitting} className="px-4 py-2 text-sm rounded text-white hover:opacity-90 disabled:opacity-50" style={{ backgroundColor: '#2563EB' }}>

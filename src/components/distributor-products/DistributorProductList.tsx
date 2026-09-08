@@ -19,7 +19,7 @@ export function DistributorProductList({ items, categories, onEdit, onDelete }: 
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-sm font-medium" style={{ color: '#6B7280' }}>販売店商品が登録されていません</p>
+        <p className="text-sm font-medium" style={{ color: '#4B5563' }}>販売店商品が登録されていません</p>
       </div>
     )
   }
@@ -64,19 +64,19 @@ export function DistributorProductList({ items, categories, onEdit, onDelete }: 
               <td className="px-6 py-4 text-sm font-medium" style={{ color: '#111827' }}>
                 {item.name}
               </td>
-              <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>
+              <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>
                 {item.maker}
               </td>
-              <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>
+              <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>
                 {item.supplier}
               </td>
-              <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>
+              <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>
                 {categoryNameById.get(item.categoryId) ?? '—'}
               </td>
-              <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+              <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                 {item.reimbursementPrice === null ? '—' : `¥${item.reimbursementPrice.toLocaleString()}`}
               </td>
-              <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+              <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                 {item.quantity}
               </td>
               <td className="px-6 py-4 text-sm">

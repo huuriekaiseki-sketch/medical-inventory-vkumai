@@ -17,8 +17,8 @@ export function CategoryList({ categories, onEdit, onDelete }: CategoryListProps
   if (categories.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-sm font-medium" style={{ color: '#6B7280' }}>カテゴリが登録されていません</p>
-        <p className="mt-1 text-xs" style={{ color: '#9CA3AF' }}>「新規登録」から追加してください</p>
+        <p className="text-sm font-medium" style={{ color: '#4B5563' }}>カテゴリが登録されていません</p>
+        <p className="mt-1 text-xs" style={{ color: '#6B7280' }}>「新規登録」から追加してください</p>
       </div>
     )
   }
@@ -52,10 +52,10 @@ export function CategoryList({ categories, onEdit, onDelete }: CategoryListProps
               <td className="px-6 py-4 text-sm font-medium" style={{ color: '#111827' }}>
                 {category.name}
               </td>
-              <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>
+              <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>
                 {category.description ?? '—'}
               </td>
-              <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+              <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                 {formatJstDate(category.createdAt)}
               </td>
               <td className="px-6 py-4 text-sm">

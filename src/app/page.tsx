@@ -56,7 +56,7 @@ export default function Home() {
   if (!data) {
     return (
       <div className="mx-auto max-w-6xl px-6 py-10">
-        <p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>読み込み中...</p>
       </div>
     )
   }

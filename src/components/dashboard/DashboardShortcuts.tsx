@@ -32,7 +32,7 @@ export function DashboardShortcuts({ isAdmin }: DashboardShortcutsProps) {
           key={shortcut.href}
           href={shortcut.href}
           className="px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-          style={{ backgroundColor: '#FF5F03', fontFamily: 'var(--font-ubuntu), sans-serif', borderRadius: '2px' }}
+          style={{ backgroundColor: '#B03F00', fontFamily: 'var(--font-ubuntu), sans-serif', borderRadius: '2px' }}
         >
           {shortcut.label}
         </Link>

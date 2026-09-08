@@ -28,12 +28,12 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
     }
   }, [id])
 
-  const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+  const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <div className="mb-6">
-        <Link href={`/facilities/${id}`} className="text-sm hover:underline" style={{ color: '#6B7280' }}>
+        <Link href={`/facilities/${id}`} className="text-sm hover:underline" style={{ color: '#4B5563' }}>
           ← 施設に戻る
         </Link>
       </div>
@@ -59,9 +59,9 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
       )}
 
       {loading ? (
-        <p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>読み込み中...</p>
       ) : returns.length === 0 ? (
-        <p className="text-sm" style={{ color: '#6B7280' }}>返却履歴がありません。</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>返却履歴がありません。</p>
       ) : (
         <div className="rounded bg-white shadow-sm overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
           <table className="min-w-full">
@@ -75,11 +75,11 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
             <tbody>
               {returns.map(ret => (
                 <tr key={ret.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
-                  <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+                  <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                     {ret.returnDatetime ? formatJstDateTime(ret.returnDatetime) : '-'}
                   </td>
-                  <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>{STATUS_LABEL[ret.status] ?? ret.status}</td>
-                  <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+                  <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>{STATUS_LABEL[ret.status] ?? ret.status}</td>
+                  <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                     {formatJstDate(ret.createdAt)}
                   </td>
                 </tr>

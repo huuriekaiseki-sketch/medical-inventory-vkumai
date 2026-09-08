@@ -19,7 +19,7 @@ export default function AdminIndexPage() {
 
       <div className="rounded bg-white shadow-sm overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
         <div className="px-6 py-4" style={{ borderBottom: '1px solid #E5E7EB' }}>
-          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }}>
+          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }}>
             ユーザー
           </p>
           <Link
@@ -31,7 +31,7 @@ export default function AdminIndexPage() {
           </Link>
         </div>
         <div className="px-6 py-4" style={{ borderBottom: '1px solid #E5E7EB' }}>
-          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }}>
+          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }}>
             レポート
           </p>
           <Link
@@ -44,7 +44,7 @@ export default function AdminIndexPage() {
         </div>
         {/* WHY: issue #757 の 4・24。監査ログと拒否の記録は貯まっていたが読む導線が無かった */}
         <div className="px-6 py-4">
-          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }}>
+          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }}>
             監査
           </p>
           <Link

@@ -22,10 +22,10 @@ export function ItemRowInput({ rows, onChange }: Props) {
   return (
     <div>
       <div className="flex gap-2 mb-1 px-1">
-        <span className="text-xs font-semibold w-36" style={{ color: '#6B7280' }}>JAN</span>
-        <span className="text-xs font-semibold w-28" style={{ color: '#6B7280' }}>LOT</span>
-        <span className="text-xs font-semibold w-24" style={{ color: '#6B7280' }}>UBD</span>
-        <span className="text-xs font-semibold w-16" style={{ color: '#6B7280' }}>数量</span>
+        <span className="text-xs font-semibold w-36" style={{ color: '#4B5563' }}>JAN</span>
+        <span className="text-xs font-semibold w-28" style={{ color: '#4B5563' }}>LOT</span>
+        <span className="text-xs font-semibold w-24" style={{ color: '#4B5563' }}>UBD</span>
+        <span className="text-xs font-semibold w-16" style={{ color: '#4B5563' }}>数量</span>
       </div>
       {rows.map((row, i) => (
         <div key={row.id} className="flex gap-2 mb-2 items-center">

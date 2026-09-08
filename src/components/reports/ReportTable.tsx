@@ -10,7 +10,7 @@ import type { OrderAmountReportRow } from '@/types/report'
 //      種別ごとに totalCount === 0 なら「発注0件」、totalCount > 0 かつ amount === null なら
 //      「発注はあるが単価データなし」と判定する（SPEC.md Part2 Set B参照）。
 
-const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
 
 // WHY: 単価スナップショットはこの日付以降に作成された発注にのみ存在する
 // （supabase/migrations/20260715000001_add_unit_price_to_order_items.sql 適用日）。
@@ -112,7 +112,7 @@ export function ReportTable({ rows }: Props) {
           </table>
         </div>
       </div>
-      <p className="mt-3 text-xs" style={{ color: '#6B7280' }}>
+      <p className="mt-3 text-xs" style={{ color: '#4B5563' }}>
         {UNIT_PRICE_SNAPSHOT_START_DATE}以前の発注は金額データがありません
       </p>
     </div>

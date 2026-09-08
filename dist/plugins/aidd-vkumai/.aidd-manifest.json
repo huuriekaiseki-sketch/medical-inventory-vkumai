@@ -40,7 +40,7 @@
     "scripts/check-rls-grant-gaps.test.sh": "2cb4a5191282cbad941b04e3185e0c2f302ddee0598ff0c20e95b2349f4fd924",
     "scripts/check-rls-mutation.sh": "93413365ef14d1def7354357eba511c231cb55101d7ebd626f8bc9de1474d386",
     "scripts/check-text-column-limits.test.sh": "592a1e89d625369997559a905a02f059de66a9ca41200573dafda2945d60dfd2",
-    "scripts/check-text-contrast.test.sh": "8b49d69c779ee377483a1d58bf4779abcbc8e3621b0af537c2aa6c646dc195ef",
+    "scripts/check-text-contrast.test.sh": "3d1389ae0e70fda6bf9441e24c68677f0e5d3c9b1bd21e09f8849ee56fbe1cfe",
     "scripts/check-text-length-consistency.test.sh": "51d18fb08b7eaee725cb8fc9f176baf1ffb1d91f52d2848636bd21232ee1435c",
     "scripts/lib/aidd-config.sh": "602a4dbea32a067cf69ea486f41bfc354c380f5fe5dbb47e667eecb7417bc6c0",
     "scripts/lib/aidd-config.test.sh": "6b91cb5b02f30b8705c004fceca8413d2d004e3bcf59b78049a560ea9b857b58",

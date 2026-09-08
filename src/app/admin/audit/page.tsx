@@ -160,7 +160,7 @@ function AuditPageInner() {
           施設 ID
           <input type="text" name="facility_id" defaultValue={facilityId} placeholder="UUID" className="mt-1 rounded border px-3 py-2" style={{ borderColor: '#E5E7EB' }} />
         </label>
-        <button type="submit" className="rounded px-4 py-2 text-sm font-medium" style={{ backgroundColor: '#FF5F03', color: '#FFFFFF' }}>
+        <button type="submit" className="rounded px-4 py-2 text-sm font-medium" style={{ backgroundColor: '#B03F00', color: '#FFFFFF' }}>
           絞り込む
         </button>
       </form>

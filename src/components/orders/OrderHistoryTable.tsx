@@ -20,7 +20,7 @@ const KIND_LABEL: Record<OrderKind, string> = {
 }
 
 const KIND_COLOR: Record<OrderKind, string> = {
-  case_order: '#FF5F03',
+  case_order: '#B03F00',
   consumable_order: '#16A34A',
   loan_order: '#2563EB',
   loan_return: '#4B5563',
@@ -30,7 +30,7 @@ type Props = {
   items: OrderListItem[]
 }
 
-const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
 
 export function OrderHistoryTable({ items }: Props) {
   return (
@@ -58,7 +58,7 @@ export function OrderHistoryTable({ items }: Props) {
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm font-medium" style={{ color: '#111827' }}>{item.summary}</td>
-                <td className="px-6 py-4 text-sm whitespace-nowrap" style={{ color: '#6B7280' }}>
+                <td className="px-6 py-4 text-sm whitespace-nowrap" style={{ color: '#4B5563' }}>
                   {STATUS_LABEL[item.status] ?? item.status}
                   {item.unreturned && (
                     <span
@@ -72,7 +72,7 @@ export function OrderHistoryTable({ items }: Props) {
                     </span>
                   )}
                 </td>
-                <td className="px-6 py-4 text-sm whitespace-nowrap" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+                <td className="px-6 py-4 text-sm whitespace-nowrap" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                   {formatJstDate(item.createdAt)}
                 </td>
               </tr>

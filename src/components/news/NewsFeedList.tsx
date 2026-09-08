@@ -25,7 +25,7 @@ export function NewsFeedList({ items }: NewsFeedListProps) {
         className="flex flex-col items-center justify-center py-16 text-center rounded bg-white shadow-sm"
         style={{ border: '1px solid #E5E7EB' }}
       >
-        <p className="text-sm font-medium" style={{ color: '#6B7280' }}>お知らせはありません</p>
+        <p className="text-sm font-medium" style={{ color: '#4B5563' }}>お知らせはありません</p>
       </div>
     )
   }
@@ -46,14 +46,14 @@ export function NewsFeedList({ items }: NewsFeedListProps) {
             </span>
             <span
               className="text-xs"
-              style={{ color: '#9CA3AF', fontFamily: 'var(--font-ubuntu-mono), monospace' }}
+              style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}
             >
               {formatDateTime(item.occurredAt)}
             </span>
           </div>
           <p className="text-sm font-medium" style={{ color: '#111827' }}>
             {item.productName}
-            <span className="ml-2 text-xs font-normal" style={{ color: '#6B7280' }}>
+            <span className="ml-2 text-xs font-normal" style={{ color: '#4B5563' }}>
               {item.maker} / {item.supplier}
             </span>
           </p>
@@ -62,7 +62,7 @@ export function NewsFeedList({ items }: NewsFeedListProps) {
               {FIELD_LABEL[item.fieldName]}: {formatPrice(item.oldValue)} →{' '}
               <span className="font-semibold">{formatPrice(item.newValue)}</span>
               {item.facilityName && (
-                <span className="ml-2 text-xs" style={{ color: '#6B7280' }}>
+                <span className="ml-2 text-xs" style={{ color: '#4B5563' }}>
                   （{item.facilityName}）
                 </span>
               )}

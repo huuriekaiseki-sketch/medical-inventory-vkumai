@@ -64,12 +64,12 @@ export default function NewConsumableOrderPage({ params }: { params: Promise<{ i
   }
 
   const labelClass = 'block text-xs font-semibold uppercase tracking-widest mb-1'
-  const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+  const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <div className="mb-6">
-        <Link href={`/facilities/${id}/consumable-orders`} className="text-sm hover:underline" style={{ color: '#6B7280' }}>
+        <Link href={`/facilities/${id}/consumable-orders`} className="text-sm hover:underline" style={{ color: '#4B5563' }}>
           ← 消耗品発注一覧に戻る
         </Link>
       </div>
@@ -95,7 +95,7 @@ export default function NewConsumableOrderPage({ params }: { params: Promise<{ i
                 className="px-4 py-1.5 text-sm font-semibold rounded-full border transition-colors"
                 style={activeTab === tab
                   ? { backgroundColor: '#16A34A', color: '#fff', borderColor: '#16A34A' }
-                  : { backgroundColor: '#fff', color: '#6B7280', borderColor: '#E5E7EB' }}
+                  : { backgroundColor: '#fff', color: '#4B5563', borderColor: '#E5E7EB' }}
               >
                 {tab}
               </button>
@@ -105,14 +105,14 @@ export default function NewConsumableOrderPage({ params }: { params: Promise<{ i
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4 border rounded divide-y" style={{ borderColor: '#E5E7EB' }}>
-            {filtered.length === 0 && <p className="px-4 py-3 text-sm" style={{ color: '#6B7280' }}>消耗品が登録されていません</p>}
+            {filtered.length === 0 && <p className="px-4 py-3 text-sm" style={{ color: '#4B5563' }}>消耗品が登録されていません</p>}
             {filtered.map(c => (
               <div key={c.id} className="flex items-center gap-3 px-4 py-3">
                 <input type="checkbox" id={`c-${c.id}`} checked={!!selections[c.id]} onChange={() => toggle(c.id)} className="w-4 h-4" />
                 <label htmlFor={`c-${c.id}`} className="flex-1 text-sm" style={{ color: '#111827' }}>
                   {c.name}
-                  {c.jan && <span className="ml-2 text-xs" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>{c.jan}</span>}
-                  <span className="ml-2 text-xs px-1 rounded" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>{c.purpose}</span>
+                  {c.jan && <span className="ml-2 text-xs" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>{c.jan}</span>}
+                  <span className="ml-2 text-xs px-1 rounded" style={{ backgroundColor: '#F3F4F6', color: '#4B5563' }}>{c.purpose}</span>
                 </label>
                 {selections[c.id] && (
                   <input type="number" min={1} value={selections[c.id]} onChange={e => setQty(c.id, Number(e.target.value) || 1)} className="border rounded px-2 py-1 text-sm w-16" style={{ borderColor: '#E5E7EB' }} />
@@ -122,7 +122,7 @@ export default function NewConsumableOrderPage({ params }: { params: Promise<{ i
           </div>
 
           <div className="flex justify-end gap-3">
-            <Link href={`/facilities/${id}/consumable-orders`} className="px-4 py-2 text-sm rounded border inline-block" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>
+            <Link href={`/facilities/${id}/consumable-orders`} className="px-4 py-2 text-sm rounded border inline-block" style={{ borderColor: '#E5E7EB', color: '#4B5563' }}>
               キャンセル
             </Link>
             <button type="submit" disabled={submitting} className="px-4 py-2 text-sm rounded text-white hover:opacity-90 disabled:opacity-50" style={{ backgroundColor: '#16A34A' }}>

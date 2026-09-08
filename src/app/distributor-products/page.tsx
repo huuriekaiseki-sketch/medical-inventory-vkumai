@@ -122,7 +122,7 @@ function DistributorProductsPageInner() {
         <button
           onClick={() => router.push('/distributor-products/new')}
           className="px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-          style={{ backgroundColor: '#FF5F03', fontFamily: 'var(--font-ubuntu), sans-serif', borderRadius: '2px' }}
+          style={{ backgroundColor: '#B03F00', fontFamily: 'var(--font-ubuntu), sans-serif', borderRadius: '2px' }}
         >
           + 新規登録
         </button>
@@ -156,7 +156,7 @@ function DistributorProductsPageInner() {
             （レビュー指摘: 正しさ important 誤表示競合状態、products/page.tsxと同様の修正） */}
         {!itemsError && !isLoading && (keyword || categoryId) && items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-sm font-medium" style={{ color: '#6B7280' }}>該当する販売店商品がありません</p>
+            <p className="text-sm font-medium" style={{ color: '#4B5563' }}>該当する販売店商品がありません</p>
           </div>
         ) : (
           <DistributorProductList

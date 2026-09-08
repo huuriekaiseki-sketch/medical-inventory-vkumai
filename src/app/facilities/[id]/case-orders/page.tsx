@@ -29,12 +29,12 @@ export default function CaseOrdersPage({ params }: { params: Promise<{ id: strin
   }, [id])
 
   const labelClass = 'text-xs font-semibold uppercase tracking-widest'
-  const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+  const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <div className="mb-6">
-        <Link href={`/facilities/${id}`} className="text-sm hover:underline" style={{ color: '#6B7280' }}>
+        <Link href={`/facilities/${id}`} className="text-sm hover:underline" style={{ color: '#4B5563' }}>
           ← 施設に戻る
         </Link>
       </div>
@@ -49,7 +49,7 @@ export default function CaseOrdersPage({ params }: { params: Promise<{ id: strin
         <Link
           href={`/facilities/${id}/case-orders/new`}
           className="px-4 py-2 text-sm font-semibold rounded text-white hover:opacity-90"
-          style={{ backgroundColor: '#FF5F03' }}
+          style={{ backgroundColor: '#B03F00' }}
         >
           新規作成
         </Link>
@@ -62,9 +62,9 @@ export default function CaseOrdersPage({ params }: { params: Promise<{ id: strin
       )}
 
       {loading ? (
-        <p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>読み込み中...</p>
       ) : orders.length === 0 ? (
-        <p className="text-sm" style={{ color: '#6B7280' }}>発注履歴がありません。</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>発注履歴がありません。</p>
       ) : (
         <div className="rounded bg-white shadow-sm overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
           <table className="min-w-full">
@@ -79,12 +79,12 @@ export default function CaseOrdersPage({ params }: { params: Promise<{ id: strin
             <tbody>
               {orders.map(order => (
                 <tr key={order.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
-                  <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+                  <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                     {order.caseDatetime ? formatJstDateTime(order.caseDatetime) : '-'}
                   </td>
                   <td className="px-6 py-4 text-sm font-medium" style={{ color: '#111827' }}>{order.procedureName}</td>
-                  <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>{STATUS_LABEL[order.status] ?? order.status}</td>
-                  <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+                  <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>{STATUS_LABEL[order.status] ?? order.status}</td>
+                  <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                     {formatJstDate(order.createdAt)}
                   </td>
                 </tr>

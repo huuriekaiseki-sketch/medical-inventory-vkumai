@@ -53,14 +53,14 @@ export default function NewCaseOrderPage({ params }: { params: Promise<{ id: str
   }
 
   const labelClass = 'block text-xs font-semibold uppercase tracking-widest mb-1'
-  const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+  const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
   const inputClass = 'border rounded px-3 py-2 text-sm w-full'
   const inputStyle = { borderColor: '#E5E7EB' }
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <div className="mb-6">
-        <Link href={`/facilities/${id}/case-orders`} className="text-sm hover:underline" style={{ color: '#6B7280' }}>
+        <Link href={`/facilities/${id}/case-orders`} className="text-sm hover:underline" style={{ color: '#4B5563' }}>
           ← 症例発注一覧に戻る
         </Link>
       </div>
@@ -108,10 +108,10 @@ export default function NewCaseOrderPage({ params }: { params: Promise<{ id: str
           <ItemRowInput rows={items} onChange={setItems} />
         </div>
         <div className="flex justify-end gap-3">
-          <Link href={`/facilities/${id}/case-orders`} className="px-4 py-2 text-sm rounded border inline-block" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>
+          <Link href={`/facilities/${id}/case-orders`} className="px-4 py-2 text-sm rounded border inline-block" style={{ borderColor: '#E5E7EB', color: '#4B5563' }}>
             キャンセル
           </Link>
-          <button type="submit" disabled={submitting} className="px-4 py-2 text-sm rounded text-white hover:opacity-90 disabled:opacity-50" style={{ backgroundColor: '#FF5F03' }}>
+          <button type="submit" disabled={submitting} className="px-4 py-2 text-sm rounded text-white hover:opacity-90 disabled:opacity-50" style={{ backgroundColor: '#B03F00' }}>
             {submitting ? '送信中...' : '発注する'}
           </button>
         </div>

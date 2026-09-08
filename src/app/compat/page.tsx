@@ -112,7 +112,7 @@ export default function CompatPage() {
 
       <div className="mb-6 flex flex-wrap items-end gap-4">
         <div>
-          <label htmlFor="compat-category-filter" className="block text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }}>
+          <label htmlFor="compat-category-filter" className="block text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }}>
             カテゴリで絞り込み
           </label>
           <select
@@ -131,7 +131,7 @@ export default function CompatPage() {
           </select>
         </div>
         <div className="flex-1 min-w-[200px]">
-          <label htmlFor="compat-keyword-filter" className="block text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }}>
+          <label htmlFor="compat-keyword-filter" className="block text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }}>
             キーワード検索
           </label>
           <input

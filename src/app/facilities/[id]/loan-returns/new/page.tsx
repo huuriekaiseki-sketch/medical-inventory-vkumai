@@ -149,12 +149,12 @@ export default function NewLoanReturnPage({ params }: { params: Promise<{ id: st
   }
 
   const labelClass = 'block text-xs font-semibold uppercase tracking-widest mb-1'
-  const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+  const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <div className="mb-6">
-        <Link href={`/facilities/${id}/loan-returns`} className="text-sm hover:underline" style={{ color: '#6B7280' }}>
+        <Link href={`/facilities/${id}/loan-returns`} className="text-sm hover:underline" style={{ color: '#4B5563' }}>
           ← 短貸返却一覧に戻る
         </Link>
       </div>
@@ -204,22 +204,22 @@ export default function NewLoanReturnPage({ params }: { params: Promise<{ id: st
           <div className="mb-6">
             <p className={labelClass} style={labelStyle}>返却物品（残っているものだけ出ます）</p>
             {linesLoading ? (
-              <p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>
+              <p className="text-sm" style={{ color: '#4B5563' }}>読み込み中...</p>
             ) : orderLines.length === 0 ? (
-              <p className="text-sm" style={{ color: '#6B7280' }}>返す物が残っていません。</p>
+              <p className="text-sm" style={{ color: '#4B5563' }}>返す物が残っていません。</p>
             ) : (
               <div>
                 <div className="flex gap-2 mb-1 px-1">
-                  <span className="text-xs font-semibold flex-1" style={{ color: '#6B7280' }}>品名</span>
-                  <span className="text-xs font-semibold w-16" style={{ color: '#6B7280' }}>残り</span>
-                  <span className="text-xs font-semibold w-20" style={{ color: '#6B7280' }}>返す数</span>
-                  <span className="text-xs font-semibold w-24" style={{ color: '#6B7280' }}>LOT</span>
-                  <span className="text-xs font-semibold w-24" style={{ color: '#6B7280' }}>UBD</span>
+                  <span className="text-xs font-semibold flex-1" style={{ color: '#4B5563' }}>品名</span>
+                  <span className="text-xs font-semibold w-16" style={{ color: '#4B5563' }}>残り</span>
+                  <span className="text-xs font-semibold w-20" style={{ color: '#4B5563' }}>返す数</span>
+                  <span className="text-xs font-semibold w-24" style={{ color: '#4B5563' }}>LOT</span>
+                  <span className="text-xs font-semibold w-24" style={{ color: '#4B5563' }}>UBD</span>
                 </div>
                 {orderLines.map(line => (
                   <div key={line.itemId} className="flex gap-2 mb-2 items-center">
                     <span className="text-sm flex-1" style={{ color: '#111827' }}>{line.name}</span>
-                    <span className="text-sm w-16" style={{ color: '#6B7280' }}>{line.remaining}</span>
+                    <span className="text-sm w-16" style={{ color: '#4B5563' }}>{line.remaining}</span>
                     <input
                       type="number"
                       aria-label={`${line.name} の返す数`}
@@ -261,7 +261,7 @@ export default function NewLoanReturnPage({ params }: { params: Promise<{ id: st
         )}
 
         <div className="flex justify-end gap-3">
-          <Link href={`/facilities/${id}/loan-returns`} className="px-4 py-2 text-sm rounded border inline-block" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>
+          <Link href={`/facilities/${id}/loan-returns`} className="px-4 py-2 text-sm rounded border inline-block" style={{ borderColor: '#E5E7EB', color: '#4B5563' }}>
             キャンセル
           </Link>
           <button type="submit" disabled={submitting} className="px-4 py-2 text-sm rounded text-white hover:opacity-90 disabled:opacity-50" style={{ backgroundColor: '#4B5563' }}>

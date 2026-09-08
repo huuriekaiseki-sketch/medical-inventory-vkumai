@@ -23,7 +23,7 @@ export function OrderButtons({ facilityId, role }: Props) {
     return (
       <div
         className="mb-8 rounded px-4 py-3 text-sm"
-        style={{ backgroundColor: '#F3F4F6', color: '#6B7280', border: '1px solid #E5E7EB' }}
+        style={{ backgroundColor: '#F3F4F6', color: '#4B5563', border: '1px solid #E5E7EB' }}
       >
         閲覧のみの権限のため、発注・返却はできません。
       </div>
@@ -32,7 +32,7 @@ export function OrderButtons({ facilityId, role }: Props) {
 
   return (
     <div className="flex flex-wrap gap-3 mb-8">
-      <Link href={`${base}/case-orders`} className={btnBase} style={{ backgroundColor: '#FF5F03' }}>
+      <Link href={`${base}/case-orders`} className={btnBase} style={{ backgroundColor: '#B03F00' }}>
         症例発注
       </Link>
       <Link href={`${base}/consumable-orders`} className={btnBase} style={{ backgroundColor: '#16A34A' }}>

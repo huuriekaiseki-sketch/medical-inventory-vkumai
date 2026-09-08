@@ -22,7 +22,7 @@ export function RecentPriceChangeList({ items }: RecentPriceChangeListProps) {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center rounded bg-white shadow-sm" style={{ border: '1px solid #E5E7EB' }}>
-        <p className="text-sm font-medium" style={{ color: '#6B7280' }}>データがありません</p>
+        <p className="text-sm font-medium" style={{ color: '#4B5563' }}>データがありません</p>
       </div>
     )
   }
@@ -64,7 +64,7 @@ export function RecentPriceChangeList({ items }: RecentPriceChangeListProps) {
                   {item.productName ?? '商品情報なし'}
                 </Link>
               </td>
-              <td className="px-4 py-3 text-sm" style={{ color: '#6B7280' }}>
+              <td className="px-4 py-3 text-sm" style={{ color: '#4B5563' }}>
                 {item.entityType === 'hospital_price' ? `${ENTITY_LABEL.hospital_price}（${FIELD_LABEL[item.fieldName]}）` : FIELD_LABEL[item.fieldName]}
               </td>
               <td className="px-4 py-3 text-right text-sm" style={{ color: '#374151' }}>
@@ -73,7 +73,7 @@ export function RecentPriceChangeList({ items }: RecentPriceChangeListProps) {
               <td className="px-4 py-3 text-right text-sm font-semibold" style={{ color: '#111827' }}>
                 {formatPrice(item.newValue)}
               </td>
-              <td className="px-4 py-3 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+              <td className="px-4 py-3 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                 {formatDateTime(item.changedAt)}
               </td>
             </tr>

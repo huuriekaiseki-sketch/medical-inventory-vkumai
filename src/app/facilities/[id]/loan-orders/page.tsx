@@ -28,12 +28,12 @@ export default function LoanOrdersPage({ params }: { params: Promise<{ id: strin
     }
   }, [id])
 
-  const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+  const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <div className="mb-6">
-        <Link href={`/facilities/${id}`} className="text-sm hover:underline" style={{ color: '#6B7280' }}>
+        <Link href={`/facilities/${id}`} className="text-sm hover:underline" style={{ color: '#4B5563' }}>
           ← 施設に戻る
         </Link>
       </div>
@@ -59,9 +59,9 @@ export default function LoanOrdersPage({ params }: { params: Promise<{ id: strin
       )}
 
       {loading ? (
-        <p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>読み込み中...</p>
       ) : orders.length === 0 ? (
-        <p className="text-sm" style={{ color: '#6B7280' }}>発注履歴がありません。</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>発注履歴がありません。</p>
       ) : (
         <div className="rounded bg-white shadow-sm overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
           <table className="min-w-full">
@@ -77,9 +77,9 @@ export default function LoanOrdersPage({ params }: { params: Promise<{ id: strin
               {orders.map(order => (
                 <tr key={order.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
                   <td className="px-6 py-4 text-sm font-medium" style={{ color: '#111827' }}>{order.procedureName}</td>
-                  <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>{order.maker}</td>
-                  <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>{STATUS_LABEL[order.status] ?? order.status}</td>
-                  <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+                  <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>{order.maker}</td>
+                  <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>{STATUS_LABEL[order.status] ?? order.status}</td>
+                  <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                     {formatJstDate(order.createdAt)}
                   </td>
                 </tr>
