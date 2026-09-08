@@ -29,6 +29,23 @@ paths:
   - ポリシーを作らない表（SECURITY DEFINER 関数からしか触らない表）は、
     **実 DB で「読める人・読めない人」を測る統合テスト**も必須（静的検査は GRANT の文字列しか見られない）
 
+- **関数を書き直すときは「最後に定義した版」を元にする（2026-09-08・E-064）。**
+  `CREATE OR REPLACE FUNCTION` は本文をまるごと差し替えるので、**古い版を元に書くと
+  後から入った強化が黙って消える**。同じ関数が何本もの migration で再定義されているのが普通で、
+  最初の版に `has_aal2()` や `SET search_path` が入っていないことは珍しくない。
+  - 実際に 2026-09-08、`get_order_amount_report` を最初の版（20260715000003）を元に書き直し、
+    20260907000001 で足してあった `has_aal2()` の判定を消した。
+    **パスワードだけを奪われた admin が全施設の金額を読める状態**に戻っていた
+  - 書き直す前に `grep -rn "FUNCTION <名前>" supabase/migrations` で**全部の再定義を並べ、
+    いちばん新しいものを開く**。最初の 1 本ではない
+  - 再定義で認可の判定（`is_admin()` / `has_aal2()` / `is_facility_member()` /
+    `is_facility_writer()` / `SET search_path`）が消えると
+    `scripts/check-guard-regressions.test.sh`（CI `hooks-test`）が落とす。
+    狭める変更（`is_facility_member` → `is_facility_writer`）は違反にしない。
+    意図して外すときは migration に `-- drops-guard: <理由>` を書く（理由は同じ行に必須）
+  - **この検査は名前があるかどうかしか見ない。** `IF NOT is_admin() THEN` を `IF true THEN` に
+    すれば素通りする。それは RLS 変異計測（`scripts/check-rls-mutation.sh`）の担当
+
 - **新しい施設ロールを足すときは 4 軸すべてを決める（2026-09-07）。**
   読む / 書く / マスタを書く / 画面の書き込み UI。決めた内容は
   [`docs/agents/role-rulebook.md`](../../docs/agents/role-rulebook.md)（R-xxx）に 1 行書く。
