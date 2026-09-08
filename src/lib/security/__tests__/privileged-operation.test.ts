@@ -6,6 +6,7 @@
 //          2026-09-07 に access-denial.ts で実際に起きた形）
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import limitsConfig from '../../../../aidd.config.json'
 
 const rpc = vi.fn()
 const createClient = vi.fn(() => ({ rpc }))
@@ -103,13 +104,16 @@ describe('特権操作の記録ヘルパー（recordPrivilegedOperation） [P-06
     expect(rpc).not.toHaveBeenCalled()
   })
 
-  it('RPC が例外を投げても特権操作を止めない', async () => {
+  it('RPC が例外を投げても特権操作を止めないが、黙りもしない', async () => {
+    // WHY(2026-09-08 の変異計測): catch の中身を空にしても緑だった＝**例外経路だけ無音**にできた。
+    //      記録の失敗で操作は止めない設計なので、ログが唯一の手がかりになる
     rpc.mockRejectedValue(new Error('network down'))
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const m = await loadModule()
     await expect(
       m.recordPrivilegedOperation({ operation: 'user_invite', succeeded: true, actorId: 'a' }),
     ).resolves.toBeUndefined()
+    expect(String(spy.mock.calls[0]?.[0])).toContain('record_privileged_operation')
     spy.mockRestore()
   })
 
@@ -152,6 +156,29 @@ describe('特権操作の記録ヘルパー（recordPrivilegedOperation） [P-06
     expect(printed).not.toContain('real.person@example.org')
     expect(printed).toContain('[email]')
     spy.mockRestore()
+  })
+
+  // WHY(#757-31、2026-09-08 の変異計測で未カバーだった): 記録は特権操作の道の途中にあるので、
+  //      ここで待つと admin の画面が固まる。上限で諦めても操作は止めないが、
+  //      **諦めたことと、どの記録かがログに残る**
+  it('RPC が返ってこないときは上限で諦め、操作は止めない（ログには残す）', async () => {
+    vi.useFakeTimers()
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      rpc.mockImplementation(() => new Promise(() => {}))
+      const m = await loadModule()
+      const promise = m.recordPrivilegedOperation({
+        operation: 'user_invite', succeeded: true, actorId: 'a',
+      })
+      await vi.advanceTimersByTimeAsync(limitsConfig.limits.authJudgmentTimeoutMs)
+      await expect(promise).resolves.toBeUndefined()
+      const printed = JSON.stringify(spy.mock.calls)
+      expect(printed).toContain('judgment-timeout')
+      expect(printed).toContain('rpc.record_privileged_operation')
+    } finally {
+      spy.mockRestore()
+      vi.useRealTimers()
+    }
   })
 
   it('クライアントは使い回す（連続する特権操作で作り直さない）', async () => {

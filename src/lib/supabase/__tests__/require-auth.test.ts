@@ -95,8 +95,10 @@ describe('requireAuth の待ち時間の上限 (F-001)', () => {
       await vi.advanceTimersByTimeAsync(AUTH_JUDGMENT_TIMEOUT_MS)
       await assertion
       expect(recordAccessDenial).toHaveBeenCalledWith({ guard: 'auth', reason: 'unauthenticated' })
-      // 諦めたことは記録に残る（拒否が増えただけに見えないように）
-      expect(JSON.stringify(spy.mock.calls)).toContain('judgment-timeout')
+      // 諦めたことと**どの判定か**が記録に残る（拒否が増えただけに見えないように）
+      const printed = JSON.stringify(spy.mock.calls)
+      expect(printed).toContain('judgment-timeout')
+      expect(printed).toContain('auth.getUser')
     } finally {
       spy.mockRestore()
       vi.useRealTimers()

@@ -183,7 +183,9 @@ describe('回数の上限（rate limit） [P-064][Q-002]', () => {
       const r = await promise
       expect(r.allowed).toBe(true)
       expect(r.unmeasured).toBe(true)
-      expect(JSON.stringify(spy.mock.calls)).toContain('judgment-timeout')
+      const printed = JSON.stringify(spy.mock.calls)
+      expect(printed).toContain('judgment-timeout')
+      expect(printed).toContain('rpc.consume_rate_limit')
     } finally {
       spy.mockRestore()
       vi.useRealTimers()
@@ -229,6 +231,22 @@ describe('招待の枠の払い戻し（refundInviteQuota） [M-021][Q-020]', ()
     await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
   })
 
+  // WHY(2026-09-08 の変異計測): `row?.refunded` の `?.` を外しても緑だった。
+  //      行がまったく返らない形（空配列）を測っていなかったため。
+  //      そこで落ちると**払い戻しの失敗が例外になって呼び出し側を巻き込む**
+  it('行が 1 つも返らなくても例外にせず false（呼び出し側を巻き込まない）', async () => {
+    rpc.mockResolvedValue({ data: [], error: null })
+    const m = await loadModule()
+    await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
+  })
+
+  it('service role の環境変数が無ければ RPC を呼ばずに false', async () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+    const m = await loadModule()
+    await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
   it('RPC が戻り値の error で失敗したら false を返し、ログに出す（黙って落とさない）', async () => {
     // WHY: PostgREST の失敗は throw ではなく戻り値の error に来る。捨てると
     //      「払い戻せていないこと」に誰も気づけない（2026-09-07 に access-denial.ts で起きた形）
@@ -245,6 +263,8 @@ describe('招待の枠の払い戻し（refundInviteQuota） [M-021][Q-020]', ()
     rpc.mockRejectedValue(new Error('network down'))
     const m = await loadModule()
     await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
+    // 例外の側も**どこで起きたか**が残る（文脈名を空にしても緑だった。2026-09-08 の変異計測）
+    expect(String(spy.mock.calls[0]?.[0])).toContain('refund_rate_limit')
     spy.mockRestore()
   })
 

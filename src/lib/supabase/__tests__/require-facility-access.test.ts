@@ -180,6 +180,10 @@ describe('requireFacilityAccess (P-002)', () => {
         expect(recordAccessDenial).toHaveBeenCalledWith({
           guard: 'facility', reason: 'forbidden', actorId: 'u-user', facilityId: FACILITY_ID,
         })
+        // 諦めたことと**どの判定か**が記録に残る
+        const printed = JSON.stringify(spy.mock.calls)
+        expect(printed).toContain('judgment-timeout')
+        expect(printed).toContain('rpc.is_facility_member')
       } finally {
         spy.mockRestore()
         vi.useRealTimers()
