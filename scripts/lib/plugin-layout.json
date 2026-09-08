@@ -184,6 +184,7 @@
     "check-text-contrast.test.sh": "aidd-vkumai",
     "lib/scan-text-columns.mjs": "aidd-vkumai",
     "lib/scan-db-constraints.mjs": "aidd-vkumai",
+    "lib/scan-rls-grant-gaps.mjs": "aidd-vkumai",
     "lib/extract-api-rules.ts": "aidd-vkumai",
     "lib/compare-layers.mjs": "aidd-vkumai",
     "check-rls-mutation.sh": "aidd-vkumai",
@@ -247,7 +248,8 @@
     "check-no-registry-fetch.test.sh": "aidd-vkumai",
     "check-docs-issue-refs.test.sh": "aidd-core",
     "codex-config-separation.test.sh": "aidd-core",
-    "codex-agents-sandbox.test.sh": "aidd-core"
+    "codex-agents-sandbox.test.sh": "aidd-core",
+    "check-rls-grant-gaps.test.sh": "aidd-vkumai"
   },
   "checksNotDistributed": {
     "_comment": "配らない検査と、その理由。導入先に存在しないもの（このリポジトリの docs・カタログ・スキーマ）を検査していて、配ると必ず落ちるものだけをここに書く。「面倒だから」で足さない。",

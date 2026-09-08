@@ -1,0 +1,36 @@
+-- supabase/migrations/20260908050000_revoke_facilities_delete_from_authenticated.sql
+-- release-order: db-first
+-- design: 権限=施設を消せるのは誰もいない（2026-09-08 に人が判断、E-055）／大きさ・量・消え方は
+--         変えない／記録=監査対象のまま（変更なし）／外部送信なし
+-- lock: 権限の変更のみ。テーブルロックは取らない
+--
+-- WHY(E-055): `facilities` は 20260619013819 で
+--      `grant all on table public.facilities to postgres, anon, authenticated, service_role`
+--      と一括で権限を配っており、後から anon だけを REVOKE した（20260626001000）。
+--      その結果 `authenticated` は SELECT / INSERT / UPDATE / DELETE の権限を持っているが、
+--      **RLS のポリシーは SELECT・INSERT・UPDATE の 3 つしか無い**。
+--
+--      RLS は拒否ではなく **0 行**にするので、DELETE は「権限が無い」ではなく
+--      「何も起きない」になる。実際 `DELETE /api/facilities/[id]` は実在する施設に対して
+--      404「施設が見つかりません」を返していた（2026-09-08 実測）。
+--      **原因が認可であることが、誰にも分からない形**だった。
+--
+-- WHY(いま REVOKE する): 同日、人が「施設は消せなくてよい」と判断し、route と
+--      `deleteFacility()` を消した。DB 側も同じ判断に揃える。
+--      **見える振る舞いは変わらない**（RLS が既に全部止めている）。変わるのは、
+--      万一 client から DELETE を叩いたときに**黙って 0 行ではなく 42501 で落ちる**こと。
+--      「触れるが何も起きない」より「触れない」の方が、次に読む人が原因に辿り着ける。
+--
+-- WHY(service_role は触らない): E2E / 統合テストの後始末が service_role で施設を消している
+--      （アプリの経路が無いので、そこしか掃除の手段が無い）。ここを剥がすとテストが後始末を
+--      できなくなり、施設が溜まり続ける。service_role は RLS を通らない鍵で、
+--      サーバー側にしか無い。
+--
+-- WHY(INSERT / UPDATE / SELECT は剥がさない): それぞれポリシーがあり、実際に使われている
+--      （施設の作成・改名・一覧）。ここで一緒に「既定に答えを委ねない」形へ揃えたくなるが、
+--      使われている権限を同じ migration で触ると、壊れたときにどちらが原因か分からなくなる。
+--
+-- ROLLBACK: GRANT DELETE ON TABLE facilities TO authenticated;
+--           （元に戻すと「触れるが何も起きない」状態に戻る。安全側ではない）
+
+REVOKE DELETE ON TABLE facilities FROM authenticated;

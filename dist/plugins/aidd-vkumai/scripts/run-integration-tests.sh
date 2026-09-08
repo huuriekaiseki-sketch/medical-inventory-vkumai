@@ -18,6 +18,10 @@
 #      発火した）。同じ型が E-022 にもある。掃除の正式手段は `supabase db reset`（追記専用なので
 #      他に消す手段は無い）。**止めずに知らせるだけ**にする（回したいときに回せない方が困る）。
 #      閾値は aidd.config.json の limits.localLogRowsWarnAt（2026-09-08 に確認して 800）。
+#      **数えるのは表の総行数ではなく「1 回の問い合わせが返す塊」**（2026-09-08 に変更）。
+#      切り落とされるのは問い合わせの結果であって表そのものではない。総行数で数えると、作り直した
+#      直後の DB でも E2E と統合を 1 周回すだけで越えて**毎回鳴り、読まれない警告になる**
+#      （実測: audit_log は総数 2,467 行に対し最大の塊が 446 行）。
 #
 # 使い方: bash scripts/run-integration-tests.sh [追加の vitest 引数...]
 #   実 DB が要る（supabase start 済み）。記録は logs/integration-runs.jsonl。
@@ -87,22 +91,71 @@ for (const m of clean.matchAll(
 )) tables.add(m[1].toLowerCase())
 if (tables.size === 0) process.exit(0)
 
+// **表の総行数では数えない**（2026-09-08 に数え方を変えた）。
+// WHY: 切り落とされるのは「1 回の問い合わせが返す行」であって表そのものではない。
+//      E-023 が実際に当たったのは `audit_log` 全体ではなく `table_name='user_facilities'` の
+//      **1,195 行**、E-022 は `access_denials` の guard ごとの塊だった。総行数で数えると、
+//      作り直した直後の DB でも E2E と統合を 1 周回すだけで越える（実測: audit_log は
+//      0 → 1,311 → 2,467 行。同じときの最大の塊は 446 行）。**毎回鳴る警告は読まれない**ので、
+//      塊の単位で数える。塊の値は DB の実データから取る（migrations の解析を二重に持たない）。
+// 分類列を持たない表は総行数のまま（新しい表を足したときに黙るより、うるさい方へ倒す）。
+const GROUP_BY = { audit_log: 'table_name', access_denials: 'guard', privileged_operations: 'operation' }
+const PAGE = 1000
+const MAX_PAGES = 50   // 5 万行を越えたら諦めて総行数で報告する（無限ループ防止）
+
+const headers = { apikey: key, Authorization: `Bearer ${key}` }
+
+async function totalRows(t) {
+  const res = await fetch(`${url}/rest/v1/${t}?select=*&limit=1`, {
+    method: 'HEAD',
+    headers: { ...headers, Prefer: 'count=exact' },
+  })
+  const m = /\/(\d+)$/.exec(res.headers.get('content-range') ?? '')
+  return m ? Number(m[1]) : null
+}
+
+/** 分類列の値ごとの最大件数。取れなければ null */
+async function largestGroup(t, column) {
+  const counts = new Map()
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res = await fetch(
+      `${url}/rest/v1/${t}?select=${column}&limit=${PAGE}&offset=${page * PAGE}`,
+      { headers },
+    )
+    let rows
+    try { rows = await res.json() } catch { return null }
+    if (!Array.isArray(rows)) return null
+    for (const r of rows) {
+      const k = String(r?.[column] ?? '(なし)')
+      counts.set(k, (counts.get(k) ?? 0) + 1)
+    }
+    if (rows.length < PAGE) {
+      let best = null
+      for (const [k, n] of counts) if (!best || n > best.n) best = { k, n }
+      return best
+    }
+  }
+  return null
+}
+
 const over = []
 for (const t of [...tables].sort()) {
-  let res
   try {
-    res = await fetch(`${url}/rest/v1/${t}?select=*&limit=1`, {
-      method: 'HEAD',
-      headers: { apikey: key, Authorization: `Bearer ${key}`, Prefer: 'count=exact' },
-    })
+    const column = GROUP_BY[t]
+    if (column) {
+      const best = await largestGroup(t, column)
+      if (best) {
+        if (best.n >= threshold) over.push(`${t} の ${column}=${best.k} が ${best.n} 行`)
+        continue
+      }
+      // 塊で数えられなかったときは総行数へ落ちる（黙らない）
+    }
+    const n = await totalRows(t)
+    if (n !== null && n >= threshold) over.push(`${t}=${n} 行`)
   } catch { process.exit(0) }   // DB が起動していない
-  const m = /\/(\d+)$/.exec(res.headers.get('content-range') ?? '')
-  if (!m) continue
-  const n = Number(m[1])
-  if (n >= threshold) over.push(`${t}=${n} 行`)
 }
 if (over.length > 0) {
-  console.log(`[run-integration-tests] 手元の追記専用テーブルが積み上がっています（閾値 ${threshold} 行）: ${over.join(', ')}`)
+  console.log(`[run-integration-tests] 手元の追記専用テーブルが積み上がっています（閾値 ${threshold} 行。1 回の問い合わせが返す塊で数えます）: ${over.join(', ')}`)
   console.log('[run-integration-tests] PostgREST の既定上限 1,000 行を越えると、全件を取る形のテストが古い順に切り落とされ「監査の取りこぼし」に見える失敗をします（E-022 / E-023）。')
   console.log('[run-integration-tests] 追記専用なので個別には消せません。作り直してください: supabase db reset')
 }
@@ -117,13 +170,23 @@ fi
 
 # WHY(npx を使わない): scripts/check-no-registry-fetch.test.sh が hook スクリプトの npx を禁止する
 #      （2026-09-04 に CI が 4〜8 倍かかった原因）。node_modules のものを直接呼ぶ。
-./node_modules/.bin/vitest run --config vitest.integration.config.ts "$@"
+# RIT_VITEST_BIN はテスト用の差し替え口（記録の分岐を実 DB 無しで測るため。既定は変えない）。
+"${RIT_VITEST_BIN:-./node_modules/.bin/vitest}" run --config vitest.integration.config.ts "$@"
 EXIT_CODE=$?
 
 if [ "$EXIT_CODE" -eq 0 ]; then
   RESULT="pass"
 else
   RESULT="fail"
+fi
+
+# WHY(部分実行は記録しない、2026-09-08): ファイル名や `-t` を渡した実行で「全件通した」と
+#      記録すると、check-integration-freshness.sh（SessionStart hook）が嘘の緑を信じる。
+#      1 本だけ通した実行が、放置されていた赤 2 件を隠せてしまう形（このスクリプトを作った
+#      きっかけそのもの）。run-e2e-tests.sh と同じ扱いに揃える。
+if [ "$#" -ne 0 ]; then
+  echo "[run-integration-tests] 引数付きの実行なので記録しません（全件を通したときだけ記録する）"
+  exit "$EXIT_CODE"
 fi
 
 # supabase/ の木のハッシュを残す。次回、ここが変わっていれば「その記録はもう当てにならない」と分かる
