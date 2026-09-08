@@ -25,6 +25,7 @@
     "src/lib/security/judgment-timeout.ts",
     "src/lib/security/privileged-operation.ts",
     "src/lib/api-error.ts",
+    "src/lib/invariant-error.ts",
     "src/lib/api-pagination.ts",
     "src/lib/log-safe.ts",
     "src/lib/audit/repository.ts"
@@ -38,5 +39,5 @@
   "concurrency": 4,
   "tempDirName": ".stryker-tmp",
   "cleanTempDir": true,
-  "_thresholds_comment": "break は実測値の少し下に置く ratchet。**同じ対象のままなら下げてはいけない**（docs/agents/mutation-testing.md）。2026-09-08 実測 92.87%（対象 12 ファイル）。94 → 92 にしたのは対象を 10 → 12 に広げて分母が変わったためで、**元の 10 ファイルだけなら 94.10%** と維持している。残り 35 件の内訳と「殺さないと決めた種類」は同ドキュメントの表にある"
+  "_thresholds_comment": "break は実測値の少し下に置く ratchet。**同じ対象のままなら下げてはいけない**（docs/agents/mutation-testing.md）。2026-09-08 夕方の実測 92.79%（対象 13 ファイル・489/527 変異）。invariant-error.ts を足す前の 12 ファイルだけなら 92.73%（459/495）。94 → 92 にしたのは対象を 10 → 12 に広げて分母が変わったためで、**元の 10 ファイルだけなら 94.10%** と維持している。残り 35 件の内訳と「殺さないと決めた種類」は同ドキュメントの表にある"
 }
