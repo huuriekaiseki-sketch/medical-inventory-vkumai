@@ -162,8 +162,12 @@ describe('resolveIsAdmin', () => {
       const promise = resolveIsAdmin(db, makeUser(USER_ID, 'admin@example.com'))
       await vi.advanceTimersByTimeAsync(AUTH_JUDGMENT_TIMEOUT_MS)
       expect(await promise).toBe(false)
-      // 諦めたことが記録に残る（無音だと「拒否が増えた」としか読めない）
-      expect(JSON.stringify(spy.mock.calls)).toContain('judgment-timeout')
+      // WHY(どの判定が諦めたかまで見る): 「judgment-timeout」だけを見ていると、
+      //      呼び出し側のラベルを空文字に書き換えても緑のままだった（2026-09-08 の変異計測）。
+      //      ログに出るのが「何かが諦めた」だけになると、原因の切り分けができない
+      const printed = JSON.stringify(spy.mock.calls)
+      expect(printed).toContain('judgment-timeout')
+      expect(printed).toContain('rpc.get_admin_status')
     } finally {
       spy.mockRestore()
       vi.useRealTimers()

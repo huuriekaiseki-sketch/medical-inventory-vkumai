@@ -7,6 +7,7 @@
 //      （docs/agents/fail-open-inventory.md の型）。
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import limitsConfig from '../../../../aidd.config.json'
 
 const rpc = vi.fn()
 const createClient = vi.fn(() => ({ rpc }))
@@ -150,6 +151,27 @@ describe('拒否された操作の記録（recordAccessDenial） [P-063]', () =>
     await m.recordAccessDenial({ guard: 'auth', reason: 'unauthenticated' })
     expect(createClient).toHaveBeenCalledTimes(1)
     expect(rpc).toHaveBeenCalledTimes(3)
+  })
+
+  // WHY(#757-31、2026-09-08 の変異計測で未カバーだった): 記録は拒否の道の途中にある。
+  //      PostgREST が落ちているときにここで待つと、拒否を返すまでに約 16 秒かかっていた。
+  //      上限で諦めても拒否は変わらないが、**諦めたことと、どの記録かがログに残る**
+  it('RPC が返ってこないときは上限で諦め、拒否は止めない（ログには残す）', async () => {
+    vi.useFakeTimers()
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      rpc.mockImplementation(() => new Promise(() => {}))
+      const m = await loadModule()
+      const promise = m.recordAccessDenial({ guard: 'facility', reason: 'forbidden' })
+      await vi.advanceTimersByTimeAsync(limitsConfig.limits.authJudgmentTimeoutMs)
+      await expect(promise).resolves.toBeUndefined()
+      const printed = JSON.stringify(spy.mock.calls)
+      expect(printed).toContain('judgment-timeout')
+      expect(printed).toContain('rpc.record_access_denial')
+    } finally {
+      spy.mockRestore()
+      vi.useRealTimers()
+    }
   })
 
   it('セッションを持たないクライアントとして作る', async () => {
