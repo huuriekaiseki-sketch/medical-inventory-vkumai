@@ -16,6 +16,7 @@ vi.mock('@/lib/security/access-denial', () => ({
 
 import { recordAccessDenial } from '@/lib/security/access-denial'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
+import { AUTH_JUDGMENT_TIMEOUT_MS } from '@/lib/security/judgment-timeout'
 
 const FACILITY_ID = 'f-123'
 
@@ -156,6 +157,33 @@ describe('requireFacilityAccess (P-002)', () => {
       expect(recordAccessDenial).toHaveBeenCalledWith({
         guard: 'facility', reason: 'forbidden', actorId: 'u-user', facilityId: FACILITY_ID,
       })
+    })
+
+    // WHY(#757-31): PostgREST を止めた実測でこの RPC が **55 秒**返らなかった。
+    //      上限で諦めたときに通すと、依存が落ちている間だけ他施設に届く
+    it('所属の RPC が返ってこないときは上限で諦めて FORBIDDEN（依存が落ちている間だけ通らない）', async () => {
+      vi.useFakeTimers()
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        const db = {
+          rpc: vi.fn().mockImplementation((fnName: string) => {
+            if (fnName === 'get_admin_status') {
+              return Promise.resolve({ data: [{ user_is_admin: false, db_has_admin: true }], error: null })
+            }
+            return new Promise(() => {}) // is_facility_member が返ってこない
+          }),
+        } as unknown as SupabaseClient
+        const promise = requireFacilityAccess(db, user, FACILITY_ID)
+        const assertion = expect(promise).rejects.toThrow('FORBIDDEN')
+        await vi.advanceTimersByTimeAsync(AUTH_JUDGMENT_TIMEOUT_MS)
+        await assertion
+        expect(recordAccessDenial).toHaveBeenCalledWith({
+          guard: 'facility', reason: 'forbidden', actorId: 'u-user', facilityId: FACILITY_ID,
+        })
+      } finally {
+        spy.mockRestore()
+        vi.useRealTimers()
+      }
     })
   })
 })

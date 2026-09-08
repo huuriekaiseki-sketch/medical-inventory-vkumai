@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database.generated'
 import { DENIAL_METHOD_HEADER, DENIAL_ROUTE_HEADER } from '@/lib/security/denial-headers'
 import { logServerError } from '@/lib/log-safe'
+import { withJudgmentTimeout } from '@/lib/security/judgment-timeout'
 
 // WHY: issue #757 の 24。拒否された操作は audit_log の行トリガーに来ないので、
 //      アプリの認可ガードが弾いた瞬間にここで記録する（P-063）。
@@ -87,14 +88,23 @@ export async function recordAccessDenial(denial: AccessDenial): Promise<void> {
     //      捨てると try/catch にも来ず、**記録できていないことに誰も気づけない**
     //      （2026-09-07 のマージ後に check-fail-open.test.sh が捕まえた）。
     //      握りつぶすのは「拒否そのものを止めない」ためであって、黙ることではない。
-    const { error } = await db.rpc('record_access_denial', {
-      p_guard: denial.guard,
-      p_reason: denial.reason,
-      p_route: ctx.route ?? undefined,
-      p_method: ctx.method ?? undefined,
-      p_actor_id: denial.actorId ?? undefined,
-      p_facility_id: denial.facilityId ?? undefined,
-    })
+    // WHY(#757-31、2026-09-08 の実測): 記録は判定そのものではないが、**拒否の道の途中にある**。
+    //      PostgREST を止めて測ったら、判定に上限を付けた後も `requireFacilityAccess` が
+    //      26.6 秒かかっていた（5 秒 + 5 秒 + **記録の待ち 約 16 秒**）。
+    //      判定を切っても記録で待たされるなら、上限を付けた意味が無い。
+    //      記録の失敗は元から握りつぶす設計なので、諦めても拒否の結果は変わらない。
+    const { error } = await withJudgmentTimeout<{ error: unknown }>(
+      'rpc.record_access_denial',
+      () => db.rpc('record_access_denial', {
+        p_guard: denial.guard,
+        p_reason: denial.reason,
+        p_route: ctx.route ?? undefined,
+        p_method: ctx.method ?? undefined,
+        p_actor_id: denial.actorId ?? undefined,
+        p_facility_id: denial.facilityId ?? undefined,
+      }),
+      () => ({ error: null }),
+    )
     if (error) logServerError('record_access_denial', error)
   } catch {
     // WHY: 記録の失敗は握りつぶす（上のコメント参照）。ここで throw すると

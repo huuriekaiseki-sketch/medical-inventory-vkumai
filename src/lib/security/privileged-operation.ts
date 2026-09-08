@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database.generated'
 import { DENIAL_METHOD_HEADER, DENIAL_ROUTE_HEADER } from '@/lib/security/denial-headers'
 import { logServerError } from '@/lib/log-safe'
+import { withJudgmentTimeout } from '@/lib/security/judgment-timeout'
 
 // WHY: issue #757 の 24・39。特権書き込みルールブック W-011 の限界のうち
 //      「auth.users の作成・削除が監査ログに残らない」を塞ぐ。
@@ -94,16 +95,22 @@ export async function recordPrivilegedOperation(record: PrivilegedOperationRecor
     const db = serviceRoleClient()
     if (!db) return
     const ctx = await routeFromHeaders()
-    const { error } = await db.rpc('record_privileged_operation', {
-      p_operation: record.operation,
-      p_succeeded: record.succeeded,
-      p_actor_id: record.actorId,
-      p_target_email: record.targetEmail ?? undefined,
-      p_target_user_id: record.targetUserId ?? undefined,
-      p_error_code: record.errorCode ?? undefined,
-      p_route: ctx.route ?? undefined,
-      p_method: ctx.method ?? undefined,
-    })
+    // WHY(#757-31): access-denial.ts と同じ。記録は特権操作の道の途中にあるので、
+    //      ここで待つと admin の画面が固まる。記録の失敗は元から握りつぶす設計
+    const { error } = await withJudgmentTimeout<{ error: unknown }>(
+      'rpc.record_privileged_operation',
+      () => db.rpc('record_privileged_operation', {
+        p_operation: record.operation,
+        p_succeeded: record.succeeded,
+        p_actor_id: record.actorId,
+        p_target_email: record.targetEmail ?? undefined,
+        p_target_user_id: record.targetUserId ?? undefined,
+        p_error_code: record.errorCode ?? undefined,
+        p_route: ctx.route ?? undefined,
+        p_method: ctx.method ?? undefined,
+      }),
+      () => ({ error: null }),
+    )
     if (error) logServerError('record_privileged_operation', error)
   } catch (error) {
     // 記録の失敗で特権操作そのものを止めない。ただし黙らない

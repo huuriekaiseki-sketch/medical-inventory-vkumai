@@ -168,6 +168,27 @@ describe('回数の上限（rate limit） [P-064][Q-002]', () => {
     expect(r.unmeasured).toBe(true)
     expect(rpc).not.toHaveBeenCalled()
   })
+
+  // WHY(#757-31): これは requireAuth の中にあり **全 route が通る**。PostgREST を止めた実測で
+  //      18 秒かかっていた。上限は認可ではないので、諦めたら通す（fail-open）。
+  //      ただし**諦めたこと自体は記録に残す**
+  it('RPC が返ってこないときは上限で諦めて通す（上限を可用性の穴にしない）', async () => {
+    vi.useFakeTimers()
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      rpc.mockImplementation(() => new Promise(() => {}))
+      const m = await loadModule()
+      const promise = m.consumeUserRequestQuota('user-1')
+      await vi.advanceTimersByTimeAsync(limitsConfig.limits.authJudgmentTimeoutMs)
+      const r = await promise
+      expect(r.allowed).toBe(true)
+      expect(r.unmeasured).toBe(true)
+      expect(JSON.stringify(spy.mock.calls)).toContain('judgment-timeout')
+    } finally {
+      spy.mockRestore()
+      vi.useRealTimers()
+    }
+  })
 })
 
 // 部分成功の棚卸し（docs/agents/partial-success-inventory.md）: M-021 送れなかった分の枠を戻す

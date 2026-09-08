@@ -78,6 +78,7 @@
       "emailAddress": 254
     },
     "requestsPerMinute": 300,
-    "invitesPerDay": 50
+    "invitesPerDay": 50,
+    "authJudgmentTimeoutMs": 5000
   }
 }
