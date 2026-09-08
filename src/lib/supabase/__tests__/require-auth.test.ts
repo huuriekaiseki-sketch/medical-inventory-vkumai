@@ -15,6 +15,7 @@ vi.mock('@/lib/security/rate-limit', () => ({
 }))
 
 import { requireAuth } from '@/lib/supabase/require-auth'
+import { AUTH_JUDGMENT_TIMEOUT_MS } from '@/lib/security/judgment-timeout'
 
 function makeDb(user: User | null, error: Error | null = null): SupabaseClient {
   return {
@@ -76,5 +77,29 @@ describe('requireAuth の回数の上限 (P-064)', () => {
   it('数えられなかったとき（fail-open）は通す', async () => {
     consumeUserRequestQuota.mockResolvedValue({ ...allowed, unmeasured: true })
     await expect(requireAuth(makeDb(USER))).resolves.toBe(USER)
+  })
+})
+
+// WHY(#757-31): GoTrue を止めた実測で `getUser` が **54 秒**返らなかった。
+//      `requireAuth` は全 route が通るので、ここが詰まると製品全体が止まる。
+//      上限で諦めたときは「誰か分からない」＝未認証に倒す（通してはいけない）
+describe('requireAuth の待ち時間の上限 (F-001)', () => {
+  it('getUser が返ってこないときは上限で諦めて UNAUTHORIZED', async () => {
+    vi.useFakeTimers()
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const db = {
+        auth: { getUser: vi.fn(() => new Promise(() => {})) },
+      } as unknown as SupabaseClient
+      const assertion = expect(requireAuth(db)).rejects.toThrow('UNAUTHORIZED')
+      await vi.advanceTimersByTimeAsync(AUTH_JUDGMENT_TIMEOUT_MS)
+      await assertion
+      expect(recordAccessDenial).toHaveBeenCalledWith({ guard: 'auth', reason: 'unauthenticated' })
+      // 諦めたことは記録に残る（拒否が増えただけに見えないように）
+      expect(JSON.stringify(spy.mock.calls)).toContain('judgment-timeout')
+    } finally {
+      spy.mockRestore()
+      vi.useRealTimers()
+    }
   })
 })

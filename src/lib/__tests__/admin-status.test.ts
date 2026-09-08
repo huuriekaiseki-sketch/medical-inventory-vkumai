@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { resolveIsAdmin } from '@/lib/admin-status'
+import { AUTH_JUDGMENT_TIMEOUT_MS } from '@/lib/security/judgment-timeout'
 
 const USER_ID = 'user-123'
 
@@ -147,5 +148,25 @@ describe('resolveIsAdmin', () => {
 
     const result = await resolveIsAdmin(db, user)
     expect(result).toBe(false)
+  })
+
+  // WHY(#757-31): PostgREST を止めた実測で、この RPC が **75 秒**返らなかった。
+  //      上限で諦めたときに admin を通すと、依存が落ちている間だけ全施設に届く。
+  //      「返ってこない」は「材料が取れない」なので非 admin に倒す
+  it('RPC が返ってこないときは上限で諦めて false を返す（依存が落ちている間だけ admin にならない）', async () => {
+    vi.useFakeTimers()
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      process.env.ADMIN_EMAILS = 'admin@example.com'
+      const db = { rpc: vi.fn(() => new Promise(() => {})) } as unknown as SupabaseClient
+      const promise = resolveIsAdmin(db, makeUser(USER_ID, 'admin@example.com'))
+      await vi.advanceTimersByTimeAsync(AUTH_JUDGMENT_TIMEOUT_MS)
+      expect(await promise).toBe(false)
+      // 諦めたことが記録に残る（無音だと「拒否が増えた」としか読めない）
+      expect(JSON.stringify(spy.mock.calls)).toContain('judgment-timeout')
+    } finally {
+      spy.mockRestore()
+      vi.useRealTimers()
+    }
   })
 })

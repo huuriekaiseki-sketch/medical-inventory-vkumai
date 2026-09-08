@@ -250,20 +250,33 @@ describe('監査ログの取りこぼし: 全対象テーブルで書き込み 1
     if (categoryId) await service.from('categories').delete().eq('id', categoryId)
   })
 
-  /** 対象テーブルの監査行 ID の集合（差分を取るために使う） */
+  // WHY(新しい側だけを見る。2026-09-08 に実際に落ちた): `audit_log` は append-only で消せないので、
+  //      手元の DB では試行のたびに積み上がる。全件を取ると PostgREST の既定上限（1,000 行）に
+  //      当たり、**古い順に 1,000 件**が返って**いま書いた行が切り落とされる**。
+  //      その結果「増えた監査行 0」＝取りこぼしに見えた（実測: user_facilities が 1,195 行で発火）。
+  //      差分を取るのに要るのは直近だけなので、新しい順に少しだけ取る。
+  const RECENT = 200
+
+  /** 対象テーブルの監査行 ID の集合（直近 RECENT 件。差分を取るために使う） */
   const auditIds = async (table: string): Promise<Set<string>> => {
-    const { data, error } = await service.from('audit_log').select('id').eq('table_name', table)
+    const { data, error } = await service
+      .from('audit_log')
+      .select('id')
+      .eq('table_name', table)
+      .order('occurred_at', { ascending: false })
+      .limit(RECENT)
     if (error) throw new Error(`audit_log の取得に失敗: ${error.message}`)
     return new Set((data ?? []).map((r) => (r as { id: string }).id))
   }
 
-  /** 直前の操作で増えた監査行だけを返す */
+  /** 直前の操作で増えた監査行だけを返す（直近 RECENT 件との差分） */
   const newRows = async (table: string, before: Set<string>): Promise<AuditRow[]> => {
     const { data, error } = await service
       .from('audit_log')
       .select('id, table_name, row_id, facility_id, action, old_data, new_data')
       .eq('table_name', table)
-      .order('occurred_at')
+      .order('occurred_at', { ascending: false })
+      .limit(RECENT)
     if (error) throw new Error(`audit_log の取得に失敗: ${error.message}`)
     return ((data ?? []) as AuditRow[]).filter((r) => !before.has(r.id))
   }

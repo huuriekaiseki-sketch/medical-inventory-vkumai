@@ -108,6 +108,11 @@
           "type": "integer",
           "minimum": 1,
           "description": "管理者 1 人あたり 1 日の招待メール上限"
+        },
+        "authJudgmentTimeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "description": "認可・認証の判定（利用者の取得・認可 RPC・回数の上限）が外部依存の応答を待つ上限。判定は本来ミリ秒で終わるので、これを超えたら材料が取れなかったものとして拒否側へ倒す。重い一覧・レポートには効かせない"
         }
       }
     }

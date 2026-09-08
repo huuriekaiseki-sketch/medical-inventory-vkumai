@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database.generated'
 import { recordAccessDenial } from '@/lib/security/access-denial'
 import { logServerError } from '@/lib/log-safe'
+import { withJudgmentTimeout } from '@/lib/security/judgment-timeout'
 import limitsConfig from '../../../aidd.config.json'
 
 // WHY: issue #757 の 32（量の上限、quota-inventory の Q-002）。
@@ -70,11 +71,18 @@ export async function consumeRateLimit(
   try {
     const db = serviceRoleClient()
     if (!db) return unmeasured
-    const { data, error } = await db.rpc('consume_rate_limit', {
-      p_bucket: bucket,
-      p_limit: limit,
-      p_window_seconds: windowSeconds,
-    })
+    // WHY(#757-31): これは `requireAuth` の中にあり、**全 route が通る**。PostgREST を止めた実測で
+    //      18 秒かかっていた（認可に関係ない読み取りまで巻き込まれる）。上限を過ぎたら諦め、
+    //      「数えられなかった」＝通す（fail-open。上限は認可ではないので可用性の穴にしない）
+    const { data, error } = await withJudgmentTimeout<{ data: unknown; error: unknown }>(
+      'rpc.consume_rate_limit',
+      () => db.rpc('consume_rate_limit', {
+        p_bucket: bucket,
+        p_limit: limit,
+        p_window_seconds: windowSeconds,
+      }),
+      () => ({ data: null, error: null }),
+    )
     if (error) return unmeasured
     const row = Array.isArray(data) ? data[0] : data
     if (!row) return unmeasured

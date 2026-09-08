@@ -30,9 +30,9 @@ hook 側の fail-open は既知の制約として [known-failure-patterns.md](./
 
 | ID | 制御点 | 止まるもの | 材料が取れないときの挙動 | 状態 | 守るテスト |
 | --- | --- | --- | --- | --- | --- |
-| F-001 | `requireAuth`（`src/lib/supabase/require-auth.ts`） | Supabase Auth（`getUser`） | `error \|\| !user` で `UNAUTHORIZED` → route が 401 | 閉じる | `src/lib/supabase/__tests__/require-auth.test.ts` |
-| F-002 | `requireFacilityAccess`（`src/lib/supabase/require-facility-access.ts`） | RPC `is_facility_member`・DB | `error \|\| !data` で `FORBIDDEN` → 403。admin 判定は F-003 | 閉じる | `src/lib/supabase/__tests__/require-facility-access.test.ts`（RPC error のとき FORBIDDEN） |
-| F-003 | `resolveIsAdmin`（`src/lib/admin-status.ts`） | RPC `get_admin_status`・DB | `error \|\| !data \|\| 0 件` で非 admin。`ADMIN_EMAILS` フォールバックは「DB に admin が 0 件」と**確認できた**ときだけ効く（RPC が落ちているときは効かない） | 閉じる | `src/lib/__tests__/admin-status.test.ts`（RPC エラー時は false） |
+| F-001 | `requireAuth`（`src/lib/supabase/require-auth.ts`） | Supabase Auth（`getUser`） | `error \|\| !user` で `UNAUTHORIZED` → route が 401。**5 秒で諦める**（諦めたら user なし＝同じ拒否へ倒れる。2026-09-08） | 閉じる | `src/lib/supabase/__tests__/require-auth.test.ts` |
+| F-002 | `requireFacilityAccess`（`src/lib/supabase/require-facility-access.ts`） | RPC `is_facility_member`・DB | `error \|\| !data` で `FORBIDDEN` → 403。admin 判定は F-003。**各段 5 秒で諦める**が、3 段直列なので最悪 15 秒（2026-09-08） | 閉じる | `src/lib/supabase/__tests__/require-facility-access.test.ts`（RPC error のとき FORBIDDEN） |
+| F-003 | `resolveIsAdmin`（`src/lib/admin-status.ts`） | RPC `get_admin_status`・DB | `error \|\| !data \|\| 0 件` で非 admin。`ADMIN_EMAILS` フォールバックは「DB に admin が 0 件」と**確認できた**ときだけ効く（RPC が落ちているときは効かない）。**5 秒で諦める**（2026-09-08） | 閉じる | `src/lib/__tests__/admin-status.test.ts`（RPC エラー時は false） |
 | F-004 | proxy の MFA ガード（`src/proxy.ts`） | **手元の JWT の `aal` クレーム**（`getAuthenticatorAssuranceLevel` は GoTrue を呼ばない。2026-09-08 に GoTrue を止めて実測: **2 ms で成功**） | **2026-09-06 まで開いていた**（error を捨て、aal が取れなければ素通り）。今は `error \|\| !aal` で `/mfa-challenge` へ送る。GoTrue の停止では失敗しない（トークンが無い・壊れているときだけ失敗する） | 閉じる | `src/__tests__/proxy.test.ts`（MFA API がエラー / data null → /mfa-challenge） |
 | F-005 | proxy の未認証ガード・admin ガード（`src/proxy.ts`） | Supabase Auth・RPC | `getUser` の error は未認証扱いで `/login`。admin は F-003 | 閉じる | `src/__tests__/proxy.test.ts`（getUser がエラー → /login、admin RPC 不成立 → /login） |
 | F-006 | `requireAdmin`（`src/lib/admin-auth.ts`） | Supabase Auth・RPC | `error \|\| !user` で null（route が 403）。admin は F-003 | 閉じる | `src/lib/__tests__/admin-auth.test.ts` |
@@ -123,6 +123,31 @@ hook 側の fail-open は既知の制約として [known-failure-patterns.md](./
 対象の表が 0 行だと述語は一度も呼ばれず「0 件」が返る。**壊しても何も起きない**のに
 「例外にならなかった」と読めてしまう。行を 1 つ入れてから測る。
 
+### 2026-09-08（3 回目。判定に待ち時間の上限を入れた前後）
+
+2 回目の実測で「向きは正しいが 55〜75 秒かかる」と分かったので、
+**認可・認証の判定に 5 秒の上限**を入れた（人が決めた値。`aidd.config.json` の
+`limits.authJudgmentTimeoutMs`）。同じ手順で測り直した。
+
+| 制御点（PostgREST か GoTrue を停止） | 入れる前 | 入れた後 |
+| --- | --- | --- |
+| `resolveIsAdmin`（F-003） | 75,389 ms | **5,004 ms** |
+| `requireAuth` / PostgREST 停止（F-001） | 18,493 ms | **5,042 ms** |
+| `requireAuth` / GoTrue 停止（F-001） | 54,336 ms | **5,011 ms** |
+| `requireFacilityAccess`（F-002） | 55,297 ms | **15,008 ms** |
+
+**判定だけでは足りなかった。** 最初に判定 3 つへ上限を入れた時点で
+`requireFacilityAccess` は 26,611 ms のままだった。内訳を見ると
+5 秒（admin 判定）＋ 5 秒（所属判定）＋ **約 16 秒（拒否の記録）**で、
+**記録で待たされて上限の意味が消えていた**。記録（`record_access_denial` /
+`record_privileged_operation`）は元から失敗を握りつぶす設計なので、同じ上限を付けた。
+
+**残っているもの: 直列に積み上がる。** `requireFacilityAccess` の最悪経路は
+admin 判定 → 所属判定 → 拒否の記録 の 3 段で、**3 × 5 = 15 秒**。
+1 段ごとには上限どおりでも、合計は上限ではない。
+次の一手は「1 回のリクエストで最初の 1 つが諦めたら、残りは待たずに諦める」（回路遮断器）だが、
+**状態を持つ仕組み**になるので別の判断が要る。
+
 ## 限界
 
 - **実測したのは 6 行**（F-001〜F-004・F-011・F-012、2026-09-08）。残り 13 行はコードを読んだ判断で、
@@ -131,6 +156,11 @@ hook 側の fail-open は既知の制約として [known-failure-patterns.md](./
   `has_aal2` の説明）。読んでいたときは 3 つとも気づけなかった。
 - **「閉じる」は向きの話で、速さは別。** 判定材料が取れないとき拒否側へ倒れることと、
   そこまでに 1 分待たないことは別の性質で、**この表は向きしか見ていない**（時間は実施記録に）。
+- **上限は 1 段ごとで、合計ではない。** 判定が直列に積み上がる経路は段数 × 5 秒かかる
+  （`requireFacilityAccess` は 15 秒）。1 リクエスト全体の上限は持っていない。
+- **要求そのものは止めていない。** 待つのをやめるだけで、裏の fetch は走り続ける
+  （理由は `src/lib/security/judgment-timeout.ts` の「既知の限界」）。
+- **重い一覧・レポートには上限を付けていない**（2026-09-08 の判断）。そこが遅いままなのは既知。
 - **同時に複数が落ちたときの合成は見ていない。** 1 つずつは拒否側へ倒れても、
   組み合わさると別の経路が開くことがある（例: 認可 RPC が落ちた状態で画面のロール判定も落ちる）。
 - **「情報のみ」は防御ではない。** 画面側の制御点（F-009・F-017・F-018）は
