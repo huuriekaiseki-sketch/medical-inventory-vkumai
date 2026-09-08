@@ -26,6 +26,10 @@ command -v jq >/dev/null 2>&1 || { echo "jq not found: check-direct-ddl-executio
 # `db reset` / `functions deploy` 等は対象外（`db reset`はフラグ無指定時デフォルトでローカルを
 # 対象とするため危険ではない。`--linked`明示時のみ危険だが本スクリプトのスコープ外）。
 # 既にsettings.jsonでaskとして人間の確認を要求している。
+# ただし **`npx` 経由はサブコマンドを問わず deny する**（下の is_npx_supabase）。
+# 2026-09-08 に `npx supabase db reset` がローカルの Supabase 一式を壊した原因は
+# 「reset が危険」ではなく「npx が別版の CLI を引いてきた」ことだった。危険度で選り分けず、
+# 別版が動く経路そのものを塞ぐ。
 #
 # `supabase db push`のみ例外的に本スクリプトの対象に含める（issue #485）。
 # `supabase db push --help`で確認した通り、この一つだけ他のsupabase dbサブコマンドと非対称に
@@ -77,6 +81,25 @@ is_readonly_segment() {
   esac
 }
 
+# WHY(npx 経由の supabase を丸ごと止める): `npx supabase` は npm レジストリから CLI をその場で
+# 取ってくるので、Homebrew で入れた版（正本は .supabase-version）と**別物が動く**。
+# 2026-09-08 に `npx supabase db reset` が 2.117.0 を引き、その版が要求する postgres イメージの
+# 取得に失敗して**ローカルの Supabase 一式（コンテナとボリューム）が消えた**。
+# サブコマンドの危険度の問題ではなく「別の版が動くこと」自体が事故の原因なので、
+# 読み取り系（status・migration list）も含めて npx 経由は一律で塞ぐ。
+# 限界: `npx -p <pkg> supabase ...` のように npx 自身のフラグが**値を取る**形は読み飛ばせず
+# 素通りする（フラグを 1 語ずつしか捨てないため）。典型的な手段を塞ぐのが目的で、
+# 難読化への完全対策はしない（本スクリプト全体の方針）。
+is_npx_supabase() {
+  local seg="$1" rest
+  [[ "$seg" =~ ^npx([[:space:]]|$) ]] || return 1
+  rest="$(printf '%s' "$seg" | sed -E 's/^npx[[:space:]]*//')"
+  while [[ "$rest" == -* ]]; do
+    rest="$(printf '%s' "$rest" | sed -E 's/^[^[:space:]]+[[:space:]]*//')"
+  done
+  [[ "$rest" =~ ^supabase([[:space:]@]|$) ]]
+}
+
 # WHY: コマンド文字列を「実行されようとしている個々のコマンド」単位（制御演算子 ; & |、
 # およびコマンド置換の開始 `$(` / バッククォート で区切られた各セグメント）に分割する
 # （issue #633）。区切り文字の種類に関わらず、各セグメントの先頭コマンドだけを見れば
@@ -101,6 +124,11 @@ case "$TOOL_NAME" in
       SEG="$(printf '%s' "$RAW_SEG" | sed -E 's/^[[:space:]]+//')"
       [ -z "$SEG" ] && continue
       is_readonly_segment "$SEG" && continue
+      if is_npx_supabase "$SEG"; then
+        DENY=1
+        REASON="npx 経由の supabase は使えません。npx は npm レジストリから CLI を取ってくるため Homebrew で入れた版と別物が動きます（2026-09-08 に npx supabase db reset が 2.117.0 を引き、ローカルの Supabase 一式が壊れました）。npx を外して supabase を直接実行してください（版の正本は .supabase-version）。"
+        break
+      fi
       if [[ "$SEG" =~ $DIRECT_EXEC_PATTERN ]]; then
         DENY=1
         REASON="supabase db execute・psqlの直接実行はDBスキーマ変更ルール（migration経由）で禁止されています。supabase/migrations/配下にマイグレーションファイルを作成し、supabase db push --localで適用してください。"

@@ -143,6 +143,40 @@ assert_eq "$(printf '%s\n' "$OUT" | grep -c .)" "$KEY_COUNT" "--list-rules の�
 assert_eq "$(printf '%s\n' "$OUT" | cut -f2 | sort | uniq -d | wc -l | tr -d ' ')" "0" "label（種別名）が重複しない"
 assert_eq "$(printf '%s\n' "$OUT" | cut -f3 | grep -v -e '^always$' -e '^on-change$' -e '^milestone$' | wc -l | tr -d ' ')" "0" "timing は3値のみ"
 
+echo "=== scenario 14: コミット前の変更（ステージ済み・作業ツリー・未追跡）も既定で拾う ==="
+DTS_DIR="$(mktemp -d)"
+git -C "$DTS_DIR" init -q
+git -C "$DTS_DIR" config user.email t@example.com
+git -C "$DTS_DIR" config user.name t
+mkdir -p "$DTS_DIR/docs/agents" "$DTS_DIR/src/lib/supabase" "$DTS_DIR/e2e" "$DTS_DIR/node_modules"
+printf 'x\n' > "$DTS_DIR/docs/agents/note.md"
+git -C "$DTS_DIR" add -A
+git -C "$DTS_DIR" commit -qm base
+printf 'node_modules/\n' > "$DTS_DIR/.gitignore"
+printf 'y\n' > "$DTS_DIR/node_modules/ignored.ts"
+printf 'staged\n' > "$DTS_DIR/src/lib/supabase/staged.ts"     # ステージ済み
+git -C "$DTS_DIR" add "$DTS_DIR/src/lib/supabase/staged.ts"
+printf 'changed\n' >> "$DTS_DIR/docs/agents/note.md"          # 作業ツリー（未ステージ）
+printf 'new\n' > "$DTS_DIR/e2e/untracked.spec.ts"             # 未追跡
+
+# WHY: base に HEAD を渡すと <base>...HEAD が空になるので、拾えた分は全部「未コミット由来」だと言える
+set +e
+OUT_ALL="$(DTS_GIT_ROOT="$DTS_DIR" bash "$SCRIPT" HEAD 2>/dev/null)"
+set -e
+assert_contains "$OUT_ALL" "src/lib/supabase/staged.ts" "ステージ済みを拾う"
+assert_contains "$OUT_ALL" "docs/agents/note.md" "作業ツリーの変更を拾う"
+assert_contains "$OUT_ALL" "e2e/untracked.spec.ts" "未追跡を拾う"
+assert_not_contains "$OUT_ALL" "node_modules/ignored.ts" "gitignore 済みは拾わない"
+# 拾えた結果が種別の判定まで届いていること（パス名が出るだけでは意味がない）
+assert_contains "$(keys_of "$OUT_ALL" required)" "integration" "未コミットの src/lib/supabase で RLS/IDOR 統合が required"
+assert_contains "$(keys_of "$OUT_ALL" required)" "e2e" "未コミットの e2e/ で E2E が required"
+
+set +e
+OUT_COMMITTED="$(DTS_GIT_ROOT="$DTS_DIR" bash "$SCRIPT" HEAD --committed-only 2>/dev/null)"
+set -e
+assert_not_contains "$OUT_COMMITTED" "src/lib/supabase/staged.ts" "--committed-only は未コミット分を拾わない（旧挙動を残す）"
+rm -rf "$DTS_DIR"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

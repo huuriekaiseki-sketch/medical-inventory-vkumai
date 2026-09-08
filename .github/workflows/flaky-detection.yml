@@ -89,9 +89,14 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
+      - name: Read pinned Supabase CLI version
+        id: supabase-cli
+        # WHY: 版の正本は .supabase-version の 1 か所。ここに数字を直接書くと 3 本の
+        #      ワークフローで別々にずれる（2026-09-08 に latest で開いていた穴と同型）。
+        run: echo "version=$(cat .supabase-version)" >> "$GITHUB_OUTPUT"
       - uses: supabase/setup-cli@v3
         with:
-          version: latest
+          version: ${{ steps.supabase-cli.outputs.version }}
       # WHY: e2e/env-guard.ts の許可ホストは 127.0.0.1 / localhost のみ。本番の接続情報は一切渡さない
       - name: Start local Supabase
         run: |

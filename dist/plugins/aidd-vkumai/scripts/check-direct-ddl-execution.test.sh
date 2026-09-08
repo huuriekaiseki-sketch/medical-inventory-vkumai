@@ -4,6 +4,8 @@
 # permissionDecision: "deny"で拒否すること・db reset等の正規手段は対象外であることを確認する。
 # supabase db pushのみ例外的に対象内（--local明示時のみ許可、フラグ無指定・--linked等は
 # デフォルトでリモート本番を対象とするためdeny。issue #485）。
+# npx経由はサブコマンドを問わず全部deny（2026-09-08にnpxが別版のCLIを引いてローカルの
+# Supabase一式を壊したため）。npxを外した素のsupabaseは通ることも対で確認する。
 #
 # 実行: bash scripts/check-direct-ddl-execution.test.sh
 set -euo pipefail
@@ -181,6 +183,49 @@ input="$(jq -n '{tool_name: "Bash", tool_input: {command: "node_modules/.bin/sup
 run_hook "$input"
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_empty "$OUT" "出力が空である(--local明示時はdeny対象外)"
+
+echo "=== scenario 22: npx supabase status（読み取り系） → deny（別版の CLI が動くこと自体が事故のため） ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "npx supabase status"}}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" '"permissionDecision": "deny"' "読み取り系サブコマンドでもdenyする"
+
+echo "=== scenario 23: npx supabase db reset → deny（2026-09-08 にローカルのSupabase一式を壊した実際のコマンド） ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "npx supabase db reset"}}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" '"permissionDecision": "deny"' "permissionDecision: denyが出力される"
+assert_contains "$OUT" ".supabase-version" "正しい入口（版の正本）を理由文で案内する"
+
+echo "=== scenario 24: npx -y supabase migration new x → deny（npx自身のフラグを読み飛ばす） ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "npx -y supabase migration new add_x"}}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" '"permissionDecision": "deny"' "permissionDecision: denyが出力される"
+
+echo "=== scenario 25: npx supabase@2.117.0 status → deny（版を明示しても npx 経由は塞ぐ） ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "npx supabase@2.117.0 status"}}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" '"permissionDecision": "deny"' "permissionDecision: denyが出力される"
+
+echo "=== scenario 26: npx playwright install → 対象外（supabase 以外の npx を巻き込まない） ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "npx playwright install --with-deps chromium"}}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "出力が空である(supabase以外のnpxは誤denyしない)"
+
+echo "=== scenario 27: npx -y tsx e2e/generate-auth-state.ts → 対象外（package.json の e2e:auth を壊さない） ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "npx -y tsx e2e/generate-auth-state.ts"}}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "出力が空である(npxのフラグを読み飛ばしても supabase 以外は素通しする)"
+
+echo "=== scenario 28: supabase status（Homebrew・正しい入口） → 対象外 ==="
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "supabase status"}}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "出力が空である(npxを付けなければ通る=正しい入口が残っている)"
 
 echo "=== scenario 10: .claude/settings.jsonのmatcherが両パターンをカバーしている(Bash・mcp__.*execute_sql) ==="
 SETTINGS_FILE="$SCRIPT_DIR/../.claude/settings.json"
