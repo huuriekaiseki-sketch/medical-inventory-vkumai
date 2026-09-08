@@ -36,6 +36,15 @@ export interface CrossFacilityFixtures {
   productJan?: string
   /** 施設 A の名前。ダッシュボードで「その施設の行」を特定するために使う */
   facilityAName?: string
+  /**
+   * 代理店商品の名前と ID。
+   *
+   * WHY(2026-09-08 追加): 院内価格は「施設 × 代理店商品」に付ける値なので、
+   *      画面から登録するには代理店商品が 1 件以上要る（無いとフォームの送信ボタンが押せない）。
+   *      既存のものを探して使うと DB の中身にテストが依存するため、実行ごとに 1 件作る。
+   */
+  distributorProductName?: string
+  distributorProductId?: string
 }
 
 export const CROSS_FACILITY_FIXTURES_PATH = path.join(process.cwd(), 'e2e', '.auth', 'cross-facility-fixtures.json')
@@ -134,11 +143,40 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
 
   // 明細に入れる製品を 1 件作る（products はマスタなので施設に属さない）
   const productJan = `e2e-jan-${runId}`
-  const { error: productError } = await supabase
+  const { data: product, error: productError } = await supabase
     .from('products')
     .insert({ jan: productJan, ref: `e2e-ref-${runId}` })
-  if (productError) {
-    throw new Error(`[E2E cross-facility auth] products シード失敗: ${productError.message}`)
+    .select('id')
+    .single()
+  if (productError || !product) {
+    throw new Error(`[E2E cross-facility auth] products シード失敗: ${productError?.message}`)
+  }
+
+  // 代理店商品を 1 件作る（カテゴリ → 代理店商品の順。どちらもマスタなので施設に属さない）
+  const { data: category, error: categoryError } = await supabase
+    .from('categories')
+    .insert({ name: `E2Eカテゴリ-${runId}` })
+    .select('id')
+    .single()
+  if (categoryError || !category) {
+    throw new Error(`[E2E cross-facility auth] categories シード失敗: ${categoryError?.message}`)
+  }
+
+  const distributorProductName = `E2E代理店商品-${runId}`
+  const { data: distributorProduct, error: dpError } = await supabase
+    .from('distributor_products')
+    .insert({
+      product_id: product.id,
+      category_id: category.id,
+      maker: `E2Eメーカー-${runId}`,
+      supplier: `E2E卸-${runId}`,
+      name: distributorProductName,
+      quantity: 1,
+    })
+    .select('id')
+    .single()
+  if (dpError || !distributorProduct) {
+    throw new Error(`[E2E cross-facility auth] distributor_products シード失敗: ${dpError?.message}`)
   }
 
   await signInAndSaveStorageState(supabase, emailA, CROSS_FACILITY_USER_A_AUTH_PATH)
@@ -151,6 +189,8 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     loanOrderId: loanOrder.id as string,
     productJan,
     facilityAName,
+    distributorProductName,
+    distributorProductId: distributorProduct.id as string,
   }
   fs.writeFileSync(CROSS_FACILITY_FIXTURES_PATH, JSON.stringify(fixtures))
   console.log(`[E2E cross-facility auth] フィクスチャを書き出しました: ${CROSS_FACILITY_FIXTURES_PATH}`)
