@@ -53,7 +53,7 @@
 
 | ID | 不変条件 | 守る場所 | 破る操作 | 期待 | 守るテスト | 状態 |
 | --- | --- | --- | --- | --- | --- | --- |
-| I-040 | 粗利 = 納品価格 − 仕切値。掛け率 = 価格 ÷ 償還価格で、償還価格が変わると全施設の掛け率が追従し、償還価格が NULL / 0 なら掛け率は NULL | 生成列 `gross_profit`、トリガー `compute_hospital_price_rates` / `propagate_reimbursement_price_change` | 価格を UPDATE、償還価格を UPDATE / NULL 化 | 直後の SELECT で等式が成り立つ | `supabase/__tests__/integration/business-invariants.integration.test.ts` | 実装済み |
+| I-040 | 粗利 = 納品価格 − 仕切値。掛け率 = 価格 ÷ 償還価格で、償還価格が変わると全施設の掛け率が追従し、償還価格が NULL / 0 なら掛け率は NULL | 生成列 `gross_profit`、トリガー `compute_hospital_price_rates` / `propagate_reimbursement_price_change` | 価格を UPDATE、償還価格を UPDATE / NULL 化（service_role と、所属しない施設を持つ実ユーザー admin の両方から） | 直後の SELECT で等式が成り立つ | `supabase/__tests__/integration/business-invariants.integration.test.ts` | 実装済み |
 | I-041 | 価格履歴は値が変わったときだけ 1 件増え、直接 INSERT できない | SECURITY DEFINER トリガー、RLS `price_histories_no_insert`（P-051） | 同値 UPDATE、直接 INSERT | 増えない、拒否 | `supabase/__tests__/integration/price-histories-rls-idor.integration.test.ts` | 実装済み |
 | I-042 | `updated_at` は更新のたびに進む（楽観ロックの前提） | トリガー `update_updated_at`（P-052 が依存） | 2 回 UPDATE して比較 | 単調増加 | `supabase/__tests__/integration/hospital-prices-concurrency.integration.test.ts` | 実装済み |
 

@@ -4,9 +4,12 @@
 //      RPC 経由・直接 INSERT・service_role のそれぞれから破ろうとして 23514 で止まることを実 DB で見る。
 //      派生値（粗利・掛け率）は「常に等しい」を INSERT 直後と償還価格の変更後で確かめる。
 
+import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   cleanupHospitalPricesRlsIdorFixtures,
+  createFacility,
+  createSeededUser,
   createServiceRoleClient,
   seedHospitalPricesRlsIdorFixtures,
   type SeedHospitalPricesRlsIdorFixtures,
@@ -304,6 +307,82 @@ describe('業務不変条件（DB 制約・トリガー） [I-010 I-011 I-012 I-
         .eq('id', fx.hospitalPriceA.id)
         .single()
       expect(nulled?.purchase_rate).toBeNull()
+    })
+
+    // WHY(2026-09-08): 上の it は **service_role でしか測っていない**。service_role は RLS を
+    //      通らないので、I-040 の「**全施設の**掛け率が追従する」という約束の、実運用の経路は
+    //      測れていない。propagate_reimbursement_price_change() は SECURITY DEFINER では
+    //      **ない**ため、`UPDATE hospital_prices ... WHERE distributor_product_id = …` は
+    //      呼んだ人の RLS で走る。RLS で見えない行は**エラーにならず黙って飛ばされ**、
+    //      その施設だけ古い掛け率が残る（気づく手段が無い）。
+    //      届く根拠は「償還価格を変えられるのは is_admin() だけ」かつ「is_admin() が
+    //      施設をまたぐ（role='admin' がどこか 1 施設にあれば全体で真）」の 2 つだけなので、
+    //      その 2 つを実ユーザーで測る。どちらかが施設単位に狭められたら、ここが落ちる。
+    it('償還価格を変えられるのは admin だけで、その 1 回で自分が所属しない施設の掛け率まで追従する', async () => {
+      // 施設 B にも同じ代理店商品の価格を作り、2 施設にまたがる状態にする
+      const { data: priceB, error: priceBError } = await serviceClient
+        .from('hospital_prices')
+        .insert({
+          distributor_product_id: fx.distributorProduct.id,
+          facility_id: fx.facilityB.id,
+          purchase_price: 100,
+          delivery_price: 150,
+        })
+        .select('id')
+        .single()
+      expect(priceBError).toBeNull()
+
+      await serviceClient
+        .from('hospital_prices')
+        .update({ purchase_price: 100, delivery_price: 150 })
+        .eq('id', fx.hospitalPriceA.id)
+      await serviceClient
+        .from('distributor_products')
+        .update({ reimbursement_price: 200 })
+        .eq('id', fx.distributorProduct.id)
+
+      // 施設 A にも B にも所属しない、第三の施設の admin を作る。
+      // → is_facility_writer(A) も is_facility_writer(B) も false。届くとすれば is_admin() だけ。
+      const facilityC = await createFacility(serviceClient, `テスト施設C-${randomUUID()}`)
+      const admin = await createSeededUser(serviceClient, 'invariant-i040-admin', facilityC.id, 'admin')
+      const staff = fx.userA // 施設 A の staff（admin ではない）
+
+      try {
+        // 1. staff は償還価格を変えられない（＝黙って一部だけ更新される経路自体が無い）
+        const { data: staffUpdated, error: staffError } = await staff.client
+          .from('distributor_products')
+          .update({ reimbursement_price: 999 })
+          .eq('id', fx.distributorProduct.id)
+          .select('id')
+        expect(staffError).toBeNull() // RLS の拒否はエラーではなく 0 行として返る
+        expect(staffUpdated ?? []).toHaveLength(0)
+
+        // 2. admin は変えられる
+        const { data: adminUpdated, error: adminError } = await admin.client
+          .from('distributor_products')
+          .update({ reimbursement_price: 400 })
+          .eq('id', fx.distributorProduct.id)
+          .select('id')
+        expect(adminError).toBeNull()
+        expect(adminUpdated ?? []).toHaveLength(1)
+
+        // 3. その 1 回で、admin が所属しない施設 A・B **両方**の掛け率が追従している
+        const { data: rows } = await serviceClient
+          .from('hospital_prices')
+          .select('id, facility_id, purchase_rate, delivery_rate')
+          .eq('distributor_product_id', fx.distributorProduct.id)
+        const byFacility = new Map((rows ?? []).map((r) => [r.facility_id as string, r]))
+        for (const facilityId of [fx.facilityA.id, fx.facilityB.id]) {
+          const row = byFacility.get(facilityId)
+          expect(row, `施設 ${facilityId} の価格行が見つからない`).toBeDefined()
+          expect(Number(row!.purchase_rate), `施設 ${facilityId} の仕入れ掛け率が古いまま`).toBeCloseTo(0.25)
+          expect(Number(row!.delivery_rate), `施設 ${facilityId} の納入掛け率が古いまま`).toBeCloseTo(0.375)
+        }
+      } finally {
+        await serviceClient.from('hospital_prices').delete().eq('id', priceB!.id)
+        await serviceClient.auth.admin.deleteUser(admin.id)
+        await serviceClient.from('facilities').delete().eq('id', facilityC.id)
+      }
     })
   })
 })

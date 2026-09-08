@@ -148,6 +148,44 @@ if [ -n "${STUB_PORT:-}" ]; then
 fi
 stop_stub
 
+echo "=== scenario 6: 部分実行は記録しない・全件実行だけ記録する（両方向） ==="
+# WHY: 「1 本だけ通した」を「全件通した」として記録すると、check-integration-freshness.sh が
+#      嘘の緑を信じる。このスクリプトが作られたきっかけ（赤 2 件が長期間気づかれなかった）を
+#      そのまま再現できてしまう。**記録する側／しない側の両方**を測らないと、
+#      「常に記録しない」実装でも緑になる。
+REC_DIR="$WORK_DIR/logs"
+REC_LOG="$REC_DIR/integration-runs.jsonl"
+cat > "$WORK_DIR/fake-vitest" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+chmod +x "$WORK_DIR/fake-vitest"
+
+run_recorded() { # $@ = run-integration-tests.sh に渡す引数
+  rm -rf "$REC_DIR"
+  RIT_ENV_FILE="" \
+  RIT_PILEUP_THRESHOLD="" \
+  AIDD_LOG_DIR="$REC_DIR" \
+  RIT_VITEST_BIN="$WORK_DIR/fake-vitest" \
+    bash "$SCRIPT" "$@" 2>/dev/null
+}
+
+OUT="$(run_recorded supabase/__tests__/integration/business-invariants.integration.test.ts)"
+assert_contains "$OUT" "記録しません" "引数付きなら記録しないと言う"
+if [ -s "$REC_LOG" ]; then
+  echo "  NG: 部分実行なのに記録した: $(cat "$REC_LOG")"; fail=1
+else
+  echo "  OK: 部分実行では 1 行も記録していない"
+fi
+
+OUT="$(run_recorded)"
+assert_not_contains "$OUT" "記録しません" "引数無しでは記録を止めない"
+if [ -s "$REC_LOG" ]; then
+  assert_contains "$(cat "$REC_LOG")" '"result": "pass"' "全件実行なら記録する（対照）"
+else
+  echo "  NG: 全件実行なのに記録していない（常に記録しない実装になっている）"; fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

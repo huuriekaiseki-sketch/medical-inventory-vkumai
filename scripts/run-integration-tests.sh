@@ -117,13 +117,23 @@ fi
 
 # WHY(npx を使わない): scripts/check-no-registry-fetch.test.sh が hook スクリプトの npx を禁止する
 #      （2026-09-04 に CI が 4〜8 倍かかった原因）。node_modules のものを直接呼ぶ。
-./node_modules/.bin/vitest run --config vitest.integration.config.ts "$@"
+# RIT_VITEST_BIN はテスト用の差し替え口（記録の分岐を実 DB 無しで測るため。既定は変えない）。
+"${RIT_VITEST_BIN:-./node_modules/.bin/vitest}" run --config vitest.integration.config.ts "$@"
 EXIT_CODE=$?
 
 if [ "$EXIT_CODE" -eq 0 ]; then
   RESULT="pass"
 else
   RESULT="fail"
+fi
+
+# WHY(部分実行は記録しない、2026-09-08): ファイル名や `-t` を渡した実行で「全件通した」と
+#      記録すると、check-integration-freshness.sh（SessionStart hook）が嘘の緑を信じる。
+#      1 本だけ通した実行が、放置されていた赤 2 件を隠せてしまう形（このスクリプトを作った
+#      きっかけそのもの）。run-e2e-tests.sh と同じ扱いに揃える。
+if [ "$#" -ne 0 ]; then
+  echo "[run-integration-tests] 引数付きの実行なので記録しません（全件を通したときだけ記録する）"
+  exit "$EXIT_CODE"
 fi
 
 # supabase/ の木のハッシュを残す。次回、ここが変わっていれば「その記録はもう当てにならない」と分かる
