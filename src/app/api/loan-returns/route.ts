@@ -3,8 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listLoanReturns, createLoanReturn } from '@/lib/loan-returns/repository'
-import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
-import { ClientVisibleError } from '@/lib/client-visible-error'
+import { apiError, authGuardError, repositoryError, toClientErrorMessage } from '@/lib/api-error'
 import { parsePagination } from '@/lib/api-pagination'
 import type { LoanReturnInput } from '@/types/order'
 import { parseBody } from '@/lib/validation/parse-body'
@@ -58,12 +57,9 @@ export async function POST(request: NextRequest) {
     const loanReturn = await createLoanReturn(db, body.facilityId, input, body.loanOrderId)
     return NextResponse.json({ loanReturn }, { status: 201 })
   } catch (error) {
-    // WHY: ClientVisibleError は repository層が「クライアントに見せてよいと翻訳済み」と
-    //      保証したエラー（loanOrderIdが自施設に存在しない場合の LOAN_ORDER_NOT_FOUND_ERROR、
-    //      および今回追加されたUNIQUE制約違反(23505)時の重複返却エラーの両方を含む）。
-    //      consumables/route.ts と同じ経路に統一し、個別の文字列比較を廃止する
-    //      （issue #675 Part2 セットB）
-    if (error instanceof ClientVisibleError) return apiError(error.message, 400)
-    return apiError(toClientErrorMessage(error, '返却に失敗しました'))
+    // WHY: ClientVisibleError（loanOrderId が自施設に無い・重複返却・未登録の JAN・
+    //      業務ルール違反）は利用者の直せる間違いなので 400。判定は repositoryError に集約した
+    //      （2026-09-08。他の 3 つの発注 route が 500 のままだったため）
+    return repositoryError(error, '返却に失敗しました')
   }
 }

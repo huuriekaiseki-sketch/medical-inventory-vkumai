@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listConsumableOrders, createConsumableOrder } from '@/lib/consumable-orders/repository'
-import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
+import { apiError, authGuardError, repositoryError, toClientErrorMessage } from '@/lib/api-error'
 import { parsePagination } from '@/lib/api-pagination'
 import { parseBody } from '@/lib/validation/parse-body'
 import { consumableOrderInputSchema } from '@/lib/validation/schemas'
@@ -50,6 +50,6 @@ export async function POST(request: NextRequest) {
     const order = await createConsumableOrder(db, body.facilityId, { items: body.items, clientRequestId: body.clientRequestId })
     return NextResponse.json({ order }, { status: 201 })
   } catch (error) {
-    return apiError(toClientErrorMessage(error, '発注に失敗しました'))
+    return repositoryError(error, '発注に失敗しました')
   }
 }

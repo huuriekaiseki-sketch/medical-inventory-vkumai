@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatJstDate, formatJstDateTime, formatJstDateTimeShort } from '../format-date'
+import { formatJstDate, formatJstDateTime, formatJstDateTimeShort, jstLocalInputToIso } from '../format-date'
 
 // WHY: issue #757 の 15。境界は「UTC ではまだ前日、JST では翌日」の瞬間。
 //      vitest は TZ=UTC で走る（vitest.config.ts。Vercel と同じ条件）ので、
@@ -42,5 +42,33 @@ describe('formatJstDateTime / formatJstDateTimeShort', () => {
   it('時刻も JST で出す', () => {
     expect(formatJstDateTime(JST_MIDNIGHT_UTC)).toBe('2026/6/27 0:00:00')
     expect(formatJstDateTimeShort(JST_MIDNIGHT_UTC)).toBe('2026/06/27 00:00')
+  })
+})
+
+// WHY(2026-09-08): <input type="datetime-local"> はタイムゾーンを持たない文字列を返す。
+//      そのまま送ると timestamptz が UTC として解釈し、JST 固定の一覧では 9 時間ずれて出る。
+//      E2E（e2e/loan-returns.spec.ts）で実測して見つけた形をここで固定する。
+describe('jstLocalInputToIso', () => {
+  it('秒なしの datetime-local に秒と +09:00 を付ける', () => {
+    expect(jstLocalInputToIso('2026-03-04T05:06')).toBe('2026-03-04T05:06:00+09:00')
+  })
+
+  it('秒ありでも +09:00 を付ける', () => {
+    expect(jstLocalInputToIso('2026-03-04T05:06:07')).toBe('2026-03-04T05:06:07+09:00')
+  })
+
+  it('付けた結果は入力した壁時計と同じ時刻を指す（JST で読み戻せる）', () => {
+    const iso = jstLocalInputToIso('2026-03-04T05:06')
+    expect(new Date(iso).toISOString()).toBe('2026-03-03T20:06:00.000Z')
+    expect(formatJstDateTime(iso)).toBe('2026/3/4 5:06:00')
+  })
+
+  it('既にオフセットがある値には触らない', () => {
+    expect(jstLocalInputToIso('2026-03-04T05:06:00+09:00')).toBe('2026-03-04T05:06:00+09:00')
+    expect(jstLocalInputToIso('2026-03-04T05:06:00Z')).toBe('2026-03-04T05:06:00Z')
+  })
+
+  it('空文字はそのまま返す（未入力は入口の必須検査が見る）', () => {
+    expect(jstLocalInputToIso('')).toBe('')
   })
 })

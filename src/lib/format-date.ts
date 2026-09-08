@@ -28,3 +28,29 @@ export function formatJstDateTimeShort(iso: string | Date): string {
     minute: '2-digit',
   })
 }
+
+/**
+ * `<input type="datetime-local">` の値を、JST の時刻として ISO 文字列に直す。
+ *
+ * WHY(2026-09-08 追加): `datetime-local` はタイムゾーンを持たない文字列
+ *      （`2026-03-04T05:06`）を返す。そのまま送ると PostgreSQL の timestamptz は
+ *      **サーバーのタイムゾーン（Supabase は UTC）として解釈**するので、
+ *      利用者が 05:06 と入れた返却が `05:06+00:00` で保存され、
+ *      一覧（Asia/Tokyo 固定で整形）では **14:06 と表示される**。
+ *      E2E で実測して見つけた（入れた時刻と出てくる時刻が 9 時間ずれる）。
+ *      この製品は日本の施設向けで、画面の入力も表示も JST なので、
+ *      送る前にオフセットを明示して意味を確定させる。
+ *
+ * 限界: 直すのは**画面から送る値**だけ。API を直接叩く経路がタイムゾーン無しの文字列を
+ *      送れば、これまでどおり UTC として保存される（入口の schema は形を見ていない）。
+ */
+export function jstLocalInputToIso(localValue: string): string {
+  if (!localValue) return localValue
+  // 既にオフセットや Z が付いている値には触らない（意味が決まっているものを書き換えない）
+  if (/[Zz]$|[+-]\d{2}:\d{2}$/.test(localValue)) return localValue
+  // 秒あり（YYYY-MM-DDTHH:mm:ss）／秒なし（YYYY-MM-DDTHH:mm）の両方を受ける
+  const withSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(localValue)
+    ? `${localValue}:00`
+    : localValue
+  return `${withSeconds}+09:00`
+}
