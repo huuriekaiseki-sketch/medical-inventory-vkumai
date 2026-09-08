@@ -168,7 +168,12 @@ export type LoanReturn = {
   id: string
   facilityId: string
   returnDatetime: string
-  status: 'draft' | 'returned'
+  /**
+   * `cancelled` は 2026-09-08 に足した取り消し状態（E-056）。
+   * **行は消さない**（誰がいつ取り消したかを残す）。取り消した返却は
+   * 残数・未返却の件数のどちらにも数えない。取り消しからは戻れない。
+   */
+  status: 'draft' | 'returned' | 'cancelled'
   items: LoanReturnItem[]
   createdAt: string
   updatedAt: string

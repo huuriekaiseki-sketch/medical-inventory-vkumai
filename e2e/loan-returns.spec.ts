@@ -381,4 +381,110 @@ test.describe('未返却の通し（発注 → 未返却 → 対象を選んで�
 
     await context.close()
   })
+
+  // WHY(E-056): 間違えて登録した返却を、**製品の中で**直せるようにした（2026-09-08）。
+  //      行は消さず「取り消し済」にするので、一覧には残り、残数と未返却の件数からは除かれる。
+  //      ここで測るのは通し: 発注 → 全部返す → 未返却が消える → 取り消す → **未返却が戻る**。
+  //      戻らなければ「取り消したのに返し直せない」状態になる。
+  test('間違えた返却を取り消すと、未返却と残数が戻る', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: CROSS_FACILITY_USER_A_AUTH_PATH })
+    const page = await context.newPage()
+    const facilityId = fixtures!.facilityAId
+    const suffix = uniqueSuffix()
+    const procedureName = `E2E取り消し術式-${suffix}`
+    const maker = `E2E取り消しメーカー-${suffix}`
+    const summary = `${procedureName}（${maker}）`
+    const itemName = `E2E取り消し品名-${suffix}`
+
+    // 1. 発注する（2 本）
+    await page.goto(`/facilities/${facilityId}/loan-orders/new`)
+    await page.waitForLoadState('networkidle')
+    await page.getByLabel('手技名').fill(procedureName)
+    await page.getByLabel('メーカー').fill(maker)
+    await page.getByPlaceholder('JAN').first().fill(fixtures!.productJan!)
+    await page.getByPlaceholder('品名').first().fill(itemName)
+    await page.getByRole('spinbutton').first().fill('2')
+    const [orderRes] = await Promise.all([
+      page.waitForResponse(
+        (res) => res.url().includes('/api/loan-orders') && res.request().method() === 'POST'
+      ),
+      page.getByRole('button', { name: '発注する' }).click(),
+    ])
+    expect(orderRes.status(), await orderRes.text()).toBe(201)
+
+    // 2. 間違えて全部返す
+    await page.goto(`/facilities/${facilityId}/loan-returns/new`)
+    await page.waitForLoadState('networkidle')
+    await page.getByLabel('対象の短貸発注').selectOption({ label: summary })
+    const qty = page.getByLabel(`${itemName} の返す数`)
+    await expect(qty).toBeVisible()
+    await qty.fill('2')
+    const when = uniqueReturnDatetime()
+    await page.getByLabel('返却日時').fill(when.input)
+    const [returnRes] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/api/loan-returns') && r.request().method() === 'POST'
+      ),
+      page.getByRole('button', { name: '返却する' }).click(),
+    ])
+    expect(returnRes.status(), await returnRes.text()).toBe(201)
+
+    // 未返却が消えている
+    await page.goto(`/orders?facilityId=${facilityId}&kind=loan_order`)
+    await page.waitForLoadState('networkidle')
+    await expect(
+      page.getByRole('row', { name: new RegExp(procedureName) }).getByText(/未返却/)
+    ).toHaveCount(0)
+
+    // 3. 一覧から取り消す
+    await page.goto(`/facilities/${facilityId}/loan-returns`)
+    await page.waitForLoadState('networkidle')
+    const row = page.getByRole('row', { name: new RegExp(when.jstDisplay) })
+    await expect(row, '登録した返却が一覧に出ない').toBeVisible()
+    page.once('dialog', (d) => d.accept())
+    const [cancelRes] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/api/loan-returns/') && r.request().method() === 'PATCH'
+      ),
+      row.getByRole('button', { name: '取り消す' }).click(),
+    ])
+    expect(cancelRes.status(), `取り消しに失敗: ${await cancelRes.text()}`).toBe(200)
+
+    // 4. 行は消えず「取り消し済」になる（証跡が残る）
+    await page.goto(`/facilities/${facilityId}/loan-returns`)
+    await page.waitForLoadState('networkidle')
+    const cancelledRow = page.getByRole('row', { name: new RegExp(when.jstDisplay) })
+    await expect(cancelledRow, '取り消したら一覧から消えてしまった').toBeVisible()
+    await expect(cancelledRow).toContainText('取り消し済')
+    await expect(
+      cancelledRow.getByRole('button', { name: '取り消す' }),
+      '取り消し済なのにもう一度取り消せる'
+    ).toHaveCount(0)
+
+    // 5. 未返却が戻る
+    await page.goto(`/orders?facilityId=${facilityId}&kind=loan_order`)
+    await page.waitForLoadState('networkidle')
+    await expect(
+      page.getByRole('row', { name: new RegExp(procedureName) }).getByText('未返却 2'),
+      '取り消したのに未返却が戻らない'
+    ).toBeVisible()
+
+    // 6. 返し直せる（残数が戻っている）
+    await page.goto(`/facilities/${facilityId}/loan-returns/new`)
+    await page.waitForLoadState('networkidle')
+    await page.getByLabel('対象の短貸発注').selectOption({ label: summary })
+    const qtyAgain = page.getByLabel(`${itemName} の返す数`)
+    await expect(qtyAgain, '取り消したのに返す対象として出てこない').toBeVisible()
+    await qtyAgain.fill('2')
+    await page.getByLabel('返却日時').fill(uniqueReturnDatetime().input)
+    const [again] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/api/loan-returns') && r.request().method() === 'POST'
+      ),
+      page.getByRole('button', { name: '返却する' }).click(),
+    ])
+    expect(again.status(), `返し直せない: ${await again.text()}`).toBe(201)
+
+    await context.close()
+  })
 })

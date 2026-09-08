@@ -221,6 +221,18 @@ export const loanReturnInputSchema = z.object({
   clientRequestId,
 })
 
+/**
+ * 返却の取り消し（E-056）。**できるのは取り消しだけ**。
+ *
+ * WHY(status を受け取らない): 自由に状態を入れられる形にすると、`returned` へ戻す・
+ *      `draft` にする経路を後から足せてしまう。入口の形で「取り消しだけ」を示す。
+ *      `action: 'cancel'` を必須にして、意図しない PATCH が通らないようにする。
+ */
+export const loanReturnCancelSchema = z.object({
+  facilityId,
+  action: z.literal('cancel', { error: 'action は cancel のみ指定できます' }),
+})
+
 /** 消耗品発注（consumable_orders）。明細は消耗品の ID と数量だけ */
 export const consumableOrderInputSchema = z.object({
   facilityId,

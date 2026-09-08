@@ -6,7 +6,12 @@ import { ClientVisibleError } from '@/lib/client-visible-error'
 import { toRepositoryError } from '@/lib/invariant-error'
 import type { LoanReturn, LoanReturnInput, LoanReturnItem } from '@/types/order'
 
-const STATUSES = ['draft', 'returned'] as const
+const STATUSES = ['draft', 'returned', 'cancelled'] as const
+
+/** 取り消そうとした返却が見つからない（他施設のものを含む）。route が 404 に写す */
+export const LOAN_RETURN_NOT_FOUND_ERROR = '返却が見つかりません'
+/** すでに取り消し済み。route が 409 に写す */
+export const LOAN_RETURN_ALREADY_CANCELLED_ERROR = 'この返却はすでに取り消されています'
 
 // loan_order_id: issue #20 (Set A) で追加した loan_orders への FK。既存行は NULL のまま
 const LOAN_RETURN_COLUMNS = 'id, facility_id, return_datetime, status, created_at, updated_at, loan_order_id'
@@ -174,6 +179,61 @@ export async function createLoanReturn(db: SupabaseClient, facilityId: string, i
     returnDatetime: asString(r.return_datetime),
     status: asEnum(r.status, STATUSES, 'draft'),
     items: itemRows.map(mapItem),
+    createdAt: asString(r.created_at),
+    updatedAt: asString(r.updated_at),
+    loanOrderId: asOptionalString(r.loan_order_id),
+  }
+}
+
+/**
+ * 返却を取り消す（E-056。行は消さず `cancelled` にする）。
+ *
+ * WHY(削除しない): 誰がいつ何を取り消したかを残す。行を消すと業務の一覧から消えてしまい、
+ *      「間違えた返却があった」こと自体が追えなくなる。status の変更は監査トリガーが残す。
+ *
+ * WHY(施設を明示的に条件へ入れる): RLS だけに頼らず、`facility_id` を条件に入れて
+ *      「存在するが他施設のもの」を確実に弾く（`createLoanReturn` の紐付け検証と同じ多層防御）。
+ *      RLS は拒否ではなく 0 行にするので、0 行を 404 に写す。
+ *
+ * WHY(すでに取り消し済みを分ける): DB のトリガーは「取り消しからは戻れない」だけを守る。
+ *      同じ返却を 2 回取り消しても実害は無いが、利用者には「もう取り消してあります」と
+ *      伝えたほうが親切で、二重送信と区別できる。
+ */
+export async function cancelLoanReturn(
+  db: SupabaseClient,
+  facilityId: string,
+  id: string
+): Promise<LoanReturn> {
+  const { data: current, error: readError } = await db
+    .from('loan_returns')
+    .select(LOAN_RETURN_COLUMNS)
+    .eq('id', id)
+    .eq('facility_id', facilityId)
+    .maybeSingle()
+  if (readError) throw toRepositoryError(readError)
+  if (!current) throw new ClientVisibleError(LOAN_RETURN_NOT_FOUND_ERROR)
+  if ((current as LoanReturnRow).status === 'cancelled') {
+    throw new ClientVisibleError(LOAN_RETURN_ALREADY_CANCELLED_ERROR)
+  }
+
+  const { data, error } = await db
+    .from('loan_returns')
+    .update({ status: 'cancelled' })
+    .eq('id', id)
+    .eq('facility_id', facilityId)
+    .select(LOAN_RETURN_COLUMNS)
+    .maybeSingle()
+  if (error) throw toRepositoryError(error)
+  // RLS で 0 行になった場合（読めるが書けない立場＝viewer）
+  if (!data) throw new ClientVisibleError('返却を取り消す権限がありません')
+
+  const r = data as LoanReturnRow
+  return {
+    id: asString(r.id),
+    facilityId: asString(r.facility_id),
+    returnDatetime: asString(r.return_datetime),
+    status: asEnum(r.status, STATUSES, 'draft'),
+    items: [],
     createdAt: asString(r.created_at),
     updatedAt: asString(r.updated_at),
     loanOrderId: asOptionalString(r.loan_order_id),

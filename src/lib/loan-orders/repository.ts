@@ -15,8 +15,9 @@ interface LoanOrderItemRow {
   quantity?: unknown
   unit_price?: unknown
   created_at?: unknown
-  // WHY(2026-09-08): 分割返却の残数を出すために、この明細へ紐付いた返却の数量を埋め込む
-  loan_return_items?: { quantity?: unknown }[]
+  // WHY(2026-09-08): 分割返却の残数を出すために、この明細へ紐付いた返却の数量を埋め込む。
+  //      取り消した返却は数えないので、親の状態も一緒に取る（E-056）
+  loan_return_items?: { quantity?: unknown; loan_returns?: { status?: unknown } | null }[]
 }
 
 interface LoanOrderRow {
@@ -39,7 +40,12 @@ export function mapItem(row: LoanOrderItemRow): LoanOrderItem {
     unitPrice: asNullableNumber(row.unit_price),
     createdAt: asString(row.created_at),
     // 埋め込みが無い呼び出し（古い select）では 0 になる。残り = quantity - returnedQuantity
-    returnedQuantity: (row.loan_return_items ?? []).reduce((n, r) => n + asNumber(r.quantity), 0),
+    // WHY(cancelled を除く、E-056): 取り消した返却は残数に数えない。DB 側
+    //      （loan_outstanding_count・過剰返却トリガー）と `orders/repository.ts` も同じ条件。
+    //      **同じ問いの答えを 3 か所で揃える**（E-053 で 2 か所が食い違った）
+    returnedQuantity: (row.loan_return_items ?? [])
+      .filter(r => asString(r.loan_returns?.status) !== 'cancelled')
+      .reduce((n, r) => n + asNumber(r.quantity), 0),
   }
 }
 
@@ -55,8 +61,9 @@ export async function listLoanOrders(
 ): Promise<LoanOrder[]> {
   let query = db
     .from('loan_orders')
-    // WHY(2026-09-08): 返却フォームが明細ごとの残数を出すため、紐付いた返却の数量まで取る
-    .select('*, loan_order_items(*, loan_return_items(quantity))')
+    // WHY(2026-09-08): 返却フォームが明細ごとの残数を出すため、紐付いた返却の数量まで取る。
+    //      取り消した返却を除くので、親の状態（loan_returns.status）も取る（E-056）
+    .select('*, loan_order_items(*, loan_return_items(quantity, loan_returns(status)))')
     .eq('facility_id', facilityId)
     .order('created_at', { ascending: false })
 

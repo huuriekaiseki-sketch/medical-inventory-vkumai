@@ -8,6 +8,7 @@ import { formatJstDate, formatJstDateTime } from '@/lib/format-date'
 const STATUS_LABEL: Record<string, string> = {
   draft: '下書き',
   returned: '返却済',
+  cancelled: '取り消し済',
 }
 
 export default function LoanReturnsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -15,6 +16,7 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
   const [returns, setReturns] = useState<LoanReturn[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -27,6 +29,32 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
       cancelled = true
     }
   }, [id])
+
+  // WHY(E-056): 間違えて登録した返却を、製品の中で直せるようにする。
+  //      **行は消さず取り消し状態にする**ので、一覧には「取り消し済」として残り、
+  //      誰がいつ取り消したかは監査ログに残る。残数と未返却の件数からは除かれる。
+  const handleCancel = async (ret: LoanReturn) => {
+    if (!confirm('この返却を取り消しますか？（取り消すと元に戻せません）')) return
+    setCancellingId(ret.id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/loan-returns/${ret.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ facilityId: id, action: 'cancel' }),
+      })
+      if (!res.ok) {
+        const { error: message } = await res.json().catch(() => ({ error: '取り消しに失敗しました' }))
+        setError(message ?? '取り消しに失敗しました')
+        return
+      }
+      setReturns(prev => prev.map(r => (r.id === ret.id ? { ...r, status: 'cancelled' } : r)))
+    } catch {
+      setError('取り消しに失敗しました')
+    } finally {
+      setCancellingId(null)
+    }
+  }
 
   const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
 
@@ -70,6 +98,7 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>返却日時</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>ステータス</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>作成日</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -81,6 +110,21 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
                   <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>{STATUS_LABEL[ret.status] ?? ret.status}</td>
                   <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                     {formatJstDate(ret.createdAt)}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    {ret.status === 'cancelled' ? (
+                      <span style={{ color: '#6B7280' }}>—</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleCancel(ret)}
+                        disabled={cancellingId === ret.id}
+                        className="text-sm hover:underline disabled:opacity-50"
+                        style={{ color: '#B91C1C' }}
+                      >
+                        {cancellingId === ret.id ? '取り消し中…' : '取り消す'}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

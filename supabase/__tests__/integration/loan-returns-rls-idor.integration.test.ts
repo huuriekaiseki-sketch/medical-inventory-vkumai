@@ -241,5 +241,121 @@ describe('loan_returns RLS/IDOR [P-010 P-012 P-015 I-030]', () => {
       const total = (items ?? []).reduce((n, i) => n + (i.quantity as number), 0)
       expect(total, '借りた数を超えて記録が残った').toBe(1)
     })
+
+    // WHY(E-056): 間違えて登録した返却を直せるようにした（20260908060000）。
+    //      **行は消さず `cancelled` にする**ので、取り消した返却は
+    //      「残数」「未返却の件数」のどちらからも除かれなければならない。
+    //      除かれていないと、取り消しても返し直せない（残数が戻らない）。
+    describe('返却の取り消し [I-030 I-021]', () => {
+      it('取り消すと残数が戻り、同じ数だけ返し直せる', async () => {
+        const { orderId, itemId } = await createLoanOrderForFacilityA(2)
+
+        const first = await makeReturn(orderId, itemId, 2)
+        expect(first.error, JSON.stringify(first.error)).toBeNull()
+        const returnId = (first.data as { id: string }).id
+
+        // 全部返したので、もう 1 本も返せない
+        const before = await makeReturn(orderId, itemId, 1)
+        expect(before.error?.code, '全部返したのに、まだ返せてしまう').toBe('23514')
+
+        // 取り消す
+        const { data: cancelled, error: cancelError } = await fixtures.userA.client
+          .from('loan_returns')
+          .update({ status: 'cancelled' })
+          .eq('id', returnId)
+          .select('id, status')
+          .single()
+        expect(cancelError, JSON.stringify(cancelError)).toBeNull()
+        expect(cancelled!.status).toBe('cancelled')
+
+        // 残数が戻り、返し直せる
+        const after = await makeReturn(orderId, itemId, 2)
+        expect(after.error, '取り消したのに残数が戻っていない').toBeNull()
+      })
+
+      // WHY(基準ではなく前後差で見る): この施設には他のテストが作った発注も残っている。
+      //      固定の基準と比べると、テストの実行順で結果が変わる（最初にそれで落ちた）。
+      //      **自分の操作の前後の差**だけを見れば、他の行が何件あっても成り立つ。
+      it('取り消した返却は未返却の件数に数えない（数えると発注が返却済みに見える）', async () => {
+        const outstanding = async () => {
+          const { data } = await fixtures.userA.client.rpc('loan_outstanding_count', {
+            p_facility_id: fixtures.facilityA.id,
+          })
+          return data as number
+        }
+
+        const { orderId, itemId } = await createLoanOrderForFacilityA(1)
+        const withOrder = await outstanding()
+
+        const created = await makeReturn(orderId, itemId, 1)
+        expect(created.error, JSON.stringify(created.error)).toBeNull()
+        const returnId = (created.data as { id: string }).id
+
+        const afterReturn = await outstanding()
+        expect(afterReturn, '全部返したのに未返却が減らない').toBe(withOrder - 1)
+
+        await fixtures.userA.client
+          .from('loan_returns')
+          .update({ status: 'cancelled' })
+          .eq('id', returnId)
+
+        const afterCancel = await outstanding()
+        expect(
+          afterCancel,
+          '取り消したのに未返却へ戻らない（取り消した返却をまだ数えている）'
+        ).toBe(withOrder)
+      })
+
+      it('取り消しからは戻れない（終端）', async () => {
+        const { orderId, itemId } = await createLoanOrderForFacilityA(1)
+        const created = await makeReturn(orderId, itemId, 1)
+        const returnId = (created.data as { id: string }).id
+
+        await fixtures.userA.client
+          .from('loan_returns')
+          .update({ status: 'cancelled' })
+          .eq('id', returnId)
+
+        const { error } = await fixtures.userA.client
+          .from('loan_returns')
+          .update({ status: 'returned' })
+          .eq('id', returnId)
+        expect(error?.code, '取り消しから戻せてしまう').toBe('23514')
+      })
+
+      it('決めていない状態にはできない（語彙は draft / returned / cancelled だけ）', async () => {
+        const { orderId, itemId } = await createLoanOrderForFacilityA(1)
+        const created = await makeReturn(orderId, itemId, 1)
+        const returnId = (created.data as { id: string }).id
+
+        const { error } = await fixtures.userA.client
+          .from('loan_returns')
+          .update({ status: 'voided' })
+          .eq('id', returnId)
+        expect(error?.code, '知らない状態が通ってしまう').toBe('23514')
+      })
+
+      it('他施設の利用者は取り消せない', async () => {
+        const { orderId, itemId } = await createLoanOrderForFacilityA(1)
+        const created = await makeReturn(orderId, itemId, 1)
+        const returnId = (created.data as { id: string }).id
+
+        const { data, error } = await fixtures.userB.client
+          .from('loan_returns')
+          .update({ status: 'cancelled' })
+          .eq('id', returnId)
+          .select('id')
+        expect(error).toBeNull()
+        expect(data ?? [], '他施設の返却を取り消せてしまった').toEqual([])
+
+        const serviceClient = createServiceRoleClient()
+        const { data: still } = await serviceClient
+          .from('loan_returns')
+          .select('status')
+          .eq('id', returnId)
+          .single()
+        expect(still!.status).toBe('returned')
+      })
+    })
   })
 })

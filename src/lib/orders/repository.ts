@@ -56,7 +56,8 @@ interface LoanOrderRow {
   loan_order_items?: {
     name?: unknown
     quantity?: unknown
-    loan_return_items?: { quantity?: unknown }[]
+    // WHY(2026-09-08・E-056): 取り消した返却は残数に数えない。親の状態が要るので一緒に取る
+    loan_return_items?: { quantity?: unknown; loan_returns?: { status?: unknown } | null }[]
   }[]
 }
 
@@ -153,7 +154,10 @@ async function fetchLoanOrderItems(db: SupabaseClient, facilityId: string, filte
   //      「返却が 1 件でもあれば返却済み」だと、一部だけ返した発注が消えてしまう。
   let query = db
     .from('loan_orders')
-    .select('*, loan_order_items(name, quantity, loan_return_items(quantity))')
+    // WHY(loan_returns(status) まで取る、2026-09-08・E-056): 取り消した返却は残数に数えない。
+    //      DB 側（loan_outstanding_count・過剰返却トリガー）も同じ条件で数えている。
+    //      **同じ問いの答えを揃える**（E-053 で 2 か所が食い違った）
+    .select('*, loan_order_items(name, quantity, loan_return_items(quantity, loan_returns(status)))')
     .eq('facility_id', facilityId)
     .order('created_at', { ascending: false })
 
@@ -178,7 +182,9 @@ async function fetchLoanOrderItems(db: SupabaseClient, facilityId: string, filte
       // 明細ごとに「借りた数 − 紐付いた返却の合計」を足し合わせる。負にはしない（過剰返却は DB が拒否する）
       const outstandingQuantity = (o.loan_order_items ?? []).reduce((sum, item) => {
         const ordered = asNumber(item.quantity)
-        const returned = (item.loan_return_items ?? []).reduce((n, r) => n + asNumber(r.quantity), 0)
+        const returned = (item.loan_return_items ?? [])
+          .filter(r => asString(r.loan_returns?.status) !== 'cancelled')
+          .reduce((n, r) => n + asNumber(r.quantity), 0)
         return sum + Math.max(ordered - returned, 0)
       }, 0)
       const unreturned = status === 'submitted' && outstandingQuantity > 0

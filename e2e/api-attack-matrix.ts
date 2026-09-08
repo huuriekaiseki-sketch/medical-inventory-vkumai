@@ -49,6 +49,9 @@ export const ATTACK_MATRIX: Record<string, RouteAttacks> = {
   '/api/loan-returns': {
     POST: { body: { facilityId: FACILITY_A, returnDatetime: ISO, loanOrderId: LOAN_ORDER_A, items: [] }, note: '施設 A の実在する短貸発注に対する返却の詐称' },
   },
+  '/api/loan-returns/[id]': {
+    PATCH: { pathId: 'random', body: { facilityId: FACILITY_A, action: 'cancel' }, note: '施設 A の返却を勝手に取り消せない（E-056）。id は存在しない UUID で、認可が先に 403 を返すこと' },
+  },
   '/api/consumables': {
     POST: { body: { facilityId: FACILITY_A, name: '攻撃テスト用消耗品', purpose: '攻撃テスト' } },
   },
