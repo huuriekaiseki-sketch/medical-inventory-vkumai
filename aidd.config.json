@@ -79,6 +79,7 @@
     },
     "requestsPerMinute": 300,
     "invitesPerDay": 50,
-    "authJudgmentTimeoutMs": 5000
+    "authJudgmentTimeoutMs": 5000,
+    "localLogRowsWarnAt": 800
   }
 }

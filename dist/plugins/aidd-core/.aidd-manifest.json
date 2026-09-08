@@ -20,7 +20,7 @@
     "bin/show-agent-status.sh": "ffc7f5007394835109a028488c71eb6d13f3b08f12d7581ac9b38c692e774d24",
     "evidence/vkumai-2026-09-05.md": "7962b68d469c89879f2efd4b162537b158c782ea6ea9f2d31996e22c624bbc4e",
     "hooks/hooks.json": "c8c3e5bcd1acae4c905810bd0f3871be9860aebe8872435fd9dd48dd0fc8a725",
-    "schema/aidd-config.schema.json": "c53d590c9dcd38014b5fe907da626312899da53a3d1587a949dbe0970e42c3cb",
+    "schema/aidd-config.schema.json": "2068632dd0f9b71ae7a2ad6db423c760e6c9da8f6d9b8adde6582b6af9810544",
     "scripts/check-access-review-staleness.sh": "4185028711c70e3d193ea43d1e54a07f22f90e1ef9e75da026814180e6dd72db",
     "scripts/check-access-review-staleness.test.sh": "faac9bde128828f0ca584417c4be45a9bbb4620f95bf3b6f2a63557628e858ae",
     "scripts/check-aidd-phase-stats-recorded.sh": "59783cc1b76f3d1a9992278f302be78c36027ff8380bd879370025da807802e1",
