@@ -35,8 +35,11 @@ WORK_DIR="$(mktemp -d)"
 STUB_LOG="$WORK_DIR/stub.log"
 PORT_FILE="$WORK_DIR/port"
 
-# PostgREST の代わり。HEAD に content-range を返し、問い合わせが来たことを記録する。
-# rows= で「全部の表がこの行数」と答える。
+# PostgREST の代わり。HEAD に content-range を返し、GET には行の配列を返し、
+# 問い合わせが来たことを記録する。
+# rows= で「全部の表がこの行数」、groups= で「その行が何通りの値に分かれているか」を決める。
+# WHY(groups): 2026-09-08 に数え方を「表の総行数」から「1 回の問い合わせが返す塊」へ変えた。
+#      塊で数えていることを測るには、**同じ総行数でも塊の大きさが違う**状況を作る必要がある。
 cat > "$WORK_DIR/stub.mjs" <<'NODE'
 import http from 'node:http'
 import fs from 'node:fs'
@@ -44,21 +47,38 @@ import fs from 'node:fs'
 const rows = Number(process.argv[2])
 const logPath = process.argv[3]
 const portPath = process.argv[4]
+const groups = Number(process.argv[5] ?? 1)
+
 const server = http.createServer((req, res) => {
   fs.appendFileSync(logPath, req.url + '\n')
-  res.setHeader('content-range', `0-0/${rows}`)
-  res.writeHead(206)
-  res.end()
+  if (req.method === 'HEAD') {
+    res.setHeader('content-range', `0-0/${rows}`)
+    res.writeHead(206)
+    res.end()
+    return
+  }
+  // GET: select=<列>&limit=N&offset=M。列名はそのまま返す
+  const u = new URL(req.url, 'http://x')
+  const column = (u.searchParams.get('select') ?? 'x').split(',')[0]
+  const limit = Number(u.searchParams.get('limit') ?? rows)
+  const offset = Number(u.searchParams.get('offset') ?? 0)
+  const body = []
+  for (let i = offset; i < Math.min(rows, offset + limit); i++) {
+    body.push({ [column]: `g${i % groups}` })
+  }
+  res.setHeader('content-type', 'application/json')
+  res.writeHead(200)
+  res.end(JSON.stringify(body))
 })
 server.listen(0, '127.0.0.1', () => {
   fs.writeFileSync(portPath, String(server.address().port))
 })
 NODE
 
-start_stub() { # $1=返す行数
+start_stub() { # $1=返す行数 $2=塊の数（省略時 1＝全部が同じ塊）
   : > "$STUB_LOG"
   rm -f "$PORT_FILE"
-  node "$WORK_DIR/stub.mjs" "$1" "$STUB_LOG" "$PORT_FILE" &
+  node "$WORK_DIR/stub.mjs" "$1" "$STUB_LOG" "$PORT_FILE" "${2:-1}" &
   STUB_PID=$!
   for _ in $(seq 1 50); do
     [ -s "$PORT_FILE" ] && break
@@ -85,8 +105,8 @@ if [ -z "${STUB_PORT:-}" ]; then
 else
   OUT="$(run_check 800 "http://127.0.0.1:$STUB_PORT")"
   assert_contains "$OUT" "積み上がっています" "積み上がりを知らせる"
-  assert_contains "$OUT" "audit_log=1200 行" "表の名前と行数を出す"
-  assert_contains "$OUT" "access_denials=1200 行" "同じ形の他の表も出す"
+  assert_contains "$OUT" "audit_log の table_name=g0 が 1200 行" "表と分類列と塊の大きさを出す"
+  assert_contains "$OUT" "access_denials の guard=g0 が 1200 行" "同じ形の他の表も出す"
   assert_contains "$OUT" "db reset" "作り直す手段を案内する"
   assert_contains "$OUT" "E-022" "同じ型の過去の事故を指す"
 fi
@@ -94,11 +114,13 @@ stop_stub
 
 echo "=== scenario 4: append-only の表を migrations から実際に見つけている（空振り防止） ==="
 # WHY: 表を 1 つも見つけられなくても、この警告は「何も出ない」だけで正常に見える。
-#      問い合わせ先の URL を数えて、実際に複数の表を当たったことを確かめる。
+#      問い合わせ先を数えて、実際に複数の表を当たったことを確かめる。
+#      **表の名前まで削って数える**（塊で数えるようになって 1 表につき複数ページ問い合わせるため、
+#      URL のまま数えると 1 表しか当たっていなくても数が増えてしまう）。
 start_stub 1200
 if [ -n "${STUB_PORT:-}" ]; then
   run_check 800 "http://127.0.0.1:$STUB_PORT" > /dev/null
-  ASKED="$(sort -u "$STUB_LOG" | grep -c . || true)"
+  ASKED="$(sed -e 's#?.*##' "$STUB_LOG" | sort -u | grep -c . || true)"
   if [ "$ASKED" -ge 3 ]; then
     echo "  OK: $ASKED 個の表を実際に当たっている"
   else
@@ -114,6 +136,26 @@ start_stub 10
 if [ -n "${STUB_PORT:-}" ]; then
   OUT="$(run_check 800 "http://127.0.0.1:$STUB_PORT")"
   assert_not_contains "$OUT" "積み上がっています" "少なければ何も言わない"
+fi
+stop_stub
+
+echo "=== scenario 7: 総行数ではなく塊で数える（同じ行数でも塊が小さければ黙る） ==="
+# WHY(2026-09-08): 切り落とされるのは 1 回の問い合わせが返す行であって表そのものではない。
+#      総行数で数えると、作り直した直後の DB でも 1 周回すだけで越えて**毎回鳴る**
+#      （実測: audit_log 総数 2,467 行に対し最大の塊 446 行）。
+#      **同じ総行数で塊の数だけを変えて**両方向を測る。片方だけだと総行数のままでも緑になる。
+start_stub 3000 10   # 3,000 行だが 10 通りに分かれる → 最大の塊は 300 行
+if [ -n "${STUB_PORT:-}" ]; then
+  OUT="$(run_check 800 "http://127.0.0.1:$STUB_PORT")"
+  assert_not_contains "$OUT" "積み上がっています" "総行数が閾値の 3 倍以上でも、塊が小さければ黙る"
+fi
+stop_stub
+
+start_stub 3000 2    # 同じ 3,000 行でも 2 通りなら 1 塊 1,500 行 → 鳴る（対照）
+if [ -n "${STUB_PORT:-}" ]; then
+  OUT="$(run_check 800 "http://127.0.0.1:$STUB_PORT")"
+  assert_contains "$OUT" "積み上がっています" "塊が閾値を越えたら鳴る（対照）"
+  assert_contains "$OUT" "が 1500 行" "塊の大きさを出す"
 fi
 stop_stub
 
