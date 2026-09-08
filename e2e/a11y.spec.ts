@@ -38,18 +38,41 @@ const PENDING_CONTRAST: ReadonlyArray<{ fg: string; bg: string; ratio: string; w
   { fg: '#9ca3af', bg: '#ffffff', ratio: '2.53', why: '補足文の薄い灰色。3 ファイル' },
 ]
 
-/** ページ別の既知の件数（2026-09-07 実測）。**増やしてはいけない** */
+/**
+ * ページ別の既知の**場所**の数。**増やしてはいけない**。
+ *
+ * WHY(2026-09-08 に「件数」から「場所の数」へ変えた): 以前は axe が返したノードを 1 件ずつ
+ *      数えていたので、**一覧の行が増えるだけで数が増えた**。`/news` は 1 行につき 1 か所
+ *      （日時の薄い灰色）を出すので、手元の DB に製品が増えるほど数が増え、基準 12 に対して
+ *      20 になって落ちた（実測）。**コードは 1 行も変わっていない**。
+ *      消せないデータが積み上がってテストが壊れる形は E-022 / E-023 と同じで、これが 3 回目。
+ *      見たいのは「同じ配色が**新しい場所**に増えていないか」なので、
+ *      配色 + タグ + class の署名で重複を潰し、行数に依存しない単位で数える。
+ */
 const PENDING_COUNT: Record<string, number> = {
+  // 2026-09-08 実測（基準を 0 にして出た値そのまま。緩めない）
   '/products': 2,
   '/categories': 1,
-  '/distributor-products': 3,
-  '/news': 12,
+  '/distributor-products': 2,
+  '/news': 1,
 }
 
 function isPending(fg: unknown, bg: unknown): boolean {
   return PENDING_CONTRAST.some(
     (p) => p.fg === String(fg).toLowerCase() && p.bg === String(bg).toLowerCase()
   )
+}
+
+/**
+ * 「同じ場所」を表す署名。位置・並び順・中の文字は無視し、配色と見た目の指定だけを見る。
+ * 一覧の 20 行が同じ書き方なら 1 か所と数える。
+ */
+function pendingPlace(html: string | undefined, fg: unknown, bg: unknown): string {
+  const el = html ?? ''
+  const tag = /^<(\w+)/.exec(el)?.[1] ?? '?'
+  const cls = /class="([^"]*)"/.exec(el)?.[1] ?? ''
+  const style = /style="([^"]*)"/.exec(el)?.[1] ?? ''
+  return `${String(fg)}/${String(bg)} ${tag}[${cls}][${style}]`
 }
 
 test.describe('画面の操作性（アクセシビリティ）', () => {
@@ -73,13 +96,13 @@ test.describe('画面の操作性（アクセシビリティ）', () => {
         return `    ${n.html?.slice(0, 100) ?? ''}${measured}`
       }
 
-      let pendingNodes = 0
+      const pendingPlaces = new Set<string>()
       const unexpected: string[] = []
       for (const v of blocking) {
         for (const node of v.nodes) {
           const data = (node.any?.[0]?.data ?? {}) as Record<string, unknown>
           if (v.id === 'color-contrast' && isPending(data.fgColor, data.bgColor)) {
-            pendingNodes += 1
+            pendingPlaces.add(pendingPlace(node.html, data.fgColor, data.bgColor))
             continue
           }
           unexpected.push(`${v.impact} ${v.id}: ${v.help}\n${describe(node)}`)
@@ -91,11 +114,12 @@ test.describe('画面の操作性（アクセシビリティ）', () => {
         `${path} に新しい重大な違反がある:\n  ${unexpected.join('\n  ')}`
       ).toEqual([])
 
-      // 既知の配色でも件数が増えたら止める（同じ色を新しい場所に増やさせない）
+      // 既知の配色でも「場所」が増えたら止める（同じ色を新しい書き方で増やさせない）
       const allowed = PENDING_COUNT[path] ?? 0
       expect(
-        pendingNodes,
-        `${path} の既知の配色の件数が基準（${allowed}）より増えた。docs/agents/a11y-baseline.md を見て直す`
+        pendingPlaces.size,
+        `${path} の既知の配色の場所が基準（${allowed}）より増えた。` +
+          `docs/agents/a11y-baseline.md を見て直す\n  ${[...pendingPlaces].join('\n  ')}`
       ).toBeLessThanOrEqual(allowed)
 
       // moderate / minor は 0 を保つ（今日時点で 0 件）
