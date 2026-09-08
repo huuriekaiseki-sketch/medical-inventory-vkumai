@@ -20,6 +20,21 @@ export function authGuardError(error: unknown) {
   return apiError('認証が必要です', 401)
 }
 
+/**
+ * repository 層のエラーから応答を作る（書き込み経路用）。
+ *
+ * WHY: ClientVisibleError は「利用者に見せてよい」と repository が翻訳済みのエラーで、
+ *      中身は**利用者の入力が原因**（未登録の JAN・業務ルール違反・重複）。これを 500 で返すと、
+ *      利用者が自分で直せる間違いが「サーバーの故障」に見える。
+ *      2026-09-08 の時点で 400 を返していたのは短貸返却だけで、症例発注・短貸発注・
+ *      消耗品発注は文言だけ差し替えて 500 のままだった。判定を 1 か所に集める。
+ */
+export function repositoryError(error: unknown, fallbackMessage: string) {
+  if (error instanceof ClientVisibleError) return apiError(error.message, 400)
+  logServerError('api', error)
+  return apiError(fallbackMessage, 500)
+}
+
 // WHY: Supabase/Postgresの生エラーメッセージにはテーブル名・制約名が含まれうるため、
 //      クライアントに返す前に必ずこの関数を通してスキーマ情報の漏洩を防ぐ。
 //      ClientVisibleErrorのインスタンス(repository層が明示的に翻訳済みと保証した安全なメッセージ)

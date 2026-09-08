@@ -4,6 +4,7 @@ import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ItemRowInput, type ItemRow } from '@/components/orders/ItemRowInput'
+import { jstLocalInputToIso } from '@/lib/format-date'
 import type { OrderListItem } from '@/types/order'
 
 export default function NewLoanReturnPage({ params }: { params: Promise<{ id: string }> }) {
@@ -54,7 +55,7 @@ export default function NewLoanReturnPage({ params }: { params: Promise<{ id: st
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           facilityId: id,
-          returnDatetime,
+          returnDatetime: jstLocalInputToIso(returnDatetime),
           items: items.map(r => ({ jan: r.jan, lot: r.lot || undefined, ubd: r.ubd || undefined, quantity: r.quantity })),
           ...(loanOrderId ? { loanOrderId } : {}),
           clientRequestId,

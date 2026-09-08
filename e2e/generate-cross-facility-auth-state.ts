@@ -25,6 +25,15 @@ export interface CrossFacilityFixtures {
   loanOrderProcedureName: string
   /** 施設 A にシードした短貸発注の ID（api-cross-facility-attack.spec.ts が path / body に入れて攻撃する。P-017） */
   loanOrderId?: string
+  /**
+   * 明細に入れられる、実在する製品の JAN。
+   *
+   * WHY(2026-09-08 追加): `case_order_items` / `loan_order_items` / `loan_return_items` の
+   *      `jan` は `products.jan` への外部キー（`*_jan_fkey`）。**未登録の JAN では明細を作れない**
+   *      ので、発注・返却の正常系を画面から測るには実在する製品が要る。
+   *      既存の製品を探して使うと DB の中身にテストが依存するため、実行ごとに 1 件作る。
+   */
+  productJan?: string
 }
 
 export const CROSS_FACILITY_FIXTURES_PATH = path.join(process.cwd(), 'e2e', '.auth', 'cross-facility-fixtures.json')
@@ -120,6 +129,15 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     throw new Error(`[E2E cross-facility auth] loan_ordersシード失敗: ${loanOrderError?.message}`)
   }
 
+  // 明細に入れる製品を 1 件作る（products はマスタなので施設に属さない）
+  const productJan = `e2e-jan-${runId}`
+  const { error: productError } = await supabase
+    .from('products')
+    .insert({ jan: productJan, ref: `e2e-ref-${runId}` })
+  if (productError) {
+    throw new Error(`[E2E cross-facility auth] products シード失敗: ${productError.message}`)
+  }
+
   await signInAndSaveStorageState(supabase, emailA, CROSS_FACILITY_USER_A_AUTH_PATH)
   await signInAndSaveStorageState(supabase, emailB, CROSS_FACILITY_USER_B_AUTH_PATH)
 
@@ -128,6 +146,7 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     facilityBId: facilityB.id as string,
     loanOrderProcedureName,
     loanOrderId: loanOrder.id as string,
+    productJan,
   }
   fs.writeFileSync(CROSS_FACILITY_FIXTURES_PATH, JSON.stringify(fixtures))
   console.log(`[E2E cross-facility auth] フィクスチャを書き出しました: ${CROSS_FACILITY_FIXTURES_PATH}`)

@@ -4,6 +4,7 @@ import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ItemRowInput, type ItemRow } from '@/components/orders/ItemRowInput'
+import { jstLocalInputToIso } from '@/lib/format-date'
 
 export default function NewCaseOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -32,7 +33,7 @@ export default function NewCaseOrderPage({ params }: { params: Promise<{ id: str
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           facilityId: id,
-          caseDatetime,
+          caseDatetime: jstLocalInputToIso(caseDatetime),
           procedureName,
           patientId,
           patientInitials,
