@@ -37,7 +37,7 @@
 | ID | 不変条件 | 守る場所 | 破る操作 | 期待 | 守るテスト | 状態 |
 | --- | --- | --- | --- | --- | --- | --- |
 | I-020 | 発注（3 種）と返却の状態は前にしか進まない（draft → submitted / returned）。draft 以外からは変えられない | トリガー `enforce_status_forward_only`（BEFORE UPDATE OF status、check_violation） | service_role で submitted → draft に UPDATE | 23514。status は submitted のまま | `supabase/__tests__/integration/business-invariants.integration.test.ts`、`supabase/migrations/__tests__/add_business_invariant_checks.test.ts`。順番の組み合わせは `supabase/__tests__/integration/invariant-properties.integration.test.ts` | 実装済み |
-| I-021 | 状態の値は決められた語だけ（draft / submitted、返却は draft / returned） | CHECK（20260624000000 の `status IN (...)`） | 未知の status で INSERT | 23514 | 未 | 計画 |
+| I-021 | 状態の値は決められた語だけ（draft / submitted、返却は draft / returned） | CHECK（20260624000000 の `status IN (...)`） | 未知の status へ UPDATE する | 23514。決めてある値へは進める（対照） | `supabase/__tests__/integration/business-invariants.integration.test.ts`（消耗品発注で実測。他の 3 表は同じ形の CHECK で未実測） | 実装済み |
 
 ## 関係の個数
 
@@ -67,7 +67,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | I-060 | 症例発注の術式名は 200 文字以内、患者 ID は 100 文字以内、イニシャルは 20 文字以内、医師名は 100 文字以内 | CHECK `case_orders_text_length`（20260907000004、NOT VALID） | 1 MB の術式名で発注を作る | 23514。ヘッダも明細も残らない | `supabase/__tests__/integration/text-length-limits.integration.test.ts`、`supabase/migrations/__tests__/add_text_length_limits.test.ts` | 実装済み |
 | I-061 | 短貸発注の術式名とメーカー名は 200 文字以内 | CHECK `loan_orders_text_length` | 長いメーカー名で発注を作る | 23514 | `supabase/__tests__/integration/text-length-limits.integration.test.ts` | 実装済み |
-| I-062 | 明細の JAN は 64 文字以内、ロットと使用期限は 100 文字以内、品名は 200 文字以内 | CHECK `case_order_items_text_length` / `loan_order_items_text_length` / `loan_return_items_text_length` | 長い JAN の明細を直接 INSERT する | 23514 | `supabase/__tests__/integration/text-length-limits.integration.test.ts` | 実装済み |
+| I-062 | 明細の JAN は 64 文字以内、ロットと使用期限は 100 文字以内、品名は 200 文字以内。**列は表ごとに違う**（`loan_order_items` は lot / ubd を持たず jan と name だけ） | CHECK `case_order_items_text_length` / `loan_order_items_text_length` / `loan_return_items_text_length` | 各表へ上限 +1 文字を直接 INSERT する（境界ちょうども見る） | 23514。境界ちょうどは通る | `supabase/__tests__/integration/text-length-limits.integration.test.ts`（case）、`supabase/__tests__/integration/business-invariants.integration.test.ts`（loan 発注・返却。2026-09-08 まで case の 1 表しか測っていなかった） | 実装済み |
 | I-063 | 消耗品の品名は 200 文字以内、用途は 1,000 文字以内 | CHECK `consumables_text_length` | 長い用途で消耗品を作る | 23514 | `supabase/__tests__/integration/text-length-limits.integration.test.ts` | 実装済み |
 | I-064 | 施設名は 200 文字以内 | CHECK `facilities_text_length` | 200,000 文字の施設名を作る | 23514 | `supabase/__tests__/integration/text-length-limits.integration.test.ts` | 実装済み |
 | I-065 | マスタの JAN と品番は 64 文字以内、名称・メーカー・仕入先は 200 文字以内 | CHECK `products_text_length` / `categories_text_length` / `distributor_products_text_length` | 5,000 文字の JAN で商品を作る | 23514 | `supabase/__tests__/integration/text-length-limits.integration.test.ts` | 実装済み |
@@ -82,6 +82,39 @@
 | I-051 | NOT VALID で入れた CHECK（I-01x）に違反する既存行が 0 件（pg_constraint から動的に列挙し `NOT (制約式)` で数える。制約を足しても検査側の変更は不要） | 同上の夜間検査 | 制約導入前の古い行 | 違反があれば `I-051:<制約名>` が detected。0 件なら VALIDATE CONSTRAINT へ | `supabase/__tests__/integration/business-invariants-nightly.integration.test.ts`、`supabase/migrations/__tests__/add_nightly_invariant_check.test.ts` | 実装済み |
 | I-052 | 施設を削除すると、その施設の所属・発注 3 種・明細・返却・消耗品・価格・価格履歴が残らない。監査ログ（`audit_log`）は FK を張らず意図的に残す（削除の証跡）。マスタと マスタの価格履歴は消えない | FK `ON DELETE CASCADE`（20260624000000 / 20260627010000 / 20260618063046）、`price_histories` は FK が無いためトリガー `hospital_prices_delete_price_histories`（20260906000007） | service_role で施設を DELETE して各表を数える | 施設スコープの 12 表が 0 件。audit_log に facilities / case_orders の DELETE が残る | `supabase/__tests__/integration/facility-delete-cascade.integration.test.ts`、`supabase/migrations/__tests__/delete_price_histories_with_hospital_price.test.ts` | 実装済み |
 
+## CHECK 制約の棚卸し（2026-09-08）
+
+**「カタログに載っている」と「実 DB で測っている」は別。** 実 DB の CHECK を全部並べて、
+1 件ずつ「破る操作を試しているテストがあるか」を当たった。
+
+| | 件数 |
+| --- | --- |
+| 実 DB の CHECK 制約 | **47** |
+| 破る操作を測っているテストがある | 40 |
+| **書けないので測れない**（GRANT が手前で拒否する） | 7 |
+| 測っていなかった（この日に追加した） | **5** |
+
+**測っていなかった 5 件**（どれも「同じ不変条件を表ごとに宣言して、1 表しか測っていない」形）:
+
+- `consumable_order_items_unit_price_nonnegative` … I-012 は全明細表を指しているのに、
+  測っていたのは `loan_order_items` だけだった
+- `loan_return_items_text_length` … 発注明細側は測っていたが返却明細だけ抜けていた
+- `consumable_orders_status_check` … 状態の**語彙**（I-020 の「前にしか進まない」とは別の約束。
+  カタログでは I-021 として「計画」のまま残っていた）
+- `loan_order_items_text_length` … I-062 は 3 つの CHECK を 1 行で宣言しているが、
+  測っていたのは `case_order_items` だけだった（残り 2 表をこの日に追加）
+
+**書けないので測れない 7 件**（`audit_log` 1 / `price_histories` 2 / `schema_drift_log` 2 /
+`rate_limit_counters` 2）: service_role でも INSERT が 42501 で拒否される（2026-09-08 に実測）。
+CHECK の手前に GRANT というより強い扉があるので、アプリ側からは到達できない。
+**これは穴ではなく、二重の防御が効いている状態**。トリガーや SECURITY DEFINER 関数を
+経由した書き込みは、それぞれの表の統合テストが別に見ている。
+
+**この棚卸しの当たり方の限界**: 最初は「その表を触るテストが 23514 を期待しているか」で機械的に
+数えたが、**RPC 経由で破るテストを 1 つも拾えず 2 件を誤って「無防備」と数えた**
+（`create_consumable_order_atomic` に quantity 0 を渡す形）。機械の当たりだけで結論を出さず、
+1 件ずつ中身を読んで確かめている。次に同じ棚卸しをするときも同じ手当てが要る。
+
 ## 限界
 
 - **条件が業務上正しいかは見ない。** DB がその条件を守っているかしか見ない。
@@ -92,3 +125,7 @@
   違反行はそのまま残る。夜間検査で 0 件を確認してから `VALIDATE CONSTRAINT` するまでは穴。
 - **アプリ側の入力検証は数えていない。** 画面で弾いていても DB に CHECK が無ければ
   この表では「守っていない」。逆に DB にあれば画面の有無は問わない。
+- **同じ不変条件を複数の表に宣言したとき、全部を測っているとは限らない。**
+  2026-09-08 の棚卸しで見つけた 3 件はすべてこの形だった（1 表だけ測って済ませていた）。
+  カタログの行は `*_order_items_...` のようにワイルドカードで書けてしまうので、
+  **行を読んだだけでは何表ぶん測ったか分からない**。
