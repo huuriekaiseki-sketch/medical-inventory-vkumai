@@ -34,7 +34,11 @@ function isUnknownJanViolation(error: PostgresError): boolean {
  *      括弧の中だけを取り出す。取れなければ値を添えない（推測で埋めない）。
  */
 function extractJan(details?: string | null): string | undefined {
-  const m = /Key \(jan\)=\(([^)]*)\)/.exec(details ?? '')
+  // WHY(空を先に返す・2026-09-08): 以前は `details ?? ''` を正規表現に渡していた。
+  //      その空文字を別の文字列に変える変異が**どう変えても結果が同じ**（等価変異）で、
+  //      殺せないまま残った。例外として登録するより、**渡さない形にして変異ごと無くす**。
+  if (!details) return undefined
+  const m = /Key \(jan\)=\(([^)]*)\)/.exec(details)
   return m?.[1]
 }
 

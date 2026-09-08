@@ -5,11 +5,13 @@
 //      20260908030000 で明細どうしを紐付け（`loan_return_items.loan_order_item_id`）、
 //      借りた数を超える返却をトリガーで拒否するようにした。
 //
-//      ここで実 DB に固定するのは 4 つ:
+//      ここで実 DB に固定するのは 5 つ:
 //        1. 同じ発注へ 2 回目の返却ができる（UNIQUE を外したこと）
 //        2. 借りた数を超える返却は拒否される（23514）
 //        3. 数え方（`loan_outstanding_count`）が残数を見ている
 //        4. 紐付けの無い返却は残数にも上限にも関わらない（従来の経路を塞いでいない）
+//        5. `loan_outstanding_count` に他施設の ID を渡しても 0（SECURITY DEFINER にしていないので
+//           RLS がそのまま効く、という**関数のコメントに書いた主張**を実測で裏づける）
 
 import { randomUUID } from 'crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -139,6 +141,34 @@ describe('分割返却と過剰返却の拒否 [I-030 P-050]', () => {
     const linked = await returnItems(orderId, [{ itemId, quantity: 1 }])
     expect(linked.error).toBeNull()
     expect(await outstanding()).toBe(before)
+  })
+
+  it('未返却の数え方は施設をまたがない（他施設の ID を渡しても 0）', async () => {
+    // WHY: `loan_outstanding_count` は SECURITY DEFINER にしていない（呼び出した利用者の権限で走る）。
+    //      「だから RLS がそのまま効く」と関数のコメントに書いたが、**書いただけでは主張でしかない**。
+    //      施設 B に未返却の発注を作ったうえで、施設 A の利用者がその施設 ID を渡して 0 になることを測る。
+    const { error } = await fx.userB.client.rpc('create_loan_order_atomic', {
+      p_facility_id: fx.facilityB.id,
+      p_procedure_name: '施設分離テストの発注',
+      p_maker: 'テストメーカー',
+      p_items: [{ jan, name: '施設分離テストの品', quantity: 3 }],
+      p_client_request_id: randomUUID(),
+    })
+    expect(error).toBeNull()
+
+    // 対照: 施設 B の利用者が自施設を数えると 1 件以上ある
+    const { data: own, error: ownError } = await fx.userB.client.rpc('loan_outstanding_count', {
+      p_facility_id: fx.facilityB.id,
+    })
+    expect(ownError).toBeNull()
+    expect(own as number, '施設 B から自施設が数えられない（この後の 0 が空振りになる）').toBeGreaterThan(0)
+
+    // 施設 A の利用者が施設 B の ID を渡しても 0
+    const { data: crossed, error: crossedError } = await fx.userA.client.rpc('loan_outstanding_count', {
+      p_facility_id: fx.facilityB.id,
+    })
+    expect(crossedError).toBeNull()
+    expect(crossed as number, '他施設の未返却件数が数えられてしまった').toBe(0)
   })
 
   it('他施設の発注明細には紐付けられない', async () => {
