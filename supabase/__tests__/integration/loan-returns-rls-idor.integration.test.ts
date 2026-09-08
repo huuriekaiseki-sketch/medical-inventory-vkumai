@@ -82,6 +82,74 @@ describe('loan_returns RLS/IDOR [P-010 P-012 P-015 I-030]', () => {
     expect((data as { facility_id?: string })?.facility_id).toBe(fixtures.facilityA.id)
   })
 
+  // WHY(2026-09-08 に測った): 返却の**取り消し**は、画面にも API にも経路が無い
+  //      （`src/app/api/loan-returns/route.ts` は GET と POST だけで、DELETE も PUT も無い。
+  //       発注 3 種も同じ）。ところが DB は施設の writer に DELETE を許している。
+  //      **層が食い違っている**ので、どちらが本当かを実測して残す。
+  //
+  //      これは E-055（アプリに道があるのに DB が誰にも許していない）の**裏返し**で、
+  //      こちらは「DB は許すのにアプリに道が無い」。実害の向きも違う:
+  //      間違えて返却を登録すると、**製品の中では直せない**（残数が戻らない）。
+  //
+  //      ここでは「今どうなっているか」だけを固定する。誰が取り消せるようにするかは
+  //      人が決めること（docs/agents/design-questions.md の『消えるとき』『権限』）。
+  describe('返却の取り消し: DB は施設の writer に許すが、アプリに経路が無い', () => {
+    it('ユーザーBは施設Aの返却を消せない（消えていないことを service_role で裏取りする）', async () => {
+      const serviceClient = createServiceRoleClient()
+      const { data: created, error: createError } = await serviceClient
+        .from('loan_returns')
+        .insert({
+          facility_id: fixtures.facilityA.id,
+          return_datetime: new Date().toISOString(),
+        })
+        .select('id')
+        .single()
+      expect(createError).toBeNull()
+      const id = created!.id as string
+
+      const { data: deleted, error } = await fixtures.userB.client
+        .from('loan_returns')
+        .delete()
+        .eq('id', id)
+        .select('id')
+      // RLS は拒否ではなく 0 行にする
+      expect(error).toBeNull()
+      expect(deleted ?? []).toEqual([])
+
+      const { data: still } = await serviceClient.from('loan_returns').select('id').eq('id', id)
+      expect(still, '他施設の利用者が返却を消せてしまった').toHaveLength(1)
+
+      await serviceClient.from('loan_returns').delete().eq('id', id)
+    })
+
+    it('ユーザーAは自施設の返却を消せる（DB は許している。画面に経路が無いだけ）', async () => {
+      const serviceClient = createServiceRoleClient()
+      const { data: created } = await serviceClient
+        .from('loan_returns')
+        .insert({
+          facility_id: fixtures.facilityA.id,
+          return_datetime: new Date().toISOString(),
+        })
+        .select('id')
+        .single()
+      const id = created!.id as string
+
+      const { data: deleted, error } = await fixtures.userA.client
+        .from('loan_returns')
+        .delete()
+        .eq('id', id)
+        .select('id')
+      expect(error).toBeNull()
+      expect(
+        deleted ?? [],
+        'DB が返却の削除を許さなくなった。取り消し経路を作る前提が変わっている'
+      ).toHaveLength(1)
+
+      const { data: gone } = await serviceClient.from('loan_returns').select('id').eq('id', id)
+      expect(gone ?? []).toEqual([])
+    })
+  })
+
   // WHY(2026-09-08 に約束が変わった): 20260828000001 の部分 UNIQUE は
   //  「1 発注 : 1 返却」を強制していたが、**分割して返す運用が実在する**ことを確認したので
   //  20260908030000 で外した。守るものは「2 回目を拒否する」から
