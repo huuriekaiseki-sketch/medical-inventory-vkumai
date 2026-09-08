@@ -98,6 +98,9 @@
       "Bash(scripts/check-integration-freshness.sh *)",
       "Bash(bash scripts/check-integration-freshness.test.sh*)",
       "Bash(bash scripts/run-integration-tests.sh*)",
+      "Bash(scripts/check-e2e-freshness.sh *)",
+      "Bash(bash scripts/check-e2e-freshness.test.sh*)",
+      "Bash(bash scripts/run-e2e-tests.sh*)",
       "Bash(scripts/check-claude-md-size.sh *)",
       "Bash(bash scripts/check-claude-md-size.test.sh*)",
       "Bash(scripts/check-stale-worktrees.sh*)",
@@ -250,6 +253,11 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-integration-freshness.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-e2e-freshness.sh",
             "timeout": 10
           }
         ]

@@ -17,6 +17,10 @@ set -uo pipefail
 #      無関係な変更で警告が鳴っても人が無視するようになるため。
 #      守りたいのは「この木で通したか」であって「最近走らせたか」ではない。
 #
+# WHY(判定は共有の engine に置く・2026-09-08): 同じ形の検査を E2E にも足した（E-060）ので、
+#      判定を 2 つ書くと片方だけ古くなる。engine は scripts/lib/run-freshness.py、
+#      ここが渡すのは「何を見張るか」「どう回すか」だけ。
+#
 # WHY(警告専用・jq 不在時は静かに終わる): 既存の check-*-staleness.sh と同じ設計。
 #      ブロックしない hook なので、jq が無い環境では警告が出ないだけにする（issue #636）。
 command -v jq >/dev/null 2>&1 || exit 0
@@ -33,50 +37,12 @@ if [ "$SUPABASE_TREE" = "unknown" ]; then
   exit 0
 fi
 
-MSG="$(python3 - "$LOG_FILE" "$SUPABASE_TREE" <<'PY'
-import json, os, sys
-
-log_file, tree = sys.argv[1], sys.argv[2]
-
-if not os.path.exists(log_file):
-    print("統合テスト（npm run test:integration）を通した記録が 1 件もありません。"
-          "`bash scripts/run-integration-tests.sh` で回すと結果が記録され、次から鮮度を見られます。")
-    sys.exit(0)
-
-last = None
-with open(log_file, encoding="utf-8") as f:
-    for line in f:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            last = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-
-if last is None:
-    print("統合テストの記録ファイルは在りますが、読める行がありません。"
-          "`bash scripts/run-integration-tests.sh` で回し直してください。")
-    sys.exit(0)
-
-when = last.get("at", "不明")
-if last.get("result") != "pass":
-    print(f"直近の統合テストは **失敗** のままです（{when}、branch {last.get('branch', '不明')}）。"
-          "`bash scripts/run-integration-tests.sh` で再現し、赤を残したまま先へ進めないでください。")
-    sys.exit(0)
-
-if last.get("supabaseDirty"):
-    print(f"直近の統合テストは通っていますが（{when}）、未コミットの `supabase/` 変更がある状態での実行でした。"
-          "コミット後にもう一度 `bash scripts/run-integration-tests.sh` を回してください。")
-    sys.exit(0)
-
-if last.get("supabaseTree") != tree:
-    print(f"直近に統合テストを通したとき（{when}）から `supabase/` の中身が変わっています。"
-          "migration・RLS・統合テストのどれかが動いたということなので、"
-          "`bash scripts/run-integration-tests.sh` を回してから作業を終えてください。")
-    sys.exit(0)
-PY
-)"
+MSG="$(python3 "$SCRIPT_DIR/lib/run-freshness.py" \
+  --log "$LOG_FILE" \
+  --label "統合テスト" \
+  --runner "bash scripts/run-integration-tests.sh" \
+  --tree "supabase=$SUPABASE_TREE" \
+  --changed-note "migration・RLS・統合テストのどれかが動いたということなので、")"
 
 [ -z "$MSG" ] && exit 0
 
