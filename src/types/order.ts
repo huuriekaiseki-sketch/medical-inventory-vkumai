@@ -143,6 +143,11 @@ export type LoanOrderItem = {
   /** 発注時点の単価スナップショット。既存データ(unit_price追加前)はnull */
   unitPrice: number | null
   createdAt: string
+  /**
+   * この明細に対して**もう返した**数量の合計（2026-09-08）。
+   * 返却フォームが「残り」を出すために使う。紐付けの無い返却は入らない。
+   */
+  returnedQuantity?: number
 }
 
 export type LoanOrderInput = {
@@ -179,6 +184,8 @@ export type LoanReturnItem = {
   ubd?: string
   quantity: number
   createdAt: string
+  /** どの発注明細に対する返却か。紐付けない返却では undefined（2026-09-08） */
+  loanOrderItemId?: string
 }
 
 export type LoanReturnInput = {
@@ -193,6 +200,15 @@ export type LoanReturnItemInput = {
   lot?: string
   ubd?: string
   quantity: number
+  /**
+   * どの発注明細に対する返却か（`loan_order_items.id`）。
+   *
+   * WHY(2026-09-08 追加): 分割返却を表せるようにした（20260908030000）。
+   *      この紐付けが無い返却は残数の計算にも過剰返却の判定にも入らない
+   *      （対象を選ばずに記録だけ残す従来の経路を塞がないため）。
+   *      施設をまたいだ紐付けは RPC が弾く。
+   */
+  loanOrderItemId?: string
 }
 
 /**
@@ -205,7 +221,8 @@ export type OrderKind = 'case_order' | 'consumable_order' | 'loan_order' | 'loan
  * 横断一覧用サマリ型（issue #20 発注履歴ページ）
  * Set C: listOrders(db, facilityId, filter, limit, offset) の戻り値要素
  * unreturned は kind === 'loan_order' かつ status === 'submitted' かつ
- * 対応する loan_returns が0件の場合のみ true。それ以外は false または undefined
+ * **まだ返っていない数量が残っている**場合のみ true（2026-09-08 に「返却が 0 件」から変えた。
+ * 分割返却を表せるようにしたので、一部だけ返した発注も未返却のまま残る）
  */
 export type OrderListItem = {
   id: string
@@ -216,8 +233,13 @@ export type OrderListItem = {
   /** 手技名 / 消耗品 N 品目 など、UI 表示用の概要テキスト */
   summary: string
   createdAt: string
-  /** loan_order のみ意味を持つ。true: 対応する返却記録が0件 */
+  /** loan_order のみ意味を持つ。true: まだ返っていない数量がある */
   unreturned?: boolean
+  /**
+   * loan_order のみ意味を持つ。まだ返っていない数量の合計。
+   * 一覧のバッジが「未返却 2」のように出す（人が残りを知りたいため）。
+   */
+  outstandingQuantity?: number
 }
 
 /**

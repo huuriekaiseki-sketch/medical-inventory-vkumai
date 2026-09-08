@@ -11,7 +11,7 @@ const STATUSES = ['draft', 'returned'] as const
 // loan_order_id: issue #20 (Set A) で追加した loan_orders への FK。既存行は NULL のまま
 const LOAN_RETURN_COLUMNS = 'id, facility_id, return_datetime, status, created_at, updated_at, loan_order_id'
 // 注: updated_at は Group A のマイグレーション適用前のため明細列挙には含めない
-const LOAN_RETURN_ITEM_COLUMNS = 'id, loan_return_id, jan, lot, ubd, quantity, created_at'
+const LOAN_RETURN_ITEM_COLUMNS = 'id, loan_return_id, jan, lot, ubd, quantity, created_at, loan_order_item_id'
 
 // WHY: 重複定義していたフィルタ型を src/lib/orders/list-filter.ts に統合（issue #20 レビュー指摘）
 export type LoanReturnListFilter = OrderRepositoryFilter
@@ -30,6 +30,7 @@ interface LoanReturnItemRow {
   ubd?: unknown
   quantity?: unknown
   created_at?: unknown
+  loan_order_item_id?: unknown
 }
 
 interface LoanReturnRow {
@@ -51,6 +52,7 @@ export function mapItem(row: LoanReturnItemRow): LoanReturnItem {
     ubd: asOptionalString(row.ubd),
     quantity: asNumber(row.quantity),
     createdAt: asString(row.created_at),
+    loanOrderItemId: asOptionalString(row.loan_order_item_id),
   }
 }
 
@@ -139,15 +141,26 @@ export async function createLoanReturn(db: SupabaseClient, facilityId: string, i
       lot: item.lot ?? null,
       ubd: item.ubd ?? null,
       quantity: item.quantity,
+      // WHY: どの発注明細に対する返却か（20260908030000）。分割返却の残数と過剰返却の判定に使う。
+      //      施設・発注をまたいだ紐付けは RPC が弾く（20260908040000）
+      loan_order_item_id: item.loanOrderItemId ?? null,
     })),
   })
   if (error) {
-    // WHY: loan_returns.loan_order_id には部分UNIQUEインデックス(loan_order_id IS NOT NULL)
-    //      が追加されている(issue #675 セットA)。同一loan_order_idへの2回目の返却登録は
-    //      Postgresの一意制約違反(23505)になる。生のPostgresエラー(制約名・テーブル名を
-    //      含む文字列)をそのままthrowするとスキーマ情報が漏洩しうるため、ClientVisibleError
-    //      として翻訳しroute側で400として扱えるようにする(consumables/repository.ts:53と同じパターン)
-    if (error.code === '23505') throw new ClientVisibleError('この短貸発注は既に返却登録されています')
+    // WHY(23505): 2026-09-08 に loan_order_id の部分 UNIQUE は外した（分割返却を許すため、
+    //      20260908030000）。ここへ来る 23505 は client_request_id の索引だけで、RPC が
+    //      再送として処理しきれなかった場合に限る。生の Postgres エラーは制約名・表名を含むので
+    //      そのまま投げない
+    if (error.code === '23505') throw new ClientVisibleError('同じ内容の返却が既に登録されています')
+    // WHY(23514): 借りた数を超える返却をトリガーが拒否する（I-030）。
+    //      toRepositoryError の一般的な文言では「数量が多すぎる」ことが伝わらないので個別に写す
+    if (error.code === '23514' && /exceeds ordered quantity/.test(error.message ?? '')) {
+      throw new ClientVisibleError('返却の数量が、借りた数量を超えています')
+    }
+    // WHY(23503): 他施設・他発注の明細へ紐付けようとした（RPC が foreign_key_violation で上げる）
+    if (error.code === '23503' && /loan order item/.test(error.message ?? '')) {
+      throw new ClientVisibleError('返却対象の明細が、選んだ短貸発注のものではありません')
+    }
     throw toRepositoryError(error)
   }
   if (!data) throw new ClientVisibleError('loan_returns の作成に失敗しました')

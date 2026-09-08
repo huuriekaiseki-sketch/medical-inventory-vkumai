@@ -15,6 +15,8 @@ interface LoanOrderItemRow {
   quantity?: unknown
   unit_price?: unknown
   created_at?: unknown
+  // WHY(2026-09-08): 分割返却の残数を出すために、この明細へ紐付いた返却の数量を埋め込む
+  loan_return_items?: { quantity?: unknown }[]
 }
 
 interface LoanOrderRow {
@@ -36,6 +38,8 @@ export function mapItem(row: LoanOrderItemRow): LoanOrderItem {
     quantity: asNumber(row.quantity),
     unitPrice: asNullableNumber(row.unit_price),
     createdAt: asString(row.created_at),
+    // 埋め込みが無い呼び出し（古い select）では 0 になる。残り = quantity - returnedQuantity
+    returnedQuantity: (row.loan_return_items ?? []).reduce((n, r) => n + asNumber(r.quantity), 0),
   }
 }
 
@@ -51,7 +55,8 @@ export async function listLoanOrders(
 ): Promise<LoanOrder[]> {
   let query = db
     .from('loan_orders')
-    .select('*, loan_order_items(*)')
+    // WHY(2026-09-08): 返却フォームが明細ごとの残数を出すため、紐付いた返却の数量まで取る
+    .select('*, loan_order_items(*, loan_return_items(quantity))')
     .eq('facility_id', facilityId)
     .order('created_at', { ascending: false })
 

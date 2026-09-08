@@ -15,6 +15,7 @@ import {
   cleanupLoanReturnsRlsIdorFixtures,
   seedLoanReturnsRlsIdorFixtures,
   type SeedLoanReturnsRlsIdorFixtures,
+  createServiceRoleClient,
 } from './helpers/seed-rls-idor'
 
 // 約束カタログ（docs/agents/promise-catalog.md）: P-010 他施設は読めない / P-012 RPC に他施設 id は forbidden / P-015 自施設は通る（対照）/ P-050 返却は 1 件まで
@@ -81,80 +82,96 @@ describe('loan_returns RLS/IDOR [P-010 P-012 P-015 I-030]', () => {
     expect((data as { facility_id?: string })?.facility_id).toBe(fixtures.facilityA.id)
   })
 
-  // WHY(issue #675): loan_returns.loan_order_id には部分UNIQUEインデックス
-  //  (loan_returns_loan_order_id_unique, migration 20260828000001)を追加した。
-  //  同一loan_order_idへの2回目の返却登録が実際にDBレベルで拒否されることを、
-  //  静的SQL検証（migrations/__tests__）ではなく本物のローカルSupabaseへの
-  //  RPC呼び出しで確認する。
-  describe('loan_order_id の重複登録防止 (issue #675) [P-050]', () => {
-    async function createLoanOrderForFacilityA(): Promise<string> {
-      const { data, error } = await fixtures.userA.client.rpc('create_loan_order_atomic', {
-        p_facility_id: fixtures.facilityA.id,
-        p_procedure_name: '重複返却テスト術式',
-        p_maker: '重複返却テストメーカー',
-        p_items: [{ name: '重複返却テスト器材', quantity: 1 }],
-      })
-      if (error || !data) {
-        throw new Error(`[loan-returns dedup test] loan_orders シード作成失敗: ${error?.message}`)
-      }
-      return (data as { id: string }).id
-    }
+  // WHY(2026-09-08 に約束が変わった): 20260828000001 の部分 UNIQUE は
+  //  「1 発注 : 1 返却」を強制していたが、**分割して返す運用が実在する**ことを確認したので
+  //  20260908030000 で外した。守るものは「2 回目を拒否する」から
+  //  **「明細ごとに、借りた数を超えて返せない」**に変わった（P-050）。
+  //  静的 SQL 検証ではなく本物のローカル Supabase への RPC 呼び出しで確認する。
+  describe('借りた数を超えて返せない（分割返却）[P-050]', () => {
+    // WHY: `loan_return_items.jan` は `products.jan` への外部キー（E-050）。
+    //      作り話の JAN では 23503 で弾かれるので、この describe 用に 1 件作っておく
+    let jan: string
 
-    it('同一loan_order_idへ返却登録を2回連続で行うと、1回目は成功・2回目はエラーになる', async () => {
-      const loanOrderId = await createLoanOrderForFacilityA()
-
-      const first = await fixtures.userA.client.rpc('create_loan_return_atomic', {
-        p_header: {
-          facility_id: fixtures.facilityA.id,
-          return_datetime: new Date().toISOString(),
-          loan_order_id: loanOrderId,
-        },
-        p_items: [],
-      })
-      expect(first.error).toBeNull()
-      expect(first.data).not.toBeNull()
-
-      const second = await fixtures.userA.client.rpc('create_loan_return_atomic', {
-        p_header: {
-          facility_id: fixtures.facilityA.id,
-          return_datetime: new Date().toISOString(),
-          loan_order_id: loanOrderId,
-        },
-        p_items: [],
-      })
-      expect(second.data).toBeNull()
-      expect(second.error).not.toBeNull()
-      // WHY: 「何らかのエラー」ではなく、実際にUNIQUE制約違反(23505)であることまで確認する
-      //      （コネクション失敗等の無関係なエラーでもテストが通ってしまうのを防ぐ）
-      expect(second.error?.code).toBe('23505')
+    beforeAll(async () => {
+      const serviceClient = createServiceRoleClient()
+      const suffix = Math.random().toString(36).slice(2, 10)
+      jan = `partial-return-jan-${suffix}`
+      const { error } = await serviceClient
+        .from('products')
+        .insert({ jan, ref: `partial-return-ref-${suffix}` })
+      if (error) throw new Error(`[loan-returns partial test] products シード失敗: ${error.message}`)
     })
 
-    it('同一loan_order_idへ返却登録を2件同時送信すると、成功1件・失敗1件になり、loan_returns該当行は1件だけ残る', async () => {
-      const loanOrderId = await createLoanOrderForFacilityA()
+    async function createLoanOrderForFacilityA(quantity: number): Promise<{ orderId: string; itemId: string }> {
+      const { data, error } = await fixtures.userA.client.rpc('create_loan_order_atomic', {
+        p_facility_id: fixtures.facilityA.id,
+        p_procedure_name: '分割返却テスト術式',
+        p_maker: '分割返却テストメーカー',
+        p_items: [{ name: '分割返却テスト器材', quantity }],
+      })
+      if (error || !data) {
+        throw new Error(`[loan-returns partial test] loan_orders シード作成失敗: ${error?.message}`)
+      }
+      const order = data as { id: string; items: { id: string }[] }
+      return { orderId: order.id, itemId: order.items[0].id }
+    }
 
-      const callRpc = () =>
-        fixtures.userA.client.rpc('create_loan_return_atomic', {
-          p_header: {
-            facility_id: fixtures.facilityA.id,
-            return_datetime: new Date().toISOString(),
-            loan_order_id: loanOrderId,
-          },
-          p_items: [],
-        })
+    const makeReturn = (orderId: string, itemId: string, quantity: number) =>
+      fixtures.userA.client.rpc('create_loan_return_atomic', {
+        p_header: {
+          facility_id: fixtures.facilityA.id,
+          return_datetime: new Date().toISOString(),
+          loan_order_id: orderId,
+        },
+        p_items: [{ jan, quantity, loan_order_item_id: itemId }],
+      })
 
-      const results = await Promise.all([callRpc(), callRpc()])
-      const succeeded = results.filter((r) => r.error === null)
-      const failed = results.filter((r) => r.error !== null)
-      expect(succeeded.length).toBe(1)
-      expect(failed.length).toBe(1)
-      expect(failed[0].error?.code).toBe('23505')
+    it('同じ短貸発注へ 2 回目の返却ができる（分割して返せる）', async () => {
+      const { orderId, itemId } = await createLoanOrderForFacilityA(2)
 
-      const { data: rows, error } = await fixtures.userA.client
+      const first = await makeReturn(orderId, itemId, 1)
+      expect(first.error, JSON.stringify(first.error)).toBeNull()
+
+      // WHY: 部分 UNIQUE があったころは、ここが 23505 で弾かれていた
+      const second = await makeReturn(orderId, itemId, 1)
+      expect(second.error, JSON.stringify(second.error)).toBeNull()
+
+      const { data: rows } = await fixtures.userA.client
         .from('loan_returns')
         .select('id')
-        .eq('loan_order_id', loanOrderId)
-      expect(error).toBeNull()
-      expect(rows?.length).toBe(1)
+        .eq('loan_order_id', orderId)
+      expect(rows?.length, '同じ発注に 2 件の返却が残る').toBe(2)
+    })
+
+    it('合計が借りた数を超える返却は拒否される', async () => {
+      const { orderId, itemId } = await createLoanOrderForFacilityA(2)
+      expect((await makeReturn(orderId, itemId, 2)).error).toBeNull()
+
+      const over = await makeReturn(orderId, itemId, 1)
+      expect(over.error?.code, JSON.stringify(over.error)).toBe('23514')
+    })
+
+    it('全部返す返却を 2 件同時に送ると、成功 1 件・失敗 1 件になる', async () => {
+      // WHY: 2 件が同時に「まだ余っている」と読んで両方通ると、借りた数の 2 倍が返る。
+      //      トリガーが発注明細を FOR UPDATE で掴んで順番を付けていることを実測する
+      const { orderId, itemId } = await createLoanOrderForFacilityA(1)
+
+      const results = await Promise.all([
+        makeReturn(orderId, itemId, 1),
+        makeReturn(orderId, itemId, 1),
+      ])
+      const succeeded = results.filter((r) => r.error === null)
+      const failed = results.filter((r) => r.error !== null)
+      expect(succeeded.length, JSON.stringify(results.map((r) => r.error))).toBe(1)
+      expect(failed.length).toBe(1)
+      expect(failed[0].error?.code).toBe('23514')
+
+      const { data: items } = await fixtures.userA.client
+        .from('loan_return_items')
+        .select('quantity')
+        .eq('loan_order_item_id', itemId)
+      const total = (items ?? []).reduce((n, i) => n + (i.quantity as number), 0)
+      expect(total, '借りた数を超えて記録が残った').toBe(1)
     })
   })
 })

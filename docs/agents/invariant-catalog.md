@@ -43,7 +43,7 @@
 
 | ID | 不変条件 | 守る場所 | 破る操作 | 期待 | 守るテスト | 状態 |
 | --- | --- | --- | --- | --- | --- | --- |
-| I-030 | 短貸発注 1 件に返却は 1 件まで（issue #675） | 部分 UNIQUE `loan_returns_loan_order_id_unique`（P-050） | 同じ loan_order_id で返却登録を 2 回・2 件同時 | 2 回目は 23505、同時送信は成功 1 / 失敗 1 | `supabase/__tests__/integration/loan-returns-rls-idor.integration.test.ts` | 実装済み |
+| I-030 | 短貸発注は分割して返せるが、**明細ごとに返却の合計が借りた数量を超えない**（2026-09-08 に「1 発注 : 1 返却」から変えた。分割して返す運用が実在するため。E-054） | トリガー `enforce_loan_return_not_over`（BEFORE INSERT OR UPDATE、20260908030000。発注明細を FOR UPDATE で掴んでから合計を数えるので同時送信でも超えない。P-050） | 合計が借りた数を超える返却明細を作る（1 回で超える／分割して合計で超える／全量を 2 件同時送信） | 23514。ちょうど借りた数までは通る（対照）。同時送信は成功 1 / 失敗 1 | `supabase/__tests__/integration/partial-loan-returns.integration.test.ts`、`supabase/__tests__/integration/loan-returns-rls-idor.integration.test.ts` | 実装済み |
 | I-031 | 施設 × 代理店商品の価格は 1 行 | UNIQUE `hospital_prices(distributor_product_id, facility_id)`（P-052） | 同じ組み合わせを並列 INSERT | 成功 1 / 23505 1 | `supabase/__tests__/integration/hospital-prices-concurrency.integration.test.ts` | 実装済み |
 | I-032 | 互換ペアは自己参照せず、順序付き（小 < 大）で 1 件 | CHECK `no_self_compat` / `ordered_pair`、UNIQUE | 同じ製品同士、逆順、重複 | 23514 / 23505 | `supabase/__tests__/integration/product-compatibilities-constraints.integration.test.ts` | 実装済み |
 | I-033 | 利用者は 1 施設に 1 行（同じ施設に二重所属しない） | 主キー `user_facilities(user_id, facility_id)` | 同じ組み合わせを 2 回 INSERT | 23505 | 未 | 計画 |

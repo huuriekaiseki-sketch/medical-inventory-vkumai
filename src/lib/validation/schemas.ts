@@ -203,12 +203,21 @@ export const loanOrderInputSchema = z.object({
   clientRequestId,
 })
 
-/** 短貸返却（loan_returns） */
+/**
+ * 短貸返却の明細。JAN の決まりは janItemSchema と同じで、発注明細への紐付けが増える。
+ *
+ * WHY(janItemSchema を広げない): 同じ形を症例発注も使っている。
+ *      症例発注に「返却先の明細」は無いので、返却だけに足す。
+ */
+const loanReturnItemSchema = janItemSchema.extend({
+  loanOrderItemId: uuid('返却対象の明細').optional(),
+})
+
 export const loanReturnInputSchema = z.object({
   facilityId,
   returnDatetime: z.string({ error: '返却日時は必須です' }).min(1, { error: '返却日時は必須です' }),
   loanOrderId: z.string().optional(),
-  items: z.array(janItemSchema).default([]),
+  items: z.array(loanReturnItemSchema).default([]),
   clientRequestId,
 })
 

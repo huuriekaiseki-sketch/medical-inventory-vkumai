@@ -81,6 +81,32 @@ export async function signInAndSaveStorageState(
   }
 }
 
+/**
+ * メールアドレスから利用者 ID を引く。**全ページを走査する。**
+ *
+ * WHY(2026-09-08): 以前は `listUsers()` を 1 回だけ呼んで find していた。
+ *      既定の `perPage` は **50** なので、手元の DB に利用者がたまると
+ *      **居るのに「見つかりません」で落ちる**（実測: 利用者 52 人・固定のテストユーザーは
+ *      最初の 50 人に入らず E2E の globalSetup ごと失敗した）。
+ *      消せないデータ・たまるデータで既定のページ長に当たって静かに壊れる形は
+ *      E-022（拒否記録）・E-023（監査ログ）・E-061（a11y の件数）と同じで、**4 回目**。
+ *      「既定のページ長に依存して探さない」が共通の教訓。
+ */
+async function findUserIdByEmail(
+  supabase: SupabaseClient,
+  email: string
+): Promise<string | null> {
+  const perPage = 1000
+  for (let page = 1; page <= 50; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage })
+    if (error) throw new Error(`テストユーザー検索失敗: ${error.message}`)
+    const hit = data.users.find((u) => u.email === email)
+    if (hit) return hit.id
+    if (data.users.length < perPage) return null
+  }
+  return null
+}
+
 export async function generateAuthState() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -111,9 +137,7 @@ export async function generateAuthState() {
   let testUserId = createdUser?.user?.id
   if (!testUserId) {
     // 既存ユーザーの場合はcreateUserがuserを返さないため、一覧から拾う
-    const { data: userList, error: listError } = await supabase.auth.admin.listUsers()
-    if (listError) throw new Error(`テストユーザー検索失敗: ${listError.message}`)
-    testUserId = userList.users.find((u) => u.email === testEmail)?.id
+    testUserId = (await findUserIdByEmail(supabase, testEmail)) ?? undefined
     if (!testUserId) throw new Error(`テストユーザーが見つかりません: ${testEmail}`)
   }
 

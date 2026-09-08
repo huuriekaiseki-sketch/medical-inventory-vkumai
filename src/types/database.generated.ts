@@ -582,6 +582,7 @@ export type Database = {
           created_at: string
           id: string
           jan: string
+          loan_order_item_id: string | null
           loan_return_id: string
           lot: string | null
           quantity: number
@@ -592,6 +593,7 @@ export type Database = {
           created_at?: string
           id?: string
           jan: string
+          loan_order_item_id?: string | null
           loan_return_id: string
           lot?: string | null
           quantity?: number
@@ -602,6 +604,7 @@ export type Database = {
           created_at?: string
           id?: string
           jan?: string
+          loan_order_item_id?: string | null
           loan_return_id?: string
           lot?: string | null
           quantity?: number
@@ -615,6 +618,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["jan"]
+          },
+          {
+            foreignKeyName: "loan_return_items_loan_order_item_id_fkey"
+            columns: ["loan_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "loan_order_items"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "loan_return_items_loan_return_id_fkey"
@@ -1092,6 +1102,10 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_facility_member: { Args: { p_facility_id: string }; Returns: boolean }
       is_facility_writer: { Args: { p_facility_id: string }; Returns: boolean }
+      loan_outstanding_count: {
+        Args: { p_facility_id: string }
+        Returns: number
+      }
       rate_limit_bucket_key: {
         Args: { p_bucket: string; p_window_start: string }
         Returns: string

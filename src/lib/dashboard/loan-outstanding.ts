@@ -3,36 +3,28 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 /**
  * 施設の「未返却」の短貸発注の件数。
  *
- * WHY(2026-09-08 に件数差からやめた): 以前は
- * 「submitted の発注の数 − returned の返却の数」で近似していたが、
- * **一覧のバッジと判定が違っていた**。バッジ（`src/lib/orders/repository.ts`）は
- * `loan_returns.loan_order_id` の紐付けを見るのに対し、この件数は紐付けを一切見ない。
- * その結果:
- *   - 対象を選ばずに返却を作ると、**件数は減るのにバッジは残る**
- *   - `loan_order_id` が NULL の返却は部分 UNIQUE の対象外で何件でも作れるので、
- *     3 件作れば件数が 3 減る（実態と無関係に減る）
- * 数え方を紐付けベースへ揃え、「どの発注が未返却か」と「何件あるか」が必ず一致するようにした。
+ * WHY(2026-09-08 に 2 回変えた):
+ *   1. もとは「submitted の発注の数 − returned の返却の数」で近似していた。
+ *      一覧のバッジ（紐付けを見る）と判定が違い、**対象を選ばない返却でも件数が減っていた**（E-053）。
+ *   2. 紐付けベースに揃えたあと、分割返却を表せるようにした（20260908030000）。
+ *      「返却が 1 件でもあるか」で見ると**一部だけ返した発注が消えてしまう**ので、
+ *      いまは **まだ返っていない数量が残っている発注の件数** を数える。
  *
- * WHY(JS で数えない): 全件を取って数えると PostgREST の既定上限（1,000 行）で切り落とされ、
- * 件数が静かに小さく出る（E-023 と同じ形）。埋め込みの anti-join を DB 側で数える。
- * `loan_returns=is.null` が本当に親を絞ることは 2026-09-08 に実測で確認した
- * （返却を 1 件紐付けると 13 → 12、外すと 13 に戻る）。
+ * WHY(RPC で数える): 判定が「明細ごとの数量 − 紐付いた返却の合計」になり、
+ * PostgREST の埋め込みだけでは書けない。アプリで全件を取って数えると
+ * 既定上限（1,000 行）で静かに切り落とされる（E-023 と同じ形）。DB 側で数える。
  *
- * 限界: 短貸発注 1 件に返却は 1 件までという今のスキーマ（`loan_returns.loan_order_id` の
- * 部分 UNIQUE、20260828000001）を前提にしている。**分割返却は表現できない**ので、
- * 一部だけ返した発注も「返却済み」として数から外れる。分割返却の運用があることは
- * 2026-09-08 に確認済みで、別件として扱う。
+ * WHY(SECURITY DEFINER にしない): `loan_outstanding_count` は呼び出した利用者の権限で走るので
+ * RLS がそのまま効き、自分の施設の行しか数えない。他施設の ID を渡しても 0 になる。
+ *
+ * 限界: 紐付けの無い返却（対象の短貸発注を選ばずに記録したもの）は残数に影響しない。
+ * 「とりあえず返却だけ記録する」経路を塞がないための意図的な扱い。
  */
 export async function getLoanOutstandingCount(
   db: SupabaseClient,
   facilityId: string
 ): Promise<number> {
-  const { count, error } = await db
-    .from('loan_orders')
-    .select('id, loan_returns!left(id)', { count: 'exact', head: true })
-    .eq('facility_id', facilityId)
-    .eq('status', 'submitted')
-    .is('loan_returns', null)
+  const { data, error } = await db.rpc('loan_outstanding_count', { p_facility_id: facilityId })
   if (error) throw new Error(error.message)
-  return count ?? 0
+  return typeof data === 'number' ? data : 0
 }
