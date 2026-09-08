@@ -14,7 +14,7 @@ import {
 
 const CHECK_VIOLATION = '23514'
 
-describe('業務不変条件（DB 制約・トリガー） [I-010 I-011 I-012 I-013 I-014 I-020 I-040]', () => {
+describe('業務不変条件（DB 制約・トリガー） [I-010 I-011 I-012 I-013 I-014 I-020 I-021 I-040 I-062]', () => {
   const serviceClient = createServiceRoleClient()
   let fx: SeedHospitalPricesRlsIdorFixtures
   let jan: string
@@ -100,6 +100,116 @@ describe('業務不変条件（DB 制約・トリガー） [I-010 I-011 I-012 I-
         .from('loan_order_items')
         .insert({ loan_order_id: orderId, name: '単価なし', quantity: 1, unit_price: null })
       expect(nullPrice).toBeNull()
+    })
+
+    // WHY(2026-09-08 の棚卸しで見つけた): カタログの I-012 は
+    //      CHECK `*_order_items_unit_price_nonnegative` と**全明細表**を指しているのに、
+    //      測っていたのは `loan_order_items` の 1 表だけだった。
+    //      同じ不変条件を表ごとに宣言して 1 表しか測らないのは、
+    //      products の文字数（E-024）とまったく同じ形。
+    it('consumable_order_items.unit_price = -1 も 23514（同じ不変条件を表ごとに測る）', async () => {
+      const { data: consumable } = await serviceClient
+        .from('consumables')
+        .insert({ facility_id: fx.facilityA.id, name: '単価テスト消耗品', purpose: 'test' })
+        .select('id')
+        .single()
+      const { data: order, error: orderError } = await fx.userA.client.rpc('create_consumable_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_items: [{ consumable_id: consumable!.id, quantity: 1 }],
+      })
+      expect(orderError).toBeNull()
+      const orderId = (order as { id: string }).id
+
+      const { error: negative } = await serviceClient
+        .from('consumable_order_items')
+        .insert({ consumable_order_id: orderId, consumable_id: consumable!.id, quantity: 1, unit_price: -1 })
+      expect(negative?.code).toBe(CHECK_VIOLATION)
+
+      const { error: nullPrice } = await serviceClient
+        .from('consumable_order_items')
+        .insert({ consumable_order_id: orderId, consumable_id: consumable!.id, quantity: 1, unit_price: null })
+      expect(nullPrice).toBeNull()
+    })
+  })
+
+  // WHY(2026-09-08 の棚卸しで見つけた): 状態の**語彙**（どの値を許すか）は、
+  //      前にしか進まないこと（I-020）とは別の約束。消耗品発注だけ語彙を測っていなかった。
+  //      語彙が黙って広がると、画面・集計・状態遷移のトリガーがそれぞれ別の前提で動き出す。
+  describe('I-021 状態の語彙は決めた値だけ（消耗品発注）', () => {
+    it('決めていない状態へは更新できない', async () => {
+      const { data: consumable } = await serviceClient
+        .from('consumables')
+        .insert({ facility_id: fx.facilityA.id, name: '状態語彙テスト消耗品', purpose: 'test' })
+        .select('id')
+        .single()
+      const { data: order, error: orderError } = await fx.userA.client.rpc('create_consumable_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_items: [{ consumable_id: consumable!.id, quantity: 1 }],
+      })
+      expect(orderError).toBeNull()
+      const orderId = (order as { id: string }).id
+
+      const { error } = await serviceClient
+        .from('consumable_orders')
+        .update({ status: 'shipped' })
+        .eq('id', orderId)
+      expect(error?.code).toBe(CHECK_VIOLATION)
+
+      // 決めてある値へは進める（対照。語彙の検査が「何も通さない」形で緑になっていないこと）
+      const { error: allowed } = await serviceClient
+        .from('consumable_orders')
+        .update({ status: 'submitted' })
+        .eq('id', orderId)
+      expect(allowed).toBeNull()
+    })
+  })
+
+  // WHY(2026-09-08 の棚卸しで見つけた): I-062 は
+  //      `case_order_items` / `loan_order_items` / `loan_return_items` の 3 つの CHECK を
+  //      **1 行にまとめて宣言している**が、実際に測っていたのは `case_order_items` だけだった。
+  //      ワイルドカード（`*_items_text_length`）で書けてしまうので、
+  //      **カタログの行を読んだだけでは何表ぶん測ったか分からない**。残り 2 表をここで測る。
+  describe('I-062 明細の自由入力の上限は 3 つの明細表すべてで効く', () => {
+    // WHY(表ごとに列が違う): `loan_order_items` は lot / ubd を持たず、
+    //      CHECK が見るのは jan（64）と name（200）だけ。**同じ I-062 でも列が同じではない**
+    it('loan_order_items の品名は 200 文字を超えると 23514（境界の反対側も見る）', async () => {
+      const { data: order, error: orderError } = await fx.userA.client.rpc('create_loan_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_procedure_name: '明細長さテスト',
+        p_maker: 'テストメーカー',
+        p_items: [],
+      })
+      expect(orderError).toBeNull()
+      const orderId = (order as { id: string }).id
+
+      const { error: tooLong } = await serviceClient
+        .from('loan_order_items')
+        .insert({ loan_order_id: orderId, name: 'あ'.repeat(201), quantity: 1 })
+      expect(tooLong?.code).toBe(CHECK_VIOLATION)
+
+      const { error: edge } = await serviceClient
+        .from('loan_order_items')
+        .insert({ loan_order_id: orderId, name: 'あ'.repeat(200), quantity: 1 })
+      expect(edge, '境界ちょうどが拒否された').toBeNull()
+    })
+
+    it('loan_return_items のロットは 100 文字を超えると 23514（境界の反対側も見る）', async () => {
+      const { data: ret, error: retError } = await fx.userA.client.rpc('create_loan_return_atomic', {
+        p_header: { facility_id: fx.facilityA.id, return_datetime: new Date().toISOString(), loan_order_id: null },
+        p_items: [{ jan, lot: null, ubd: null, quantity: 1 }],
+      })
+      expect(retError).toBeNull()
+      const returnId = (ret as { id: string }).id
+
+      const { error: tooLong } = await serviceClient
+        .from('loan_return_items')
+        .insert({ loan_return_id: returnId, jan, lot: 'あ'.repeat(101), quantity: 1 })
+      expect(tooLong?.code).toBe(CHECK_VIOLATION)
+
+      const { error: edge } = await serviceClient
+        .from('loan_return_items')
+        .insert({ loan_return_id: returnId, jan, lot: 'あ'.repeat(100), quantity: 1 })
+      expect(edge, '境界ちょうどが拒否された').toBeNull()
     })
   })
 
