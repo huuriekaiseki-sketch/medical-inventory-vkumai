@@ -61,3 +61,59 @@ describe('取りこぼしていた自由入力の列に上限がある [I-067]',
     expect(error).not.toBeNull()
   })
 })
+
+// WHY(2026-09-08 に見つけた穴): 20260907060000 で `products.name` / `products.maker` に
+//      上限を足したが、**それを守るテストが 1 本も無かった**。
+//      `scripts/check-constraint-coverage.sh` は「その migration が触る表の名前が統合テストの
+//      どこかに出ているか」で数えるので、`products` を使うテストが既にある以上
+//      「カバー済み」に見えてしまう（**制約単位では見ていない**）。
+//      検査が緑でも守られていない、の実例なのでここに実測を置く。
+describe('製品マスタの自由入力に上限がある [I-067]', () => {
+  const createdProducts: string[] = []
+  afterAll(async () => {
+    for (const jan of createdProducts) await service.from('products').delete().eq('jan', jan)
+  })
+
+  const jan = (n: number) => `49${String(n).padStart(11, '0')}`
+
+  it('製品名は 200 文字を超えると拒否される', async () => {
+    const { error } = await service
+      .from('products')
+      .insert({ jan: jan(1), ref: `ref-name-over-${run}`, name: long(201) })
+    expect(error?.code).toBe(CHECK_VIOLATION)
+  })
+
+  it('製品名はちょうど 200 文字なら通る（境界の反対側）', async () => {
+    const j = jan(2)
+    const { error } = await service
+      .from('products')
+      .insert({ jan: j, ref: `ref-name-edge-${run}`, name: long(200) })
+    expect(error).toBeNull()
+    if (!error) createdProducts.push(j)
+  })
+
+  it('メーカー名は 200 文字を超えると拒否される', async () => {
+    const { error } = await service
+      .from('products')
+      .insert({ jan: jan(3), ref: `ref-maker-over-${run}`, name: `メーカー超過-${run}`, maker: long(201) })
+    expect(error?.code).toBe(CHECK_VIOLATION)
+  })
+
+  it('メーカー名はちょうど 200 文字なら通る（境界の反対側）', async () => {
+    const j = jan(4)
+    const { error } = await service
+      .from('products')
+      .insert({ jan: j, ref: `ref-maker-edge-${run}`, name: `メーカー境界-${run}`, maker: long(200) })
+    expect(error).toBeNull()
+    if (!error) createdProducts.push(j)
+  })
+
+  it('メーカー名が空でも通る（弾くのは「長すぎる」であって「空」ではない）', async () => {
+    const j = jan(5)
+    const { error } = await service
+      .from('products')
+      .insert({ jan: j, ref: `ref-maker-null-${run}`, name: `メーカー無し-${run}`, maker: null })
+    expect(error).toBeNull()
+    if (!error) createdProducts.push(j)
+  })
+})
