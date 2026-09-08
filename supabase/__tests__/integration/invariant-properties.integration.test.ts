@@ -190,36 +190,56 @@ describe('不変条件は代表値ではなく境界で成り立つ（プロパ�
     const statuses = ['draft', 'submitted'] as const
     // 「戻そうとして拒否された」回数。0 のままなら、この性質は一度も試されていない
     const hits = { blockedRollback: 0, forwardMoves: 0 }
+
+    // WHY(出発点を 2 つ試す・2026-09-08): 発注は 2 通りの生まれ方がある。
+    //      画面の経路（RPC）は **submitted** で作り（E-052 の修正、20260908020000）、
+    //      列の既定値は **draft** のまま残してある。出発点を決め打ちにすると、
+    //      作られ方が変わったときに黙って片方しか試さなくなる。
+    //      作った直後の実際の status を読んでから列を適用する。
+    const createSubmitted = async () => {
+      const { data, error } = await fx.userA.client.rpc('create_loan_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_procedure_name: '状態遷移プロパティ',
+        p_maker: 'テストメーカー',
+        p_items: [],
+      })
+      expect(error).toBeNull()
+      return data as { id: string; status: 'draft' | 'submitted' }
+    }
+    const createDraft = async () => {
+      const { data, error } = await serviceClient
+        .from('loan_orders')
+        .insert({ facility_id: fx.facilityA.id, procedure_name: '状態遷移プロパティ（既定値）', maker: 'テストメーカー' })
+        .select('id, status')
+        .single()
+      expect(error).toBeNull()
+      return data as { id: string; status: 'draft' | 'submitted' }
+    }
+
     await fc.assert(
       fc.asyncProperty(fc.array(fc.constantFrom(...statuses), { minLength: 1, maxLength: 4 }), async (sequence) => {
-        const { data: created, error: createError } = await fx.userA.client.rpc('create_loan_order_atomic', {
-          p_facility_id: fx.facilityA.id,
-          p_procedure_name: '状態遷移プロパティ',
-          p_maker: 'テストメーカー',
-          p_items: [],
-        })
-        expect(createError).toBeNull()
-        const id = (created as { id: string }).id
-
-        try {
-          // 作られた直後は draft。以後、一度でも submitted になったら draft には戻れない
-          let expected: 'draft' | 'submitted' = 'draft'
-          for (const next of sequence) {
-            const { error } = await serviceClient.from('loan_orders').update({ status: next }).eq('id', id)
-            const allowed = !(expected === 'submitted' && next === 'draft')
-            if (allowed) {
-              expect(error).toBeNull()
-              if (expected !== next) hits.forwardMoves += 1
-              expected = next
-            } else {
-              expect(error?.code).toBe(CHECK_VIOLATION)
-              hits.blockedRollback += 1
+        for (const create of [createSubmitted, createDraft]) {
+          const row = await create()
+          try {
+            // 一度でも submitted になったら draft には戻れない
+            let expected = row.status
+            for (const next of sequence) {
+              const { error } = await serviceClient.from('loan_orders').update({ status: next }).eq('id', row.id)
+              const allowed = !(expected === 'submitted' && next === 'draft')
+              if (allowed) {
+                expect(error).toBeNull()
+                if (expected !== next) hits.forwardMoves += 1
+                expected = next
+              } else {
+                expect(error?.code).toBe(CHECK_VIOLATION)
+                hits.blockedRollback += 1
+              }
             }
+            const { data: final } = await serviceClient.from('loan_orders').select('status').eq('id', row.id).single()
+            expect(final!.status).toBe(expected)
+          } finally {
+            await serviceClient.from('loan_orders').delete().eq('id', row.id)
           }
-          const { data: final } = await serviceClient.from('loan_orders').select('status').eq('id', id).single()
-          expect(final!.status).toBe(expected)
-        } finally {
-          await serviceClient.from('loan_orders').delete().eq('id', id)
         }
       }),
       { numRuns: RUNS },

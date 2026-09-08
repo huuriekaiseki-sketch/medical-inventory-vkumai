@@ -34,6 +34,8 @@ export interface CrossFacilityFixtures {
    *      既存の製品を探して使うと DB の中身にテストが依存するため、実行ごとに 1 件作る。
    */
   productJan?: string
+  /** 施設 A の名前。ダッシュボードで「その施設の行」を特定するために使う */
+  facilityAName?: string
 }
 
 export const CROSS_FACILITY_FIXTURES_PATH = path.join(process.cwd(), 'e2e', '.auth', 'cross-facility-fixtures.json')
@@ -63,9 +65,10 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
   const supabase = createClient(supabaseUrl, serviceRoleKey)
   const runId = randomUUID()
 
+  const facilityAName = `テスト施設A-${runId}`
   const { data: facilityA, error: facilityAError } = await supabase
     .from('facilities')
-    .insert({ name: `テスト施設A-${runId}` })
+    .insert({ name: facilityAName })
     .select('id')
     .single()
   if (facilityAError || !facilityA) {
@@ -147,6 +150,7 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     loanOrderProcedureName,
     loanOrderId: loanOrder.id as string,
     productJan,
+    facilityAName,
   }
   fs.writeFileSync(CROSS_FACILITY_FIXTURES_PATH, JSON.stringify(fixtures))
   console.log(`[E2E cross-facility auth] フィクスチャを書き出しました: ${CROSS_FACILITY_FIXTURES_PATH}`)
