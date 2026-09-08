@@ -65,7 +65,10 @@ export function OrderHistoryTable({ items }: Props) {
                       className="ml-2 px-2 py-1 rounded text-xs font-semibold text-white"
                       style={{ backgroundColor: '#DC2626' }}
                     >
-                      未返却
+                      {/* WHY(残数を出す・2026-09-08): 分割返却を表せるようにしたので、
+                          「未返却」だけだと一部返した発注と 1 本も返していない発注が同じに見える。
+                          残数が取れないとき（古い応答・紐付けの無い発注）は数を出さずバッジだけ出す */}
+                      {item.outstandingQuantity ? `未返却 ${item.outstandingQuantity}` : '未返却'}
                     </span>
                   )}
                 </td>

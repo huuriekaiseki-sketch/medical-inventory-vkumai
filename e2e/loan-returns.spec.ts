@@ -19,9 +19,8 @@ import {
 //      バッジ・返却フォームの対象選択・ダッシュボードの件数が画面から到達できる。
 //      **その通し（発注 → 未返却 → 対象を選んで返却 → 反映）を最後の describe で測る。**
 //
-//      限界: 短貸発注 1 件に返却は 1 件まで（`loan_returns.loan_order_id` の部分 UNIQUE、
-//      20260828000001）という今のスキーマを前提にしている。**分割返却は表現できない**。
-//      分割して返す運用があることは 2026-09-08 に確認済みで、別件として残っている。
+//      2026-09-08 に**分割返却**も入れた（20260908030000）。対象の短貸発注を選ぶと明細と残数が並び、
+//      行ごとに返す数量を入れる。借りた数を超える返却は DB のトリガーが拒否する（I-063 / P-050）。
 
 const JAN_LIMIT = limitsConfig.limits.textLength.janOrRef
 
@@ -282,10 +281,12 @@ test.describe('未返却の通し（発注 → 未返却 → 対象を選んで�
     const select = page.getByLabel('対象の短貸発注')
     await expect(select.getByRole('option', { name: summary })).toBeAttached()
 
-    // 5. 対象を選んで返却する
+    // 5. 対象を選んで返却する（明細ごとに返す数量を入れる）
     await select.selectOption({ label: summary })
+    const qty = page.getByLabel(`E2E通し品名-${suffix} の返す数`)
+    await expect(qty).toBeVisible()
+    await qty.fill('1')
     await page.getByLabel('返却日時').fill(uniqueReturnDatetime().input)
-    await fillFirstItemRow(page, fixtures!.productJan!, `LOT-${suffix}`)
     const [returnRes] = await Promise.all([
       page.waitForResponse(
         (res) => res.url().includes('/api/loan-returns') && res.request().method() === 'POST'
@@ -310,42 +311,68 @@ test.describe('未返却の通し（発注 → 未返却 → 対象を選んで�
     await context.close()
   })
 
-  test('同じ短貸発注は 2 回返却できない（対象の選択肢からも消える）', async ({ browser }) => {
+  test('分割して返せる。全部返すまで未返却のまま残り、残数が減る', async ({ browser }) => {
+    // WHY: 2026-09-08 まで「同じ短貸発注は 2 回返却できない」だった（部分 UNIQUE）。
+    //      分割して返す運用が実在するので、2 回に分けて返せることと、
+    //      **途中では未返却のまま残数だけ減る**ことを画面から測る
     const context = await browser.newContext({ storageState: CROSS_FACILITY_USER_A_AUTH_PATH })
     const page = await context.newPage()
     const facilityId = fixtures!.facilityAId
     const suffix = uniqueSuffix()
-    const procedureName = `E2E二重返却術式-${suffix}`
-    const maker = `E2E二重返却メーカー-${suffix}`
+    const procedureName = `E2E分割返却術式-${suffix}`
+    const maker = `E2E分割返却メーカー-${suffix}`
     const summary = `${procedureName}（${maker}）`
+    const itemName = `E2E分割返却品名-${suffix}`
 
+    // 3 本の発注を作る
     await page.goto(`/facilities/${facilityId}/loan-orders/new`)
     await page.waitForLoadState('networkidle')
     await page.getByLabel('手技名').fill(procedureName)
     await page.getByLabel('メーカー').fill(maker)
-    await page.getByPlaceholder('品名').first().fill(`E2E二重返却品名-${suffix}`)
-    await Promise.all([
+    await page.getByPlaceholder('JAN').first().fill(fixtures!.productJan!)
+    await page.getByPlaceholder('品名').first().fill(itemName)
+    await page.getByRole('spinbutton').first().fill('3')
+    const [orderRes] = await Promise.all([
       page.waitForResponse(
         (res) => res.url().includes('/api/loan-orders') && res.request().method() === 'POST'
       ),
       page.getByRole('button', { name: '発注する' }).click(),
     ])
+    expect(orderRes.status(), await orderRes.text()).toBe(201)
 
-    // 1 回目の返却
-    await page.goto(`/facilities/${facilityId}/loan-returns/new`)
+    const returnSome = async (n: string) => {
+      await page.goto(`/facilities/${facilityId}/loan-returns/new`)
+      await page.waitForLoadState('networkidle')
+      await page.getByLabel('対象の短貸発注').selectOption({ label: summary })
+      const qty = page.getByLabel(`${itemName} の返す数`)
+      await expect(qty).toBeVisible()
+      await qty.fill(n)
+      await page.getByLabel('返却日時').fill(uniqueReturnDatetime().input)
+      const [res] = await Promise.all([
+        page.waitForResponse(
+          (r) => r.url().includes('/api/loan-returns') && r.request().method() === 'POST'
+        ),
+        page.getByRole('button', { name: '返却する' }).click(),
+      ])
+      return res
+    }
+
+    // 1 回目: 1 本返す → まだ未返却、残り 2
+    expect((await returnSome('1')).status()).toBe(201)
+    await page.goto(`/orders?facilityId=${facilityId}&kind=loan_order`)
     await page.waitForLoadState('networkidle')
-    await page.getByLabel('対象の短貸発注').selectOption({ label: summary })
-    await page.getByLabel('返却日時').fill(uniqueReturnDatetime().input)
-    await fillFirstItemRow(page, fixtures!.productJan!)
-    const [first] = await Promise.all([
-      page.waitForResponse(
-        (res) => res.url().includes('/api/loan-returns') && res.request().method() === 'POST'
-      ),
-      page.getByRole('button', { name: '返却する' }).click(),
-    ])
-    expect(first.status()).toBe(201)
+    const midRow = page.getByRole('row', { name: new RegExp(procedureName) })
+    await expect(midRow.getByText('未返却 2')).toBeVisible()
 
-    // 2 回目: もう選択肢に出ない（未返却でなくなったため）
+    // 2 回目: 残り 2 本返す → 未返却が消える
+    expect((await returnSome('2')).status()).toBe(201)
+    await page.goto(`/orders?facilityId=${facilityId}&kind=loan_order`)
+    await page.waitForLoadState('networkidle')
+    const doneRow = page.getByRole('row', { name: new RegExp(procedureName) })
+    await expect(doneRow).toBeVisible()
+    await expect(doneRow.getByText(/未返却/)).toHaveCount(0)
+
+    // 3 回目: 選択肢からも消えている（返す物が残っていない）
     await page.goto(`/facilities/${facilityId}/loan-returns/new`)
     await page.waitForLoadState('networkidle')
     await expect(
