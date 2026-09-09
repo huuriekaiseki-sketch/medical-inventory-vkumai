@@ -3,12 +3,8 @@
   "_ledger": "**これはクエリ文字列だけの台帳。ほかの借金と足し算しない。** 本文（body）の台帳は `input-validation-baseline.json`（0 本）で別物、「DB は書けるのにアプリに道が無い」は `write-path-registry.json` でまた別物。**新しく検査を作ると、それまで誰も数えていなかったものが台帳に載る。**数字が 0 から増えたように見えても、増えたのは**見えている範囲**であって借金そのものではない（2026-09-09 にこの取り違えが 2 回起きたので書いた）。",
   "_howto": "移し方: (1) その route のクエリのスキーマを書く（ページ送りは `paginationQuerySchema` を and で合成する。上限の数字を route に書かない） (2) `parseQuery(request, schema)` に置き換える (3) この一覧から行を消す (4) bash scripts/check-query-validation-coverage.test.sh",
   "_limits": "見ているのは「生読みが残っているか」だけ。**スキーマの中身が十分かは見ていない**（それは層の突合 check-layer-consistency の担当）。また `[id]` のようなパスの一部は対象外（クエリ文字列ではないため）。",
-  "maxPending": 11,
+  "maxPending": 7,
   "pending": [
-    {
-      "route": "api/case-orders/route.ts",
-      "why": "facility_id が生。所属判定（requireFacilityAccess）は通るが UUID の形は見ていない"
-    },
     {
       "route": "api/compat/route.ts",
       "why": "categoryId / keyword が生。ページ送りも無く、件数の上限は repository 任せ"
@@ -16,10 +12,6 @@
     {
       "route": "api/compat/products/route.ts",
       "why": "categoryId が生。UUID の形を見ていない"
-    },
-    {
-      "route": "api/consumable-orders/route.ts",
-      "why": "facility_id が生。case-orders とまったく同じ形で、同じ検証を別々に書いている"
     },
     {
       "route": "api/consumables/route.ts",
@@ -36,14 +28,6 @@
     {
       "route": "api/hospital-prices/route.ts",
       "why": "facilityId が生。所属判定は通るが UUID の形は見ていない（case-orders と同じ形）"
-    },
-    {
-      "route": "api/loan-orders/route.ts",
-      "why": "facility_id が生。case-orders とまったく同じ形で、同じ検証を別々に書いている"
-    },
-    {
-      "route": "api/loan-returns/route.ts",
-      "why": "facility_id が生。case-orders とまったく同じ形で、同じ検証を別々に書いている"
     },
     {
       "route": "api/orders/route.ts",
