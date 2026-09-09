@@ -25,10 +25,27 @@ import {
   readCrossFacilityFixtures,
   CROSS_FACILITY_USER_B_AUTH_PATH,
 } from './generate-cross-facility-auth-state'
-import { ATTACK_MATRIX, FACILITY_A, LOAN_ORDER_A, RANDOM_UUID, type AttackCase, type Method } from './api-attack-matrix'
+import {
+  ATTACK_MATRIX,
+  FACILITY_A,
+  LOAN_ORDER_A,
+  PRODUCT_A,
+  SECOND_PRODUCT_A,
+  CATEGORY_A,
+  DISTRIBUTOR_PRODUCT_A,
+  RANDOM_UUID,
+  type AttackCase,
+  type Method,
+  type PathId,
+} from './api-attack-matrix'
 
 const METHODS: Method[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 const FACILITY_SCOPED_TABLES = ['loan_orders', 'case_orders', 'consumable_orders', 'loan_returns', 'consumables', 'hospital_prices', 'user_facilities']
+// WHY(マスタも「変わらない」に入れる、2026-09-09): 攻撃が実在するマスタの行を狙うようになり、
+//      PUT / DELETE が通ってしまえば施設の外側（全施設が使う商品・カテゴリ・互換）が壊れる。
+//      施設で絞れないので表ごと全行を比べる。攻撃 spec は隔離プロジェクトで単独実行なので、
+//      この間に他の spec がマスタへ書き込むことはない（e2e/project-isolation.ts）
+const MASTER_TABLES = ['products', 'categories', 'distributor_products', 'product_compatibilities', 'price_histories']
 
 // src/app 配下の route.ts を列挙し、'/api/loan-orders' や '/api/hospital-prices/[id]' の形にする
 function discoverRoutes(): { route: string; methods: Method[] }[] {
@@ -49,12 +66,43 @@ function discoverRoutes(): { route: string; methods: Method[] }[] {
   return found.sort((a, b) => a.route.localeCompare(b.route))
 }
 
-function substitute<T>(value: T, fx: { facilityAId: string; loanOrderId: string }): T {
+interface Fx {
+  facilityAId: string
+  loanOrderId: string
+  distributorProductId: string
+  hospitalPriceId: string
+  productId: string
+  secondProductId: string
+  categoryId: string
+  compatibilityId: string
+}
+
+function substitute<T>(value: T, fx: Fx): T {
   const json = JSON.stringify(value)
     .replaceAll(FACILITY_A, fx.facilityAId)
     .replaceAll(LOAN_ORDER_A, fx.loanOrderId)
+    .replaceAll(PRODUCT_A, fx.productId)
+    .replaceAll(SECOND_PRODUCT_A, fx.secondProductId)
+    .replaceAll(CATEGORY_A, fx.categoryId)
+    .replaceAll(DISTRIBUTOR_PRODUCT_A, fx.distributorProductId)
     .replaceAll(RANDOM_UUID, randomUUID())
   return JSON.parse(json) as T
+}
+
+/**
+ * その攻撃が**認可の判定に到達しなかった**かを、実際の応答から判定する。
+ *
+ * WHY(2026-09-09): `weak` は今まで人が書く印でしかなく、body や route が変わっても
+ *      更新されなかった。実測と突き合わせれば、印だけ足して逃げることも、
+ *      到達しているのに weak のまま放置することもできなくなる。
+ *   - 400: 入口の検証で止まった（認可より手前）
+ *   - 404 かつ pathId が 'random': 実在しない ID なので、そもそも対象の行が無い
+ *     （実在する行に対する 404 は「RLS が 0 行にした」= 到達しているので weak ではない）
+ */
+function isWeakOutcome(status: number, pathId: PathId): boolean {
+  if (status === 400) return true
+  if (status === 404 && pathId === 'random') return true
+  return false
 }
 
 function serviceRoleClient(): SupabaseClient {
@@ -75,6 +123,11 @@ async function snapshotFacilityA(db: SupabaseClient, facilityAId: string): Promi
   }
   const { data: facility } = await db.from('facilities').select('*').eq('id', facilityAId).single()
   snap['facilities'] = JSON.stringify(facility)
+  for (const table of MASTER_TABLES) {
+    const { data, error } = await db.from(table).select('*').order('id')
+    if (error) throw new Error(`[attack] ${table} の snapshot 失敗: ${error.message}`)
+    snap[table] = JSON.stringify(data)
+  }
   return snap
 }
 
@@ -110,10 +163,18 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
   })
 
   test('全 route × 全メソッドを施設 B のユーザーで叩いても、施設 A のデータは漏れず・変わらない', async ({ baseURL }) => {
-    const fx = {
+    const fx: Fx = {
       facilityAId: fixtures!.facilityAId,
       loanOrderId: fixtures!.loanOrderId!,
       distributorProductId: fixtures!.distributorProductId!,
+      hospitalPriceId: fixtures!.facilityAHospitalPriceId!,
+      productId: fixtures!.productId!,
+      secondProductId: fixtures!.secondProductId!,
+      categoryId: fixtures!.categoryId!,
+      compatibilityId: fixtures!.compatibilityId!,
+    }
+    for (const [name, value] of Object.entries(fx)) {
+      expect(value, `フィクスチャの ${name} が無い（攻撃が実在しない ID を叩いて空振りする）`).toBeTruthy()
     }
     // WHY(価格と施設名も目印にする、2026-09-09): 価格履歴の route は施設スコープの行を
     //      SECURITY DEFINER の RPC 内の手書き WHERE で絞る。漏れるとしたら
@@ -135,19 +196,26 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
     })
     const leaks: string[] = []
     const log: string[] = []
+    const staleWeak: string[] = []
+    const unreached: string[] = []
     try {
       for (const { route, methods } of routes) {
         for (const m of methods) {
           const spec = ATTACK_MATRIX[route]?.[m]
           if (spec && 'skip' in spec) { log.push(`${m} ${route}: skip（${spec.skip}）`); continue }
           const c: AttackCase = substitute(spec ?? {}, fx)
-          const idFor = {
+          const idFor: Record<PathId, string> = {
             facilityA: fx.facilityAId,
             loanOrderA: fx.loanOrderId,
             distributorProductA: fx.distributorProductId,
+            hospitalPriceA: fx.hospitalPriceId,
+            productA: fx.productId,
+            categoryA: fx.categoryId,
+            compatA: fx.compatibilityId,
             random: randomUUID(),
           }
-          const url = route.replace('[id]', idFor[c.pathId ?? 'random'])
+          const pathId: PathId = c.pathId ?? 'random'
+          const url = route.replace('[id]', idFor[pathId])
           const query = new URLSearchParams(c.query ?? { facility_id: fx.facilityAId, facilityId: fx.facilityAId })
           const res = await ctx.fetch(`${url}?${query.toString()}`, {
             method: m,
@@ -168,6 +236,17 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
             const hit = markers.filter(mk => (mk !== fx.facilityAId || idIsMarker) && text.includes(mk))
             if (hit.length > 0) leaks.push(`${m} ${url}: 2xx で施設 A の目印を含む（${hit.join(', ')}）`)
           }
+          // 不変条件 (3): weak の印は実測と一致する（宣言と実態の両方向の突合）
+          const weakInFact = isWeakOutcome(status, pathId)
+          if (c.weak && !weakInFact) {
+            staleWeak.push(`${m} ${route}: weak と書いてあるが ${status} で認可まで届いている。印を外す`)
+          }
+          if (!c.weak && weakInFact) {
+            unreached.push(
+              `${m} ${route}: ${status} で止まり認可まで届いていない` +
+                `（${status === 400 ? '入口の検証。body を通る形にする' : '実在しない ID。pathId をフィクスチャの行に向ける'}）`
+            )
+          }
         }
       }
     } finally {
@@ -182,7 +261,9 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
       console.log(['[attack-log]', ...log].join('\n'))
     }
     expect(leaks, '他施設ユーザーへ施設 A のデータが漏れた').toEqual([])
-    expect(changed, '他施設ユーザーの攻撃で施設 A の行が変わった').toEqual([])
+    expect(changed, '他施設ユーザーの攻撃で施設 A の行・マスタの行が変わった').toEqual([])
+    expect(staleWeak, '攻撃表の weak が実態と合っていない（届いているのに weak のまま）').toEqual([])
+    expect(unreached, '認可まで届いていない攻撃がある（見かけだけの攻撃）').toEqual([])
     expect(log.length, '攻撃が 1 件も実行されていない（列挙の自壊）').toBeGreaterThan(10)
   })
 })

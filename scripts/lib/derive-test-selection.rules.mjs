@@ -124,8 +124,10 @@ export const RULES = [
       why: highRiskHit(ctx) ? `auth / 認可 / RLS に関わるパスに触れた: ${ctx.route.matchedPaths.join(', ')}` : 'リスク申告 authz_change',
     }),
     notRequiredReason: 'auth / 認可 / RLS に関わるパスに触れていない',
-    // 2026-09-06: API Route 全メソッドの総当たりは E2E（P-017）が機械化。手動は weak 印と新しい攻撃ベクトルのみ
-    commands: ['npx playwright test e2e/api-cross-facility-attack.spec.ts', '(手動) 攻撃表で weak 印の route と新しい攻撃ベクトルを他施設ユーザーで直接呼び、03 欄に記録する'],
+    // 2026-09-06: API Route 全メソッドの総当たりは E2E（P-017）が機械化。
+    // 2026-09-09: weak（認可まで届かない攻撃）は 0 件になり、印は実測と突き合わせて検査される。
+    //             手動で残るのは「新しい攻撃ベクトルの探索」だけ
+    commands: ['npx playwright test e2e/api-cross-facility-attack.spec.ts', '(手動) 攻撃表に無い新しい攻撃ベクトルを他施設ユーザーで直接呼び、03 欄に記録する'],
   },
   {
     key: 'agents-baseline',

@@ -56,6 +56,18 @@ export interface CrossFacilityFixtures {
    */
   facilityAHospitalPriceId?: string
   facilityAPurchasePrice?: number
+  /**
+   * 攻撃の総当たり（P-017）が `[id]` に入れる、**実在するマスタの行**（2026-09-09 追加）。
+   *
+   * WHY: 攻撃表は長らく多くの route を **weak**（存在しない UUID を渡すので 404 止まり、
+   *      あるいは本文が入口の検証に落ちて 400 止まり）として扱っており、
+   *      **認可の判定に一度も到達していなかった**。実在する行を渡して初めて
+   *      「施設 B の staff はマスタを読めるが変えられない」を実際に測れる（P-021 / P-033）。
+   */
+  productId?: string
+  secondProductId?: string
+  categoryId?: string
+  compatibilityId?: string
 }
 
 export const CROSS_FACILITY_FIXTURES_PATH = path.join(process.cwd(), 'e2e', '.auth', 'cross-facility-fixtures.json')
@@ -173,6 +185,26 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     throw new Error(`[E2E cross-facility auth] categories シード失敗: ${categoryError?.message}`)
   }
 
+  // 互換ペア（product_compatibilities）を 1 件作るには製品が 2 つ要る。
+  // `ordered_pair` の CHECK（product_id_1 < product_id_2）があるので、UUID の辞書順に並べて入れる
+  const { data: secondProduct, error: secondProductError } = await supabase
+    .from('products')
+    .insert({ jan: `e2e-jan2-${runId}`, ref: `e2e-ref2-${runId}` })
+    .select('id')
+    .single()
+  if (secondProductError || !secondProduct) {
+    throw new Error(`[E2E cross-facility auth] 2 件目の products シード失敗: ${secondProductError?.message}`)
+  }
+  const [pair1, pair2] = [product.id as string, secondProduct.id as string].sort()
+  const { data: compatibility, error: compatibilityError } = await supabase
+    .from('product_compatibilities')
+    .insert({ category_id: category.id, product_id_1: pair1, product_id_2: pair2 })
+    .select('id')
+    .single()
+  if (compatibilityError || !compatibility) {
+    throw new Error(`[E2E cross-facility auth] product_compatibilities シード失敗: ${compatibilityError?.message}`)
+  }
+
   const distributorProductName = `E2E代理店商品-${runId}`
   const { data: distributorProduct, error: dpError } = await supabase
     .from('distributor_products')
@@ -238,6 +270,10 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     distributorProductId: distributorProduct.id as string,
     facilityAHospitalPriceId: hospitalPrice.id as string,
     facilityAPurchasePrice,
+    productId: product.id as string,
+    secondProductId: secondProduct.id as string,
+    categoryId: category.id as string,
+    compatibilityId: compatibility.id as string,
   }
   fs.writeFileSync(CROSS_FACILITY_FIXTURES_PATH, JSON.stringify(fixtures))
   console.log(`[E2E cross-facility auth] フィクスチャを書き出しました: ${CROSS_FACILITY_FIXTURES_PATH}`)
