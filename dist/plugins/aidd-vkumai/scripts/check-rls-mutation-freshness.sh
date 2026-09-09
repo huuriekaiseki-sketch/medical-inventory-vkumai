@@ -44,7 +44,7 @@ fi
 
 MSG="$(python3 "$SCRIPT_DIR/lib/run-freshness.py" \
   --log "$LOG_FILE" \
-  --label "RLS の変異計測" \
+  --label "認可ポリシーの変異計測（RLS）" \
   --runner "bash scripts/check-rls-mutation.sh" \
   --tree "supabase=$SUPABASE_TREE" \
   --changed-note "ポリシーか、それを守るテストが動いたということなので、")"

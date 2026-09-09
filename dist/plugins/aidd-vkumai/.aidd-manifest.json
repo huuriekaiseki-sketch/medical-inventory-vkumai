@@ -46,7 +46,7 @@
     "scripts/check-readonly-bash.sh": "4f94bd6ae57cf146ddc90c25b0427319faf2f035a1cb02a5155355890033bc8a",
     "scripts/check-readonly-bash.test.sh": "9879fac1093c958d20a60b264bb1f6192ab698cb1dcbe5b8a8e09a8e430b7b0a",
     "scripts/check-rls-grant-gaps.test.sh": "2cb4a5191282cbad941b04e3185e0c2f302ddee0598ff0c20e95b2349f4fd924",
-    "scripts/check-rls-mutation-freshness.sh": "462408aaae2936bd1ac12f0e1df4ab029c489e61710270d59972ec582b31c0c2",
+    "scripts/check-rls-mutation-freshness.sh": "81ae90140c2cc96c9fc8f41b552a59f486bd2cfce919393f849f8b21287131fd",
     "scripts/check-rls-mutation-freshness.test.sh": "9ecce0c4f07faa0305f65eb0c64a6b0eb4683a0dad384b342d1904fa7d41e4a0",
     "scripts/check-rls-mutation.sh": "411bd322033076a4ffaffd03ecd29fa232ea5d7299c36eb3086a274e6d1014aa",
     "scripts/check-text-column-limits.test.sh": "592a1e89d625369997559a905a02f059de66a9ca41200573dafda2945d60dfd2",
