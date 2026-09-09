@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { parseQuery } from '@/lib/validation/parse-query'
+import { optionalUuidQuery } from '@/lib/validation/uuid'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
@@ -9,25 +12,27 @@ import { compatibilityInputSchema } from '@/lib/validation/schemas'
 
 // WHY: category_id/product_id_1/product_id_2 はDB上uuid型のためAPI層で形式チェックしておくと
 // 不正値をFK違反として捕捉する前に400で弾ける（SPEC Part2 Set D参照）。
-// POST の本文は compatibilityInputSchema が見る。この正規表現は GET のクエリ用に残す
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// POST の本文は compatibilityInputSchema が見る。
+//
+// WHY(2026-09-09、クエリを唯一の入口へ): GET のクエリは `parseQuery` で読む。
+//      UUID の判定は `validation/uuid.ts` に 1 つだけ（以前はこのファイルにコピーがあった）。
 const MAX_KEYWORD_LENGTH = 100
+const compatQuerySchema = z.object({
+  categoryId: optionalUuidQuery('categoryId の形式が不正です'),
+  keyword: z
+    .string()
+    .max(MAX_KEYWORD_LENGTH, { error: `キーワードは${MAX_KEYWORD_LENGTH}文字以内で入力してください` })
+    .optional(),
+})
 
 export async function GET(request: NextRequest) {
   try {
     const db = await createServerSupabase()
     try { await requireAuth(db) } catch (e) { return authGuardError(e) }
 
-    const categoryId = request.nextUrl.searchParams.get('categoryId') ?? undefined
-    const keyword = request.nextUrl.searchParams.get('keyword') ?? undefined
-
-    if (categoryId && !UUID_RE.test(categoryId)) {
-      return apiError('categoryId の形式が不正です', 400)
-    }
-
-    if (keyword && keyword.length > MAX_KEYWORD_LENGTH) {
-      return apiError('キーワードは100文字以内で入力してください', 400)
-    }
+    const parsed = parseQuery(request, compatQuerySchema)
+    if (!parsed.ok) return parsed.response
+    const { categoryId, keyword } = parsed.data
 
     const compatibilities = await listCompatibilities(db, { categoryId, keyword })
     return NextResponse.json({ compatibilities })

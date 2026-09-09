@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { parseQuery } from '@/lib/validation/parse-query'
+
+const hospitalPricesQuerySchema = z.object({
+  facilityId: z.string().max(200, { error: 'facilityId が長すぎます' }).optional(),
+})
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
@@ -12,10 +18,18 @@ export async function GET(request: NextRequest) {
     const db = await createServerSupabase()
     let user
     try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
-    const facilityId = request.nextUrl.searchParams.get('facilityId')
+    // WHY(2026-09-09): クエリを読むのは parseQuery だけ。越境は所属判定と RLS が止めるので、
+    //      ここは「明らかに変な値」を落とすだけにする
+    const parsed = parseQuery(request, hospitalPricesQuerySchema)
+    if (!parsed.ok) return parsed.response
+
     let grantedFacilityId: string | null
     try {
-      ;({ facilityId: grantedFacilityId } = await requireFacilityAccess(db, user, facilityId))
+      ;({ facilityId: grantedFacilityId } = await requireFacilityAccess(
+        db,
+        user,
+        parsed.data.facilityId ?? null
+      ))
     } catch (e) {
       if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('facilityId は必須です', 400)
       return apiError('アクセス権限がありません', 403)

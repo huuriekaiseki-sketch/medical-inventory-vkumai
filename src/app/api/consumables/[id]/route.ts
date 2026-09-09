@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { parseQuery } from '@/lib/validation/parse-query'
+
+const consumableDeleteQuerySchema = z.object({
+  facilityId: z.string().max(200, { error: 'facilityId が長すぎます' }).optional(),
+})
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
@@ -117,7 +123,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
  */
 export async function DELETE(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
-  const facilityId = request.nextUrl.searchParams.get('facilityId')
+  // WHY(2026-09-09): クエリを読むのは parseQuery だけ
+  const parsed = parseQuery(request, consumableDeleteQuerySchema)
+  if (!parsed.ok) return parsed.response
+  const facilityId = parsed.data.facilityId ?? null
 
   const db = await createServerSupabase()
   const guard = await authorize(db, facilityId)

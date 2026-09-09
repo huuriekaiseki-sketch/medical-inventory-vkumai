@@ -17,7 +17,7 @@
 | --- | --- | --- | --- |
 | データ | テストのデータが互いを壊さない | `e2e/fixture-guard.ts`（走行前後で行の消失を見る。C-030）、`seed-rls-idor.ts`、テーブル台帳 TB-xxx、追記専用表の積み上がり警告 | 一部 |
 | 契約（宣言と実態） | 決めたことと動くものが食い違わない | 操作の契約 O-xxx（35 操作・両方向）、層の突合 `compare-layers.mjs`（DB の CHECK と zod を**値まで**）、ルールブック 16 本を 1 エンジンで検査 | あり |
-| 契約（入口の検証） | 受け取る値の形を 1 か所で決める | 本文 `parseBody`（唯一の入口・eslint で `request.json()` 禁止・借金 0）、クエリ `parseQuery`（2026-09-09 新設・借金 13） | 一部 |
+| 契約（入口の検証） | 受け取る値の形を 1 か所で決める | 本文 `parseBody` と クエリ `parseQuery`。どちらも**唯一の入口 ＋ eslint で直接読みを禁止 ＋ 借金 0**（クエリは 2026-09-09 に 13 → 0） | あり |
 | セキュリティ・回帰 | 施設の境界を越えられない | 4 つの入口の総当たり——route（P-017）／REST 直叩き（P-018）／RPC（P-019）／**RPC に渡す参照先**（2026-09-09）。認可判定の消失検知 `check-guard-regressions`、到達範囲 B-xxx、依存監査・秘密走査 | 一部 |
 | ミューテーション | 検査が本当に効いている | 4 種類——製品コード（Stryker）／RLS ポリシー（RM-xxx）／hook を no-op 化／判定エンジンの枝（CM-xxx）。一覧は [`mutation-testing.md`](./mutation-testing.md) の冒頭 | 一部 |
 | 監視・観測 | 起きたことに気づける | 夜間検査（不変条件 I-050・拒否の異常 P-065・スキーマドリフト）、エージェントの進捗と記録漏れ検知、鮮度（C-041） | 一部 |
@@ -29,8 +29,7 @@
 
 | 空き | どこ | なぜ残っているか |
 | --- | --- | --- |
-| クエリ文字列の検証が 13 route で手書き | `scripts/lib/query-validation-baseline.json` | 2026-09-09 に入口を作ったばかり。1 本ずつ移す（一覧は増やせない） |
-| クエリ側の eslint 禁止がまだ | `eslint.config.mjs` | 13 本残っている状態で入れると `eslint-disable` が散る。一覧が小さくなってから |
+| `URLSearchParams` を受け取る共通ヘルパが残っている | `api-keyword-query.ts` の `parseKeyword` | route から `searchParams` を渡している。これも `parseQuery` のスキーマへ寄せれば、`searchParams` に触ること自体を禁止できる |
 | 統合テストの後片付けを機械で見ていない | — | C-030 の計測は E2E だけ。統合テストは各ファイルが自分で種をまくので同じ形が使えない |
 | 応答時間の差から存在を推測できるか | 脅威 T-013 | 外部公開前に引き出し（`security-test-catalog.md`）から開ける |
 | Stryker が人の起動のまま | `npm run test:mutation` | 1 回 2 分かかり、Actions の無料枠を使い切る。有料化の判断待ち（#757 の 6） |
@@ -52,7 +51,7 @@ ratchet を持つ仕組みはそれぞれ**別の台帳**を持っている。**
 | 台帳 | 何を数えているか | いま |
 | --- | --- | --- |
 | `input-validation-baseline.json` | 本文（body）を検証せずに読む route | 0 本 |
-| `query-validation-baseline.json` | クエリ文字列を検証せずに読む route | 13 本 |
+| `query-validation-baseline.json` | クエリ文字列を検証せずに読む route | **0 本**（2026-09-09 に 13 → 0） |
 | `write-path-registry.json` | DB は書けるのにアプリに道が無い組み合わせ | 宣言済み 4 件・未宣言 0 件 |
 | `check-mutants.json` の `minMutants` | 判定エンジンの壊し方（下限） | 17 件 |
 | `rls-mutants.json` | RLS・RPC の壊し方 | 18 件 |

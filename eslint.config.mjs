@@ -83,6 +83,42 @@ const eslintConfig = defineConfig([
     files: ["src/lib/validation/parse-body.ts"],
     rules: { "no-restricted-syntax": "off" },
   },
+  // WHY(2026-09-09、#757 の 20 の続き): 本文と同じことをクエリ文字列にもする。
+  //      読む方法を src/lib/validation/parse-query.ts の parseQuery だけにし、
+  //      `searchParams.get()` の直接呼び出しを禁止する。
+  //      2026-09-09 に 13 route（30 か所）を全部移して 0 本にしたので、いま入れられる
+  //      （借金が残っている状態で入れると eslint-disable が散るため、順番はこちらが後）。
+  //
+  // WHY(searchParams そのものは禁止しない): `parseKeyword(params)` のように
+  //      URLSearchParams を受け取る共通ヘルパがまだある。**それも parseQuery へ寄せるのが次の一手**で、
+  //      寄せ終わってから禁止を広げる。いまは「route が自分で値を取り出す」ことだけを止める。
+  //
+  // WHY(コードだけを見る検査と対で使う): eslint は `params.get()`（局所変数に受けた形）を
+  //      この選択子では捕まえられない。そちらは
+  //      scripts/check-query-validation-coverage.test.sh が文字列で見る（2 つで対になる）。
+  {
+    files: ["src/app/api/**/*.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.property.name='json'][callee.object.name='request']",
+          message: "本文は src/lib/validation/parse-body.ts の parseBody(request, schema) で読む（issue #757 の 20）",
+        },
+        {
+          selector: "CallExpression[callee.property.name='json'][callee.object.name='req']",
+          message: "本文は src/lib/validation/parse-body.ts の parseBody(request, schema) で読む（issue #757 の 20）",
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name='get'][callee.object.property.name='searchParams']",
+          message:
+            "クエリ文字列は src/lib/validation/parse-query.ts の parseQuery(request, schema) で読む（issue #757 の 20）",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

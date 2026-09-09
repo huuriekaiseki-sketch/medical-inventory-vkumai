@@ -1,4 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { parseQuery } from '@/lib/validation/parse-query'
+
+// WHY(既定では使用停止を返さない、2026-09-09): 呼び出し元の多くは発注の選択肢として使う。
+//      管理の画面だけが `includeRetired=1` を付ける。**明示しない限り安全側**にしておかないと、
+//      新しい呼び出し元が黙って止めたものを混ぜる。
+//      判定（'1' だけを真とする）は移行前と同じ——ここを緩めると意味が変わる
+const consumablesQuerySchema = z.object({
+  facilityId: z.string().max(200, { error: 'facilityId が長すぎます' }).optional(),
+  includeRetired: z
+    .string()
+    .optional()
+    .transform((v) => v === '1'),
+})
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
@@ -12,17 +26,15 @@ export async function GET(request: NextRequest) {
   const db = await createServerSupabase()
   let user
   try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
-  const facilityId = request.nextUrl.searchParams.get('facilityId')
+  const parsed = parseQuery(request, consumablesQuerySchema)
+  if (!parsed.ok) return parsed.response
+  const { facilityId, includeRetired } = parsed.data
   try {
-    await requireFacilityAccess(db, user, facilityId)
+    await requireFacilityAccess(db, user, facilityId ?? null)
   } catch (e) {
     if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('施設IDは必須です', 400)
     return apiError('アクセス権限がありません', 403)
   }
-  // WHY(既定では使用停止を返さない、2026-09-09): 呼び出し元の多くは発注の選択肢として使う。
-  //      管理の画面だけが `includeRetired=1` を付ける。**明示しない限り安全側**にしておかないと、
-  //      新しい呼び出し元が黙って止めたものを混ぜる
-  const includeRetired = request.nextUrl.searchParams.get('includeRetired') === '1'
   try {
     const consumables = await listConsumablesByFacility(db, facilityId!, { includeRetired })
     return NextResponse.json({ consumables })

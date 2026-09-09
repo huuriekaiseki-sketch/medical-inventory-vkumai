@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { optionalText, requiredText } from '@/lib/validation/text-limits'
+import { UUID_PATTERN } from '@/lib/validation/uuid'
 import { FACILITY_ROLES } from '@/types/role'
 
 // WHY: issue #757 の 20。書き込み API が受け取る本文の形を 1 か所に集める。
@@ -27,9 +28,11 @@ const money = (label: string) =>
  * WHY(版と variant を見ない): PostgreSQL の uuid 型は 16 進 32 桁ならどの版でも受ける。
  *      RFC の版・variant まで縛ると、DB が受ける正当な ID を入口で弾いてしまう
  *      （2026-09-07、厳しくしたところ既存テストの ID が落ちて気づいた）。
- *      ここで弾きたいのは「明らかに UUID でない文字列」だけ
+ *      ここで弾きたいのは「明らかに UUID でない文字列」だけ。
+ *      **2026-09-09 に定義を `validation/uuid.ts` へ移した**（6 か所にコピーされ、
+ *      うち 1 つだけ版 4 限定になっていたため）
  */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const UUID_RE = UUID_PATTERN
 const uuid = (label: string) =>
   z
     .string({ error: `${label}は必須です` })
