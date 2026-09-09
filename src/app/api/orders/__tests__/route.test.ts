@@ -157,6 +157,66 @@ describe('GET /api/orders', () => {
     expect(mockListOrders).not.toHaveBeenCalled()
   })
 
+  // WHY(2026-09-09、判定を共有へ寄せて新しく得た振る舞い): この route はもともと日付の
+  //      **形式だけ**を見て前後関係を見ておらず、監査・レポート route（前後関係も見る）と
+  //      条件が違っていた。`refineDateRange` へ寄せた結果ここでも見るようになったので、
+  //      **新しく得た振る舞いを RED 方向で留める**（移行のついでに得たものを測らずに置かない）
+  it('date_from が date_to より後なら 400（前後関係。共有へ寄せて新しく得た）', async () => {
+    authenticated()
+    const res = await GET(
+      new NextRequest('http://localhost/api/orders?facility_id=f1&date_from=2026-09-10&date_to=2026-09-01')
+    )
+    expect(res.status).toBe(400)
+    expect(mockListOrders).not.toHaveBeenCalled()
+  })
+
+  it('date_from と date_to が同じ日なら通る（境界の反対側）', async () => {
+    authenticated()
+    const res = await GET(
+      new NextRequest('http://localhost/api/orders?facility_id=f1&date_from=2026-09-01&date_to=2026-09-01')
+    )
+    expect(res.status).toBe(200)
+  })
+
+  // WHY: keyword はもともと上限が無く、同じ族の /api/products・/api/distributor-products（100 文字）と
+  //      食い違っていた。共有の keywordQueryShape へ寄せたので、上限と trim がここでも効く
+  it('keyword が 101 文字なら 400（上限。共有へ寄せて新しく得た）', async () => {
+    authenticated()
+    const res = await GET(
+      new NextRequest(`http://localhost/api/orders?facility_id=f1&keyword=${'a'.repeat(101)}`)
+    )
+    expect(res.status).toBe(400)
+    expect(mockListOrders).not.toHaveBeenCalled()
+  })
+
+  it('keyword が 100 文字ちょうどなら通る（境界の反対側）', async () => {
+    authenticated()
+    const res = await GET(
+      new NextRequest(`http://localhost/api/orders?facility_id=f1&keyword=${'a'.repeat(100)}`)
+    )
+    expect(res.status).toBe(200)
+  })
+
+  it('keyword は前後の空白を落として渡る（空白だけなら指定なし扱い）', async () => {
+    authenticated()
+    await GET(new NextRequest('http://localhost/api/orders?facility_id=f1&keyword=%20%20abc%20%20'))
+    expect(mockListOrders.mock.calls[0][2]).toMatchObject({ keyword: 'abc' })
+
+    mockListOrders.mockClear()
+    await GET(new NextRequest('http://localhost/api/orders?facility_id=f1&keyword=%20%20%20'))
+    expect(mockListOrders.mock.calls[0][2].keyword).toBeUndefined()
+  })
+
+  // WHY(パラメータ汚染): `get()` は先頭だけを返すので 2 つ目が黙って捨てられる
+  it('同じ鍵を 2 回渡すと 400（先頭だけを黙って採らない）', async () => {
+    authenticated()
+    const res = await GET(
+      new NextRequest('http://localhost/api/orders?facility_id=f1&limit=1&limit=200')
+    )
+    expect(res.status).toBe(400)
+    expect(mockListOrders).not.toHaveBeenCalled()
+  })
+
   it('例外発生時は500を返す', async () => {
     authenticated()
     mockListOrders.mockRejectedValue(new Error('DB error'))
