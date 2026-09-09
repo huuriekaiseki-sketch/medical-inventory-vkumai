@@ -32,7 +32,7 @@ async function createPrice(page: Page, purchase: number, delivery: number) {
   await page.goto('/hospital-prices/new')
   await page.waitForLoadState('networkidle')
   await page.getByLabel('施設').selectOption({ label: fixtures!.facilityAName! })
-  await page.getByLabel('代理店商品').selectOption({ label: fixtures!.distributorProductName! })
+  await page.getByLabel('代理店商品').selectOption({ label: fixtures!.hospitalPricesDistributorProductName! })
   await page.getByLabel('仕切値（円）').fill(String(purchase))
   await page.getByLabel('納品価格（円）').fill(String(delivery))
   const [response] = await Promise.all([
@@ -45,27 +45,31 @@ async function createPrice(page: Page, purchase: number, delivery: number) {
 }
 
 /**
- * この spec が使う「施設 A × フィクスチャの代理店商品」の院内価格だけを消す。
+ * この spec **専用**の代理店商品に付いた院内価格だけを消す。
  *
- * WHY(施設 A の全件を消さない、2026-09-09): 以前は施設 A の院内価格を**全部**消していた。
+ * WHY(2 段階で狭めた、2026-09-09): 最初は施設 A の院内価格を**全部**消していた。
  *      院内価格を消すと価格履歴も一緒に消える（20260906000007）ため、
  *      並列で走る price-history.spec.ts が用意した履歴まで巻き添えで消え、
- *      あちらが単独では通るのに全体実行でだけ落ちた（2026-09-09 実測）。
- *      「施設 A のもの」は複数の spec が同時に触る共有物なので、
- *      自分が作る組み合わせ（施設 × 代理店商品）だけに絞る。
+ *      あちらが単独では通るのに全体実行でだけ落ちた。
+ *
+ *      そこで「フィクスチャの代理店商品」に絞ったが、**それでもまだ広かった**。
+ *      その代理店商品にはフィクスチャ自身の院内価格と改定履歴が付いていて、
+ *      毎回それを消していた（`e2e/fixture-guard.ts` が「走行前からあった 2 行が消えた」と実測）。
+ *      いまは**この spec のためだけに作られた代理店商品**に絞ってあり、
+ *      消す範囲が他人に届かない。
  */
 async function clearPrices(page: Page) {
   const res = await page.request.get(`/api/hospital-prices?facilityId=${fixtures!.facilityAId}`)
   if (!res.ok()) return
   const body = await res.json()
   for (const price of body.prices ?? []) {
-    if (price.distributorProductId !== fixtures!.distributorProductId) continue
+    if (price.distributorProductId !== fixtures!.hospitalPricesDistributorProductId) continue
     await page.request.delete(`/api/hospital-prices/${price.id}`)
   }
 }
 
 test.describe('院内価格（画面から）', () => {
-  test.skip(!fixtures?.distributorProductId, 'cross-facility フィクスチャが生成されていない（SUPABASE_SERVICE_ROLE_KEY 等が未設定）')
+  test.skip(!fixtures?.hospitalPricesDistributorProductId, 'cross-facility フィクスチャが生成されていない（SUPABASE_SERVICE_ROLE_KEY 等が未設定）')
 
   // WHY(毎回消す): 「施設 × 代理店商品」は UNIQUE なので、前のテストが残した行があると
   //      次のテストの登録が 409 になる。テストの並びに依存させない
@@ -89,7 +93,7 @@ test.describe('院内価格（画面から）', () => {
     ).toBe(201)
 
     await openList(page)
-    const row = page.getByRole('row', { name: new RegExp(fixtures!.distributorProductName!) })
+    const row = page.getByRole('row', { name: new RegExp(fixtures!.hospitalPricesDistributorProductName!) })
     await expect(row).toBeVisible()
     await expect(row.getByText(purchase.toLocaleString(), { exact: true })).toBeVisible()
     await expect(row.getByText(delivery.toLocaleString(), { exact: true })).toBeVisible()
@@ -125,7 +129,7 @@ test.describe('院内価格（画面から）', () => {
     expect((await createPrice(page, before, before + 10000)).status()).toBe(201)
 
     await openList(page)
-    const row = page.getByRole('row', { name: new RegExp(fixtures!.distributorProductName!) })
+    const row = page.getByRole('row', { name: new RegExp(fixtures!.hospitalPricesDistributorProductName!) })
     await row.getByRole('button', { name: '編集' }).click()
     await expect(page).toHaveURL(/\/hospital-prices\/.+\/edit/)
     await page.waitForLoadState('networkidle')
@@ -144,7 +148,7 @@ test.describe('院内価格（画面から）', () => {
     ).toBe(200)
 
     await openList(page)
-    const updated = page.getByRole('row', { name: new RegExp(fixtures!.distributorProductName!) })
+    const updated = page.getByRole('row', { name: new RegExp(fixtures!.hospitalPricesDistributorProductName!) })
     await expect(updated.getByText(after.toLocaleString(), { exact: true })).toBeVisible()
     await expect(updated.getByText(before.toLocaleString(), { exact: true })).toHaveCount(0)
 
@@ -157,7 +161,7 @@ test.describe('院内価格（画面から）', () => {
     expect((await createPrice(page, uniquePrice(), uniquePrice())).status()).toBe(201)
 
     await openList(page)
-    await expect(page.getByRole('row', { name: new RegExp(fixtures!.distributorProductName!) })).toBeVisible()
+    await expect(page.getByRole('row', { name: new RegExp(fixtures!.hospitalPricesDistributorProductName!) })).toBeVisible()
 
     // 確認ダイアログが出る実装なら受ける
     page.on('dialog', (d) => d.accept())
@@ -165,7 +169,7 @@ test.describe('院内価格（画面から）', () => {
       page.waitForResponse(
         (res) => res.url().includes('/api/hospital-prices/') && res.request().method() === 'DELETE'
       ),
-      page.getByRole('row', { name: new RegExp(fixtures!.distributorProductName!) })
+      page.getByRole('row', { name: new RegExp(fixtures!.hospitalPricesDistributorProductName!) })
         .getByRole('button', { name: '削除' })
         .click(),
     ])
@@ -175,14 +179,14 @@ test.describe('院内価格（画面から）', () => {
     ).toBe(200)
 
     await openList(page)
-    await expect(page.getByRole('row', { name: new RegExp(fixtures!.distributorProductName!) })).toHaveCount(0)
+    await expect(page.getByRole('row', { name: new RegExp(fixtures!.hospitalPricesDistributorProductName!) })).toHaveCount(0)
 
     await context.close()
   })
 })
 
 test.describe('院内価格の施設間境界（P-017）', () => {
-  test.skip(!fixtures?.distributorProductId, 'cross-facility フィクスチャが生成されていない（SUPABASE_SERVICE_ROLE_KEY 等が未設定）')
+  test.skip(!fixtures?.hospitalPricesDistributorProductId, 'cross-facility フィクスチャが生成されていない（SUPABASE_SERVICE_ROLE_KEY 等が未設定）')
 
   test('ユーザーBには施設Aの院内価格が存在しないように見える（読めず・更新できず・消せない）', async ({ browser }) => {
     // 施設 A に 1 件作る
@@ -214,7 +218,7 @@ test.describe('院内価格の施設間境界（P-017）', () => {
     const put = await contextB.request.put(`/api/hospital-prices/${priceId}`, {
       data: {
         facilityId: fixtures!.facilityBId,
-        distributorProductId: fixtures!.distributorProductId,
+        distributorProductId: fixtures!.hospitalPricesDistributorProductId,
         purchasePrice: 1,
         deliveryPrice: 2,
       },

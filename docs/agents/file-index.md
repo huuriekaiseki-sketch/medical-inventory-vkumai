@@ -58,6 +58,7 @@
 | `.claude/workflows/lib/constraint-coverage.js` | DB制約・RLS/admin境界・公開RPCの「守るテストが無い穴」の判定ロジック正本（issue #675、P-043） |
 | `scripts/check-constraint-coverage.sh` | 現存する穴を**怪しい順**に表示。新規発生の阻止は`supabase/migrations/__tests__/constraint_coverage_ratchet.test.ts`が`npm test`で行う |
 | `scripts/lib/scan-rls-grant-gaps.mjs` / `scripts/check-rls-grant-gaps.test.sh` | 層の食い違いの**片側**（E-055）。権限はあるが規則が無い＝**触れるが何も起きない道**を数える。逆向きも見る（規則はあるが権限が無い） |
+| `e2e/fixture-guard.ts` / `scripts/lib/fixture-guard.mjs` / `scripts/check-fixture-guard.test.sh` | **後片付けが自分の作った行以外を消していないか**を E2E の前後で実測する（C-030 の機械化、2026-09-09）。全 spec の前に「消えては困る行」を控え、終わったあとに 1 行でも消えていれば実行が失敗する。判定は DB を知らない共有エンジン側、実 DB の読み出しは `e2e/` 側 |
 | `scripts/check-full-run-before-finish.sh` / `scripts/lib/worktree-hash.sh` | **終える瞬間に「いまの状態で全件を通したか」を聞く** Stop hook（C-041 の機械化、2026-09-09）。判定は SessionStart 側と同じ `lib/run-freshness.py` だが、材料を HEAD の木から**未コミット・未追跡を含む「いまの姿」のハッシュ**へ広げた。セッションに 1 回・警告のみ |
 | `scripts/lib/check-write-path-gaps.mjs` / `scripts/lib/write-path-registry.json` / `scripts/check-write-path-gaps.test.sh` | 層の食い違いの**逆側**（E-056 / E-057、2026-09-09）。**DB は書けるのにアプリに道が無い**組み合わせを数え、理由の宣言を要求して件数を増やせなくする（ratchet）。エンジンは共通・登録簿は導入先 |
 | [`docs/agents/operation-contracts.md`](./operation-contracts.md) / `scripts/lib/check-operation-contracts.mjs` / `scripts/check-operation-contracts.test.sh` | **1 操作（表 × 動詞）= 1 行**の契約（O-xxx、2026-09-09）。入口・直接書き込みの可否・認可・危険度を宣言し、DB 権限／アプリの直接書き込み／入口の実在／攻撃表への登録と**両方向**で突き合わせる。決める単位を、実際に穴が開く単位に揃えるための正本 |

@@ -87,6 +87,16 @@ export interface CrossFacilityFixtures {
    */
   consumableId?: string
   consumableName?: string
+  /**
+   * `hospital-prices.spec.ts` 専用の代理店商品（2026-09-09 追加）。**院内価格は付けない**。
+   *
+   * WHY: あの spec は自分が使う組み合わせの院内価格を beforeEach で消す。
+   *      フィクスチャの代理店商品を共用していたため、**フィクスチャの院内価格と改定履歴まで
+   *      巻き添えで消えていた**（C-030。fixture-guard が実測して発覚）。
+   *      消す範囲が他人に届かないよう、spec ごとに専用の商品を持たせる。
+   */
+  hospitalPricesDistributorProductId?: string
+  hospitalPricesDistributorProductName?: string
 }
 
 export const CROSS_FACILITY_FIXTURES_PATH = path.join(process.cwd(), 'e2e', '.auth', 'cross-facility-fixtures.json')
@@ -299,6 +309,31 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
   //      **実在する行**に対して測るため。存在しない UUID を渡すと 404 で止まり、
   //      認可の境界に一度も届かない（攻撃表の weak になる）。
   //      消耗品の品名・用途は施設の運用が見える情報なので、他施設から読めないことを実際に測る。
+  // hospital-prices.spec.ts 専用の代理店商品（**院内価格を付けない**）。
+  //
+  // WHY(2026-09-09 に足した): あの spec は beforeEach で「自分が使う組み合わせの院内価格」を消すが、
+  //      使っていたのが**フィクスチャの代理店商品**だったので、
+  //      フィクスチャ自身の院内価格と、その改定履歴まで一緒に消えていた（fixture-guard が実測して発覚）。
+  //      価格を消すと履歴が連鎖で消える（20260906000007）ので、消した本人は履歴を触ったつもりがない。
+  //      **spec ごとに専用の代理店商品を持たせて、消す範囲が他人に届かないようにする。**
+  const hospitalPricesDistributorProductName = `E2E院内価格用代理店商品-${runId}`
+  const { data: hpDistributorProduct, error: hpDpError } = await supabase
+    .from('distributor_products')
+    .insert({
+      product_id: secondProduct.id,
+      category_id: category.id,
+      name: hospitalPricesDistributorProductName,
+      maker: `E2Eメーカー-${runId}`,
+      supplier: `E2E卸-${runId}`,
+      quantity: 1,
+      reimbursement_price: 1000,
+    })
+    .select('id')
+    .single()
+  if (hpDpError || !hpDistributorProduct) {
+    throw new Error(`[E2E cross-facility auth] 院内価格 spec 用の distributor_products シード失敗: ${hpDpError?.message}`)
+  }
+
   const consumableName = `E2E消耗品-${runId}`
   const { data: consumable, error: consumableError } = await supabase
     .from('consumables')
@@ -335,6 +370,8 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     loanReturnItemId: loanReturnItem.id as string,
     consumableId: consumable.id as string,
     consumableName,
+    hospitalPricesDistributorProductId: hpDistributorProduct.id as string,
+    hospitalPricesDistributorProductName,
   }
   fs.writeFileSync(CROSS_FACILITY_FIXTURES_PATH, JSON.stringify(fixtures))
   console.log(`[E2E cross-facility auth] フィクスチャを書き出しました: ${CROSS_FACILITY_FIXTURES_PATH}`)

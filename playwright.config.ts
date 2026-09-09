@@ -15,6 +15,8 @@ assertTestSupabaseEnv()
 export default defineConfig({
   testDir: './e2e',
   globalSetup: './e2e/global-setup.ts',
+  // WHY(C-030): 全 spec の後で「走り出す前からあった行が消えていないか」を見る
+  globalTeardown: './e2e/global-teardown.ts',
   retries: process.env.CI ? 1 : 0,
   timeout: 30_000,
   reporter: [['list'], ['./scripts/playwright-loop-observability-reporter.ts']],
