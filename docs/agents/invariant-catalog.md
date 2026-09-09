@@ -49,6 +49,7 @@
 | I-032 | 互換ペアは自己参照せず、順序付き（小 < 大）で 1 件 | CHECK `no_self_compat` / `ordered_pair`、UNIQUE | 同じ製品同士、逆順、重複 | 23514 / 23505 | `supabase/__tests__/integration/product-compatibilities-constraints.integration.test.ts` | 実装済み |
 | I-033 | 利用者は 1 施設に 1 行（同じ施設に二重所属しない）。**役割を変えても 2 行目は入らない**（主キーに role が入っていないため。viewer と admin を同時に持てない） | 主キー `user_facilities(user_id, facility_id)` | 同じ組み合わせを 2 回 INSERT（同じ役割・違う役割の両方） | 23505。別の施設へは入る（対照） | `supabase/__tests__/integration/business-invariants.integration.test.ts` | 実装済み |
 | I-034 | 同じ施設 × 同じ `client_request_id` の発注（3 種）・返却は 1 行（画面の再送・二重クリックで同じ発注が 2 件できない） | 部分 UNIQUE `*_client_request_id_unique`（20260906000006、P-053）。RPC は同じ鍵で既存の行を返す | 同じ鍵で RPC を 2 回・2 件同時、service_role で同じ鍵を 2 回 INSERT | RPC は同じ id を返し行は 1 件。直接 INSERT の 2 回目は 23505 | `supabase/__tests__/integration/order-idempotency.integration.test.ts`、`supabase/migrations/__tests__/add_client_request_id_for_order_idempotency.test.ts` | 実装済み |
+| I-035 | 消耗品発注の明細は、**自施設の**、**使用停止でない**消耗品だけを指す（2026-09-09 の実測で、他施設の消耗品も使用停止の消耗品も指せることが分かった。**混乱した代理人**: 呼び出し元は正しく認可されていて、渡された参照先だけが他人のもの）。**過去の明細は使用停止にしても残る**（履歴は履歴のまま） | RPC `create_consumable_order_atomic` 内の検証（20260909060000、check_violation）。短貸返却（20260908040000）が持っていた同じ形を揃えたもの | 他施設の消耗品 ID・使用停止した消耗品 ID・存在しない ID で発注 RPC を呼ぶ | 23514（`is not orderable`）。自施設の生きた消耗品なら通る（対照）。明細が 1 つでも悪ければ発注ごと残らない | `supabase/__tests__/integration/consumable-order-items-boundary.integration.test.ts`、`src/lib/consumable-orders/__tests__/repository.test.ts`（利用者向けの文言への写し）。効き目は `scripts/lib/rls-mutants.json` の RM-016 が実測する | 実装済み |
 
 ## 派生値
 

@@ -117,6 +117,14 @@
       "expect": "supabase/__tests__/integration/loan-order-cancel-boundary.integration.test.ts",
       "promise": "P-050",
       "note": "2026-09-09 に人が決めた業務規則（I-022）の本体。ポリシーではなくトリガーだが、**認可と同じで「壊して落ちるか」でしか効き目は測れない**ので同じ登録簿に置く。取り消しは終端で戻せないため、ここが緩むと「物が動いた事実がある発注を無かったことにする」が黙って通る"
+    },
+    {
+      "id": "RM-016",
+      "breaks": "消耗品発注 RPC から、明細の持ち主と使用停止の検証を外す（混乱した代理人）",
+      "sql": "-- WHY(前提を先に確かめる): この変異は**関数本体を丸ごと差し替える**形なので、\n--      取り除く対象がもう無いのに「壊したつもり」で通ってしまう余地がある。\n--      検証の文言が現に入っていることを確かめてから差し替える。\nDO $chk$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM pg_proc\n    WHERE proname = 'create_consumable_order_atomic' AND prosrc LIKE '%is not orderable%'\n  ) THEN\n    RAISE EXCEPTION 'RM-016 の前提が崩れている（検証が既に入っていない）';\n  END IF;\nEND $chk$;\n\nCREATE OR REPLACE FUNCTION create_consumable_order_atomic(\n  p_facility_id UUID,\n  p_items JSONB,\n  p_client_request_id UUID DEFAULT NULL\n)\nRETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $fn$\nDECLARE\n  v_order public.consumable_orders%ROWTYPE;\n  v_items JSONB;\n  v_replayed BOOLEAN := FALSE;\nBEGIN\n  IF NOT public.is_facility_writer(p_facility_id) THEN\n    RAISE EXCEPTION 'forbidden: not a member of this facility';\n  END IF;\n  IF NOT public.has_aal2() THEN\n    RAISE EXCEPTION 'forbidden: aal2 required';\n  END IF;\n  -- ここにあった「明細の持ち主と使用停止の検証」を外すのがこの変異\n  IF p_client_request_id IS NOT NULL THEN\n    SELECT * INTO v_order FROM public.consumable_orders\n    WHERE facility_id = p_facility_id AND client_request_id = p_client_request_id;\n    v_replayed := FOUND;\n  END IF;\n  IF NOT v_replayed THEN\n    INSERT INTO public.consumable_orders (facility_id, client_request_id, status)\n    VALUES (p_facility_id, p_client_request_id, 'submitted')\n    RETURNING * INTO v_order;\n  END IF;\n  IF NOT v_replayed THEN\n    INSERT INTO public.consumable_order_items (consumable_order_id, consumable_id, quantity, unit_price)\n    SELECT v_order.id, (elem->>'consumable_id')::UUID,\n      COALESCE((elem->>'quantity')::INTEGER, 1),\n      (SELECT public.resolve_jan_unit_price(c.jan, p_facility_id)\n       FROM public.consumables c WHERE c.id = (elem->>'consumable_id')::UUID)\n    FROM jsonb_array_elements(COALESCE(p_items, '[]'::JSONB)) AS elem;\n  END IF;\n  SELECT COALESCE(jsonb_agg(to_jsonb(i) ORDER BY i.created_at), '[]'::JSONB) INTO v_items\n  FROM public.consumable_order_items i WHERE i.consumable_order_id = v_order.id;\n  RETURN to_jsonb(v_order) || jsonb_build_object('items', v_items, 'replayed', v_replayed);\nEND;\n$fn$;",
+      "expect": "supabase/__tests__/integration/consumable-order-items-boundary.integration.test.ts",
+      "promise": "P-013",
+      "note": "2026-09-09 に実測で見つけた穴（I-035）の本体。ポリシーではなく RPC 内の検証だが、**壊して落ちるかでしか効き目は測れない**ので同じ登録簿に置く。ここが緩むと、施設 A の発注が施設 B の消耗品を指せる（外部キーが通るかで他施設の ID の存在も当てられる）。**限界**: 本体を丸ごと差し替える形なので、関数が別の理由で書き直されると変異が古い本体を復元する。前提チェック（検証の文言が現にあるか）は入れてあるが、**本体の残りが古いままになる余地は残る**"
     }
   ]
 }
