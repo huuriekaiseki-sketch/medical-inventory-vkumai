@@ -32,6 +32,7 @@ import {
   createFacility,
   createSeededUser,
   cleanupFacilitiesAndUsers,
+  deleteWhereIn,
   type SeededUser,
 } from './helpers/seed-rls-idor'
 
@@ -75,6 +76,8 @@ interface Seed {
   hospitalPriceId: string
   productId: string
   distributorProductId: string
+  /** 後片付け用（施設に紐づかないマスタは施設の削除では消えない） */
+  categoryId: string
 }
 
 let seed: Seed
@@ -337,14 +340,18 @@ describe('テーブル台帳の全表を Supabase REST で直接叩く総当た�
     seed = {
       facilityA, facilityB, userA, userB,
       caseOrderId, consumableOrderId, loanOrderId, loanReturnId, hospitalPriceId, productId,
-      distributorProductId,
+      distributorProductId, categoryId,
     }
   }, 60_000)
 
   afterAll(async () => {
     if (!seed) return
     await cleanupFacilitiesAndUsers(seed.userA, seed.userB, seed.facilityA, seed.facilityB)
-    await service.from('products').delete().eq('id', seed.productId)
+    // WHY(カテゴリも消す、2026-09-09): 施設を消しても製品・カテゴリは残る（施設に紐づかない）。
+    //      ここが抜けていて、緑の実行のたびに残っていた。
+    //      仕切値の履歴は親の削除に合わせて DB のトリガーが消す（20260910000000）。
+    await deleteWhereIn(service, 'products', 'id', [seed.productId])
+    await deleteWhereIn(service, 'categories', 'id', [seed.categoryId])
   }, 60_000)
 
   it('台帳の全表に「誰から隠すのか」の定義がある（新しい表を作ったら決めさせる）', () => {

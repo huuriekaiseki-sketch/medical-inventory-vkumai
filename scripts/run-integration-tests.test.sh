@@ -9,6 +9,9 @@
 #   3. ローカル以外を向いていたら**問い合わせにも行かない**（本番の監査ログを数えに行かない）
 #   4. append-only の表を migrations から実際に見つけている（空振りしていない）
 #
+#      2026-09-10 に **後片付けの漏れ（消し残し）の判定**を足したので、その分も固定する:
+#      通す側／落とす側の両方・報告が無いときに通さないこと・赤い実行と部分実行では判定しないこと。
+#
 # 実 DB は要らない。PostgREST の代わりに使い捨ての HTTP スタブを立てて測る。
 #
 # 実行: bash scripts/run-integration-tests.test.sh
@@ -29,6 +32,10 @@ assert_not_contains() {
   if printf '%s' "$haystack" | grep -qF -- "$needle"; then
     echo "  NG: $label"; echo "      unexpected: $needle"; echo "      actual: $haystack"; fail=1
   else echo "  OK: $label"; fi
+}
+assert_eq() {
+  if [ "$1" = "$2" ]; then echo "  OK: $3"; else
+    echo "  NG: $3"; echo "      expected: $2"; echo "      actual:   $1"; fail=1; fi
 }
 
 WORK_DIR="$(mktemp -d)"
@@ -199,6 +206,9 @@ REC_DIR="$WORK_DIR/logs"
 REC_LOG="$REC_DIR/integration-runs.jsonl"
 cat > "$WORK_DIR/fake-vitest" <<'SH'
 #!/usr/bin/env bash
+# WHY(報告を書く): 2026-09-10 から、全件実行では「消し残しの報告」が無いと落ちる（測れていないため）。
+#      ここで測りたいのは記録の分岐なので、漏れ 0 件の報告を書いて先へ進ませる。
+[ -n "${INTEGRATION_LEAK_REPORT:-}" ] && printf '{"leaked":[],"count":0}' > "$INTEGRATION_LEAK_REPORT"
 exit 0
 SH
 chmod +x "$WORK_DIR/fake-vitest"
@@ -227,6 +237,77 @@ if [ -s "$REC_LOG" ]; then
 else
   echo "  NG: 全件実行なのに記録していない（常に記録しない実装になっている）"; fail=1
 fi
+
+echo "=== scenario 8: 後片付けの漏れ（消し残し）を判定する ==="
+# WHY(2026-09-10): 統合テストは各ファイルが自分で種をまき自分で消すが、削除の戻り値の
+#      エラーを誰も見ておらず、**緑の全件実行 1 回につき業務表に 41 行が積み上がっていた**。
+#      数えるのは vitest 側、判定はこのスクリプト。判定が空振り（常に通す）にならないよう、
+#      **通す側と落とす側の両方**、および「測れていないときに通さない」ことを固定する。
+LEAK_FILE="$WORK_DIR/leak.json"
+cat > "$WORK_DIR/leaky-vitest" <<'SH'
+#!/usr/bin/env bash
+# INTEGRATION_LEAK_REPORT へ「消し残し」の報告を書く vitest の代役。
+# LEAK_STUB_MODE: none=0 件 / some=2 件 / silent=報告を書かない / red=報告を書いて赤で終わる
+case "${LEAK_STUB_MODE:-none}" in
+  none)   printf '{"leaked":[],"count":0}' > "$INTEGRATION_LEAK_REPORT" ;;
+  some)   printf '{"leaked":["products: p1","categories: c1"],"count":2}' > "$INTEGRATION_LEAK_REPORT" ;;
+  silent) : ;;
+  red)    printf '{"leaked":["products: p9"],"count":1}' > "$INTEGRATION_LEAK_REPORT"; exit 1 ;;
+esac
+exit 0
+SH
+chmod +x "$WORK_DIR/leaky-vitest"
+
+# WHY(副シェルを作らない、2026-09-10): `OUT="$(run_leak ...)"` と書くと関数は副シェルで動くので、
+#      中で立てた終了コードが親に返らない（**常に 0 になり、落ちる側を測れなくなる**）。
+#      同じ取り違えを 2026-09-09 にも踏んだので、出力も終了コードもグローバルに置く形に揃える。
+run_leak() { # $1 = LEAK_STUB_MODE、$2... = run-integration-tests.sh の引数
+  local mode="$1"; shift
+  rm -rf "$REC_DIR" "$LEAK_FILE"
+  LEAK_OUT="$(
+    LEAK_STUB_MODE="$mode" \
+    RIT_ENV_FILE="" \
+    RIT_PILEUP_THRESHOLD="" \
+    AIDD_LOG_DIR="$REC_DIR" \
+    RIT_LEAK_REPORT="$LEAK_FILE" \
+    RIT_VITEST_BIN="$WORK_DIR/leaky-vitest" \
+      bash "$SCRIPT" "$@" 2>&1
+  )"
+  LEAK_CODE=$?
+}
+
+# (a) 漏れ 0 なら通る（対照。ここが落ちる実装は「常に落ちる」だけで何も示さない）
+run_leak none
+assert_eq "$LEAK_CODE" "0" "消し残し 0 件なら通る（対照）"
+
+# (b) 漏れがあれば落ちる。**どの行が残ったかを名指しする**
+run_leak some
+assert_eq "$LEAK_CODE" "1" "消し残しがあれば落ちる"
+assert_contains "$LEAK_OUT" "2 件残りました" "件数を出す"
+assert_contains "$LEAK_OUT" "products: p1" "残った行を名指しする"
+# WHY(記録が残ることまで見る): 漏れの判定で早く抜けると「全件を回した記録が無い」ことになり、
+#      鮮度の hook が「一度も回していない」と言い出す（直したはずの E-030 に化ける）。
+#      記録は**テストの結果そのもの**なので、漏れとは別に残す。
+if [ -s "$REC_LOG" ]; then
+  assert_contains "$(cat "$REC_LOG")" '"result": "pass"' "漏れがあってもテストの結果は記録する"
+else
+  echo "  NG: 漏れの判定で抜けたせいで記録が残っていない（鮮度の hook が「一度も回していない」と言う）"; fail=1
+fi
+
+# (c) 報告が無いときは通さない（「漏れ 0」ではなく「測れていない」。C-021）
+run_leak silent
+assert_eq "$LEAK_CODE" "1" "報告が無ければ落ちる（配線が外れても緑にしない）"
+assert_contains "$LEAK_OUT" "配線が外れている疑い" "測れていないことを名指しする"
+
+# (d) 実行が赤のときは判定しない（後片付けが途中で止まるので、残りを漏れと読まない）
+run_leak red
+assert_eq "$LEAK_CODE" "1" "赤い実行はそのまま赤（漏れの判定で上書きしない）"
+assert_contains "$LEAK_OUT" "赤なので後片付けの漏れは判定しません" "赤のときは判定しないと言う"
+
+# (e) 部分実行では判定しない（他のファイルが作った行を漏れと読むため）
+run_leak some supabase/__tests__/integration/business-invariants.integration.test.ts
+assert_eq "$LEAK_CODE" "0" "部分実行は漏れがあっても落とさない"
+assert_contains "$LEAK_OUT" "後片付けの漏れも判定しません" "部分実行では判定しないと言う"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

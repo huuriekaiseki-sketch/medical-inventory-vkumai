@@ -40,6 +40,7 @@ import {
   createServiceRoleClient,
   createFacility,
   createSeededUser,
+  deleteWhereIn,
   type SeededUser,
 } from './helpers/seed-rls-idor'
 import { enrollAndVerifyTotp } from './helpers/mfa-totp'
@@ -212,6 +213,17 @@ const ATTEMPTS: Record<string, Attempt> = {
 
 const contracts = parseContracts()
 
+/**
+ * 対照（通ってよい立場）が通ると**本物の行が増える**。その行を控えておく。
+ *
+ * WHY(2026-09-09): 掃きは「書けるはずの立場が書ける」ことも測るので、INSERT の対照が
+ *      通るたびに施設・製品・カテゴリ・代理店商品が 1 行ずつ本当に増える。
+ *      これを消していなかったため、**緑の実行のたびに積み上がっていた**
+ *      （全ファイル合わせて 1 回 41 行を実測）。控えるのは 1 か所（試す場所）だけにして、
+ *      操作を足したときに消し忘れが起きない形にする。
+ */
+const createdRows: Array<{ table: string; id: string }> = []
+
 describe('操作 × 立場の総当たり（認可の列を実 DB で測る） [O-xxx]', () => {
   beforeAll(async () => {
     const service = createServiceRoleClient()
@@ -331,19 +343,32 @@ describe('操作 × 立場の総当たり（認可の列を実 DB で測る） [
   afterAll(async () => {
     if (!s) return
     // 的にした行はまとめて消す（施設を消すと施設スコープの行は連鎖で消える）
-    await s.service.from('product_compatibilities').delete().eq('id', s.targets.compatibility)
+    await deleteWhereIn(s.service, 'product_compatibilities', 'id', [s.targets.compatibility])
     for (const u of s.users) await s.service.auth.admin.deleteUser(u.id)
     await s.service.auth.admin.deleteUser(s.targets.spareUser)
-    await s.service.from('facilities').delete().in('id', [s.facilityA.id, s.facilityB.id])
-    await s.service
-      .from('distributor_products')
-      .delete()
-      .in('id', [s.targets.distributorProduct, s.targets.distributorProductToDelete, s.targets.freeDistributorProduct])
-    await s.service.from('categories').delete().in('id', [s.targets.category, s.targets.categoryToDelete])
-    await s.service
-      .from('products')
-      .delete()
-      .in('id', [s.targets.product, s.refs.secondProductId, s.targets.productToDelete, s.targets.compatLeft, s.targets.compatRight])
+    await deleteWhereIn(s.service, 'facilities', 'id', [s.facilityA.id, s.facilityB.id])
+
+    // 対照が通って**増えてしまった行**を、作った逆順に消す（子を先に消すため）
+    for (const { table, id } of [...createdRows].reverse()) {
+      await deleteWhereIn(s.service, table, 'id', [id])
+    }
+    createdRows.length = 0
+
+    const distributorProducts = [
+      s.targets.distributorProduct,
+      s.targets.distributorProductToDelete,
+      s.targets.freeDistributorProduct,
+    ]
+    // 履歴は親（代理店商品）の削除に合わせて DB のトリガーが消す（20260910000000）
+    await deleteWhereIn(s.service, 'distributor_products', 'id', distributorProducts)
+    await deleteWhereIn(s.service, 'categories', 'id', [s.targets.category, s.targets.categoryToDelete])
+    await deleteWhereIn(s.service, 'products', 'id', [
+      s.targets.product,
+      s.refs.secondProductId,
+      s.targets.productToDelete,
+      s.targets.compatLeft,
+      s.targets.compatRight,
+    ])
   }, 120_000)
 
   it('契約の全操作に、実際に試す方法が定義されている（ratchet）', () => {
@@ -382,6 +407,13 @@ describe('操作 × 立場の総当たり（認可の列を実 DB で測る） [
           probes += 1
           const { data, error } = await attempt(client)
           const rows = Array.isArray(data) ? data.length : data ? 1 : 0
+          // 作れてしまった行は afterAll で消す（`id` を持たない user_facilities は
+          // 施設の削除で連鎖して消えるので控えなくてよい）
+          if (c.operation === 'INSERT' && !error && Array.isArray(data)) {
+            for (const row of data as Array<Record<string, unknown>>) {
+              if (typeof row?.id === 'string') createdRows.push({ table: c.table, id: row.id })
+            }
+          }
 
           if (shouldPass) {
             if (error || rows === 0) {

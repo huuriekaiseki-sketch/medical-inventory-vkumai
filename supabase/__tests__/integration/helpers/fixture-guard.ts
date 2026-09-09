@@ -15,13 +15,20 @@
 //          それは正しい状態（E2E はフィクスチャを必ずまくので 0 件なら異常、という違い）。
 //          ただし「0 件だった＝この実行では何も測っていない」と**必ず出力に残す**
 //
+// 後片付け漏れ（消し残し）について:
+//        ここでは**数えて書き出すだけ**で、合否は決めない。判定は
+//        `scripts/run-integration-tests.sh` がする——「全件を回して、緑だったとき」に
+//        限らないと意味が無いため（部分実行は他のファイルの行を漏れと読むし、
+//        赤い実行は後片付けが途中で止まる）。その 2 つを知っているのはラッパーだけ。
+//
 // 限界:
-//   - 控えが 0 件の実行では何も測れない（reset 直後）。出力には残るが止めはしない
+//   - 控えが 0 件の実行でも**消し残しは測れる**（0 件からの差分になるため）。
+//     測れないのは「消しすぎ」のほうだけ
 //   - 消した犯人のファイルは分からない（並列で走るので、消えたことしか分からない）
-//   - 走行中に作られて**残った**行（後片付け漏れ）はここでは見ていない
 
+import fs from 'fs'
 import { readProtectedKeys } from '../../../../e2e/fixture-guard'
-import { findVanished } from '../../../../scripts/lib/fixture-guard.mjs'
+import { findVanished, findLeaked } from '../../../../scripts/lib/fixture-guard.mjs'
 
 export type ProtectedSnapshot = Record<string, string[]>
 
@@ -56,6 +63,11 @@ export async function snapshotIntegrationRows(): Promise<ProtectedSnapshot> {
  */
 export async function verifyIntegrationRows(snapshot: ProtectedSnapshot): Promise<void> {
   const total = countKeys(snapshot)
+  const present = (await readProtectedKeys()) as ProtectedSnapshot
+
+  // 後片付け漏れは合否を決めずに書き出すだけ（判定はラッパーの仕事。上の WHY）
+  writeLeakReport(findLeaked(snapshot, present) as string[])
+
   if (total === 0) {
     // WHY(落とさないが黙りもしない): 空の控えで「消えていない」と言うのは何も測っていないのと同じ。
     //      E2E と違って統合テストでは正しく 0 件になりうるので、**事実として出す**だけにする（C-021）。
@@ -66,7 +78,6 @@ export async function verifyIntegrationRows(snapshot: ProtectedSnapshot): Promis
     return
   }
 
-  const present = (await readProtectedKeys()) as ProtectedSnapshot
   const gone = findVanished(snapshot, present) as string[]
   if (gone.length === 0) {
     console.log(`[fixture-guard/integration] 走行前からあった ${total} 行はすべて残っています`)
@@ -87,4 +98,23 @@ export async function verifyIntegrationRows(snapshot: ProtectedSnapshot): Promis
   console.error(message)
   process.exitCode = 1
   throw new Error(message)
+}
+
+/**
+ * 後片付け漏れの件数を、指定されたファイルへ書き出す（`INTEGRATION_LEAK_REPORT`）。
+ *
+ * WHY(ファイル越しに渡す): 判定するのは `scripts/run-integration-tests.sh` だが、
+ *      数えられるのはここ（走り出す前の姿を持っているのはこのプロセスだけ）。
+ *      環境変数が無いときは書かない——単体で vitest を回したときに
+ *      古い報告が残って次の判定を狂わせないため。
+ */
+function writeLeakReport(leaked: string[]): void {
+  const path = process.env.INTEGRATION_LEAK_REPORT
+  console.log(
+    leaked.length === 0
+      ? '[fixture-guard/integration] 走行中に作った行はすべて片付いています（消し残し 0 件）'
+      : `[fixture-guard/integration] 走行中に作った行が ${leaked.length} 件残りました（消し残し）`
+  )
+  if (!path) return
+  fs.writeFileSync(path, JSON.stringify({ leaked, count: leaked.length }), 'utf-8')
 }

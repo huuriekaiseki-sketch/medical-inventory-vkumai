@@ -27,6 +27,7 @@ import {
   createFacility,
   createSeededUser,
   cleanupFacilitiesAndUsers,
+  deleteWhereIn,
   type SeededUser,
 } from './helpers/seed-rls-idor'
 
@@ -67,6 +68,9 @@ interface Seed {
   userB: SeededUser
   jan: string
   distributorProductId: string
+  /** 後片付け用（施設に紐づかないマスタは連鎖では消えない） */
+  productId: string
+  categoryId: string
   patientId: string
   procedureName: string
   purchasePrice: number
@@ -225,12 +229,22 @@ describe('クライアントから呼べる RPC の総当たり（他施設・�
       throw new Error('[rpc-sweep] 価格履歴が 1 行も生まれていない（価格履歴の RPC を空振りで測ることになる）')
     }
 
-    seed = { facilityA, facilityB, userA, userB, jan, distributorProductId, patientId, procedureName, purchasePrice }
+    seed = {
+      facilityA, facilityB, userA, userB, jan, distributorProductId,
+      productId, categoryId, patientId, procedureName, purchasePrice,
+    }
   }, 60_000)
 
   afterAll(async () => {
     if (!seed) return
     await cleanupFacilitiesAndUsers(seed.userA, seed.userB, seed.facilityA, seed.facilityB)
+    // WHY(マスタも消す、2026-09-09): 施設を消しても製品・カテゴリ・代理店商品は残る
+    //      （施設に紐づかないため）。ここが抜けていて、緑の実行のたびに 3 行ずつ積んでいた。
+    //      仕切値の履歴は親の削除に合わせて DB のトリガーが消す（20260910000000）。
+    const service = createServiceRoleClient()
+    await deleteWhereIn(service, 'distributor_products', 'id', [seed.distributorProductId])
+    await deleteWhereIn(service, 'products', 'id', [seed.productId])
+    await deleteWhereIn(service, 'categories', 'id', [seed.categoryId])
   }, 60_000)
 
   it('公開されている RPC はすべて攻撃表にある（新しく公開したら決めさせる）', () => {

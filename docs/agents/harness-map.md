@@ -15,7 +15,7 @@
 
 | 役割 | 何を守るか | 主なもの | 状態 |
 | --- | --- | --- | --- |
-| データ | テストのデータが互いを壊さない | 走行前後で行の消失を見る（C-030）——**E2E と統合テストの両方**（`e2e/fixture-guard.ts` / `supabase/__tests__/integration/helpers/fixture-guard.ts`）、`seed-rls-idor.ts`、テーブル台帳 TB-xxx、追記専用表の積み上がり警告 | 一部 |
+| データ | テストのデータが互いを壊さない | 走行前後で**消しすぎ（C-030）と消し残しの両方**を見る——E2E と統合テストの両方（`e2e/fixture-guard.ts` / `supabase/__tests__/integration/helpers/fixture-guard.ts`）。消し残しの判定は `run-integration-tests.sh`（全件・緑のときだけ）で**現在 0 件**。ほかに `seed-rls-idor.ts`、テーブル台帳 TB-xxx、追記専用表の積み上がり警告 | あり |
 | 契約（宣言と実態） | 決めたことと動くものが食い違わない | 操作の契約 O-xxx（35 操作・両方向）、層の突合 `compare-layers.mjs`（DB の CHECK と zod を**値まで**）、ルールブック 16 本を 1 エンジンで検査 | あり |
 | 契約（入口の検証） | 受け取る値の形を 1 か所で決める | 本文 `parseBody` と クエリ `parseQuery`。どちらも**唯一の入口 ＋ eslint で直接読みを禁止 ＋ 借金 0**（クエリは 2026-09-09 に 13 → 0）。route は `request.json()` にも `searchParams` にも**触れない** | あり |
 | セキュリティ・回帰 | 施設の境界を越えられない | 4 つの入口の総当たり——route（P-017）／REST 直叩き（P-018）／RPC（P-019）／**RPC に渡す参照先**（2026-09-09）。認可判定の消失検知 `check-guard-regressions`、到達範囲 B-xxx、依存監査・秘密走査 | 一部 |
@@ -29,7 +29,6 @@
 
 | 空き | どこ | なぜ残っているか |
 | --- | --- | --- |
-| 統合テストの**後片付け漏れ**を数えていない | — | 消しすぎ（C-030）は 2026-09-09 に統合テストへも入れた。**残しすぎ**は別の問題で、緑の全件実行 1 回につき 41 行が積み上がる（実測） |
 | 応答時間の差から存在を推測できるか | 脅威 T-013 | 外部公開前に引き出し（`security-test-catalog.md`）から開ける |
 | Stryker が人の起動のまま | `npm run test:mutation` | 1 回 2 分かかり、Actions の無料枠を使い切る。有料化の判断待ち（#757 の 6） |
 
@@ -52,7 +51,8 @@ ratchet を持つ仕組みはそれぞれ**別の台帳**を持っている。**
 | `input-validation-baseline.json` | 本文（body）を検証せずに読む route | 0 本 |
 | `query-validation-baseline.json` | クエリ文字列を検証せずに読む route | **0 本**（2026-09-09 に 13 → 0） |
 | `write-path-registry.json` | DB は書けるのにアプリに道が無い組み合わせ | 宣言済み 4 件・未宣言 0 件 |
-| `check-mutants.json` の `minMutants` | 判定エンジンの壊し方（下限） | 17 件 |
+| 統合テストの消し残し | 緑の全件実行 1 回で業務表に残る行 | **0 行**（2026-09-10 に 41 → 0） |
+| `check-mutants.json` の `minMutants` | 判定エンジンの壊し方（下限） | 18 件 |
 | `rls-mutants.json` | RLS・RPC の壊し方 | 18 件 |
 
 **新しい検査を作ると、それまで誰も数えていなかったものが台帳に載る。**

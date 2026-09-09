@@ -12,6 +12,7 @@
 #   5. テーブル台帳の実装済みの表が、控えるか外すかのどちらかに必ず入っている（ratchet）
 #   6. 外す理由が短ければ落ちる（下限そのものを境界 19/20 文字で固定する）
 #   7. E2E・統合の**両方**で配線が外れていない（控えるだけ／突き合わせるだけ、を検知する）
+#   10. 消し残し（後片付けの漏れ）を、消しすぎと**逆向き**に数えられている
 #   8-9. **落ちる前提そのもの**を毎回測り直す（2026-09-09 追加）
 #
 #      「teardown で投げれば実行が落ちる」は走らせる仕組みごとに答えが違った:
@@ -147,6 +148,28 @@ if grep -q "globalTeardown" "$CONFIG"; then echo "  OK: playwright.config.ts が
   echo "  NG: globalTeardown の配線が外れている"; fail=1; fi
 if grep -q "snapshotProtectedRows" "$SETUP"; then echo "  OK: globalSetup が控えを取る"; else
   echo "  NG: 控えを取る呼び出しが外れている（控えが無いと「消えていない」と言えてしまう）"; fail=1; fi
+
+echo "=== scenario 10: 消し残し（後片付けの漏れ）を数える ==="
+# WHY(2026-09-10): C-030 は「消しすぎ」を測るが、統合テストで実際に積み上がっていたのは
+#      **消し残し**のほうだった（緑の全件実行 1 回につき 41 行を実測）。
+#      判定は消しすぎと**逆向き**なので、取り違えると常に 0 件で緑になる。両方向を固定する。
+OUT="$(run_node <<'NODE'
+const { findLeaked, findVanished } = await import(`file://${process.argv[2]}/scripts/lib/fixture-guard.mjs`)
+const snapshot = { products: ['p1', 'p2'], categories: ['c1'] }
+// p2 が消え（消しすぎ）、p9 と c9 が増えて残った（消し残し）
+const present = { products: ['p1', 'p9'], categories: ['c1', 'c9'] }
+console.log(JSON.stringify({
+  leaked: findLeaked(snapshot, present),
+  vanished: findVanished(snapshot, present),
+  none: findLeaked(snapshot, { products: ['p2', 'p1'], categories: ['c1'] }),
+  unknownTable: findLeaked({}, { brand_new: ['x'] }),
+}))
+NODE
+)"
+assert_contains "$OUT" '"leaked":["categories: c9","products: p9"]' "増えて残った行だけを名指しする"
+assert_contains "$OUT" '"vanished":["products: p2"]' "消えた行と混ざらない（向きが逆）"
+assert_contains "$OUT" '"none":[]' "増えていなければ 0 件（誤検知なし）"
+assert_contains "$OUT" '"unknownTable":["brand_new: x"]' "控えに無い表は黙って見逃さない"
 
 echo "=== scenario 7: 統合テスト側の配線が残っている（外されたら気づく） ==="
 INT_SETUP="$REPO_ROOT/supabase/__tests__/integration/helpers/global-setup.ts"

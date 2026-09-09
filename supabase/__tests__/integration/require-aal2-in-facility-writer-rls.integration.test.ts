@@ -96,10 +96,19 @@ describe('facility_writer_or_adminポリシーはRPCを経由しない直接書�
   afterAll(async () => {
     await serviceClient.auth.admin.deleteUser(userId)
     await serviceClient.from('facilities').delete().eq('id', facilityId)
-    await serviceClient
+    // WHY(`888` と カテゴリも消す、2026-09-09): 価格の直接 INSERT を測る it が
+    //      製品・カテゴリ・代理店商品をその場で作っていたのに、後片付けの一覧に入っていなかった。
+    //      緑の実行のたびに 3 行ずつ残っていた（distributor_products は products の CASCADE で消える）。
+    const { error: productError } = await serviceClient
       .from('products')
       .delete()
-      .in('jan', [`999${runId}-1`, `999${runId}-2`, `111${runId}`, `222${runId}`, `333${runId}`])
+      .in('jan', [`999${runId}-1`, `999${runId}-2`, `111${runId}`, `222${runId}`, `333${runId}`, `888${runId}`])
+    if (productError) throw new Error(`[aal2-rls] products の後片付けに失敗: ${productError.message}`)
+    const { error: categoryError } = await serviceClient
+      .from('categories')
+      .delete()
+      .like('name', `%${runId}%`)
+    if (categoryError) throw new Error(`[aal2-rls] categories の後片付けに失敗: ${categoryError.message}`)
   })
 
   async function signInAtAal1(): Promise<SupabaseClient> {

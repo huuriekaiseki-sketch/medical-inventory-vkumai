@@ -83,6 +83,34 @@ export function findVanished(snapshot, present) {
 }
 
 /**
+ * 控えたあとに増えて、**終わっても残っている**行を返す（後片付けの漏れ）。
+ *
+ * WHY(消しすぎの裏返し、2026-09-10): C-030 は「消しすぎ」を測るが、統合テストで実際に
+ *      積み上がっていたのは**消し残し**のほうだった（緑の全件実行 1 回につき 41 行を実測）。
+ *      原因は 2 つとも「黙って失敗していた」こと——
+ *      後片付けの `delete()` の戻り値を誰も見ておらず、`price_histories` からの FK と
+ *      GRANT 不足で毎回 23503 / 42501 になっていた。
+ *      残った行は E-022 / E-023（PostgREST の 1,000 行上限で全件を取る形のテストが
+ *      古い順に切り落とされる）へ育つので、**件数そのものを測って 0 で止める**。
+ *
+ * 控えに無い表（あとから足した表）は全行が「増えた」扱いになる。**黙って見逃すより鳴らす**。
+ *
+ * @param {Record<string, string[]>} snapshot 表ごとの鍵の一覧（走り出す前）
+ * @param {Record<string, string[]>} present  表ごとの鍵の一覧（終わったあと）
+ * @returns {string[]} `表: 鍵` の形で、増えて残っているものだけ
+ */
+export function findLeaked(snapshot, present) {
+  const leaked = []
+  for (const table of Object.keys(present).sort()) {
+    const before = new Set(snapshot[table] ?? [])
+    for (const key of present[table]) {
+      if (!before.has(key)) leaked.push(`${table}: ${key}`)
+    }
+  }
+  return leaked
+}
+
+/**
  * テーブル台帳（TB-xxx）の実装済みの表が、控えるか外すかのどちらかに必ず入っていることを見る。
  *
  * WHY: 表を足した人に「E2E の後片付けで消えて困るか」を 1 回考えさせる。

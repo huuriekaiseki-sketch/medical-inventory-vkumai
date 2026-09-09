@@ -23,6 +23,15 @@ import { describeDenial, isPermissionDenied } from './helpers/pg-error'
 // 不変条件カタログ（docs/agents/invariant-catalog.md）: I-030 短貸発注 1 件に返却は 1 件まで
 describe('loan_returns RLS/IDOR [P-010 P-012 P-015 I-030]', () => {
   let fixtures: SeedLoanReturnsRlsIdorFixtures
+  /**
+   * 内側の describe が作る製品。**外側で消す。**
+   *
+   * WHY(内側の afterAll で消さない、2026-09-10): `loan_return_items.jan` は
+   *      `products.jan` への FK。内側の afterAll は親より先に走るので、
+   *      そのとき返却明細はまだ生きていて 23503 で消せない。
+   *      施設が消えて明細が連鎖で消えたあと（＝外側）に消す。
+   */
+  let partialReturnJan: string | undefined
 
   beforeAll(async () => {
     fixtures = await seedLoanReturnsRlsIdorFixtures()
@@ -31,6 +40,13 @@ describe('loan_returns RLS/IDOR [P-010 P-012 P-015 I-030]', () => {
   afterAll(async () => {
     if (fixtures) {
       await cleanupLoanReturnsRlsIdorFixtures(fixtures)
+    }
+    if (partialReturnJan) {
+      const { error } = await createServiceRoleClient()
+        .from('products')
+        .delete()
+        .eq('jan', partialReturnJan)
+      if (error) throw new Error(`[loan-returns] 分割返却用の製品を消せませんでした: ${error.message}`)
     }
   })
 
@@ -171,6 +187,8 @@ describe('loan_returns RLS/IDOR [P-010 P-012 P-015 I-030]', () => {
         .from('products')
         .insert({ jan, ref: `partial-return-ref-${suffix}` })
       if (error) throw new Error(`[loan-returns partial test] products シード失敗: ${error.message}`)
+      // 後片付けは外側の afterAll がやる（明細が消えてからでないと FK で消せない）
+      partialReturnJan = jan
     })
 
     async function createLoanOrderForFacilityA(quantity: number): Promise<{ orderId: string; itemId: string }> {

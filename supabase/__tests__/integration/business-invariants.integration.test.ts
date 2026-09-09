@@ -17,7 +17,7 @@ import {
 
 const CHECK_VIOLATION = '23514'
 
-describe('業務不変条件（DB 制約・トリガー） [I-010 I-011 I-012 I-013 I-014 I-020 I-021 I-040 I-062]', () => {
+describe('業務不変条件（DB 制約・トリガー） [I-010 I-011 I-012 I-013 I-014 I-020 I-021 I-037 I-040 I-062]', () => {
   const serviceClient = createServiceRoleClient()
   let fx: SeedHospitalPricesRlsIdorFixtures
   let jan: string
@@ -293,6 +293,97 @@ describe('業務不変条件（DB 制約・トリガー） [I-010 I-011 I-012 I-
       expect(q?.code).toBe(CHECK_VIOLATION)
       const { error: r } = await serviceClient.from('distributor_products').insert({ ...base, reimbursement_price: -1 })
       expect(r?.code).toBe(CHECK_VIOLATION)
+    })
+  })
+
+  // WHY(2026-09-10、統合テストの後片付けを機械で測って見つけた): 契約 O-052 は
+  //      「代理店商品は admin + aal2 が消せる」だが、**仕切値を一度でも変えた商品は
+  //      誰にも消せなかった**（`price_histories` からの FK が ON DELETE 指定なしで、
+  //      履歴は GRANT が SELECT のみなので先に消すこともできない）。
+  //      院内価格側（20260906000007）と同じ規則を親の反対側にも入れた。
+  //      **両方向で測る**: 履歴があっても消せること（本題）と、
+  //      消した後に履歴が 1 行も残らないこと（孤児にしない）。
+  describe('I-037 代理店商品を消すと、その仕切値の履歴が残らない', () => {
+    /** 製品・カテゴリ・代理店商品を 1 組作り、仕切値を変えて履歴を 1 行以上作る */
+    async function seedWithHistory() {
+      const suffix = randomUUID()
+      const { data: product, error: productError } = await serviceClient
+        .from('products')
+        .insert({ jan: `i037-jan-${suffix}`, ref: `i037-ref-${suffix}`, name: `I-037 製品-${suffix}` })
+        .select('id')
+        .single()
+      if (productError || !product) throw new Error(`[I-037] products: ${productError?.message}`)
+      const { data: category, error: categoryError } = await serviceClient
+        .from('categories')
+        .insert({ name: `I-037 カテゴリ-${suffix}` })
+        .select('id')
+        .single()
+      if (categoryError || !category) throw new Error(`[I-037] categories: ${categoryError?.message}`)
+      const { data: dp, error: dpError } = await serviceClient
+        .from('distributor_products')
+        .insert({
+          product_id: product.id, category_id: category.id, maker: 'm', supplier: 's',
+          name: `I-037 代理店商品-${suffix}`, reimbursement_price: 100, quantity: 1,
+        })
+        .select('id')
+        .single()
+      if (dpError || !dp) throw new Error(`[I-037] distributor_products: ${dpError?.message}`)
+
+      // 履歴は**値が変わったときだけ** 1 行増える（I-041）。変えないと餌が無いまま測ることになる
+      const { error: reviseError } = await serviceClient
+        .from('distributor_products').update({ reimbursement_price: 200 }).eq('id', dp.id)
+      if (reviseError) throw new Error(`[I-037] 改定: ${reviseError.message}`)
+
+      const { count } = await serviceClient
+        .from('price_histories').select('*', { count: 'exact', head: true }).eq('distributor_product_id', dp.id)
+      // 対照（C-021）: 履歴が 0 件のまま「消せた」と言っても何も測っていない
+      expect(count ?? 0, '仕切値の履歴が 1 行も生まれていない（測る餌が無い）').toBeGreaterThan(0)
+
+      return { productId: product.id as string, categoryId: category.id as string, dpId: dp.id as string }
+    }
+
+    it('履歴がある代理店商品を消せる（消せなかったのが実害）', async () => {
+      const { productId, categoryId, dpId } = await seedWithHistory()
+
+      const { error } = await serviceClient.from('distributor_products').delete().eq('id', dpId)
+      expect(error, `履歴があると消せない（${JSON.stringify(error)}）`).toBeNull()
+
+      const { count } = await serviceClient
+        .from('price_histories').select('*', { count: 'exact', head: true }).eq('distributor_product_id', dpId)
+      expect(count ?? 0, '親が消えたのに履歴が残っている（孤児）').toBe(0)
+
+      await serviceClient.from('products').delete().eq('id', productId)
+      await serviceClient.from('categories').delete().eq('id', categoryId)
+    })
+
+    it('緩い参照（entity_type / entity_id）の履歴も残らない', async () => {
+      const { productId, categoryId, dpId } = await seedWithHistory()
+
+      await serviceClient.from('distributor_products').delete().eq('id', dpId)
+      const { count } = await serviceClient
+        .from('price_histories')
+        .select('*', { count: 'exact', head: true })
+        .eq('entity_type', 'distributor_product')
+        .eq('entity_id', dpId)
+      expect(count ?? 0, 'entity_id 側の履歴が孤児として残っている').toBe(0)
+
+      await serviceClient.from('products').delete().eq('id', productId)
+      await serviceClient.from('categories').delete().eq('id', categoryId)
+    })
+
+    it('別の代理店商品の履歴は巻き込まない（消しすぎない。C-030）', async () => {
+      const a = await seedWithHistory()
+      const b = await seedWithHistory()
+
+      await serviceClient.from('distributor_products').delete().eq('id', a.dpId)
+
+      const { count } = await serviceClient
+        .from('price_histories').select('*', { count: 'exact', head: true }).eq('distributor_product_id', b.dpId)
+      expect(count ?? 0, '関係の無い商品の履歴まで消えている').toBeGreaterThan(0)
+
+      await serviceClient.from('distributor_products').delete().eq('id', b.dpId)
+      await serviceClient.from('products').delete().in('id', [a.productId, b.productId])
+      await serviceClient.from('categories').delete().in('id', [a.categoryId, b.categoryId])
     })
   })
 

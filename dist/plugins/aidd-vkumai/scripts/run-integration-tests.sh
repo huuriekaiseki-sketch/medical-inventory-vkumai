@@ -27,9 +27,20 @@
 #   実 DB が要る（supabase start 済み）。記録は logs/integration-runs.jsonl。
 #   積み上がりの警告だけを見たいときは --check-pileup-only。
 #
+# あわせて、**後片付けの漏れ（消し残し）を判定する**（2026-09-10 追加）。
+#      統合テストは各ファイルが自分で種をまき自分で消すが、削除の戻り値のエラーを誰も見ておらず、
+#      **緑の全件実行 1 回につき業務表に 41 行が積み上がっていた**（165 → 206 → 247 で実測）。
+#      原因は 2 つとも黙って失敗していたこと——`price_histories` からの FK（ON DELETE 指定なし）と、
+#      その表の GRANT が SELECT のみで先に消す回避もできないこと。
+#      数えるのは vitest 側（走り出す前の姿を持っているのはそのプロセスだけ）、
+#      判定はここ。**全件を回して緑だったときだけ**判定する——部分実行は他のファイルが作った行を
+#      漏れと読み、赤い実行は後片付けが途中で止まるため。
+#      報告が**無いときは落とす**（「漏れ 0」ではなく「測れていない」なので。C-021）。
+#
 # 環境変数（テスト用注入ポイント）:
 #   RIT_PILEUP_THRESHOLD   知らせる行数（既定 aidd.config.json の limits.localLogRowsWarnAt）
 #   RIT_ENV_FILE           接続情報を読むファイル（既定 .env.test。空文字なら読まず process env を使う）
+#   RIT_LEAK_REPORT        消し残しの報告先（既定は毎回新しい一時ファイル）
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -172,8 +183,16 @@ fi
 
 # WHY(npx を使わない): scripts/check-no-registry-fetch.test.sh が hook スクリプトの npx を禁止する
 #      （2026-09-04 に CI が 4〜8 倍かかった原因）。node_modules のものを直接呼ぶ。
+# WHY(消し残しの報告先を渡す、2026-09-10): 走行の前後で「増えて残った行」を数えるのは
+#      vitest 側（走り出す前の姿を持っているのはそのプロセスだけ）。合否を決めるのはここ——
+#      **全件を回して緑だったときにだけ**意味がある判定で、その 2 つを知っているのはここだけ。
+#      RIT_LEAK_REPORT はテスト用の差し替え口（既定は毎回新しい一時ファイル）。
+LEAK_REPORT="${RIT_LEAK_REPORT:-$(mktemp)}"
+rm -f "$LEAK_REPORT"
+
 # RIT_VITEST_BIN はテスト用の差し替え口（記録の分岐を実 DB 無しで測るため。既定は変えない）。
-"${RIT_VITEST_BIN:-./node_modules/.bin/vitest}" run --config vitest.integration.config.ts "$@"
+INTEGRATION_LEAK_REPORT="$LEAK_REPORT" \
+  "${RIT_VITEST_BIN:-./node_modules/.bin/vitest}" run --config vitest.integration.config.ts "$@"
 EXIT_CODE=$?
 
 if [ "$EXIT_CODE" -eq 0 ]; then
@@ -188,7 +207,44 @@ fi
 #      きっかけそのもの）。run-e2e-tests.sh と同じ扱いに揃える。
 if [ "$#" -ne 0 ]; then
   echo "[run-integration-tests] 引数付きの実行なので記録しません（全件を通したときだけ記録する）"
+  echo "[run-integration-tests] 後片付けの漏れも判定しません（他のファイルが作った行を漏れと読むため）"
   exit "$EXIT_CODE"
+fi
+
+# --- 後片付けの漏れ（消し残し）を判定する ---------------------------------
+# WHY(緑のときだけ、2026-09-10): 赤い実行は afterAll が途中で止まるので、
+#      残った行は「漏れ」ではなく「途中で終わった」だけ。赤に赤を重ねても読まれない。
+# WHY(ここでは exit しない): 記録（下）は**テストの結果そのもの**で、漏れの判定とは別の事実。
+#      ここで抜けると「全件を回した記録が無い」ことになり、鮮度の hook が
+#      「一度も回していない」と言い出す（直したはずの事故に化ける）。判定は旗だけ立てて、
+#      記録を残してから最後に反映する。
+LEAK_FAILED=0
+if [ "$EXIT_CODE" -ne 0 ]; then
+  echo "[run-integration-tests] 実行が赤なので後片付けの漏れは判定しません（後片付けが途中で止まるため）"
+elif [ ! -f "$LEAK_REPORT" ]; then
+  # WHY(**無いなら落とす**): 報告が無いのは「漏れが 0」ではなく「測れていない」。
+  #      globalSetup の配線が外れていても緑になる形（C-021）を作らない。
+  echo "[run-integration-tests] 後片付けの漏れの報告がありません（fixture-guard の配線が外れている疑い）" >&2
+  LEAK_FAILED=1
+else
+  LEAKED="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['count'])" "$LEAK_REPORT" 2>/dev/null || echo unknown)"
+  if [ "$LEAKED" = "unknown" ]; then
+    echo "[run-integration-tests] 後片付けの漏れの報告を読めません: $LEAK_REPORT" >&2
+    LEAK_FAILED=1
+  elif [ "$LEAKED" -ne 0 ]; then
+    echo "[run-integration-tests] **走行中に作った行が $LEAKED 件残りました**（後片付けの漏れ）。" >&2
+    echo "  各ファイルの afterAll は、自分が作った行を必ず消してください。" >&2
+    echo "  削除の戻り値のエラーを捨てないこと（2026-09-10 まで 41 行/回が黙って積み上がっていました）。" >&2
+    python3 -c "
+import json, sys
+rows = json.load(open(sys.argv[1]))['leaked']
+for r in rows[:20]:
+    print(f'    - {r}', file=sys.stderr)
+if len(rows) > 20:
+    print(f'    ... 他 {len(rows) - 20} 件', file=sys.stderr)
+" "$LEAK_REPORT"
+    LEAK_FAILED=1
+  fi
 fi
 
 # supabase/ の木のハッシュを残す。次回、ここが変わっていれば「その記録はもう当てにならない」と分かる
@@ -225,4 +281,8 @@ with open(log_file, "a", encoding="utf-8") as f:
 print(f"[run-integration-tests] {result} を記録しました: {log_file}")
 PY
 
+# 漏れがあったら、テストが緑でも実行としては失敗にする（記録はテストの結果のまま残る）
+if [ "$LEAK_FAILED" -ne 0 ] && [ "$EXIT_CODE" -eq 0 ]; then
+  exit 1
+fi
 exit "$EXIT_CODE"
