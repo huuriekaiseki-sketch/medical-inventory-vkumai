@@ -1,0 +1,10 @@
+{
+  "_comment": "「ルールの節に守る検査があるか」を見るエンジン（aidd-core が配る scripts/lib/check-rule-guard-coverage.mjs）の登録簿のひな形。scripts/lib/rule-guard-registry.json へ置く。エンジンは共通側が配り、**この登録簿は導入先のもの**（配ると導入先が足した分が上書きで消える）。",
+  "_howto": "ruleDocs: 常時ロードされ、ルールが書かれている文書。このファイルを置かなければ規約の既定（docs/agents/common.md）で動くので、まずは何もしなくてよい。notRules: ルールではない節（分類の見出し・索引・参照リスト）と、その理由。",
+  "_why_reason": "notRules に理由を必須にしているのは「面倒だから対象外にする」を止めるため。理由が 10 文字未満だと検査が落ちる。ただし『ルールなのに notRules に入れて逃げる』ことまでは止められない（理由の記述だけが歯止め）。",
+  "_what_this_enforces": "ルールの節は (1) どこかの検査が `<file>.md「<節名>」` で名指ししている か (2) 検知手段が無いものとして棚卸し（docs/agents/undetectable-rules-inventory.md）に登録されている、のどちらかでなければならない。黙って検知の無いルールを増やす第三の道を残さない。",
+
+  "ruleDocs": ["docs/agents/common.md"],
+
+  "notRules": {}
+}

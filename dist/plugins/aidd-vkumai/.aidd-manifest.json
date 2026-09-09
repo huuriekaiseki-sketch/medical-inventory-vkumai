@@ -52,6 +52,7 @@
     "scripts/lib/resolve-log-dir.sh": "b459c3da39017bf468d885803e8bfa05b01b91b8059591103fdca4f6c1cf8b4e",
     "scripts/lib/resolve-log-dir.test.sh": "21aa497a006ea1566d72dcaf7dec621673d11d7c64640eb0dee62b217c77c5a0",
     "scripts/lib/rls-mutants.json": "393286f669dc32c6478b5dd730ffdf4456c72e5b944c07a05326a8e25f7e98d4",
+    "scripts/lib/rule-guard-registry.json": "32d80ce2452d565527c862aac76e1dcf7956ccefad51528fdd0f7b40fc74ecc8",
     "scripts/lib/run-freshness.py": "c0a4a5798ee85090d516ca0f3dbe810d351f4f1a8b8d0cc1d425dadc1d786b3f",
     "scripts/lib/scan-db-constraints.mjs": "1bcc9378e511ae1de09a9dfe3d99af8f5e9424075ee248ea84558f26ae8bb526",
     "scripts/lib/scan-guard-regressions.mjs": "a80ccefca7b7340d1500ad00d4d6182ba3a61c4922b7bee33b9a8d1d337cacff",

@@ -27,14 +27,20 @@ ok() { echo "  OK: $1"; }
 ng() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }
 
 # ルールの節を名指ししている検査を機械で拾う（一覧を手で持たない）
+# WHY(登録簿から対象を取る、2026-09-09): 以前は `common.md` を直書きしていた。
+#      ルールの文書名は導入先ごとに違うので、共通側へ配れなかった。
+#      エンジンと同じ登録簿（scripts/lib/rule-guard-registry.json）から文書名を取る。
 GUARDS="$(cd "$ROOT" && node -e '
 import("./scripts/lib/check-rule-guard-coverage.mjs").then(async (m) => {
   const fs = await import("node:fs")
+  const path = await import("node:path")
+  const docs = m.loadRegistry(process.cwd()).ruleDocs.map((d) => path.basename(d))
+  const pointer = new RegExp("(" + docs.map((d) => d.replace(/\./g, "\\.")).join("|") + ")」?\\)?「")
   const names = new Set()
   for (const f of fs.readdirSync("scripts")) {
     if (!f.endsWith(".sh") || f.endsWith(".test.sh")) continue
     const t = fs.readFileSync("scripts/" + f, "utf8")
-    if (/common\.md」?\)?「/.test(t) || /common\.md「/.test(t)) {
+    if (pointer.test(t)) {
       if (fs.existsSync("scripts/" + f.replace(/\.sh$/, ".test.sh"))) names.add(f.replace(/\.sh$/, ""))
     }
   }

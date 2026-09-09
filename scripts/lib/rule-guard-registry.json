@@ -1,0 +1,13 @@
+{
+  "_comment": "「ルールの節に守る検査があるか」を見るエンジン（scripts/lib/check-rule-guard-coverage.mjs）の登録簿。エンジンは共通側（aidd-core）が配り、**この登録簿は導入先のもの**。配ると導入先が足した分が上書きで消えるため配らない（catalog-registry.json と同じ扱い）。",
+  "_howto": "ruleDocs: 常時ロードされ、ルールが書かれている文書。省略すると規約の既定（docs/agents/common.md）。notRules: ルールではない節（分類の見出し・索引・参照リスト）と、その理由。",
+  "_why_reason": "notRules に理由を必須にしているのは「面倒だから対象外にする」を止めるため。理由が 10 文字未満だと scripts/check-rule-guard-coverage.test.sh のシナリオ 8 が落ちる。ただし『ルールなのに notRules に入れて逃げる』ことまでは止められない（理由の記述だけが歯止め）。",
+
+  "ruleDocs": ["docs/agents/common.md"],
+
+  "notRules": {
+    "どこに何があるか（索引）": "ルールではなく file-index.md へのポインタ",
+    "分離した参照ドキュメント": "ルールではなく分離先の一覧",
+    "Next.js バージョンに関する注意": "ルールではなく前提の共有（node_modules の docs を読め、という指示で、守ったか破ったかを判定する対象が無い）"
+  }
+}

@@ -58,6 +58,7 @@
     "scripts/check-plugin-integrity.test.sh": "63b4fcd17aa4215d0a8c6cd7ebf627994b1c16072cedfbd954c330b96f84eccb",
     "scripts/check-recovery-queue.sh": "93b69da797d356fce416b9ede31cfeeb59c2cb4887e5ef96bc9efeb00439e3e8",
     "scripts/check-recovery-queue.test.sh": "f24213fffa158b03ed8774428c6bffd6f1dd42ebf6beb05e553d6c2253253c15",
+    "scripts/check-rule-guard-coverage.test.sh": "15ad97c513a834de85e01f7b17494f85c5432bc3ffbd342159aa30237f44dc4d",
     "scripts/check-run-manifest-presence.sh": "dd7a3e2ed166e44eb1b078b2eae4be501366f10a8237ab2a0941d1db5294137c",
     "scripts/check-session-start-matchers.test.sh": "155bdb6d76ba63ed9330c8576cab7a04b037049aca1380d8c5ed19fe57e36ac4",
     "scripts/check-skill-size.test.sh": "1d0112bb93e19fe92f0a1be20ea712076d3b7564b3e86e75afd5e93ac87eab39",
@@ -79,6 +80,7 @@
     "scripts/lib/aidd-config.test.sh": "6b91cb5b02f30b8705c004fceca8413d2d004e3bcf59b78049a560ea9b857b58",
     "scripts/lib/canonical-event.ts": "374f540d160b1f30a8e9586b481b991d782bbb265af4e18787d82868a799f0b5",
     "scripts/lib/check-catalog.mjs": "7315ce8862f248e1b58f576fe84ba529fe444ccc194b4501d86070d81acb85af",
+    "scripts/lib/check-rule-guard-coverage.mjs": "ec4457be69358b720ab88c8437b5a9f4ba1ae600dc3b0d6ec204d2b62193209c",
     "scripts/lib/gate-effectiveness-summary.ts": "6d704753c32f573b7b52a19273b6f67c017a314aefd84accea66a3f73f56e692",
     "scripts/lib/harvest-journal-events.ts": "63fb76382f15c8051a4956e33f9255091b0077625a76cf5eaa9d429c9d8f8029",
     "scripts/lib/model-pricing.ts": "34ab4d65b17c14aa48ddb235b6a27ccc9f4a2205e41344c27d664b5d379a10f8",
@@ -128,6 +130,7 @@
     "templates/consumer/README.md": "a1b9f3ce73f162b2690778818d18a717790f82cd68ec4305a932312ec5d0f4e2",
     "templates/consumer/aidd.config.json": "8a79d67a78bc2cdd442302de93b9c440d108e4374ab1ee314c0455f8ede8ecff",
     "templates/consumer/catalog-registry.json": "37fff591c33c4eed46cc42b9fbba0dc4d966415e576ddb7917800731d1328f4b",
-    "templates/consumer/check-design-pitfalls.md": "6447d3afe7d0eb612eccccf096b5390206d3bb7aa947fb184193252810e581b2"
+    "templates/consumer/check-design-pitfalls.md": "6447d3afe7d0eb612eccccf096b5390206d3bb7aa947fb184193252810e581b2",
+    "templates/consumer/rule-guard-registry.json": "79070efd33023b8789872cd61037e5caf0597500c9f692fdb2ce34d25bd35b9d"
   }
 }
