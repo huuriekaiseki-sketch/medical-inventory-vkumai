@@ -138,6 +138,58 @@ describe('業務不変条件（DB 制約・トリガー） [I-010 I-011 I-012 I-
   // WHY(2026-09-08 の棚卸しで見つけた): 状態の**語彙**（どの値を許すか）は、
   //      前にしか進まないこと（I-020）とは別の約束。消耗品発注だけ語彙を測っていなかった。
   //      語彙が黙って広がると、画面・集計・状態遷移のトリガーがそれぞれ別の前提で動き出す。
+  // WHY(2026-09-09 に測って閉じた): I-033 は「守る場所＝主キー」と書いたまま
+  //      **守るテストが 未 で 計画のまま**だった。制約は最初からあるのに、
+  //      誰も破ろうとしたことが無い＝「効いている」と言えない状態（C-011 の形）。
+  //
+  //      これは認可に直結する。同じ利用者が同じ施設に 2 行持てると、
+  //      `is_facility_writer()` / `is_admin()` が**どちらの行を見るか**で結果が変わりうる
+  //      （viewer の行と admin の行を同時に持てる）。
+  describe('I-033 利用者は 1 施設に 1 行（同じ施設に二重所属しない）', () => {
+    it('同じ組み合わせを 2 回入れると 23505。役割違いでも入らない', async () => {
+      const { data: facility } = await serviceClient
+        .from('facilities')
+        .insert({ name: `二重所属テスト施設-${randomUUID()}` })
+        .select('id')
+        .single()
+      const { data: created } = await serviceClient.auth.admin.createUser({
+        email: `duplicate-membership-${randomUUID()}@example.test`,
+        password: 'duplicate-membership-test-0000',
+        email_confirm: true,
+      })
+      const userId = created!.user!.id
+
+      const { error: first } = await serviceClient
+        .from('user_facilities')
+        .insert({ user_id: userId, facility_id: facility!.id, role: 'viewer' })
+      expect(first, '1 行目が入らない（前提が崩れている）').toBeNull()
+
+      // 同じ役割でも、違う役割でも 2 行目は入らない（主キーは role を含まない）
+      const { error: sameRole } = await serviceClient
+        .from('user_facilities')
+        .insert({ user_id: userId, facility_id: facility!.id, role: 'viewer' })
+      expect(sameRole?.code).toBe('23505')
+      const { error: otherRole } = await serviceClient
+        .from('user_facilities')
+        .insert({ user_id: userId, facility_id: facility!.id, role: 'admin' })
+      expect(otherRole?.code, '役割を変えれば二重に所属できてしまった').toBe('23505')
+
+      // 対照: 別の施設へは入る（「何も入らない」で緑になっていないこと）
+      const { data: other } = await serviceClient
+        .from('facilities')
+        .insert({ name: `二重所属テスト施設2-${randomUUID()}` })
+        .select('id')
+        .single()
+      const { error: another } = await serviceClient
+        .from('user_facilities')
+        .insert({ user_id: userId, facility_id: other!.id, role: 'staff' })
+      expect(another, '別の施設にも所属できない（制約が広すぎる）').toBeNull()
+
+      await serviceClient.auth.admin.deleteUser(userId)
+      await serviceClient.from('facilities').delete().in('id', [facility!.id, other!.id])
+    })
+  })
+
   describe('I-021 状態の語彙は決めた値だけ（消耗品発注）', () => {
     it('決めていない状態へは更新できない', async () => {
       const { data: consumable } = await serviceClient
