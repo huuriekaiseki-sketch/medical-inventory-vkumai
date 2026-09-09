@@ -114,13 +114,26 @@ export function checkCatalog({ spec, text, root }) {
   const idRe = new RegExp(`^${prefix}-[0-9]{3}$`)
   const rowRe = new RegExp(`^\\|\\s*${prefix}-`)
   const seen = new Set()
-  const rows = text.split('\n').filter((l) => rowRe.test(l))
+  // WHY(見出しも一緒に持つ・2026-09-09): ID の帯（10 刻み）は**節と対応している**が、
+  //      その対応は今まで人が読んで守るだけだった。実際に 1 件間違えた
+  //      （状態遷移の節に 06x の ID を振り、更新ルールを読み直すまで誰も落ちなかった）。
+  //      行だけを集めると節が消えるので、直前の見出しを添えて持つ。
+  const rows = []
+  let heading = ''
+  for (const l of text.split('\n')) {
+    const h = /^#{2,4}\s+(.*)$/.exec(l)
+    if (h) heading = h[1].trim()
+    else if (rowRe.test(l)) rows.push({ line: l, heading })
+  }
 
   if (rows.length === 0) violations.push(`${spec.id}: 行が 1 つも無い（${prefix}-xxx の行）`)
 
   violations.push(...checkLimits({ spec, text }))
 
-  for (const line of rows) {
+  /** 節の見出し → その節に出てきた帯（10 刻み）の集合 */
+  const bandsBySection = new Map()
+
+  for (const { line, heading: section } of rows) {
     const cells = splitRow(line)
     const id = cells[0] ?? ''
 
@@ -140,6 +153,8 @@ export function checkCatalog({ spec, text, root }) {
       if (!spec.idBands.includes(band)) {
         violations.push(`${spec.id}: band: [${id}] 区分の番号帯（${spec.idBands.join(' / ')}）の外`)
       }
+      if (!bandsBySection.has(section)) bandsBySection.set(section, new Map())
+      if (!bandsBySection.get(section).has(band)) bandsBySection.get(section).set(band, id)
     }
 
     const status = cells[(spec.statusColumn ?? spec.columns) - 1] ?? ''
@@ -169,6 +184,53 @@ export function checkCatalog({ spec, text, root }) {
         }
       }
     }
+  }
+
+  violations.push(...checkBandSections({ spec, bandsBySection }))
+  return violations
+}
+
+/**
+ * 節（見出し）と ID の帯が一致しているかを見る。
+ *
+ * WHY(2026-09-09、実際に間違えたので足した): 更新ルールには「区分ごとに 10 刻み」と書いてあるが、
+ *      **書いてあるだけで誰も突き合わせていなかった**。状態遷移の節に 06x の ID を振っても
+ *      15 本のルールブック検査は 1 つも落ちず、更新ルールを読み直して初めて気づいた（C-010 の型）。
+ *
+ * WHY(節が 1 つしか無いルールブックには掛けない): `check-design-pitfalls.md` のように
+ *      **1 つの節に全部の帯を並べる**書き方も正しい（帯の意味は更新ルールの文章にある）。
+ *      節で区分を表しているルールブック（行を持つ節が 2 つ以上）だけを対象にする。
+ *      対象かどうかを人が宣言しないので、**書き方を変えたら勝手に対象が変わる**（宣言の陳腐化が無い）。
+ *
+ * 限界: 節の**名前**が区分の意味と合っているかは見ない（帯が節ごとに 1 つであることだけ）。
+ *       節をまたいで同じ帯を使っていること自体は見る（下の 2 つ目）。
+ */
+export function checkBandSections({ spec, bandsBySection }) {
+  const violations = []
+  if (bandsBySection.size < 2) return violations
+
+  for (const [section, bands] of bandsBySection) {
+    if (bands.size <= 1) continue
+    const detail = [...bands].map(([band, id]) => `${band}x=${id}`).join(' / ')
+    violations.push(
+      `${spec.id}: section: 節「${section}」に帯が ${bands.size} つ混ざっている（${detail}）。` +
+        `ID の帯は節と対応させる`
+    )
+  }
+
+  /** 逆向き: 同じ帯が 2 つ以上の節に散っている */
+  const sectionsByBand = new Map()
+  for (const [section, bands] of bandsBySection) {
+    for (const band of bands.keys()) {
+      if (!sectionsByBand.has(band)) sectionsByBand.set(band, [])
+      sectionsByBand.get(band).push(section)
+    }
+  }
+  for (const [band, sections] of sectionsByBand) {
+    if (sections.length <= 1) continue
+    violations.push(
+      `${spec.id}: section: 帯 ${band}x が ${sections.length} つの節に散っている（${sections.join(' / ')}）`
+    )
   }
   return violations
 }

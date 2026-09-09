@@ -118,6 +118,62 @@ else
   assert_fail "正しい fixture を違反にした" "$OUT"
 fi
 
+echo "=== scenario 4c: 節と ID の帯の食い違いを検知する（2026-09-09 に実際にやった間違い） ==="
+# WHY: 更新ルールの「区分ごとに 10 刻み」は**書いてあるだけ**で、誰も突き合わせていなかった。
+#      状態遷移の節に 06x の ID を振っても 15 本のルールブック検査は 1 つも落ちず、
+#      更新ルールを読み直して初めて気づいた（C-010: 印を実態と突き合わせていない）。
+cat > "$WORK/mixed.md" <<'EOF'
+## 状態遷移
+
+| ID | 内容 | 守るテスト | 状態 |
+| --- | --- | --- | --- |
+| Z-001 | この節の帯は 00x | `package.json` | 済み |
+| Z-060 | **別の帯を紛れ込ませた** | `package.json` | 済み |
+
+## 入力の長さ
+
+| ID | 内容 | 守るテスト | 状態 |
+| --- | --- | --- | --- |
+| Z-061 | この節の帯は 06x | `package.json` | 済み |
+
+## 限界
+
+表の形（列・ID・状態の語彙）しか見ないので、書かれている中身が正しいかは見ない。
+EOF
+SPEC_BANDS='{"id":"fixture","idPrefix":"Z","columns":4,"evidenceColumn":3,"statusColumn":4,"states":["済み","計画","対象外"],"evidenceRequiredStates":["済み"],"idBands":[0,60],"limits":"fixture 用。表の形しか見ないので中身の妥当性は見ない"}'
+OUT="$(node "$ENGINE" --spec "$SPEC_BANDS" --file "$WORK/mixed.md" --root "$REPO_ROOT")"
+if printf '%s\n' "$OUT" | grep -q '節「状態遷移」に帯が 2 つ混ざっている'; then
+  assert_ok "節に別の帯が紛れたら検知"
+else
+  assert_fail "節と帯の食い違いを検知できない" "$OUT"
+fi
+if printf '%s\n' "$OUT" | grep -q '帯 60x が 2 つの節に散っている'; then
+  assert_ok "同じ帯が 2 つの節に散っているのも検知（逆向き）"
+else
+  assert_fail "帯が散っているのを検知できない" "$OUT"
+fi
+
+# WHY(節が 1 つなら掛けない): 1 つの節に全部の帯を並べる書き方も正しい
+#      （check-design-pitfalls.md がその形。帯の意味は更新ルールの文章にある）
+cat > "$WORK/single-section.md" <<'EOF'
+## 一覧
+
+| ID | 内容 | 守るテスト | 状態 |
+| --- | --- | --- | --- |
+| Z-001 | 帯 00x | `package.json` | 済み |
+| Z-060 | 帯 06x | `package.json` | 済み |
+
+## 限界
+
+表の形（列・ID・状態の語彙）しか見ないので、書かれている中身が正しいかは見ない。
+EOF
+OUT="$(node "$ENGINE" --spec "$SPEC_BANDS" --file "$WORK/single-section.md" --root "$REPO_ROOT")"
+if [ "$(printf '%s\n' "$OUT" | tail -n1)" = "violations=0" ]; then
+  assert_ok "節が 1 つなら帯が混ざっていても違反にしない"
+else
+  assert_fail "1 節に並べる書き方を違反にした" "$OUT"
+fi
+
 echo '=== scenario 4b: エスケープしたパイプ（\|）は区切りにしない。正しい markdown を違反にしない ==='
 # WHY(2026-09-07): fail-open-inventory.md を登録しようとしたら列数の違反が 6 件出た。
 #      中身は `` `error \|\| !user` `` のように **markdown のエスケープで内容としてのパイプ**を

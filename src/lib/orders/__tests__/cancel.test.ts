@@ -23,7 +23,14 @@ type DbError = { code?: string; message: string } | null
 /**
  * `db.from(table).select(...).eq(...).eq(...).maybeSingle()` と
  * `db.from(table).update(...).eq(...).eq(...).select(...).maybeSingle()` の
- * 両方に答える最小のスタブ。1 回目の maybeSingle が読み取り、2 回目が更新。
+ * 両方に答える最小のスタブ。
+ *
+ * WHY(呼ばれた回数ではなく、呼ばれた操作で答える): 最初は「1 回目が読み取り・2 回目が更新」と
+ *      **順番を数えて**いた。同じスタブで cancelOrder を 2 回呼ぶと 2 回目の読み取りが
+ *      更新の結果を受け取り、**測りたい道と違う道**（見つからない）を通っていた（実際に踏んだ）。
+ *      順番に依存する形は、テストの書き方しだいで黙って別の道へ落ちる。
+ *      `update()` が呼ばれたかどうかで答えれば、**順番も再利用も関係なくなる**。
+ *      `from()` ごとに新しい連鎖を作るので、1 つの db を何回使っても状態が混ざらない。
  */
 function makeDb(options: {
   current: Row | null
@@ -31,18 +38,24 @@ function makeDb(options: {
   updateError?: DbError
   updated?: Row | null
 }) {
-  let calls = 0
-  const chain = {
-    select: () => chain,
-    update: () => chain,
-    eq: () => chain,
-    maybeSingle: async () => {
-      calls += 1
-      if (calls === 1) return { data: options.current, error: options.readError ?? null }
-      return { data: options.updated ?? null, error: options.updateError ?? null }
+  return {
+    from: () => {
+      let isUpdate = false
+      const chain = {
+        select: () => chain,
+        update: () => {
+          isUpdate = true
+          return chain
+        },
+        eq: () => chain,
+        maybeSingle: async () =>
+          isUpdate
+            ? { data: options.updated ?? null, error: options.updateError ?? null }
+            : { data: options.current, error: options.readError ?? null },
+      }
+      return chain
     },
-  }
-  return { from: () => chain } as never
+  } as never
 }
 
 const FACILITY = '11111111-1111-1111-1111-111111111111'
@@ -100,12 +113,10 @@ describe('cancelOrder のエラーの写し方 [I-022]', () => {
   })
 
   it('書けなかった（RLS で 0 行）は権限のエラーで、取り消し済みとは別の文言', async () => {
-    // WHY(1 回の呼び出しにつきスタブを作り直す): makeDb は「1 回目が読み取り・2 回目が更新」を
-    //      数えて答える。同じスタブで 2 回呼ぶと 2 回目の読み取りが更新の結果を受け取り、
-    //      **測りたいものと違う道**（見つからない）を通る（自分でこれを踏んだ）
-    const make = () => makeDb({ current: { id: ORDER, status: 'submitted' }, updated: null })
-    await expect(cancelOrder(make(), 'loan_orders', FACILITY, ORDER)).rejects.toBeInstanceOf(ClientVisibleError)
-    await expect(cancelOrder(make(), 'loan_orders', FACILITY, ORDER)).rejects.toThrow(
+    // 同じ db を 2 回使う（スタブが順番に依存していないことの対照でもある）
+    const db = makeDb({ current: { id: ORDER, status: 'submitted' }, updated: null })
+    await expect(cancelOrder(db, 'loan_orders', FACILITY, ORDER)).rejects.toBeInstanceOf(ClientVisibleError)
+    await expect(cancelOrder(db, 'loan_orders', FACILITY, ORDER)).rejects.toThrow(
       '発注を取り消す権限がありません'
     )
   })
