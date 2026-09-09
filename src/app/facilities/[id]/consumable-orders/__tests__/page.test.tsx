@@ -36,9 +36,10 @@ afterEach(() => {
  *      viewer のときの振る舞いは role を差し替えて測れる。
  */
 function setupFetch({ consumables = facilityConsumables, role = 'staff' } = {}) {
-  // WHY(init も受ける): 呼び出しの検査（DELETE が飛んだか）で `calls[n][1]` を見るため。
-  //      引数を 1 つしか宣言しないと、TypeScript がタプル長 1 として弾く
-  return vi.fn((url: string, _init?: RequestInit) => {
+  // WHY(型に init も入れる): 呼び出しの検査（DELETE が飛んだか）で `calls[n][1]` を見るため。
+  //      引数を 1 つしか宣言しないと TypeScript がタプル長 1 として弾き、
+  //      使わない引数を書くと lint が落ちる。**型だけ**に持たせて両方を満たす
+  return vi.fn<(url: string, init?: RequestInit) => unknown>((url: string) => {
     if (typeof url === 'string' && url.includes('/my-role')) {
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ role }) })
     }
@@ -182,7 +183,7 @@ describe('ConsumableOrdersPage', () => {
     it('使用停止は確認してから PATCH する（戻せないので）', async () => {
       const user = userEvent.setup()
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
-      const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
+      const fetchMock = vi.fn<(url: string, init?: RequestInit) => unknown>((url: string) => {
         if (typeof url === 'string' && url.includes('/my-role')) {
           return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ role: 'staff' }) })
         }

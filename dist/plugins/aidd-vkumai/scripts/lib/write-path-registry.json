@@ -1,0 +1,53 @@
+{
+  "_comment": "「DB は許すのにアプリに道が無い」を数えるエンジン（scripts/lib/check-write-path-gaps.mjs）の登録簿。エンジンは共通側・**この登録簿は導入先のもの**。2026-09-09 新設（E-056 / E-057 が 2 日で 2 回、別々の表で同じ形を出したため）。",
+  "_howto": "隙間が出たら選ぶのは 3 つ: (1) アプリに道を作る (2) DB の権限を剥がす (3) ここに理由を書く。**(3) は増やせない**（maxGaps）。",
+  "_limits": "静的解析。`.from('表').insert/update/delete/upsert(` の形しか見ない。道が『あるか』だけを見て、その道の認可が正しいかは見ない（それは攻撃表 P-017 の担当）。",
+
+  "migrationsDir": "supabase/migrations",
+
+  "scan": {
+    "roots": ["src/app", "src/lib", "src/components"],
+    "extensions": [".ts", ".tsx"],
+    "excludeDirs": ["__tests__"],
+    "excludeFilePattern": "\\.test\\."
+  },
+
+  "dynamicCallSites": {
+    "_comment": "表名が変数の `.from(...)`。走査では拾えないので、何を書くのかをここで宣言する（宣言と実測の数が合わなければ落ちる）。",
+    "src/lib/orders/cancel.ts": {
+      "tables": ["case_orders", "consumable_orders", "loan_orders"],
+      "verbs": ["update"],
+      "reason": "発注 3 種の取り消しを 1 か所にまとめてあり、表名を引数で受け取る（E-056）。3 表とも status を cancelled にする UPDATE だけを行う"
+    }
+  },
+
+  "declaredGaps": {
+    "_comment": "DB は authenticated に許しているが、アプリはその向きに一度も書かない組み合わせ。**ほとんどが剥がす候補**で、ここに残っているのは『まだ測っていない』という意味。",
+
+    "case_orders.insert": "作成は create_case_order_atomic（SECURITY DEFINER）が行うので、クライアントの INSERT 権限は使われていない余剰。剥がす候補（剥がすと何が壊れるかを測ってから）",
+    "consumable_orders.insert": "同上（create_consumable_order_atomic）。RPC は定義者の権限で動くので、クライアントの INSERT 権限は要らない",
+    "loan_orders.insert": "同上（create_loan_order_atomic）",
+    "loan_returns.insert": "同上（create_loan_return_atomic）",
+    "case_order_items.insert": "明細も RPC の中で入る。クライアントが直接 INSERT する道は無い",
+    "consumable_order_items.insert": "明細は create_consumable_order_atomic の中で入る。クライアントが直接 INSERT する道は無い",
+    "loan_order_items.insert": "明細は create_loan_order_atomic の中で入る。クライアントが直接 INSERT する道は無い",
+    "loan_return_items.insert": "明細は create_loan_return_atomic の中で入る。クライアントが直接 INSERT する道は無い",
+
+    "case_orders.delete": "E-056 の判断で、間違えた発注は削除ではなく取り消し状態にする。削除の道は製品に無く、権限は余剰",
+    "consumable_orders.delete": "同じ理由（取り消し状態にする）。削除の道は製品に無い",
+    "loan_orders.delete": "同じ理由（取り消し状態にする）。削除の道は製品に無い",
+    "loan_returns.delete": "同じ理由（取り消し状態にする）。削除の道は製品に無い",
+    "case_order_items.delete": "明細も消さない。親か明細の status で表す（E-056）",
+    "consumable_order_items.delete": "明細も消さない。親の取り消しで一緒に外れる",
+    "loan_order_items.delete": "明細も消さない。親の取り消しで一緒に外れる",
+    "loan_return_items.delete": "明細も消さない。品目ごとの取り消しは status で表す（E-056 の残り、2026-09-09）",
+
+    "case_order_items.update": "明細は作り直さない。取り消しは親の status で表すので、明細を書き換える道は無い",
+    "consumable_order_items.update": "消耗品発注の明細も作り直さない。数量を直したいときは取り消して入れ直す",
+    "loan_order_items.update": "短貸発注の明細も作り直さない。返却の残数がこの行を見ているので、後から書き換えない",
+
+    "product_compatibilities.update": "互換の組は作るか消すかだけ。付け替えは消して作り直すので、更新の道は無い"
+  },
+
+  "maxGaps": 20
+}

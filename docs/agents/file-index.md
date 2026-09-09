@@ -57,6 +57,8 @@
 | `scripts/summarize-gate-passfail.sh` / `scripts/lib/gate-effectiveness-summary.ts` | 収穫済みjournalからagentType別pass/fail/blockedを集計し月次品質ゲートサマリへ出力（issue #569・#642） |
 | `.claude/workflows/lib/constraint-coverage.js` | DB制約・RLS/admin境界・公開RPCの「守るテストが無い穴」の判定ロジック正本（issue #675、P-043） |
 | `scripts/check-constraint-coverage.sh` | 現存する穴を**怪しい順**に表示。新規発生の阻止は`supabase/migrations/__tests__/constraint_coverage_ratchet.test.ts`が`npm test`で行う |
+| `scripts/lib/scan-rls-grant-gaps.mjs` / `scripts/check-rls-grant-gaps.test.sh` | 層の食い違いの**片側**（E-055）。権限はあるが規則が無い＝**触れるが何も起きない道**を数える。逆向きも見る（規則はあるが権限が無い） |
+| `scripts/lib/check-write-path-gaps.mjs` / `scripts/lib/write-path-registry.json` / `scripts/check-write-path-gaps.test.sh` | 層の食い違いの**逆側**（E-056 / E-057、2026-09-09）。**DB は書けるのにアプリに道が無い**組み合わせを数え、理由の宣言を要求して件数を増やせなくする（ratchet）。エンジンは共通・登録簿は導入先 |
 | `scripts/check-agent-progress-gap.sh` | agent-progress記録漏れの機械検知（issue #339） |
 | `scripts/record-gap-check-state.sh` | gap check用before/expected件数の記録（issue #488。オーケストレーター専用） |
 | `scripts/check-gap-check-state.sh` | Stop hookによるgap checkの自動実行（issue #488） |
