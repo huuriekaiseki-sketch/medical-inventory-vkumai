@@ -198,7 +198,12 @@
     "rehearse-merge.sh": "aidd-core",
     "lib/merge-queue.json": "aidd-vkumai",
     "lib/check-rule-guard-coverage.mjs": "aidd-core",
-    "lib/rule-guard-registry.json": "aidd-vkumai"
+    "lib/rule-guard-registry.json": "aidd-vkumai",
+    "lib/check-table-row-duplicates.mjs": "aidd-core",
+    "lib/table-duplicates-registry.json": "aidd-vkumai",
+    "check-verify-claims-fail-open-streak.sh": "aidd-core",
+    "lib/check-roadmap-staleness.mjs": "aidd-core",
+    "lib/roadmap-registry.json": "aidd-vkumai"
   },
   "workflowLib": {
     "_comment": ".claude/workflows/lib/ の純粋関数のうち bin/ のスクリプトが node で呼ぶもの。scripts/workflow-lib/ に置く（workflows/ 配下に置くと Workflow として走査されるため）",
@@ -244,7 +249,9 @@
     "scripts/check-upstream-docs-review-staleness.sh": "check-dependency-update-staleness.sh の WHY コメントが「同じ型の先行例」として名前を挙げるだけ（本体は共通側にあり、アダプター側からは参照できない）",
     "scripts/check-rule-guard-effective.test.sh": "エンジンのコメントが「名指しだけでなく効き目も測る対の検査」として参照する。その検査は導入先のリポジトリ構成（sandbox が symlink で見せる top-level）に依存するので配らない",
     "scripts/lib/check-rule-guard-coverage.mjs": "登録簿（rule-guard-registry.json）が「自分を読むエンジン」として参照する。エンジンは aidd-core が同梱し、依存関係（aidd-vkumai → aidd-core）で解決される",
-    "scripts/check-rule-guard-coverage.test.sh": "同上（エンジンの構造テスト。aidd-core が同梱する）"
+    "scripts/check-rule-guard-coverage.test.sh": "同上（エンジンの構造テスト。aidd-core が同梱する）",
+    "scripts/lib/check-table-row-duplicates.mjs": "登録簿（table-duplicates-registry.json）が「自分を読むエンジン」として参照する。エンジンは aidd-core が同梱し、依存関係（aidd-vkumai → aidd-core）で解決される",
+    "scripts/lib/check-roadmap-staleness.mjs": "登録簿（roadmap-registry.json）が「自分を読むエンジン」として参照する。エンジンは aidd-core が同梱し、依存関係（aidd-vkumai → aidd-core）で解決される"
   },
   "checks": {
     "_comment": "検査（*.test.sh）の層。check-x.sh に対する check-x.test.sh は自動で対象と同じプラグインへ付いていくので、ここに書くのは (1) 対象スクリプトを持たない構造テスト (2) 自動判定を上書きしたいもの の 2 つだけ。上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙（高リスクパスの例・ドメイン語・スタック名）で書かれている検査で、共通側の禁止語検査に引っかかるもの。",
@@ -258,12 +265,13 @@
     "check-rls-grant-gaps.test.sh": "aidd-vkumai",
     "check-guard-regressions.test.sh": "aidd-vkumai",
     "check-pitfall-rulebook.test.sh": "aidd-core",
-    "check-rule-guard-coverage.test.sh": "aidd-core"
+    "check-rule-guard-coverage.test.sh": "aidd-core",
+    "check-table-row-duplicates.test.sh": "aidd-core",
+    "check-roadmap-staleness.test.sh": "aidd-core"
   },
   "checksNotDistributed": {
     "_comment": "配らない検査と、その理由。導入先に存在しないもの（このリポジトリの docs・カタログ・スキーマ）を検査していて、配ると必ず落ちるものだけをここに書く。「面倒だから」で足さない。",
     "check-test-matrix.test.sh": "docs/agents/test-matrix.md の実データを検査する。形式は汎用だが、行の中身は導入先ごとに違う（形式だけを配るには雛形が要る。#535）",
-    "check-table-row-duplicates.test.sh": "重複を見るエンジンは汎用だが、対象の表と鍵の列（TABLES）が docs/agents 配下の実ファイルで、シナリオ 3 が .gitattributes の union 対象と突き合わせる。エンジンと登録簿を分ければ（catalog-registry.json と同じ形）共通側へ移せる",
     "check-promise-catalog.test.sh": "同上（promise-catalog.md の実データ）",
     "check-invariant-catalog.test.sh": "同上（invariant-catalog.md の実データ）",
     "check-docs-integrity.test.sh": "同上（docs/agents 配下の実データ）",
@@ -293,7 +301,6 @@
     "harvest-journal-events.test.sh": "同上（fixture にリポジトリ名が入る）",
     "check-agent-baseline-freshness.test.sh": "対象の check-agent-baseline-freshness.sh 自体を配っていない（CI ワークフローと docs/agents/baselines/ の構成が前提）。配るなら先に対象を層の表へ",
     "snapshot-agent-baseline.test.sh": "同上（baselines の取り方がこのリポジトリの agents 構成に依存する）",
-    "check-verify-claims-fail-open-streak.test.sh": "対象は共通側にあるが、検査は logs/ の実データ形式と連続回数のしきい値に依存する。しきい値を設定に出せたら配れる",
     "check-plugin-check-coverage.test.sh": "プラグインの層の表そのものを検査する。中心リポジトリだけが持つ（build-plugin.test.sh と同じ扱い）",
     "check-fail-open.test.sh": "src/ の実コードと docs/agents/fail-open-inventory.md の実データを走査する。走査の型は汎用だが対象がこのリポジトリの構成",
     "check-flaky-tests.test.sh": "テスト実行コマンドと JSON レポートの形がこのスタック固有",
@@ -317,7 +324,6 @@
     "check-design-answers.test.sh": "aidd.config.json の limits と design-questions.md の実データを突合する。値が導入先ごとに違う",
     "check-design-questions.test.sh": "supabase/migrations/ の実データを走査する",
     "check-export-paths.test.sh": "src/ の実コードと依存名を走査する（エクスポート経路が生えた瞬間に落とす ratchet）",
-    "check-rule-guard-effective.test.sh": "no-op 置換の手法自体は汎用で、対象の抽出は 2026-09-09 に登録簿（scripts/lib/rule-guard-registry.json）から取るようにした。残る固有部分は sandbox が symlink で見せる top-level の構成で、そこを設定に出せば共通側へ移せる",
-    "check-roadmap-staleness.test.sh": "「状態列と成果物の突合」という型は汎用だが、対象が security-test-catalog.md の実データで、EVIDENCE がこのリポジトリの #757 番号とファイル構成。対象と対応表を設定に出せば共通側へ移せる"
+    "check-rule-guard-effective.test.sh": "no-op 置換の手法自体は汎用で、対象の抽出は 2026-09-09 に登録簿（scripts/lib/rule-guard-registry.json）から取るようにした。残る固有部分は sandbox が symlink で見せる top-level の構成で、そこを設定に出せば共通側へ移せる"
   }
 }

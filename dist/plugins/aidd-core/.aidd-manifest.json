@@ -58,6 +58,7 @@
     "scripts/check-plugin-integrity.test.sh": "63b4fcd17aa4215d0a8c6cd7ebf627994b1c16072cedfbd954c330b96f84eccb",
     "scripts/check-recovery-queue.sh": "93b69da797d356fce416b9ede31cfeeb59c2cb4887e5ef96bc9efeb00439e3e8",
     "scripts/check-recovery-queue.test.sh": "f24213fffa158b03ed8774428c6bffd6f1dd42ebf6beb05e553d6c2253253c15",
+    "scripts/check-roadmap-staleness.test.sh": "7508505f1c1c598d0283679e938601faf6f95fd08c21a11d80c767b906e860a8",
     "scripts/check-rule-guard-coverage.test.sh": "15ad97c513a834de85e01f7b17494f85c5432bc3ffbd342159aa30237f44dc4d",
     "scripts/check-run-manifest-presence.sh": "dd7a3e2ed166e44eb1b078b2eae4be501366f10a8237ab2a0941d1db5294137c",
     "scripts/check-session-start-matchers.test.sh": "155bdb6d76ba63ed9330c8576cab7a04b037049aca1380d8c5ed19fe57e36ac4",
@@ -67,8 +68,11 @@
     "scripts/check-stale-worktrees.test.sh": "be49da301850024432aa7b960bb9b8f0ddb0da2f9a9a50a393b031d8dba66494",
     "scripts/check-subagent-model-force.sh": "99934a8770f424e46bc228bd9e97b4f5b0cdf0187e3f298730b3a4a4ada047ea",
     "scripts/check-subagent-model-force.test.sh": "199527ba52a4be98077135445835417744b2ce19e20c5f393aeebba012d7f5cb",
+    "scripts/check-table-row-duplicates.test.sh": "32e3eab6b4a5bba5eb7e844d61220ba0eaa7a04e17408b7c90e50fb9dad66149",
     "scripts/check-upstream-docs-review-staleness.sh": "53226b623bcf2724b880486a60dd6ce53a55e7be96377e08c59cf2f230747b5c",
     "scripts/check-upstream-docs-review-staleness.test.sh": "fb188032761cbf49b0e3a01e9bc2cc93788b356f9d27b4e11903662e4b26b236",
+    "scripts/check-verify-claims-fail-open-streak.sh": "b65f0612bf94b4e0e5a66224b68f8253258ab6530d95f090b5a4bf614ba0a7cb",
+    "scripts/check-verify-claims-fail-open-streak.test.sh": "20287b4046ac2f21676e958f2c0fac4ef7ba99eedbf86fad77facff690f0efa1",
     "scripts/check-workflow-interruption.sh": "594e0851c9141a3e771845458c11318688a0dfd00aef5e4ca50073d092bba230",
     "scripts/check-workflow-interruption.test.sh": "0f98a760f0dcbda3c27441384080c3634c997add2e11612e700e8f7514834b11",
     "scripts/codex-agents-sandbox.test.sh": "6971dc82b6f1bc34de62595912233995106b20f297b2d86f334182ca3a6117c3",
@@ -80,7 +84,9 @@
     "scripts/lib/aidd-config.test.sh": "6b91cb5b02f30b8705c004fceca8413d2d004e3bcf59b78049a560ea9b857b58",
     "scripts/lib/canonical-event.ts": "374f540d160b1f30a8e9586b481b991d782bbb265af4e18787d82868a799f0b5",
     "scripts/lib/check-catalog.mjs": "7315ce8862f248e1b58f576fe84ba529fe444ccc194b4501d86070d81acb85af",
+    "scripts/lib/check-roadmap-staleness.mjs": "7032d3c1bfbffd87317b92ed3f951be10a37b32f0cdb92557210dde45cc3815e",
     "scripts/lib/check-rule-guard-coverage.mjs": "ec4457be69358b720ab88c8437b5a9f4ba1ae600dc3b0d6ec204d2b62193209c",
+    "scripts/lib/check-table-row-duplicates.mjs": "bf5ef3db06febf6eb440d1a0522b84693627b0349b1c96bda608d8cdc7af08f6",
     "scripts/lib/gate-effectiveness-summary.ts": "6d704753c32f573b7b52a19273b6f67c017a314aefd84accea66a3f73f56e692",
     "scripts/lib/harvest-journal-events.ts": "63fb76382f15c8051a4956e33f9255091b0077625a76cf5eaa9d429c9d8f8029",
     "scripts/lib/model-pricing.ts": "34ab4d65b17c14aa48ddb235b6a27ccc9f4a2205e41344c27d664b5d379a10f8",
@@ -131,6 +137,8 @@
     "templates/consumer/aidd.config.json": "8a79d67a78bc2cdd442302de93b9c440d108e4374ab1ee314c0455f8ede8ecff",
     "templates/consumer/catalog-registry.json": "37fff591c33c4eed46cc42b9fbba0dc4d966415e576ddb7917800731d1328f4b",
     "templates/consumer/check-design-pitfalls.md": "6447d3afe7d0eb612eccccf096b5390206d3bb7aa947fb184193252810e581b2",
-    "templates/consumer/rule-guard-registry.json": "79070efd33023b8789872cd61037e5caf0597500c9f692fdb2ce34d25bd35b9d"
+    "templates/consumer/roadmap-registry.json": "d7d469ebcda87636d625659203e786226439a7d4cfc28db50fabb6248f0cb9ba",
+    "templates/consumer/rule-guard-registry.json": "79070efd33023b8789872cd61037e5caf0597500c9f692fdb2ce34d25bd35b9d",
+    "templates/consumer/table-duplicates-registry.json": "1aba74d2c9e982de324fec7133e83cc35686d68166b856c12a2f7d5029e5fd6e"
   }
 }
