@@ -41,6 +41,16 @@ describe('明細テーブル（親経由で施設スコープ）RLS/IDOR [P-011 
     table: 'case_order_items' | 'consumable_order_items' | 'loan_return_items'
     itemIdOf: (f: SeedOrderItemsRlsIdorFixtures) => string
     newRowFor: (f: SeedOrderItemsRlsIdorFixtures) => Record<string, unknown>
+    /**
+     * `authenticated` がまだ UPDATE の権限を持つか（2026-09-09）。
+     *
+     * WHY(表ごとに書く): 明細の UPDATE は「作ったら書き換えない」という判断で
+     *      `case_order_items` / `consumable_order_items` から**権限ごと剥がした**（20260909030000）。
+     *      剥がした表では、他施設のユーザーが弾かれる理由が**施設境界ではなく権限**に変わる。
+     *      どちらでもテストは緑になるので、**どの層が止めているか**をここで書き分ける。
+     *      書き分けないと「RLS が守っている」と読み続けてしまう（C-023 と同じ形）。
+     */
+    clientCanUpdate: boolean
   }
 
   const cases: ItemCase[] = [
@@ -52,6 +62,7 @@ describe('明細テーブル（親経由で施設スコープ）RLS/IDOR [P-011 
         jan: f.jan,
         quantity: 1,
       }),
+      clientCanUpdate: false,
     },
     {
       table: 'consumable_order_items' as const,
@@ -61,6 +72,7 @@ describe('明細テーブル（親経由で施設スコープ）RLS/IDOR [P-011 
         consumable_id: f.consumableId,
         quantity: 1,
       }),
+      clientCanUpdate: false,
     },
     {
       table: 'loan_return_items' as const,
@@ -70,10 +82,12 @@ describe('明細テーブル（親経由で施設スコープ）RLS/IDOR [P-011 
         jan: f.jan,
         quantity: 1,
       }),
+      // 品目ごとの取り消し（status）で使うので UPDATE は残っている
+      clientCanUpdate: true,
     },
   ]
 
-  describe.each(cases)('$table', ({ table, itemIdOf, newRowFor }) => {
+  describe.each(cases)('$table', ({ table, itemIdOf, newRowFor, clientCanUpdate }) => {
     it('他施設のユーザーは1件も取得できない', async () => {
       const { data, error } = await fixtures.userB.client.from(table).select('*')
 
@@ -91,16 +105,22 @@ describe('明細テーブル（親経由で施設スコープ）RLS/IDOR [P-011 
       expect(data).toEqual([])
     })
 
-    it('他施設のユーザーは更新できない（更新が1行も反映されない）', async () => {
-      // WHY: 3テーブルとも quantity を持つ。ポリシーは FOR ALL なので
-      //      SELECT/INSERT/DELETE だけ確かめて UPDATE を落とすとカバー範囲が不揃いになる
-      const { data: updated } = await fixtures.userB.client
+    it('他施設のユーザーは更新できない（止めている層まで言い当てる）', async () => {
+      // WHY: 3テーブルとも quantity を持つ。
+      //      **どの層が止めたか**まで見る。0 行なら施設境界（RLS）、42501 なら権限そのものが無い。
+      //      片方だけを期待すると、剥がした・戻したどちらの変更も静かに通ってしまう
+      const { data: updated, error } = await fixtures.userB.client
         .from(table)
         .update({ quantity: 999 })
         .eq('id', itemIdOf(fixtures))
         .select('id')
 
-      expect(updated ?? []).toEqual([])
+      if (clientCanUpdate) {
+        expect(error, 'UPDATE の権限が剥がれている（宣言を直すこと）').toBeNull()
+        expect(updated ?? []).toEqual([])
+      } else {
+        expect(error?.code, 'UPDATE の権限が戻っている（20260909030000 で剥がしたはず）').toBe('42501')
+      }
 
       const { data: after } = await fixtures.userA.client
         .from(table)
@@ -110,8 +130,25 @@ describe('明細テーブル（親経由で施設スコープ）RLS/IDOR [P-011 
       expect(after?.quantity).toBe(1) // シード時の値
     })
 
+    // WHY(2026-09-09): UPDATE を剥がした表では、**自施設の writer でも**書き換えられない。
+    //      「他施設だから止まった」のではないことを対で測る（C-021 の型）
+    it.runIf(!clientCanUpdate)('自施設のユーザーも更新できない（施設境界ではなく権限で止まる）', async () => {
+      const { error } = await fixtures.userA.client
+        .from(table)
+        .update({ quantity: 999 })
+        .eq('id', itemIdOf(fixtures))
+        .select('id')
+      expect(error?.code, '自施設の writer に UPDATE が通った').toBe('42501')
+    })
+
     it('他施設のユーザーは削除できない（削除後も行が残る）', async () => {
-      await fixtures.userB.client.from(table).delete().eq('id', itemIdOf(fixtures))
+      // WHY(2026-09-09): DELETE は 3 表とも権限ごと剥がした（20260909020000）。
+      //      施設境界より手前で止まるので、他施設・自施設のどちらでも 42501 になる
+      const { error: fromOther } = await fixtures.userB.client.from(table).delete().eq('id', itemIdOf(fixtures))
+      expect(fromOther?.code, 'DELETE の権限が戻っている').toBe('42501')
+
+      const { error: fromOwn } = await fixtures.userA.client.from(table).delete().eq('id', itemIdOf(fixtures))
+      expect(fromOwn?.code, '自施設の writer に DELETE が通った').toBe('42501')
 
       const { data: after } = await fixtures.userA.client
         .from(table)
