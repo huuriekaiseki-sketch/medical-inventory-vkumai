@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { parseQuery } from '@/lib/validation/parse-query'
+import { keywordQueryShape } from '@/lib/api-keyword-query'
+
+const productsQuerySchema = z.object({ ...keywordQueryShape() })
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listProducts, createProduct } from '@/lib/products/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
-import { parseKeyword } from '@/lib/api-keyword-query'
 import type { ProductsApiErrorResponse, ProductsApiQuery, ProductsApiResponse } from '@/types/product'
 import { parseBody } from '@/lib/validation/parse-body'
 import { productInputSchema } from '@/lib/validation/schemas'
@@ -23,12 +27,13 @@ export async function GET(
     const db = await createServerSupabase()
     try { await requireAuth(db) } catch (e) { return authGuardError(e) }
 
-    const kw = parseKeyword(request.nextUrl.searchParams)
-    if (!kw.ok) return kw.response
+    // WHY(2026-09-09): クエリを読むのは parseQuery だけ（keyword の判定は keywordQueryShape）
+    const parsed = parseQuery(request, productsQuerySchema)
+    if (!parsed.ok) return parsed.response
 
     // WHY: ProductsApiQuery型（src/types/product.ts）を実際に参照することで、route側の
     //      パース結果がSPECで定義した契約と一致していることをコンパイル時に保証する
-    const query: ProductsApiQuery = { ...(kw.keyword ? { keyword: kw.keyword } : {}) }
+    const query: ProductsApiQuery = { ...(parsed.data.keyword ? { keyword: parsed.data.keyword } : {}) }
 
     const products = await listProducts(db, query)
     return NextResponse.json({ products } satisfies ProductsApiResponse)

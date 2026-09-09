@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { keywordQueryShape } from '@/lib/api-keyword-query'
 import { z } from 'zod'
 import { parseQuery } from '@/lib/validation/parse-query'
 import { dateRangeShape, refineDateRange } from '@/lib/jst-date-range'
@@ -37,7 +38,7 @@ const ordersQuerySchema = refineDateRange(
           'kind は case_order / consumable_order / loan_order / loan_return のいずれかで指定してください',
       })
       .optional(),
-    keyword: z.string().max(100, { error: 'keyword は 100 文字以内で指定してください' }).optional(),
+    ...keywordQueryShape(),
     ...dateRangeShape,
     ...paginationQueryShape(),
   })

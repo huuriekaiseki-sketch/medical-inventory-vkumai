@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { keywordQueryShape } from '@/lib/api-keyword-query'
 import { z } from 'zod'
 import { parseQuery } from '@/lib/validation/parse-query'
 import { optionalUuidQuery } from '@/lib/validation/uuid'
@@ -16,13 +17,12 @@ import { compatibilityInputSchema } from '@/lib/validation/schemas'
 //
 // WHY(2026-09-09、クエリを唯一の入口へ): GET のクエリは `parseQuery` で読む。
 //      UUID の判定は `validation/uuid.ts` に 1 つだけ（以前はこのファイルにコピーがあった）。
-const MAX_KEYWORD_LENGTH = 100
+// WHY(2026-09-09、文言も揃えた): ここだけ「キーワードは100文字以内で入力してください」で、
+//      ほかは「keyword は 100 文字以内で指定してください」だった（同じ問いに 2 通りの答え）。
+//      判定ごと共有の keywordQueryShape へ寄せた（この文言はどのテストも見ていなかった）
 const compatQuerySchema = z.object({
   categoryId: optionalUuidQuery('categoryId の形式が不正です'),
-  keyword: z
-    .string()
-    .max(MAX_KEYWORD_LENGTH, { error: `キーワードは${MAX_KEYWORD_LENGTH}文字以内で入力してください` })
-    .optional(),
+  ...keywordQueryShape(),
 })
 
 export async function GET(request: NextRequest) {

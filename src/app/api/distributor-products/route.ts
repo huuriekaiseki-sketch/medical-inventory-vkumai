@@ -7,7 +7,7 @@ import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listDistributorProducts, createDistributorProduct } from '@/lib/distributor-products/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
-import { parseKeyword } from '@/lib/api-keyword-query'
+import { keywordQueryShape } from '@/lib/api-keyword-query'
 import { parseBody } from '@/lib/validation/parse-body'
 import { distributorProductInputSchema } from '@/lib/validation/schemas'
 import type {
@@ -24,6 +24,7 @@ import type {
 //      **同じ問いに 2 通りの答えがある状態**そのものを消す（E-053）
 const distributorProductsQuerySchema = z.object({
   categoryId: optionalUuidQuery('categoryId は UUID 形式で指定してください'),
+  ...keywordQueryShape(),
 })
 
 // WHY: apiError は共通の { error: string } 形式を返すが、DistributorProductsApiErrorResponse型と
@@ -41,16 +42,13 @@ export async function GET(
     const db = await createServerSupabase()
     try { await requireAuth(db) } catch (e) { return authGuardError(e) }
 
-    const kw = parseKeyword(request.nextUrl.searchParams)
-    if (!kw.ok) return kw.response
-
     const parsed = parseQuery(request, distributorProductsQuerySchema)
     if (!parsed.ok) return parsed.response
-    const categoryId = parsed.data.categoryId
+    const { categoryId, keyword } = parsed.data
 
     // WHY: DistributorProductsApiQuery型（src/types/distributorProduct.ts）を実際に参照することで、
     //      route側のパース結果がSPECで定義した契約と一致していることをコンパイル時に保証する
-    const query: DistributorProductsApiQuery = { keyword: kw.keyword, categoryId }
+    const query: DistributorProductsApiQuery = { keyword, categoryId }
 
     const items = await listDistributorProducts(db, query)
     return NextResponse.json({ items } satisfies DistributorProductsApiResponse)

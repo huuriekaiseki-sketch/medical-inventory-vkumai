@@ -80,7 +80,7 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    files: ["src/lib/validation/parse-body.ts"],
+    files: ["src/lib/validation/parse-body.ts", "src/lib/validation/parse-query.ts"],
     rules: { "no-restricted-syntax": "off" },
   },
   // WHY(2026-09-09、#757 の 20 の続き): 本文と同じことをクエリ文字列にもする。
@@ -89,12 +89,14 @@ const eslintConfig = defineConfig([
   //      2026-09-09 に 13 route（30 か所）を全部移して 0 本にしたので、いま入れられる
   //      （借金が残っている状態で入れると eslint-disable が散るため、順番はこちらが後）。
   //
-  // WHY(searchParams そのものは禁止しない): `parseKeyword(params)` のように
-  //      URLSearchParams を受け取る共通ヘルパがまだある。**それも parseQuery へ寄せるのが次の一手**で、
-  //      寄せ終わってから禁止を広げる。いまは「route が自分で値を取り出す」ことだけを止める。
+  // WHY(searchParams に触ること自体を禁止する・2026-09-09): 最初は `.get()` の呼び出しだけを
+  //      止めたが、`parseKeyword(params)` のように **URLSearchParams を渡す共通ヘルパ**が残っており、
+  //      そこから route が値を取り出す道が開いていた。同日中にそのヘルパも
+  //      zod の形（`keywordQueryShape`）へ移したので、**触ること自体**を禁止できるようになった。
+  //      これで「クエリを読む方法は parseQuery だけ」が書き方の上で成立する。
   //
-  // WHY(コードだけを見る検査と対で使う): eslint は `params.get()`（局所変数に受けた形）を
-  //      この選択子では捕まえられない。そちらは
+  // WHY(コードだけを見る検査と対で使う): eslint は構文で見るので、たとえば動的な
+  //      プロパティ参照（`req['nextUrl']`）までは追えない。そちらは
   //      scripts/check-query-validation-coverage.test.sh が文字列で見る（2 つで対になる）。
   {
     files: ["src/app/api/**/*.ts"],
@@ -111,10 +113,9 @@ const eslintConfig = defineConfig([
           message: "本文は src/lib/validation/parse-body.ts の parseBody(request, schema) で読む（issue #757 の 20）",
         },
         {
-          selector:
-            "CallExpression[callee.property.name='get'][callee.object.property.name='searchParams']",
+          selector: "MemberExpression[property.name='searchParams']",
           message:
-            "クエリ文字列は src/lib/validation/parse-query.ts の parseQuery(request, schema) で読む（issue #757 の 20）",
+            "クエリ文字列は src/lib/validation/parse-query.ts の parseQuery(request, schema) で読む（issue #757 の 20）。searchParams を共通ヘルパへ渡すのも不可——形（shape）を渡してスキーマに混ぜる",
         },
       ],
     },
