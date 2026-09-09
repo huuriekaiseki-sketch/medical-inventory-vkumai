@@ -36,6 +36,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=lib/resolve-log-dir.sh
 source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+# shellcheck source=lib/worktree-hash.sh
+source "$SCRIPT_DIR/lib/worktree-hash.sh"
 
 cd "$REPO_ROOT" || exit 1
 
@@ -196,12 +198,16 @@ COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 BRANCH="$(git branch --show-current 2>/dev/null || echo unknown)"
 DIRTY="false"
 if ! git diff --quiet -- supabase 2>/dev/null; then DIRTY="true"; fi
+# WHY(C-041、2026-09-09): HEAD の木だけだと**未コミットの変更**が見えない。
+#      「いまの supabase/ の姿」を 1 つのハッシュにして残し、Stop hook が
+#      「この状態では全件を通していません」と言えるようにする
+SUPABASE_WORKTREE="$(worktree_hash supabase)"
 
-python3 - "$LOG_FILE" "$RESULT" "$EXIT_CODE" "$SUPABASE_TREE" "$COMMIT" "$BRANCH" "$DIRTY" <<'PY'
+python3 - "$LOG_FILE" "$RESULT" "$EXIT_CODE" "$SUPABASE_TREE" "$COMMIT" "$BRANCH" "$DIRTY" "$SUPABASE_WORKTREE" <<'PY'
 import json, sys
 from datetime import datetime, timezone
 
-log_file, result, exit_code, tree, commit, branch, dirty = sys.argv[1:8]
+log_file, result, exit_code, tree, commit, branch, dirty, worktree = sys.argv[1:9]
 row = {
     "at": datetime.now(timezone.utc).isoformat(),
     "result": result,
@@ -211,6 +217,8 @@ row = {
     "branch": branch,
     # 未コミットの変更がある状態での実行は「その木で通った」証拠にならない
     "supabaseDirty": dirty == "true",
+    # 未コミットの変更まで含めた「いまの姿」。Stop hook がこれを見る（C-041）
+    "supabaseWorktree": worktree,
 }
 with open(log_file, "a", encoding="utf-8") as f:
     f.write(json.dumps(row, ensure_ascii=False) + "\n")

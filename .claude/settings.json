@@ -95,6 +95,8 @@
       "Bash(scripts/check-escape-ledger.sh *)",
       "Bash(bash scripts/check-escape-ledger.test.sh*)",
       "Bash(bash scripts/triage-escapes.sh*)",
+      "Bash(scripts/check-full-run-before-finish.sh *)",
+      "Bash(bash scripts/check-full-run-before-finish.test.sh*)",
       "Bash(scripts/check-integration-freshness.sh *)",
       "Bash(bash scripts/check-integration-freshness.test.sh*)",
       "Bash(bash scripts/run-integration-tests.sh*)",
@@ -277,31 +279,51 @@
       {
         "matcher": "Bash|Write|Edit|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-skip-marker-write.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-skip-marker-write.sh",
+            "timeout": 5
+          }
         ]
       },
       {
         "matcher": "Bash|Write|Edit|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-dependency-change.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-dependency-change.sh",
+            "timeout": 5
+          }
         ]
       },
       {
         "matcher": "Write|Edit|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-run-manifest-presence.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-run-manifest-presence.sh",
+            "timeout": 5
+          }
         ]
       },
       {
         "matcher": "Bash|mcp__.*execute_sql",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-direct-ddl-execution.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-direct-ddl-execution.sh",
+            "timeout": 5
+          }
         ]
       },
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-readonly-bash.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-readonly-bash.sh",
+            "timeout": 5
+          }
         ]
       }
     ],
@@ -309,34 +331,56 @@
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/record-test-failure.sh", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/record-test-failure.sh",
+            "timeout": 10
+          }
         ]
       }
     ],
     "SubagentStart": [
       {
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/log-subagent-hook-skeleton.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/log-subagent-hook-skeleton.sh",
+            "timeout": 5
+          }
         ]
       }
     ],
     "SubagentStop": [
       {
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/log-subagent-hook-skeleton.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/log-subagent-hook-skeleton.sh",
+            "timeout": 5
+          }
         ]
       }
     ],
     "InstructionsLoaded": [
       {
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/log-instructions-loaded.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/log-instructions-loaded.sh",
+            "timeout": 5
+          }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-full-run-before-finish.sh",
+            "timeout": 20,
+            "statusMessage": "全件を通したかを確認中(C-041)..."
+          },
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-escape-ledger.sh",

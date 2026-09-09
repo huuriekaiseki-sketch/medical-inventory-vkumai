@@ -22,6 +22,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=lib/resolve-log-dir.sh
 source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+# shellcheck source=lib/worktree-hash.sh
+source "$SCRIPT_DIR/lib/worktree-hash.sh"
 
 cd "$REPO_ROOT" || exit 1
 
@@ -55,12 +57,15 @@ E2E_DIRTY="false"
 SRC_DIRTY="false"
 if ! git diff --quiet -- e2e 2>/dev/null; then E2E_DIRTY="true"; fi
 if ! git diff --quiet -- src 2>/dev/null; then SRC_DIRTY="true"; fi
+# WHY(C-041、2026-09-09): 未コミットの変更まで含めた「いまの姿」を残す（統合テスト側と同じ）
+E2E_WORKTREE="$(worktree_hash e2e)"
+SRC_WORKTREE="$(worktree_hash src)"
 
-python3 - "$LOG_FILE" "$RESULT" "$EXIT_CODE" "$E2E_TREE" "$SRC_TREE" "$COMMIT" "$BRANCH" "$E2E_DIRTY" "$SRC_DIRTY" <<'PY'
+python3 - "$LOG_FILE" "$RESULT" "$EXIT_CODE" "$E2E_TREE" "$SRC_TREE" "$COMMIT" "$BRANCH" "$E2E_DIRTY" "$SRC_DIRTY" "$E2E_WORKTREE" "$SRC_WORKTREE" <<'PY'
 import json, sys
 from datetime import datetime, timezone
 
-log_file, result, exit_code, e2e_tree, src_tree, commit, branch, e2e_dirty, src_dirty = sys.argv[1:10]
+log_file, result, exit_code, e2e_tree, src_tree, commit, branch, e2e_dirty, src_dirty, e2e_worktree, src_worktree = sys.argv[1:12]
 row = {
     "at": datetime.now(timezone.utc).isoformat(),
     "result": result,
@@ -72,6 +77,9 @@ row = {
     # 未コミットの変更がある状態での実行は「その木で通った」証拠にならない
     "e2eDirty": e2e_dirty == "true",
     "srcDirty": src_dirty == "true",
+    # 未コミットの変更まで含めた「いまの姿」。Stop hook がこれを見る（C-041）
+    "e2eWorktree": e2e_worktree,
+    "srcWorktree": src_worktree,
 }
 with open(log_file, "a", encoding="utf-8") as f:
     f.write(json.dumps(row, ensure_ascii=False) + "\n")

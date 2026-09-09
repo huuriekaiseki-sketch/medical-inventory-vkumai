@@ -28,6 +28,11 @@ def parse_args(argv):
     p.add_argument("--label", required=True)
     p.add_argument("--runner", required=True)
     p.add_argument("--tree", action="append", default=[], metavar="NAME=HASH")
+    # WHY(C-041、2026-09-09): HEAD の木だけでは**未コミットの変更**が見えない。
+    #      「いまその場所がどう見えるか」のハッシュ（scripts/lib/worktree-hash.sh）を渡すと、
+    #      記録に同じ値があるかで「この状態で全件を通したか」を判定できる。
+    #      古い記録にはこの値が無いので、その場合は従来の判定へ落ちる（黙って通さない）。
+    p.add_argument("--worktree", action="append", default=[], metavar="NAME=HASH")
     p.add_argument("--changed-note", default="")
     args = p.parse_args(argv)
     trees = []
@@ -39,6 +44,13 @@ def parse_args(argv):
     if not trees:
         p.error("--tree を 1 つ以上渡す")
     args.trees = trees
+    worktrees = []
+    for spec in args.worktree:
+        if "=" not in spec:
+            p.error(f"--worktree は NAME=HASH の形で渡す: {spec}")
+        name, _, value = spec.partition("=")
+        worktrees.append((name, value))
+    args.worktrees = worktrees
     return args
 
 
@@ -78,6 +90,21 @@ def check(args):
             f"直近の{args.label}は **失敗** のままです（{when}、branch {last.get('branch', '不明')}）。"
             f"`{args.runner}` で再現し、赤を残したまま先へ進めないでください。"
         )
+
+    # WHY(いまの姿を先に見る・C-041): 未コミットの変更まで含めたハッシュが記録と違えば、
+    #      **いまの状態では一度も全件を通していない**。単体だけ緑にして終える形をここで止める。
+    #      記録にこの値が無い（この仕組みより前の記録）ときは、下の従来の判定へ落ちる。
+    for name, value in getattr(args, "worktrees", []):
+        recorded = last.get(f"{name}Worktree")
+        if recorded is None:
+            continue
+        if recorded != value:
+            return (
+                f"いまの `{name}/` の状態では{args.label}を通していません"
+                f"（直近に通したのは {when} の別の状態）。"
+                f"**単体のテストだけを緑にして終えていないか確かめてください。**"
+                f"`{args.runner}` を回してから作業を終えてください。"
+            )
 
     # WHY(未コミットを先に見る): 未コミットの変更がある状態で通しても「その木で通した」証拠にならない。
     #      木のハッシュは HEAD のものなので、この場合ハッシュは一致してしまう
