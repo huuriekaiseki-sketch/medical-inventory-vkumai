@@ -29,7 +29,7 @@
     "scripts/check-direct-ddl-execution.test.sh": "82c31e16cab3d72bccb55b71951345bd2e4b81bb5b8ae5004b7cd7d055660f16",
     "scripts/check-e2e-freshness.sh": "852f237ca2c5be6305123cc1d6a4437b193e3624ae4f4512528ca2f37dcf9b27",
     "scripts/check-e2e-freshness.test.sh": "ae6c4ffc0bfe6d20a30ade21f175f6098cc688f69fb7d9c4d1813849fb59c0ed",
-    "scripts/check-fixture-guard.test.sh": "5ec70d383fc8ecfa52f9d3de144835acdd66c4cb74b9935ca3d3a30370ae438c",
+    "scripts/check-fixture-guard.test.sh": "12ca05958a1b866707aed5603802284edb9bf6b88f7ee5cccdba53763e4ec64f",
     "scripts/check-full-run-before-finish.sh": "944f6f23e6a53ee912e7709982b1807d1387815dcca2945df1e57d272ab90714",
     "scripts/check-full-run-before-finish.test.sh": "a9f2a56a5845ddf79c02c87b4988cb485bdf6801f73935c2fc7a1711742d3f1c",
     "scripts/check-guard-regressions.test.sh": "23f7d2db2d92ca6bcdce32f8e052fe826b2b0ead1987575f4c79f66adfd6b936",

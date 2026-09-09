@@ -26,8 +26,14 @@ function serviceClient(): SupabaseClient {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } })
 }
 
-/** 表ごとの鍵を全部読む。ページングして 1,000 行の既定上限で切られないようにする */
-async function readKeys(db: SupabaseClient): Promise<Record<string, string[]>> {
+/**
+ * 表ごとの鍵を全部読む。ページングして 1,000 行の既定上限で切られないようにする。
+ *
+ * WHY(公開している): 統合テスト側も**同じ読み方**で控えを取る
+ *      （`supabase/__tests__/integration/helpers/fixture-guard.ts`）。
+ *      読み方を 2 か所に書くと、片方だけがページングを忘れる形で静かにずれる（E-053）。
+ */
+export async function readProtectedKeys(db: SupabaseClient = serviceClient()): Promise<Record<string, string[]>> {
   const out: Record<string, string[]> = {}
   for (const [table, columns] of Object.entries(PROTECTED_TABLES as Record<string, string[]>)) {
     const keys: string[] = []
@@ -49,7 +55,7 @@ async function readKeys(db: SupabaseClient): Promise<Record<string, string[]>> {
 
 /** 全 spec の前に、消えては困る行の鍵を控える */
 export async function snapshotProtectedRows(): Promise<number> {
-  const keys = await readKeys(serviceClient())
+  const keys = await readProtectedKeys(serviceClient())
   fs.mkdirSync(path.dirname(SNAPSHOT_PATH), { recursive: true })
   fs.writeFileSync(SNAPSHOT_PATH, JSON.stringify(keys), 'utf-8')
   return Object.values(keys).reduce((n, list) => n + list.length, 0)
@@ -73,7 +79,7 @@ export async function verifyProtectedRows(): Promise<void> {
     throw new Error('[fixture-guard] 控えが 0 件でした。フィクスチャの用意が失敗している可能性があります')
   }
 
-  const present = await readKeys(serviceClient())
+  const present = await readProtectedKeys(serviceClient())
   const gone = findVanished(snapshot, present) as string[]
   if (gone.length === 0) {
     console.log(`[fixture-guard] 走行前からあった ${total} 行はすべて残っています`)

@@ -11,6 +11,13 @@
 #   4. 控えていない表を鍵にしようとしたら落ちる（黙って空を返さない）
 #   5. テーブル台帳の実装済みの表が、控えるか外すかのどちらかに必ず入っている（ratchet）
 #   6. 外す理由が短ければ落ちる（下限そのものを境界 19/20 文字で固定する）
+#   7. E2E・統合の**両方**で配線が外れていない（控えるだけ／突き合わせるだけ、を検知する）
+#   8-9. **落ちる前提そのもの**を毎回測り直す（2026-09-09 追加）
+#
+#      「teardown で投げれば実行が落ちる」は走らせる仕組みごとに答えが違った:
+#        - Playwright（E2E）  … throw だけで exit 1
+#        - vitest（統合）      … throw だけでは **exit 0 のまま**。`process.exitCode` が要る
+#      どちらも思い込みで書けてしまうところなので、実際に vitest / playwright を起動して測る。
 #
 # 実行: bash scripts/check-fixture-guard.test.sh
 set -uo pipefail
@@ -140,6 +147,97 @@ if grep -q "globalTeardown" "$CONFIG"; then echo "  OK: playwright.config.ts が
   echo "  NG: globalTeardown の配線が外れている"; fail=1; fi
 if grep -q "snapshotProtectedRows" "$SETUP"; then echo "  OK: globalSetup が控えを取る"; else
   echo "  NG: 控えを取る呼び出しが外れている（控えが無いと「消えていない」と言えてしまう）"; fail=1; fi
+
+echo "=== scenario 7: 統合テスト側の配線が残っている（外されたら気づく） ==="
+INT_SETUP="$REPO_ROOT/supabase/__tests__/integration/helpers/global-setup.ts"
+INT_CONFIG="$REPO_ROOT/vitest.integration.config.ts"
+if grep -q "helpers/global-setup" "$INT_CONFIG"; then echo "  OK: vitest.integration.config.ts が globalSetup を指す"; else
+  echo "  NG: globalSetup の配線が外れている"; fail=1; fi
+if grep -q "snapshotIntegrationRows" "$INT_SETUP"; then echo "  OK: 統合の globalSetup が控えを取る"; else
+  echo "  NG: 控えを取る呼び出しが外れている"; fail=1; fi
+if grep -q "verifyIntegrationRows" "$INT_SETUP"; then echo "  OK: 返した teardown が突き合わせる"; else
+  echo "  NG: 突き合わせの呼び出しが外れている（控えるだけでは何も測っていない）"; fail=1; fi
+# WHY(exitCode まで見る): vitest は teardown の throw だけでは落ちない（scenario 8 で実測）。
+#      throw だけの実装に戻されたら、緑のまま何も守らなくなる
+if grep -q "process.exitCode" "$REPO_ROOT/supabase/__tests__/integration/helpers/fixture-guard.ts"; then
+  echo "  OK: 落とすのに process.exitCode を立てている"
+else
+  echo "  NG: throw だけでは vitest は exit 0 のまま（scenario 8 参照）"; fail=1; fi
+
+# WHY(scenario 8・9 で走らせて測る、2026-09-09): 「teardown で投げれば実行が落ちる」は
+#      **走らせる仕組みごとに答えが違った**。vitest は落ちず、Playwright は落ちる。
+#      どちらも「そういうものだろう」で書いていたので、**前提そのものを毎回測り直す**。
+#      これを測らないと C-022（壊して落ちることを確かめない）そのものになる。
+probe_dir() {
+  local d
+  d="$(mktemp -d)"
+  ln -sfn "$REPO_ROOT/node_modules" "$d/node_modules"
+  printf '%s' "$d"
+}
+
+echo "=== scenario 8: vitest は teardown で exitCode を立てれば落ちる（立てなければ落ちない） ==="
+if [ ! -x "$REPO_ROOT/node_modules/.bin/vitest" ]; then
+  echo "  NG: node_modules/.bin/vitest が無く、前提を測れない（npm ci してから実行してください）"; fail=1
+else
+  D="$(probe_dir)"
+  cat > "$D/setup.mjs" <<'PROBE'
+export default async function globalSetup() {
+  return async () => {
+    if (process.env.PROBE_MODE === 'exitcode-then-throw') {
+      process.exitCode = 1
+      throw new Error('PROBE: exitCode を立ててから投げた')
+    }
+  }
+}
+PROBE
+  cat > "$D/probe.test.mjs" <<'PROBE'
+import { it, expect } from 'vitest'
+it('trivially passes', () => { expect(1).toBe(1) })
+PROBE
+  cat > "$D/vitest.config.mjs" <<'PROBE'
+import { defineConfig } from 'vitest/config'
+export default defineConfig({
+  test: { environment: 'node', include: ['probe.test.mjs'], globalSetup: ['./setup.mjs'] },
+})
+PROBE
+  PROBE_MODE=none "$REPO_ROOT/node_modules/.bin/vitest" run --root "$D" --config "$D/vitest.config.mjs" >"$D/none.log" 2>&1
+  NONE_CODE=$?
+  PROBE_MODE=exitcode-then-throw "$REPO_ROOT/node_modules/.bin/vitest" run --root "$D" --config "$D/vitest.config.mjs" >"$D/red.log" 2>&1
+  RED_CODE=$?
+  # 反対側（何もしなければ緑）を必ず一緒に測る。緑にならない probe は「常に落ちる」だけで何も示さない
+  assert_eq "$NONE_CODE" "0" "何もしない teardown なら通る（probe が常に落ちるわけではない）"
+  assert_eq "$RED_CODE" "1" "exitCode を立てて投げれば実行が落ちる（統合の fixture-guard が頼っている前提）"
+  rm -rf "$D"
+fi
+
+echo "=== scenario 9: Playwright は teardown の throw だけで落ちる（E2E 側が頼っている前提） ==="
+if [ ! -x "$REPO_ROOT/node_modules/.bin/playwright" ]; then
+  echo "  NG: node_modules/.bin/playwright が無く、前提を測れない（npm ci してから実行してください）"; fail=1
+else
+  D="$(probe_dir)"
+  cat > "$D/teardown.mjs" <<'PROBE'
+export default async function globalTeardown() {
+  if (process.env.PROBE_MODE === 'throw') throw new Error('PROBE: teardown threw')
+}
+PROBE
+  cat > "$D/probe.spec.mjs" <<'PROBE'
+import { test, expect } from '@playwright/test'
+test('trivially passes without a browser', () => { expect(1).toBe(1) })
+PROBE
+  cat > "$D/playwright.config.mjs" <<'PROBE'
+import { defineConfig } from '@playwright/test'
+export default defineConfig({
+  testDir: '.', testMatch: /probe\.spec\.mjs/, globalTeardown: './teardown.mjs', reporter: 'line',
+})
+PROBE
+  PROBE_MODE=none "$REPO_ROOT/node_modules/.bin/playwright" test --config "$D/playwright.config.mjs" >"$D/none.log" 2>&1
+  NONE_CODE=$?
+  PROBE_MODE=throw "$REPO_ROOT/node_modules/.bin/playwright" test --config "$D/playwright.config.mjs" >"$D/red.log" 2>&1
+  RED_CODE=$?
+  assert_eq "$NONE_CODE" "0" "何もしない teardown なら通る（反対側）"
+  assert_eq "$RED_CODE" "1" "throw だけで実行が落ちる（E2E の fixture-guard が頼っている前提）"
+  rm -rf "$D"
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
