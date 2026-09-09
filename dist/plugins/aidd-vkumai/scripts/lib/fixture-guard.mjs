@@ -92,8 +92,21 @@ export function checkTableCoverage(tablesInRulebook) {
   const decided = new Set([...Object.keys(PROTECTED_TABLES), ...Object.keys(NOT_PROTECTED)])
   const undecided = tablesInRulebook.filter((t) => !decided.has(t))
   const stale = [...decided].filter((t) => !tablesInRulebook.includes(t))
-  const noReason = Object.entries(NOT_PROTECTED)
-    .filter(([, reason]) => String(reason ?? '').trim().length < 20)
+  return { undecided, stale, noReason: reasonsTooShort(NOT_PROTECTED) }
+}
+
+/** 外す理由の下限。「あとで」「不要」で済ませられると、外した判断が残らない */
+export const MIN_REASON_LENGTH = 20
+
+/**
+ * 外す理由が短すぎる表を返す。
+ *
+ * WHY(判定だけを取り出した): 下限そのものを外から測れないと、
+ *      **下限を緩めても誰も気づかない**（2026-09-09 に CM-006 で実測: 20 → 1 にしても緑のままだった）。
+ *      境界（19 文字は落ちる / 20 文字は通る）を固定するために、台帳を引数で渡せる形にする。
+ */
+export function reasonsTooShort(notProtected) {
+  return Object.entries(notProtected)
+    .filter(([, reason]) => String(reason ?? '').trim().length < MIN_REASON_LENGTH)
     .map(([t]) => t)
-  return { undecided, stale, noReason }
 }

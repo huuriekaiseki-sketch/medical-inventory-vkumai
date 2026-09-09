@@ -11,7 +11,7 @@
 #   5. DB が許しているのに契約に行が無い（逆向き）
 #   6. 入口が実在しない（route / RPC）
 #   7. route が攻撃表に載っていない
-#   8. 語彙違反（直接書き込み・危険度）
+#   8. 語彙違反（直接書き込み・認可・危険度・操作・状態の 5 列すべて）
 #   9. 行を 1 つも読めなければ**違反として落ちる**（fail-open 防止）
 #
 # 実行: bash scripts/check-operation-contracts.test.sh
@@ -147,14 +147,24 @@ OUT="$(run_on "$DIR")"
 assert_contains "$OUT" "not-in-attack-matrix: O-010 POST /api/widgets" "攻撃表への載せ忘れを検知"
 assert_not_contains "$OUT" "not-in-attack-matrix: O-020" "載っている入口は出さない"
 
-echo "=== scenario 8: 語彙違反 ==="
+echo "=== scenario 8: 語彙違反（5 列すべて） ==="
+# WHY(認可・操作・状態も見る): 認可の語だけは**掃き側（統合テスト）が期待値を導く元**なので、
+#      語彙から外れた語を書かれると、その行は**一度も実測されないまま緑**になる。
+#      2026-09-09 の変異計測（CM-008）で、認可・操作・状態の 3 列は
+#      判定を外しても緑のままだと分かったので、5 列すべてをここで留める。
 DIR="$(make_fixture vocabulary)"
 write_catalog "$DIR" \
-  '| O-010 | widgets | INSERT | `POST /api/widgets` | たぶん許可 | 施設 writer | ものすごく高い | 実装済み |' \
-  '| O-020 | gizmos | INSERT | `rpc:create_gizmo_atomic` / `POST /api/gizmos` | 禁止 | 施設 writer | 高 | 実装済み |'
+  '| O-010 | widgets | INSERT | `POST /api/widgets` | たぶん許可 | だれでも | ものすごく高い | 実装済み |' \
+  '| O-020 | gizmos | INSERT | `rpc:create_gizmo_atomic` / `POST /api/gizmos` | 禁止 | 施設 writer | 高 | 実装済み |' \
+  '| O-030 | widgets | さくじょ | `POST /api/widgets` | 禁止 | 施設 writer | 低 | たぶん実装済み |'
 OUT="$(run_on "$DIR")"
 assert_contains "$OUT" "bad-direct-write: O-010" "直接書き込みの語彙違反を検知"
 assert_contains "$OUT" "bad-risk: O-010" "危険度の語彙違反を検知"
+assert_contains "$OUT" "bad-authorization: O-010 だれでも" "認可の語彙違反を検知"
+assert_contains "$OUT" "掃き側に期待値がある語だけを使う" "なぜ 4 語しか使えないかを伝える"
+assert_contains "$OUT" "bad-operation: O-030 さくじょ" "操作の語彙違反を検知"
+assert_contains "$OUT" "bad-state: O-030 たぶん実装済み" "状態の語彙違反を検知"
+assert_not_contains "$OUT" "bad-authorization: O-020" "語彙どおりの行は出さない"
 
 echo "=== scenario 9: 行を 1 つも読めなければ落ちる（fail-open 防止） ==="
 DIR="$(make_fixture empty)"

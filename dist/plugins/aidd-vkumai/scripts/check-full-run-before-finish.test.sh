@@ -10,7 +10,9 @@
 #   4. 同一セッションでは 2 回目以降は黙る（毎ターン鳴らない）
 #   5. 記録が 1 件も無ければ鳴る
 #   6. 古い記録（いまの姿のハッシュを持たない）では従来の判定へ落ちる（黙って通さない）
-#   7. 見張るパスが無いリポジトリでは黙る（プラグインの導入先）
+#   7. **直近の実行が失敗のまま**なら鳴る（緑の記録だけを見ない）
+#   8. **未コミットのまま通した記録**は証拠にならないので鳴る（古い記録の道）
+#   9. 見張るパスが無いリポジトリでは黙る（プラグインの導入先）
 #
 # 実行: bash scripts/check-full-run-before-finish.test.sh
 set -uo pipefail
@@ -70,6 +72,22 @@ record_pass() {
   printf '{"at":"2026-09-09T00:00:00Z","result":"pass","e2eTree":"%s","srcTree":"%s","e2eDirty":false,"srcDirty":false,"e2eWorktree":"%s","srcWorktree":"%s"}\n' "$e2et" "$srct" "$e2e" "$src" > "$REPO/logs/e2e-runs.jsonl"
 }
 
+# 統合テストの記録だけを差し替える。$1=result $2=Dirty $3=いまの姿のハッシュを持たせるか
+# WHY: 鮮度の判定は分岐が 4 つあり、いちばん手前（いまの姿のハッシュ）で止まると
+#      **奥の 3 つを一度も通らない**。分岐ごとに手前を通してから突く
+record_integration() {
+  # shellcheck source=lib/worktree-hash.sh
+  source "$SCRIPT_DIR/lib/worktree-hash.sh"
+  local sup supt
+  sup="$(cd "$REPO" && worktree_hash supabase)"
+  supt="$(cd "$REPO" && git rev-parse HEAD:supabase)"
+  if [ "$3" = "yes" ]; then
+    printf '{"at":"2026-09-09T00:00:00Z","result":"%s","supabaseTree":"%s","supabaseDirty":%s,"supabaseWorktree":"%s"}\n' "$1" "$supt" "$2" "$sup" > "$REPO/logs/integration-runs.jsonl"
+  else
+    printf '{"at":"2026-09-09T00:00:00Z","result":"%s","supabaseTree":"%s","supabaseDirty":%s}\n' "$1" "$supt" "$2" > "$REPO/logs/integration-runs.jsonl"
+  fi
+}
+
 echo "=== scenario 1: いまの姿で全件を通していれば黙る ==="
 record_pass
 OUT="$(run_hook s1 "$WORK/m1.json")"
@@ -119,7 +137,20 @@ printf '{"at":"2026-09-09T00:00:00Z","result":"pass","e2eTree":"stale","srcTree"
 OUT="$(run_hook s6 "$WORK/m6.json")"
 assert_contains "$OUT" "の中身が変わっています" "古い記録でも黙って通さない"
 
-echo "=== scenario 7: 見張るパスが無いリポジトリでは黙る ==="
+echo "=== scenario 7: 直近の実行が失敗のままなら鳴る ==="
+record_pass
+record_integration fail false yes
+OUT="$(run_hook s7 "$WORK/m7.json")"
+assert_contains "$OUT" "直近の統合テストは **失敗** のままです" "赤いまま終えようとしたら鳴る"
+assert_contains "$OUT" "赤を残したまま先へ進めない" "何をすべきか言う"
+
+echo "=== scenario 8: 未コミットのまま通した記録は証拠にならない（古い記録の道） ==="
+record_pass
+record_integration pass true no
+OUT="$(run_hook s8 "$WORK/m8.json")"
+assert_contains "$OUT" "未コミットの \`supabase/\` 変更がある状態での実行でした" "未コミットのまま通した記録を検知"
+
+echo "=== scenario 9: 見張るパスが無いリポジトリでは黙る ==="
 BARE="$WORK/bare"
 mkdir -p "$BARE/logs"
 cd "$BARE" || exit 1
@@ -129,8 +160,8 @@ git config user.name t
 printf 'x\n' > readme.md
 git add -A
 git commit -qm init
-CLAUDE_LOG_DIR="$BARE/logs" FULL_RUN_CHECK_ROOT="$BARE" FULL_RUN_CHECK_SESSION_ID=s7 \
-  FULL_RUN_CHECK_MARKER="$WORK/m7.json" OUT="$(bash "$HOOK" 2>&1)"
+CLAUDE_LOG_DIR="$BARE/logs" FULL_RUN_CHECK_ROOT="$BARE" FULL_RUN_CHECK_SESSION_ID=s9 \
+  FULL_RUN_CHECK_MARKER="$WORK/m9.json" OUT="$(bash "$HOOK" 2>&1)"
 assert_silent "${OUT:-}" "supabase/ も e2e/ も無ければ黙る"
 
 if [ "$fail" -ne 0 ]; then

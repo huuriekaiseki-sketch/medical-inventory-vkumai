@@ -1,0 +1,165 @@
+{
+  "_comment": "C-022「壊して落ちることを確かめずに、緑だけを見て終える」の機械化（2026-09-09）。**検知そのものが効いているか**を、判定エンジンを 1 か所だけ壊して、対応する検査が本当に落ちるかで測る。落ちなければ、その検査は何も守っていない（緑であることと守っていることは別）。RLS に対する `rls-mutants.json` と同じ形を、ハーネス側へ向けたもの。",
+  "_howto": "bash scripts/check-detectors-effective.test.sh で回す（CI hooks-test が scripts/*.test.sh を全部走らせる）。1 件あたり「素で通ることを確かめる → 壊す → 落ちることを確かめる → バイト列のまま戻す」の 1 巡。**素で通ることを先に見る**のは、落ちた理由が壊したせいだと言えるようにするため（C-021）。",
+  "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
+  "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
+  "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
+
+  "minMutants": 16,
+
+  "mutants": [
+    {
+      "id": "CM-001",
+      "breaks": "「DB は書けるのにアプリに道が無い」の判定から、宣言されていない隙間の報告を外す",
+      "file": "scripts/lib/check-write-path-gaps.mjs",
+      "find": "      if (reason === undefined) {",
+      "replace": "      if (false) {",
+      "expect": "scripts/check-write-path-gaps.test.sh",
+      "guards": "E-056 / E-057（層の食い違いの逆向き）"
+    },
+    {
+      "id": "CM-002",
+      "breaks": "隙間の ratchet（上限を超えたら落とす）を外す",
+      "file": "scripts/lib/check-write-path-gaps.mjs",
+      "find": "  } else if (gapCount > max) {",
+      "replace": "  } else if (false) {",
+      "expect": "scripts/check-write-path-gaps.test.sh",
+      "guards": "借金を増やせないこと"
+    },
+    {
+      "id": "CM-003",
+      "breaks": "隙間の fail-open 防止（DB 側を 1 表も読めなかった）を外す",
+      "file": "scripts/lib/check-write-path-gaps.mjs",
+      "find": "  if (dbVerbs.size === 0) {",
+      "replace": "  if (false) {",
+      "expect": "scripts/check-write-path-gaps.test.sh",
+      "guards": "C-021（走査が壊れたら違反 0 件で合格に見える）"
+    },
+    {
+      "id": "CM-004",
+      "breaks": "「宣言だけ残った隙間」（道ができたのに登録簿に残っている）の報告を外す",
+      "file": "scripts/lib/check-write-path-gaps.mjs",
+      "find": "    if (!stillOpen) {",
+      "replace": "    if (false) {",
+      "expect": "scripts/check-write-path-gaps.test.sh",
+      "guards": "C-010（印が実態とずれたまま残る）"
+    },
+
+    {
+      "id": "CM-005",
+      "breaks": "操作の契約から、「禁止と宣言したのに DB が許している」の報告を外す",
+      "file": "scripts/lib/check-operation-contracts.mjs",
+      "find": "    if (r.directWrite === '禁止' && granted) {",
+      "replace": "    if (false && granted) {",
+      "expect": "scripts/check-operation-contracts.test.sh",
+      "guards": "O-xxx（発注は RPC からしか作れない、という約束）"
+    },
+    {
+      "id": "CM-006",
+      "breaks": "契約の認可の語彙（4 語）の検査を外す",
+      "file": "scripts/lib/check-operation-contracts.mjs",
+      "find": "      v.push(`bad-authorization: ${r.id} ${r.authorization}",
+      "replace": "      if (false) v.push(`bad-authorization: ${r.id} ${r.authorization}",
+      "expect": "scripts/check-operation-contracts.test.sh",
+      "guards": "掃き側（6 立場 × 35 操作）が期待値を導ける語だけを使うこと",
+      "note": "初回の計測で**生き残り**。語彙の検査は直接書き込みと危険度しか測っていなかった。認可・操作・状態を足して倒した"
+    },
+    {
+      "id": "CM-007",
+      "breaks": "契約の「route が攻撃表に載っていない」の報告を外す",
+      "file": "scripts/lib/check-operation-contracts.mjs",
+      "find": "        v.push(`not-in-attack-matrix:",
+      "replace": "        if (false) v.push(`not-in-attack-matrix:",
+      "expect": "scripts/check-operation-contracts.test.sh",
+      "guards": "P-017（入口を作ったら攻撃表に載せる）"
+    },
+    {
+      "id": "CM-008",
+      "breaks": "契約の「同じ操作が 2 行ある」の検査を外す",
+      "file": "scripts/lib/check-operation-contracts.mjs",
+      "find": "    if (seen.has(key)) v.push(`duplicate:",
+      "replace": "    if (false) v.push(`duplicate:",
+      "expect": "scripts/check-operation-contracts.test.sh",
+      "guards": "C-031（数える単位が違うまま数える）"
+    },
+
+    {
+      "id": "CM-009",
+      "breaks": "「権限はあるが規則が無い」＝触れるが何も起きない道の報告を外す",
+      "file": "scripts/lib/scan-rls-grant-gaps.mjs",
+      "find": "        if (granted && !covered) {",
+      "replace": "        if (false) {",
+      "expect": "scripts/check-rls-grant-gaps.test.sh",
+      "guards": "E-055 / C-032"
+    },
+    {
+      "id": "CM-010",
+      "breaks": "「規則はあるが権限が無い」＝誰にも届かない規則の報告を外す（逆向き）",
+      "file": "scripts/lib/scan-rls-grant-gaps.mjs",
+      "find": "        if (!granted && covered) {",
+      "replace": "        if (false) {",
+      "expect": "scripts/check-rls-grant-gaps.test.sh",
+      "guards": "E-055 の逆向き（書いたのに効いていない規則）"
+    },
+
+    {
+      "id": "CM-011",
+      "breaks": "後片付けの見張りから、消えた行の報告を外す",
+      "file": "scripts/lib/fixture-guard.mjs",
+      "find": "      if (!now.has(key)) gone.push(",
+      "replace": "      if (false && !now.has(key)) gone.push(",
+      "expect": "scripts/check-fixture-guard.test.sh",
+      "guards": "C-030（後片付けの範囲が広すぎる）"
+    },
+    {
+      "id": "CM-012",
+      "breaks": "「外す理由」の下限を 20 文字から 1 文字へ緩める（境界）",
+      "file": "scripts/lib/fixture-guard.mjs",
+      "find": ".trim().length < MIN_REASON_LENGTH)",
+      "replace": ".trim().length < 1)",
+      "expect": "scripts/check-fixture-guard.test.sh",
+      "guards": "「あとで」「不要」で外した判断を残させないこと",
+      "note": "初回の計測で**生き残り**。下限そのものはどこも測っていなかった。判定を `reasonsTooShort` に切り出し、境界 19 / 20 文字を固定して倒した"
+    },
+    {
+      "id": "CM-013",
+      "breaks": "控えていない表を鍵にしたとき、どの表で詰まったかの名指しを外す",
+      "file": "scripts/lib/fixture-guard.mjs",
+      "find": "  if (!columns) throw new Error(",
+      "replace": "  if (false) throw new Error(",
+      "expect": "scripts/check-fixture-guard.test.sh",
+      "guards": "E2E の途中で詰まったとき、どの表かが読めること",
+      "note": "初回の計測で**生き残り**。名指しを外しても素の TypeError で落ちるので「落ちた」だけでは差が出なかった（同じ意味の変異）。文言まで見るように検査を強くして倒した"
+    },
+
+    {
+      "id": "CM-014",
+      "breaks": "鮮度の判定から、「いまの姿では全件を通していない」の報告を外す",
+      "file": "scripts/lib/run-freshness.py",
+      "find": "        if recorded != value:",
+      "replace": "        if False:",
+      "expect": "scripts/check-full-run-before-finish.test.sh",
+      "guards": "C-041（単体で緑にして終える）"
+    },
+    {
+      "id": "CM-015",
+      "breaks": "鮮度の判定から、「直近の実行が失敗のまま」の報告を外す",
+      "file": "scripts/lib/run-freshness.py",
+      "find": "    if last.get(\"result\") != \"pass\":",
+      "replace": "    if False:",
+      "expect": "scripts/check-full-run-before-finish.test.sh",
+      "guards": "赤を残したまま終えないこと",
+      "note": "初回の計測で**生き残り**。記録が赤いままの場合をどこも測っていなかった（scenario 7 を足して倒した）"
+    },
+    {
+      "id": "CM-016",
+      "breaks": "鮮度の判定から、「未コミットのまま通した記録」の報告を外す",
+      "file": "scripts/lib/run-freshness.py",
+      "find": "        if last.get(f\"{name}Dirty\"):",
+      "replace": "        if False:",
+      "expect": "scripts/check-full-run-before-finish.test.sh",
+      "guards": "「その木で通した」と言えない記録を証拠に使わないこと",
+      "note": "初回の計測で**生き残り**。古い記録へ落ちたときの道が測られていなかった（scenario 8 を足して倒した）"
+    }
+  ]
+}

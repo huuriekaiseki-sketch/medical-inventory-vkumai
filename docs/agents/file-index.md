@@ -58,6 +58,7 @@
 | `.claude/workflows/lib/constraint-coverage.js` | DB制約・RLS/admin境界・公開RPCの「守るテストが無い穴」の判定ロジック正本（issue #675、P-043） |
 | `scripts/check-constraint-coverage.sh` | 現存する穴を**怪しい順**に表示。新規発生の阻止は`supabase/migrations/__tests__/constraint_coverage_ratchet.test.ts`が`npm test`で行う |
 | `scripts/lib/scan-rls-grant-gaps.mjs` / `scripts/check-rls-grant-gaps.test.sh` | 層の食い違いの**片側**（E-055）。権限はあるが規則が無い＝**触れるが何も起きない道**を数える。逆向きも見る（規則はあるが権限が無い） |
+| `scripts/lib/check-detectors-effective.mjs` / `scripts/lib/check-mutants.json` / `scripts/check-detectors-effective.test.sh` | **検知そのものが効いているか**を測る（C-022 の機械化、2026-09-09）。判定エンジンを 1 か所だけ壊し、対応する検査が本当に落ちるかを実測する。落ちなければ「生き残り」＝その検査は何も守っていない。初回の計測で 5 件が生き残り、いずれも本物の穴だった。壊し方は導入先の登録簿（`check-mutants.json`）に宣言する |
 | `e2e/fixture-guard.ts` / `scripts/lib/fixture-guard.mjs` / `scripts/check-fixture-guard.test.sh` | **後片付けが自分の作った行以外を消していないか**を E2E の前後で実測する（C-030 の機械化、2026-09-09）。全 spec の前に「消えては困る行」を控え、終わったあとに 1 行でも消えていれば実行が失敗する。判定は DB を知らない共有エンジン側、実 DB の読み出しは `e2e/` 側 |
 | `scripts/check-full-run-before-finish.sh` / `scripts/lib/worktree-hash.sh` | **終える瞬間に「いまの状態で全件を通したか」を聞く** Stop hook（C-041 の機械化、2026-09-09）。判定は SessionStart 側と同じ `lib/run-freshness.py` だが、材料を HEAD の木から**未コミット・未追跡を含む「いまの姿」のハッシュ**へ広げた。セッションに 1 回・警告のみ |
 | `scripts/lib/check-write-path-gaps.mjs` / `scripts/lib/write-path-registry.json` / `scripts/check-write-path-gaps.test.sh` | 層の食い違いの**逆側**（E-056 / E-057、2026-09-09）。**DB は書けるのにアプリに道が無い**組み合わせを数え、理由の宣言を要求して件数を増やせなくする（ratchet）。エンジンは共通・登録簿は導入先 |

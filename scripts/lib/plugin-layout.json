@@ -194,6 +194,8 @@
     "lib/compare-layers.mjs": "aidd-vkumai",
     "check-rls-mutation.sh": "aidd-vkumai",
     "lib/rls-mutants.json": "aidd-vkumai",
+    "lib/check-detectors-effective.mjs": "aidd-core",
+    "lib/check-mutants.json": "aidd-vkumai",
     "run-integration-tests.sh": "aidd-vkumai",
     "run-e2e-tests.sh": "aidd-vkumai",
     "lib/run-freshness.py": "aidd-vkumai",
@@ -226,6 +228,7 @@
     "check-agent-progress-gap.sh": "aidd-core"
   },
   "allowUnresolvedReferences": {
+    "scripts/check-detectors-effective.test.sh": "壊し方の登録簿（check-mutants.json）は導入先にあり、走らせ方は共通側（aidd-core）にある。aidd-vkumai は aidd-core に依存するので解決できるが、走査は同じプラグイン内しか見ない",
     "scripts/derive-test-selection.sh": "check-handoff-format.sh の警告文が導入先の derive を案内するだけ（実行しない）",
     "scripts/check-handoff-format.sh": "handoff-format スキル本文が Stop hook 名を説明するだけ",
     "scripts/log-find-av-precision.sh": "check-find-av-precision-recorded.sh の警告文が呼び方を案内するだけ",
@@ -271,6 +274,7 @@
     "check-rls-grant-gaps.test.sh": "aidd-vkumai",
     "check-write-path-gaps.test.sh": "aidd-vkumai",
     "check-fixture-guard.test.sh": "aidd-vkumai",
+    "check-detectors-effective.test.sh": "aidd-core",
     "check-operation-contracts.test.sh": "aidd-vkumai",
     "check-guard-regressions.test.sh": "aidd-vkumai",
     "check-pitfall-rulebook.test.sh": "aidd-core",

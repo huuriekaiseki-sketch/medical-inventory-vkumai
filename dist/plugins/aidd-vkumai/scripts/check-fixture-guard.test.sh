@@ -10,7 +10,7 @@
 #   3. 複合主キー（`user_facilities`）でも鍵が作れる
 #   4. 控えていない表を鍵にしようとしたら落ちる（黙って空を返さない）
 #   5. テーブル台帳の実装済みの表が、控えるか外すかのどちらかに必ず入っている（ratchet）
-#   6. 外す理由が短ければ落ちる
+#   6. 外す理由が短ければ落ちる（下限そのものを境界 19/20 文字で固定する）
 #
 # 実行: bash scripts/check-fixture-guard.test.sh
 set -uo pipefail
@@ -64,12 +64,16 @@ try {
   keyOf('audit_log', { id: 'x' })
   console.log('NO-THROW')
 } catch (e) {
-  console.log('THREW')
+  // WHY(文言まで見る): 落ちさえすればよいのではない。E2E の途中で出るので、
+  //      **どの表で詰まったか**が読めないと直せない（変異計測 CM-007 で、
+  //      名指しを外しても素の TypeError で落ちるだけなので緑のままだと分かった）
+  console.log(`THREW ${e.message}`)
 }
 NODE
 )"
 assert_contains "$OUT" "u1|f1" "複合主キーを連結する"
 assert_contains "$OUT" "THREW" "控えていない表は黙って空を返さない"
+assert_contains "$OUT" "audit_log は控える表に入っていない" "どの表で詰まったかを名指しする"
 
 echo "=== scenario 4: 台帳の表がすべて「控える / 外す」のどちらかに入っている（ratchet） ==="
 OUT="$(run_node <<'NODE'
@@ -108,6 +112,26 @@ NODE
 )"
 assert_contains "$OUT" "brand_new_table" "新しい表を「決めていない」で検知"
 assert_contains "$OUT" "HAS-STALE" "台帳に無い宣言も検知"
+
+# WHY(境界そのものを固定する): 「理由が短ければ落ちる」は 2026-09-09 まで**どこも測っていなかった**。
+#      変異計測（CM-006）で下限を 20 → 1 に緩めても緑のままだと分かったので、境界を 2 点で留める。
+OUT="$(run_node <<'NODE'
+const root = process.argv[2]
+const { reasonsTooShort, MIN_REASON_LENGTH } = await import(`file://${root}/scripts/lib/fixture-guard.mjs`)
+const short = 'あ'.repeat(MIN_REASON_LENGTH - 1)
+const enough = 'あ'.repeat(MIN_REASON_LENGTH)
+console.log(JSON.stringify({
+  min: MIN_REASON_LENGTH,
+  blank: reasonsTooShort({ t_blank: '   ' }),
+  short: reasonsTooShort({ t_short: short }),
+  enough: reasonsTooShort({ t_enough: enough }),
+}))
+NODE
+)"
+assert_contains "$OUT" '"min":20' "下限は 20 文字"
+assert_contains "$OUT" '"blank":["t_blank"]' "空白だけの理由を検知"
+assert_contains "$OUT" '"short":["t_short"]' "下限より 1 文字短い理由を検知（境界）"
+assert_contains "$OUT" '"enough":[]' "下限ちょうどの理由は通す（境界）"
 
 echo "=== scenario 6: E2E 側の配線が残っている（外されたら気づく） ==="
 CONFIG="$REPO_ROOT/playwright.config.ts"
