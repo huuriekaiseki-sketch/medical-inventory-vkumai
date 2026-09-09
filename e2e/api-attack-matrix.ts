@@ -8,8 +8,9 @@
 // 表の読み方:
 //   - キーは route パス（src/app/api/<...>/route.ts → '/api/<...>'。動的部分は [id] のまま）
 //   - 値はメソッドごとの AttackCase。GET は省略可（既定: query に facility_id / facilityId = 施設 A）
-//   - pathId: [id] に入れる値。'facilityA' | 'loanOrderA' | 'random'（施設 A の資源が無ければ random。
-//     random は 404 になるだけで境界の検査としては弱い。備考に理由を書く）
+//   - pathId: [id] に入れる値。'facilityA' | 'loanOrderA' | 'distributorProductA' | 'random'
+//     （施設 A の資源が無ければ random。random は 404 になるだけで境界の検査としては弱い。
+//     備考に理由を書く。**weak を減らすには、その資源をフィクスチャに作るのが本筋**）
 //   - skip: 攻撃の対象外（理由必須。OAuth コールバック等）
 //   - weak: true = バリデーションが認可より先に走るため 400 で止まる等、境界判定まで到達しない
 //     ことが分かっている（不変条件の検査自体は行う）。備考に理由を書く
@@ -19,7 +20,7 @@ export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 export interface AttackCase {
   query?: Record<string, string>
   body?: unknown
-  pathId?: 'facilityA' | 'loanOrderA' | 'random'
+  pathId?: 'facilityA' | 'loanOrderA' | 'distributorProductA' | 'random'
   weak?: boolean
   note?: string
 }
@@ -110,7 +111,7 @@ export const ATTACK_MATRIX: Record<string, RouteAttacks> = {
     DELETE: { pathId: 'random', weak: true },
   },
   '/api/distributor-products/[id]/price-history': {
-    GET: { pathId: 'random', query: { facilityId: FACILITY_A, facility_id: FACILITY_A }, weak: true, note: '施設 A の価格履歴をシードしていない' },
+    GET: { pathId: 'distributorProductA', query: { facilityId: FACILITY_A, facility_id: FACILITY_A }, note: '2026-09-09 に weak をやめた。施設 A の院内価格と改定履歴をフィクスチャに作ったので、施設 B の利用者が叩いても施設 A の仕切値・施設名が出ないことを実際に測る（資産 A-02）' },
   },
   '/api/compat': { POST: { body: { productJan: '0000000000000', compatibleJan: '0000000000001' }, weak: true } },
   '/api/compat/[id]': { DELETE: { pathId: 'random', weak: true } },

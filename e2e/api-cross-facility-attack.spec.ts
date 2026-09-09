@@ -110,8 +110,21 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
   })
 
   test('全 route × 全メソッドを施設 B のユーザーで叩いても、施設 A のデータは漏れず・変わらない', async ({ baseURL }) => {
-    const fx = { facilityAId: fixtures!.facilityAId, loanOrderId: fixtures!.loanOrderId! }
-    const markers = [fx.facilityAId, fx.loanOrderId, fixtures!.loanOrderProcedureName]
+    const fx = {
+      facilityAId: fixtures!.facilityAId,
+      loanOrderId: fixtures!.loanOrderId!,
+      distributorProductId: fixtures!.distributorProductId!,
+    }
+    // WHY(価格と施設名も目印にする、2026-09-09): 価格履歴の route は施設スコープの行を
+    //      SECURITY DEFINER の RPC 内の手書き WHERE で絞る。漏れるとしたら
+    //      **施設 A の仕切値そのものと施設名**なので、それを目印に加える（資産 A-02）。
+    const markers = [
+      fx.facilityAId,
+      fx.loanOrderId,
+      fixtures!.loanOrderProcedureName,
+      String(fixtures!.facilityAPurchasePrice),
+      fixtures!.facilityAName!,
+    ]
     const db = serviceRoleClient()
     const before = await snapshotFacilityA(db, fx.facilityAId)
 
@@ -128,7 +141,12 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
           const spec = ATTACK_MATRIX[route]?.[m]
           if (spec && 'skip' in spec) { log.push(`${m} ${route}: skip（${spec.skip}）`); continue }
           const c: AttackCase = substitute(spec ?? {}, fx)
-          const idFor = { facilityA: fx.facilityAId, loanOrderA: fx.loanOrderId, random: randomUUID() }
+          const idFor = {
+            facilityA: fx.facilityAId,
+            loanOrderA: fx.loanOrderId,
+            distributorProductA: fx.distributorProductId,
+            random: randomUUID(),
+          }
           const url = route.replace('[id]', idFor[c.pathId ?? 'random'])
           const query = new URLSearchParams(c.query ?? { facility_id: fx.facilityAId, facilityId: fx.facilityAId })
           const res = await ctx.fetch(`${url}?${query.toString()}`, {

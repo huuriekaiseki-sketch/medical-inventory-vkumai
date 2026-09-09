@@ -44,12 +44,22 @@ async function createPrice(page: Page, purchase: number, delivery: number) {
   return response
 }
 
-/** 施設 A の院内価格を service role 相当（ユーザー A の API）で全部消す。テスト間の独立を保つ */
+/**
+ * この spec が使う「施設 A × フィクスチャの代理店商品」の院内価格だけを消す。
+ *
+ * WHY(施設 A の全件を消さない、2026-09-09): 以前は施設 A の院内価格を**全部**消していた。
+ *      院内価格を消すと価格履歴も一緒に消える（20260906000007）ため、
+ *      並列で走る price-history.spec.ts が用意した履歴まで巻き添えで消え、
+ *      あちらが単独では通るのに全体実行でだけ落ちた（2026-09-09 実測）。
+ *      「施設 A のもの」は複数の spec が同時に触る共有物なので、
+ *      自分が作る組み合わせ（施設 × 代理店商品）だけに絞る。
+ */
 async function clearPrices(page: Page) {
   const res = await page.request.get(`/api/hospital-prices?facilityId=${fixtures!.facilityAId}`)
   if (!res.ok()) return
   const body = await res.json()
   for (const price of body.prices ?? []) {
+    if (price.distributorProductId !== fixtures!.distributorProductId) continue
     await page.request.delete(`/api/hospital-prices/${price.id}`)
   }
 }

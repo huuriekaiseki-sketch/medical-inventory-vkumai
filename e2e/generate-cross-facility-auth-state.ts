@@ -45,6 +45,17 @@ export interface CrossFacilityFixtures {
    */
   distributorProductName?: string
   distributorProductId?: string
+  /**
+   * 施設 A の院内価格と、その**改定後**の仕切値（2026-09-09 追加）。
+   *
+   * WHY: 価格履歴の route（`/api/distributor-products/[id]/price-history`）は
+   *      攻撃表で **weak**（存在しない UUID を渡すので 404 止まり）だった。
+   *      施設 A の履歴を実際に作ることで、施設 B の利用者で叩いたときに
+   *      「他施設の価格・施設名が本文に出ないか」を本当に測れるようになる。
+   *      `facilityAPurchasePrice` は漏洩の目印に使うので、他と衝突しない値にしてある。
+   */
+  facilityAHospitalPriceId?: string
+  facilityAPurchasePrice?: number
 }
 
 export const CROSS_FACILITY_FIXTURES_PATH = path.join(process.cwd(), 'e2e', '.auth', 'cross-facility-fixtures.json')
@@ -179,6 +190,40 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     throw new Error(`[E2E cross-facility auth] distributor_products シード失敗: ${dpError?.message}`)
   }
 
+  // 施設 A の院内価格を 1 件作り、**値を変えて価格履歴を 1 行残す**。
+  //
+  // WHY(2026-09-09 追加): `/api/distributor-products/[id]/price-history` は
+  //      施設スコープの履歴（entity_type = 'hospital_price'）を
+  //      `is_facility_member(hp.facility_id) OR is_admin()` で絞る SECURITY DEFINER の RPC を叩く。
+  //      ところが攻撃表（P-017）はこの route を **weak**（存在しない UUID を渡すので 404 止まり）
+  //      として扱っており、**境界に一度も届いていなかった**。
+  //      施設 A の履歴を実際に作れば、施設 B の利用者で叩いたときに
+  //      「他施設の価格が本文に出ないか」を本当に測れる。
+  //      価格は施設ごとの商談条件（脅威モデルの資産 A-02）で、漏れると実害が大きい。
+  const facilityAPurchasePrice = 918273
+  const { data: hospitalPrice, error: hpError } = await supabase
+    .from('hospital_prices')
+    .insert({
+      distributor_product_id: distributorProduct.id,
+      facility_id: facilityA.id,
+      purchase_price: 111111,
+      delivery_price: 222222,
+    })
+    .select('id')
+    .single()
+  if (hpError || !hospitalPrice) {
+    throw new Error(`[E2E cross-facility auth] hospital_prices シード失敗: ${hpError?.message}`)
+  }
+  // WHY(作るだけでなく変える): 価格履歴は**値が変わったときだけ**トリガーが 1 行残す（I-041）。
+  //      INSERT しただけでは履歴が生まれないので、ここで 1 回だけ改定する。
+  const { error: priceUpdateError } = await supabase
+    .from('hospital_prices')
+    .update({ purchase_price: facilityAPurchasePrice })
+    .eq('id', hospitalPrice.id)
+  if (priceUpdateError) {
+    throw new Error(`[E2E cross-facility auth] 価格改定シード失敗: ${priceUpdateError.message}`)
+  }
+
   await signInAndSaveStorageState(supabase, emailA, CROSS_FACILITY_USER_A_AUTH_PATH)
   await signInAndSaveStorageState(supabase, emailB, CROSS_FACILITY_USER_B_AUTH_PATH)
 
@@ -191,6 +236,8 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     facilityAName,
     distributorProductName,
     distributorProductId: distributorProduct.id as string,
+    facilityAHospitalPriceId: hospitalPrice.id as string,
+    facilityAPurchasePrice,
   }
   fs.writeFileSync(CROSS_FACILITY_FIXTURES_PATH, JSON.stringify(fixtures))
   console.log(`[E2E cross-facility auth] フィクスチャを書き出しました: ${CROSS_FACILITY_FIXTURES_PATH}`)
