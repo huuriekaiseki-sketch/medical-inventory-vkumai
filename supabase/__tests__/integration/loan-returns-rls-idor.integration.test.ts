@@ -82,20 +82,19 @@ describe('loan_returns RLS/IDOR [P-010 P-012 P-015 I-030]', () => {
     expect((data as { facility_id?: string })?.facility_id).toBe(fixtures.facilityA.id)
   })
 
-  // WHY(2026-09-08 に測った): 返却の**取り消し**は、画面にも API にも経路が無い
-  //      （`src/app/api/loan-returns/route.ts` は GET と POST だけで、DELETE も PUT も無い。
-  //       発注 3 種も同じ）。ところが DB は施設の writer に DELETE を許している。
-  //      **層が食い違っている**ので、どちらが本当かを実測して残す。
+  // WHY(2026-09-08 → 09 で約束が変わった): 以前ここは「**DB は施設の writer に DELETE を許すが、
+  //      アプリに経路が無い**」を実測して固定していた（E-056 の発端）。
+  //      2026-09-09、その食い違いを機械で数えたところ同じ形が 8 表に残っていたので、
+  //      **使っていない DELETE 権限を剥がした**（20260909020000。人の判断）。
   //
-  //      これは E-055（アプリに道があるのに DB が誰にも許していない）の**裏返し**で、
-  //      こちらは「DB は許すのにアプリに道が無い」。実害の向きも違う:
-  //      間違えて返却を登録すると、**製品の中では直せない**（残数が戻らない）。
+  //      いま守るのは「**誰も消せない**」。間違えた返却は削除ではなく `cancelled` にする。
   //
-  //      ここでは「今どうなっているか」だけを固定する。誰が取り消せるようにするかは
-  //      人が決めること（docs/agents/design-questions.md の『消えるとき』『権限』）。
-  describe('返却の取り消し: DB は施設の writer に許すが、アプリに経路が無い', () => {
-    it('ユーザーBは施設Aの返却を消せない（消えていないことを service_role で裏取りする）', async () => {
-      const serviceClient = createServiceRoleClient()
+  //      WHY(0 行ではなく 42501 になったことを見る): 権限を剥がす前は、他施設の利用者も
+  //      RLS で 0 行になるだけで**エラーにならなかった**（「見つかりません」と区別できない）。
+  //      いまは権限そのものが無いので、**拒否がはっきり返る**。この違いが剥がした効き目そのもの。
+  describe('返却は誰も消せない: DELETE の権限を剥がした（E-056 / E-057 の型）', () => {
+    /** 施設 A の返却を 1 件作って id を返す。後片付けは service_role で行う */
+    async function seedReturn(serviceClient: ReturnType<typeof createServiceRoleClient>) {
       const { data: created, error: createError } = await serviceClient
         .from('loan_returns')
         .insert({
@@ -105,16 +104,15 @@ describe('loan_returns RLS/IDOR [P-010 P-012 P-015 I-030]', () => {
         .select('id')
         .single()
       expect(createError).toBeNull()
-      const id = created!.id as string
+      return created!.id as string
+    }
 
-      const { data: deleted, error } = await fixtures.userB.client
-        .from('loan_returns')
-        .delete()
-        .eq('id', id)
-        .select('id')
-      // RLS は拒否ではなく 0 行にする
-      expect(error).toBeNull()
-      expect(deleted ?? []).toEqual([])
+    it('ユーザーBは施設Aの返却を消せない（42501。行も残っている）', async () => {
+      const serviceClient = createServiceRoleClient()
+      const id = await seedReturn(serviceClient)
+
+      const { error } = await fixtures.userB.client.from('loan_returns').delete().eq('id', id).select('id')
+      expect(error?.code, '他施設の利用者に DELETE が通った').toBe('42501')
 
       const { data: still } = await serviceClient.from('loan_returns').select('id').eq('id', id)
       expect(still, '他施設の利用者が返却を消せてしまった').toHaveLength(1)
@@ -122,31 +120,35 @@ describe('loan_returns RLS/IDOR [P-010 P-012 P-015 I-030]', () => {
       await serviceClient.from('loan_returns').delete().eq('id', id)
     })
 
-    it('ユーザーAは自施設の返却を消せる（DB は許している。画面に経路が無いだけ）', async () => {
+    it('ユーザーAも自施設の返却を消せない（42501。writer でも消せない）', async () => {
       const serviceClient = createServiceRoleClient()
-      const { data: created } = await serviceClient
-        .from('loan_returns')
-        .insert({
-          facility_id: fixtures.facilityA.id,
-          return_datetime: new Date().toISOString(),
-        })
-        .select('id')
-        .single()
-      const id = created!.id as string
+      const id = await seedReturn(serviceClient)
 
-      const { data: deleted, error } = await fixtures.userA.client
+      const { error } = await fixtures.userA.client.from('loan_returns').delete().eq('id', id).select('id')
+      expect(error?.code, '自施設の writer に DELETE が通った（剥がした権限が戻っている）').toBe('42501')
+
+      const { data: still } = await serviceClient.from('loan_returns').select('id').eq('id', id)
+      expect(still, '自施設の writer が返却を消せてしまった').toHaveLength(1)
+
+      await serviceClient.from('loan_returns').delete().eq('id', id)
+    })
+
+    // WHY(対照): 消せないことだけを測ると、「何も通らない」実装でも緑になる（C-021）。
+    //      同じ利用者が**取り消し（UPDATE）はできる**ことを対で測り、
+    //      剥がしたのが DELETE だけであることを固定する
+    it('同じユーザーAが取り消し（status の更新）はできる（対照）', async () => {
+      const serviceClient = createServiceRoleClient()
+      const id = await seedReturn(serviceClient)
+
+      const { data: updated, error } = await fixtures.userA.client
         .from('loan_returns')
-        .delete()
+        .update({ status: 'cancelled' })
         .eq('id', id)
-        .select('id')
-      expect(error).toBeNull()
-      expect(
-        deleted ?? [],
-        'DB が返却の削除を許さなくなった。取り消し経路を作る前提が変わっている'
-      ).toHaveLength(1)
+        .select('id, status')
+      expect(error, '取り消しまで通らなくなっている（UPDATE も剥がれた？）').toBeNull()
+      expect(updated ?? []).toHaveLength(1)
 
-      const { data: gone } = await serviceClient.from('loan_returns').select('id').eq('id', id)
-      expect(gone ?? []).toEqual([])
+      await serviceClient.from('loan_returns').delete().eq('id', id)
     })
   })
 

@@ -62,7 +62,7 @@
     "scripts/lib/scan-rls-grant-gaps.mjs": "8e92c598b7f10ba7c700b6c41b6a474b488e2deb92488c9f3f992439f725b379",
     "scripts/lib/scan-text-columns.mjs": "e0d3c715bb251bbf3aa1b885f5ee4eeee86f1560804e8eadb52999cdd2f7f92f",
     "scripts/lib/table-duplicates-registry.json": "54f30f0fbfd7636f015fabe2503992e0df624e8528cc50d235ff31863e481278",
-    "scripts/lib/write-path-registry.json": "9158e8cf8cff42632c322bad0caf097a835b2997d8b66443f6b8f206d90c61b9",
+    "scripts/lib/write-path-registry.json": "bd50cb16a65c7a81a03eca95704974b4da2ad5434243d72f45ee5af7d6a5a6d7",
     "scripts/run-e2e-tests.sh": "8f00bb668f097324581ccd0bd2e7c8568a440b28339c19234ff53924a0b39a43",
     "scripts/run-integration-tests.sh": "3b4d9b7d52b78e622b1eef058193731f5d10354f4d5c001f8aa4c2537f6733aa",
     "scripts/run-integration-tests.test.sh": "0b699036e94de21d0c6a568147802affe6de54aabfd55ed96f60279bbb1f2fb5",

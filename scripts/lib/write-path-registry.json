@@ -33,14 +33,7 @@
     "loan_order_items.insert": "明細は create_loan_order_atomic の中で入る。クライアントが直接 INSERT する道は無い",
     "loan_return_items.insert": "明細は create_loan_return_atomic の中で入る。クライアントが直接 INSERT する道は無い",
 
-    "case_orders.delete": "E-056 の判断で、間違えた発注は削除ではなく取り消し状態にする。削除の道は製品に無く、権限は余剰",
-    "consumable_orders.delete": "同じ理由（取り消し状態にする）。削除の道は製品に無い",
-    "loan_orders.delete": "同じ理由（取り消し状態にする）。削除の道は製品に無い",
-    "loan_returns.delete": "同じ理由（取り消し状態にする）。削除の道は製品に無い",
-    "case_order_items.delete": "明細も消さない。親か明細の status で表す（E-056）",
-    "consumable_order_items.delete": "明細も消さない。親の取り消しで一緒に外れる",
-    "loan_order_items.delete": "明細も消さない。親の取り消しで一緒に外れる",
-    "loan_return_items.delete": "明細も消さない。品目ごとの取り消しは status で表す（E-056 の残り、2026-09-09）",
+    "_delete_note": "発注 3 種・返却とその明細（8 表）の DELETE は 2026-09-09 に**権限ごと剥がした**（20260909020000）。E-056 の判断で削除の道はこれから先も作らないので、宣言として残すのではなく DB から外した。ここに行が無いのはそのため。",
 
     "case_order_items.update": "明細は作り直さない。取り消しは親の status で表すので、明細を書き換える道は無い",
     "consumable_order_items.update": "消耗品発注の明細も作り直さない。数量を直したいときは取り消して入れ直す",
@@ -49,5 +42,6 @@
     "product_compatibilities.update": "互換の組は作るか消すかだけ。付け替えは消して作り直すので、更新の道は無い"
   },
 
-  "maxGaps": 20
+  "_maxGaps_history": "2026-09-09 に 20 で始め、同日 8 表の DELETE を剥がして 12 へ下げた。**下げた値は上げない**（上げるときは、なぜ返せない借金になったのかを引き継ぎメモに書く）。",
+  "maxGaps": 12
 }
