@@ -36,7 +36,7 @@
     "scripts/check-input-validation-coverage.test.sh": "36f142e126a2bb7d355c67a7a52a9d9db9eee87a7051105ff2ce4e0edc5f180a",
     "scripts/check-integration-freshness.sh": "7dd3d421006760558aef58510b3e342cf5d502ed7b0507f7a0333a67d61f46b2",
     "scripts/check-integration-freshness.test.sh": "42d13f954d76511b24f69f9f20ff3765f95708f00eefd3dda4d08009efc74b3d",
-    "scripts/check-layer-consistency.test.sh": "f2af68441504cbe8d03e2cd1d70726ab0044910763529e98d97def887efd756e",
+    "scripts/check-layer-consistency.test.sh": "7fe93a60dcda9011d9ebded854046161dd222cad5e303d5df5b7875441a25e7c",
     "scripts/check-no-registry-fetch.test.sh": "8a6dd2981204f1b09a3473eba970f60beb19ce8d944c14754e5d2d973f7a0a4f",
     "scripts/check-operation-contracts.test.sh": "bcc0b9294e890028ee8f436bc32a84cabaa77a1a37cd999ce6161aa70fd45540",
     "scripts/check-query-validation-coverage.test.sh": "3502c40ee1f74a26bc08d339fcc87ade8993e64045a6966e25e0ae2a3992b6ae",

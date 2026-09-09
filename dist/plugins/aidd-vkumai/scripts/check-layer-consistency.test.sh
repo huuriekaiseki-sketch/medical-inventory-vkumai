@@ -48,10 +48,28 @@ assert_fail() {
 #      node_modules に既にある vitest で実行する。
 API_JSON="$(mktemp)"
 trap 'rm -f "$API_JSON"' EXIT
+# WHY(対象ファイルをフラグより**前**に置く、2026-09-09 実測): `--disable-console-intercept` は
+#      この版の vitest では**値を取るフラグとして解釈され、次の位置引数を飲み込む**。
+#      そのせいでこの 1 行は長らく**単体テスト 236 ファイル全部**を回していた
+#      （1 つの JSON を出すためだけに 20 秒。機械が混んでいると worker の起動が間に合わず落ちる）。
+#      実測: フラグ → ファイルの順で 229 ファイル、ファイル → フラグの順で 1 ファイル。
+#      **綴りを直す（`--disableConsoleIntercept`）でも 1 ファイルになる**が、
+#      並び順のほうが版に依らないのでこちらにする。
+EMIT_LOG="$(mktemp)"
+trap 'rm -f "$API_JSON" "$EMIT_LOG"' EXIT
 if ! ./node_modules/.bin/vitest run --config vitest.config.ts \
-     --reporter=dot --disable-console-intercept \
-     scripts/lib/__tests__/extract-api-rules.emit.test.ts > /dev/null 2>&1; then
+     scripts/lib/__tests__/extract-api-rules.emit.test.ts \
+     --reporter=dot --disableConsoleIntercept > "$EMIT_LOG" 2>&1; then
   echo "  NG: API 側のスキーマを読み取れない（scripts/lib/__tests__/extract-api-rules.emit.test.ts）"
+  tail -20 "$EMIT_LOG"
+  exit 1
+fi
+# WHY(件数まで見る、2026-09-09): 「通った」だけでは**全部回してしまったこと**に気づけない。
+#      並びを戻されたら 236 ファイル回る形へ黙って戻るので、**1 ファイルであること**を毎回測る。
+#      これ自体が C-031（数える単位）と C-022（戻ったら落ちるか）の対。
+if ! grep -qE 'Test Files +1 passed \(1\)' "$EMIT_LOG"; then
+  echo "  NG: 抽出のための実行が 1 ファイルに絞れていない（位置引数がフラグに飲まれている疑い）"
+  grep -E 'Test Files' "$EMIT_LOG"
   exit 1
 fi
 cp "$REPO_ROOT/.api-rules.json" "$API_JSON" 2>/dev/null || {
