@@ -264,35 +264,74 @@ describe('facility_writer_or_adminポリシーはRPCを経由しない直接書�
   })
 
   // WHY(aal2 の測り場所を移した): 直接 INSERT の道が無くなったので、
-  //      `facility_writer_or_admin_update` の `has_aal2()` を**取り消し（UPDATE）側**で測る。
+  //      取り消しのポリシーの `has_aal2()` を**取り消し（UPDATE）側**で測る。
   //      ここが無いと、発注・返却の表で aal2 の判定を一度も測らないまま緑になる（C-021）。
+  //
+  // WHY(4 表すべてを回す、2026-09-10): 2026-09-09 まで `loan_orders` 1 表だけを測っていた。
+  //      **ポリシーは表ごとに別物**なので、1 表で測っても他の 3 表は何も守られていない。
+  //      RLS の変異計測（RM-002: `case_orders` の書き込みから aal2 を外す）が
+  //      **生き残り**として実測で見つけた——直接 INSERT のテストは権限の層で先に止まるため、
+  //      ポリシーを壊しても気づけなくなっていた（C-023: 探りが別の防御に依存）。
+  //      表を足したら行を足す（C-011: 1 表だけの検査を「守っている」と読まない）。
+  const cancellable: Array<{ table: string; row: () => Record<string, unknown> }> = [
+    {
+      table: 'case_orders',
+      row: () => ({
+        facility_id: facilityId,
+        case_datetime: new Date().toISOString(),
+        procedure_name: '取り消しaal2テスト',
+        patient_id: 'AAL2-CANCEL',
+        patient_initials: 'テ',
+        gender: 'other',
+        doctor_name: '取り消しaal2テスト医師',
+      }),
+    },
+    { table: 'consumable_orders', row: () => ({ facility_id: facilityId }) },
+    {
+      table: 'loan_orders',
+      row: () => ({ facility_id: facilityId, procedure_name: '取り消しaal2テスト', maker: 'テストメーカー' }),
+    },
+    {
+      table: 'loan_returns',
+      row: () => ({ facility_id: facilityId, return_datetime: new Date().toISOString() }),
+    },
+  ]
+
   describe('取り消し（UPDATE）には引き続き aal2 が要る', () => {
-    it('aal1 では発注を取り消せず、aal2 まで昇格すると取り消せる', async () => {
-      const { data: order } = await serviceClient
-        .from('loan_orders')
-        .insert({ facility_id: facilityId, procedure_name: '取り消しaal2テスト', maker: 'テストメーカー' })
-        .select('id')
-        .single()
+    it.each(cancellable)(
+      '$table: aal1 では取り消せず、aal2 まで昇格すると取り消せる',
+      async ({ table, row }) => {
+        const { data: created, error: seedError } = await serviceClient
+          .from(table)
+          .insert(row())
+          .select('id')
+          .single()
+        if (seedError || !created) throw new Error(`[aal2-cancel] ${table} のシード失敗: ${seedError?.message}`)
 
-      const aal1Client = await signInAtAal1()
-      const { data: aal1Updated, error: aal1Error } = await aal1Client
-        .from('loan_orders')
-        .update({ status: 'cancelled' })
-        .eq('id', order!.id)
-        .select('id')
-      // 権限はあるのでエラーにはならない。**RLS が 0 行にする**（aal2 を満たさないため）
-      expect(aal1Error).toBeNull()
-      expect(aal1Updated ?? [], 'aal1 のセッションで取り消せてしまった').toEqual([])
+        const aal1Client = await signInAtAal1()
+        const { data: aal1Updated, error: aal1Error } = await aal1Client
+          .from(table)
+          .update({ status: 'cancelled' })
+          .eq('id', created.id)
+          .select('id')
+        // 権限はあるのでエラーにはならない。**RLS が 0 行にする**（aal2 を満たさないため）
+        expect(aal1Error).toBeNull()
+        expect(aal1Updated ?? [], `${table} を aal1 のセッションで取り消せてしまった`).toEqual([])
 
-      const aal2Client = await signInAtAal1()
-      await stepUpToAal2(aal2Client, factorId, secret)
-      const { data: aal2Updated, error: aal2Error } = await aal2Client
-        .from('loan_orders')
-        .update({ status: 'cancelled' })
-        .eq('id', order!.id)
-        .select('id')
-      expect(aal2Error).toBeNull()
-      expect(aal2Updated ?? [], 'aal2 でも取り消せない（UPDATE の道まで塞がっている）').toHaveLength(1)
-    })
+        const aal2Client = await signInAtAal1()
+        await stepUpToAal2(aal2Client, factorId, secret)
+        const { data: aal2Updated, error: aal2Error } = await aal2Client
+          .from(table)
+          .update({ status: 'cancelled' })
+          .eq('id', created.id)
+          .select('id')
+        // 対照: aal2 なら通る。これが無いと「常に 0 行」でも緑になる（C-021）
+        expect(aal2Error).toBeNull()
+        expect(aal2Updated ?? [], `${table} は aal2 でも取り消せない（UPDATE の道まで塞がっている）`).toHaveLength(1)
+        // 後片付けはしない（施設スコープの行なので、afterAll の施設削除で連鎖して消える）。
+        // ここで消すと**戻り値を見ない削除**が 1 つ増えるだけで、消し残しの計測が拾う話でもない（E-065）
+      },
+      60_000
+    )
   })
 })

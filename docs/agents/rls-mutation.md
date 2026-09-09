@@ -23,7 +23,8 @@ RLS ポリシーを 1 つ壊して、対応する統合テストが**本当に�
 bash scripts/check-rls-mutation.sh
 ```
 
-実 DB が要る（`supabase start` 済み）。全 10 件で 10 分ほど。1 件だけなら `bash scripts/check-rls-mutation.sh RM-002`。
+実 DB が要る（`supabase start` 済み）。1 件あたり 40 秒ほど（`supabase db reset` を挟むため）。**件数は `scripts/lib/rls-mutants.json` が正本**——ここには書かない（足すたびに古くなるので。C-010）。
+1 件だけなら `bash scripts/check-rls-mutation.sh RM-002`（**部分実行は記録に残らない**）。
 
 1 件あたりの流れは、壊す migration を置く → `supabase db push --local` → 対応するテストを回して
 **落ちることを確かめる** → migration を消して `supabase db reset` で戻す。
@@ -58,7 +59,7 @@ RM-010 の 2 つ目は、この手の検査そのものの教訓になる。
 
 | 欄 | 何を書くか |
 | --- | --- |
-| `id` | `M-` + 3 桁 |
+| `id` | `RM-` + 3 桁 |
 | `breaks` | どの認可条件を、どう緩めるか |
 | `sql` | `DROP POLICY` + 緩めた `CREATE POLICY`。表を新しく開く場合は `NOTIFY pgrst, 'reload schema';` を付ける（付けないと PostgREST 側に反映されず、変異が効かない） |
 | `expect` | 落ちるべき統合テストのパス |
@@ -72,6 +73,15 @@ RM-010 の 2 つ目は、この手の検査そのものの教訓になる。
 **機械では起動しない**（人が打つ）。実 DB を作り直すので CI には載せていない。
 定期作業として `scripts/maintenance-digest.sh` に載せ、下の予定日で期限を出す。
 
+**打ち忘れは 2026-09-10 から機械が拾う。** 実行を `logs/rls-mutation-runs.jsonl` へ記録し
+（記録するのは exit code であって主張ではない）、`scripts/check-rls-mutation-freshness.sh`
+（SessionStart hook）が「一度も無い / 前回が赤（**生き残りあり**）/
+前回から `supabase/` が変わっている / 汚れた木での合格」で警告する。
+
+定期の引き金と役割が違う——**あちらは「時間が経った」、こちらは「変わったのに測っていない」**。
+**日数ではなく木のハッシュで見る**（無関係な変更で鳴る警告は読まれない）。
+判定は統合テスト・E2E・Stryker と共有（`scripts/lib/run-freshness.py`）。
+
 ## 次回実施予定日
 
 2026-12-07
@@ -82,6 +92,7 @@ RM-010 の 2 つ目は、この手の検査そのものの教訓になる。
 | --- | --- | --- |
 | 2026-09-07 | 6/10 → 10/10 | 初回導入。生き残った 4 件に対して統合テストを 13 件追加（新規ファイル 11 件、aal2 のファイルに 2 件） |
 | 2026-09-07（2 回目） | 11/14 → 14/14 | 変異を 10 → 14 件へ。`privileged_operations` の追加（RM-011）で「**aal2 だけを外す**」形が未測定だと分かり、同型のポリシー全部に足した（RM-012 access_denials / RM-013 user_facilities / RM-014 products）。RM-011・RM-012・RM-013 が生き残ったのでテストを 7 件追加。あわせて **RM-009 が等価変異だったこと**（ポリシーだけ緩めても GRANT が先に拒否する）が分かり、GRANT INSERT も渡す形に実効化した |
+| 2026-09-10 | 17/18 → 18/18 | **RM-002 が再び生き残った。** 2026-09-09 に発注 3 種への直接 INSERT を権限ごと剥がしたので、RM-002 を倒していたテストが**権限の層で止まる**ようになり、ポリシーを壊しても気づかなくなっていた（E-066。C-023 の逆向き——手前の防御を**後から足した**）。取り消し（UPDATE）の aal2 テストが `loan_orders` 1 表しか無かったので **4 表すべて**へ広げて倒した。あわせて**この計測の打ち忘れを機械が拾う**ようにした（`check-rls-mutation-freshness.sh`） |
 
 ## 2 回目で分かったこと（2026-09-07）
 

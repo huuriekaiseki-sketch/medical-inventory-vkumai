@@ -10,8 +10,8 @@
 
 | 何を壊すか | どれが落ちるはずか | どこ | 起動 |
 | --- | --- | --- | --- |
-| (1) **製品コード**（認可の判断が書かれた 13 ファイル） | 単体テスト | `stryker.config.json` / `npm run test:mutation` | 人（四半期） |
-| (2) **行単位の権限のポリシー** | 統合テスト（実 DB） | `scripts/check-rls-mutation.sh` / `scripts/lib/rls-mutants.json` | 人 |
+| (1) **製品コード**（認可の判断が書かれた 13 ファイル） | 単体テスト | `stryker.config.json` / `npm run test:mutation` | 人（四半期）＋**打ち忘れは SessionStart hook が拾う** |
+| (2) **行単位の権限のポリシー** | 統合テスト（実 DB） | `scripts/check-rls-mutation.sh` / `scripts/lib/rls-mutants.json` | 同上 |
 | (3) **hook スクリプト本体**（丸ごと no-op 化） | その hook の回帰テスト | `scripts/check-rule-guard-effective.test.sh` | 機械（CI hooks-test） |
 | (4) **判定エンジンの中の 1 つの分岐** | その検査の回帰テスト | `scripts/lib/check-detectors-effective.mjs` / `scripts/lib/check-mutants.json` | 機械（CI hooks-test） |
 
@@ -164,8 +164,35 @@ npm run test:mutation
 1 回 2 分かかるうえ Actions の無料枠を使い切るため（issue #757 の 6 で有料化を判断するまで保留）。
 代わりに定期作業として `scripts/maintenance-digest.sh` に載せ、下の予定日で期限を出す。
 
-この「人が打つ」性質は [`undetectable-rules-inventory.md`](./undetectable-rules-inventory.md)
-の扱いと同じで、**破られても機械では気づけない**。期限の管理だけが担保になる。
+**RLS の変異計測（`scripts/check-rls-mutation.sh`）は 2026-09-10 から「打ち忘れ」を機械が拾う。**
+実行を `logs/rls-mutation-runs.jsonl` へ記録し（記録するのは exit code であって主張ではない）、
+`scripts/check-rls-mutation-freshness.sh`（SessionStart hook）が次のいずれかで警告する:
+
+- 記録が 1 件も無い
+- 直近が赤（**生き残った変異がある**＝守っていないテストがある）
+- 直近を記録したときから `supabase/` の中身が変わっている（**日数ではなく木のハッシュ**）
+- 直近が未コミットの変更を含む状態での実行だった
+
+定期の引き金（四半期）とは役割が違う——**あちらは「時間が経った」、こちらは「変わったのに測っていない」**。
+統合テスト（E-030）・E2E（E-060）で使っている判定をそのまま共有している
+（`scripts/lib/run-freshness.py`。3 つ目を足しても判定は 1 つのまま）。
+
+**Stryker（TypeScript 側）にも同日に足した。** `npm run test:mutation` は
+`scripts/run-mutation-tests.sh` を通るようになり、exit code と**実測したスコア**を
+`logs/mutation-runs.jsonl` へ残す。`scripts/check-mutation-freshness.sh` が同じ 4 条件で警告する。
+
+見張る木は 2 つ: `src/` と **`stryker.config.json`**。
+設定を入れるのは、**対象を減らせばスコアは上がる**から——`src/` が変わっていなくても
+対象の一覧が変われば前の記録は当てにならない（2026-09-08 に実際に 10 → 12 ファイルへ広げて
+分母が変わっている）。
+
+**入口を変えたのも意図的**。記録の仕組みを作っても、素の `stryker run` を打てる入口が
+残っていれば誰も通らない。`package.json` の `test:mutation` がラッパーを呼ぶことを
+`check-mutation-freshness.test.sh` の scenario 11 が毎回確かめる。
+
+この「人が打つ」性質そのものは [`undetectable-rules-inventory.md`](./undetectable-rules-inventory.md)
+の扱いと同じで、**打ったかどうかは強制できない**。機械が言えるのは「打った記録が無い」までで、
+そこから先は人が打つ。
 
 ## 次回実施予定日
 
@@ -177,6 +204,7 @@ npm run test:mutation
 | --- | --- | --- |
 | 2026-09-07 | 62.46% → 76.19% | 初回導入。`access-denial.ts`（0.00%）に単体テスト 9 件、`require-auth.ts` に 5 件、`authGuardError` に 4 件、`rate-limit.ts` に 4 件を追加 |
 | 2026-09-07（2 回目） | 76.19% → 95.80% | `log-safe.ts` の冗長な `instanceof Error` 分岐を削除しテスト 6 件追加（62%→100%）。`assertAdminAal2` に 14 件（未カバー 35 変異）。`require-facility-access.ts`・`audit/repository.ts`・`admin-status.ts`・`access-denial.ts`・`rate-limit.ts`・`api-pagination.ts` に「拒否の記録の中身」「絞り込みの列名」「境界の反対側」を追加。生き残りの 4 分類と限界の節を新設 |
+| 2026-09-10 | 92.64% | **記録の仕組みを入れて回した初回**（テストは足していない）。2026-09-08 の 92.87% から 0.23 ポイント下がったのは、その後 `src/` を触ったぶん（`api-pagination.ts` 95.12% → 93.18%。クエリ文字列の入口を共有へ寄せた分岐が増えた）。下限 92 は満たしている。**あわせて、機械可読の出力が 3 日間作り直されていなかった**ことが分かった（json レポーターが設定から外れており、`reports/mutation/mutation.json` は 2026-09-07 のまま。C-010） |
 | 2026-09-08 | 91.04% → 92.87% | 判定点 2 つ（`judgment-timeout.ts` / `privileged-operation.ts`）を対象に追加し、同日に入れたタイムアウトの効き目を測った。**タイムアウトを入れた 6 か所すべてで「どの判定が諦めたか」を誰も見ていなかった**（分類 B）ので、ラベルを見るアサーションを追加。`refund_rate_limit` の「行が返らない場合」と記録の例外経路のログも追加。**元の 10 ファイルは 94.10%** で break 94 を維持している |
 
 ## 更新の引き金

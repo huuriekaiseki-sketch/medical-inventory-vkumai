@@ -98,6 +98,11 @@
       "Bash(scripts/check-full-run-before-finish.sh *)",
       "Bash(bash scripts/check-full-run-before-finish.test.sh*)",
       "Bash(scripts/check-integration-freshness.sh *)",
+      "Bash(scripts/check-rls-mutation-freshness.sh *)",
+      "Bash(scripts/check-mutation-freshness.sh *)",
+      "Bash(bash scripts/check-mutation-freshness.test.sh*)",
+      "Bash(bash scripts/run-mutation-tests.sh*)",
+      "Bash(bash scripts/check-rls-mutation-freshness.test.sh*)",
       "Bash(bash scripts/check-integration-freshness.test.sh*)",
       "Bash(bash scripts/run-integration-tests.sh*)",
       "Bash(scripts/check-e2e-freshness.sh *)",
@@ -260,6 +265,16 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-e2e-freshness.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-rls-mutation-freshness.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-mutation-freshness.sh",
             "timeout": 10
           }
         ]

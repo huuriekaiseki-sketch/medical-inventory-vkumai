@@ -119,9 +119,18 @@
       "role": "ミューテーション",
       "guards": "検査が本当に効いている（壊したら落ちる）",
       "trigger": "機械",
-      "triggerDetail": "判定エンジンの変異（CM）と hook の no-op 化は hooks-test。**RLS 変異と Stryker は人が起動する**",
-      "entrypoints": ["bash scripts/check-detectors-effective.test.sh", "bash scripts/check-rls-mutation.sh", "npm run test:mutation"],
-      "checks": ["scripts/check-detectors-effective.test.sh", "scripts/check-rule-guard-effective.test.sh"],
+      "triggerDetail": "判定エンジンの変異（CM）と hook の no-op 化は hooks-test。RLS 変異と Stryker は人が打つが、**打ち忘れは SessionStart hook が拾う**（2026-09-10。木のハッシュで「変わったのに測っていない」を見る。Stryker 側は測る対象の一覧も見張る——対象を減らせばスコアは上がるので）",
+      "entrypoints": [
+        "bash scripts/check-detectors-effective.test.sh",
+        "bash scripts/check-rls-mutation.sh",
+        "bash scripts/run-mutation-tests.sh"
+      ],
+      "checks": [
+        "scripts/check-detectors-effective.test.sh",
+        "scripts/check-rule-guard-effective.test.sh",
+        "scripts/check-rls-mutation-freshness.test.sh",
+        "scripts/check-mutation-freshness.test.sh"
+      ],
       "ledgers": [
         {
           "name": "判定エンジンの壊し方（下限）",

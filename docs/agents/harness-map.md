@@ -29,7 +29,7 @@
 | 契約（H-03） | 決めたことと動くものが食い違わない（操作の契約・層の突合・入口の検証） | **機械**（npm test と hooks-test が毎回回す） | `npm test`<br>`bash scripts/check-operation-contracts.test.sh` | あり |
 | 実装（H-04） | 書いたものが型として通り、単体で動き、ビルドできる | **機械**（npm test / npm run typecheck / npm run lint / next build） | `npm test`<br>`npm run typecheck`<br>`npm run lint` | あり |
 | セキュリティ・回帰（H-05） | 施設の境界を越えられない。4 つの入口すべてを総当たりする | **機械**（静的な検査は hooks-test。**実 DB を叩く総当たりは人が起動する**（統合テスト）） | `scripts/run-integration-tests.sh`<br>`bash scripts/check-guard-regressions.test.sh` | 一部 |
-| ミューテーション（H-06） | 検査が本当に効いている（壊したら落ちる） | **機械**（判定エンジンの変異（CM）と hook の no-op 化は hooks-test。**RLS 変異と Stryker は人が起動する**） | `bash scripts/check-detectors-effective.test.sh`<br>`bash scripts/check-rls-mutation.sh`<br>`npm run test:mutation` | 一部 |
+| ミューテーション（H-06） | 検査が本当に効いている（壊したら落ちる） | **機械**（判定エンジンの変異（CM）と hook の no-op 化は hooks-test。RLS 変異と Stryker は人が打つが、**打ち忘れは SessionStart hook が拾う**（2026-09-10。木のハッシュで「変わったのに測っていない」を見る。Stryker 側は測る対象の一覧も見張る——対象を減らせばスコアは上がるので）） | `bash scripts/check-detectors-effective.test.sh`<br>`bash scripts/check-rls-mutation.sh`<br>`bash scripts/run-mutation-tests.sh` | 一部 |
 | 監視・観測（H-07） | 起きたことに気づける（夜間検査・鮮度・記録漏れ） | **機械**（夜間検査は pg_cron、鮮度は SessionStart / Stop hook。**本番の監視は外部待ち**（#757-8）） | `scripts/check-integration-freshness.sh`<br>`scripts/check-e2e-freshness.sh`<br>`scripts/maintenance-digest.sh` | 一部 |
 | リリース（H-08） | 出す順番を間違えても壊れない（順序・巻き戻し・ロック） | **機械**（hooks-test が migration の注記を毎回検査する） | `bash scripts/check-migration-release-safety.test.sh`<br>`bash scripts/rehearse-merge.sh` | 一部 |
 
@@ -58,7 +58,8 @@
 | 空き | どこ | なぜ残っているか |
 | --- | --- | --- |
 | 応答時間の差から存在を推測できるか | 脅威 T-013 | 外部公開前に引き出し（`security-test-catalog.md`）から開ける |
-| Stryker が人の起動のまま | `npm run test:mutation` | 1 回 2 分かかり、Actions の無料枠を使い切る。有料化の判断待ち（#757 の 6） |
+| 変異計測（Stryker・RLS）を打つのは人のまま | `run-mutation-tests.sh` / `check-rls-mutation.sh` | CI に載せられない（Stryker は Actions の無料枠、RLS は実 DB を作り直す）。**2026-09-10 に「打ち忘れ」だけは機械が拾うようにした**——木が変わったのに測っていなければ SessionStart で警告する。打つのは人（#757 の 6・7） |
+| すべての検査がどれかのハーネスに属することを機械で見ていない | `harness-registry.json` | 登録簿に書いた検査は実在を確かめるが、**逆向き**（`scripts/*.test.sh` 全 116 本がどれかに属するか）は見ていない。入れるなら 116 本の分類が要る |
 
 **外部への到達が要るもの**（GitHub / Supabase cloud が戻るまで着手できない）:
 

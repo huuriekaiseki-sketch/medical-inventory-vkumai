@@ -24,6 +24,16 @@
 # 実行: bash scripts/check-rls-mutation.sh [MUTANT_ID ...]
 #   引数なしで全件。実 DB が要る（supabase start 済み）。全件で 10 分ほどかかる。
 #   結果は docs/agents/rls-mutation.md に残す。
+#
+# WHY(実行を機械で記録する、2026-09-10): この計測は**人が打たないと動かない**。
+#      打ったかどうかを自己申告に頼ると、統合テストで起きたのと同じこと
+#      （いつからか分からないほど前から赤いまま。E-030）が起こる。
+#      せめて**回したときの結果は自己申告にしない**——exit code から
+#      logs/rls-mutation-runs.jsonl へ機械的に残し、
+#      scripts/check-rls-mutation-freshness.sh（SessionStart hook）が
+#      「一度も無い / 前回が赤 / 前回から supabase/ が変わっている」で警告する。
+#      **日数ではなく木のハッシュで見る**のは、無関係な変更で鳴る警告は読まれないから。
+#      統合テスト・E2E と同じ形（判定は共有の scripts/lib/run-freshness.py）。
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -126,6 +136,47 @@ fi
 if [ -n "$SURVIVORS" ]; then
   echo ""
   echo "生き残った変異（テストを足す先）:$SURVIVORS"
+fi
+
+# --- 実行を記録する -------------------------------------------------------
+# WHY(部分実行は記録しない): ID を指定した 1 件だけの実行を「全件通した」と記録すると、
+#      鮮度の hook が嘘の緑を信じる。統合テスト・E2E と同じ扱いに揃える。
+if [ "$#" -ne 0 ]; then
+  echo "[check-rls-mutation] 引数付きの実行なので記録しません（全件を通したときだけ記録する）"
+else
+  # shellcheck source=lib/resolve-log-dir.sh
+  source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+  # shellcheck source=lib/worktree-hash.sh
+  source "$SCRIPT_DIR/lib/worktree-hash.sh"
+  RLS_LOG_DIR="$(resolve_log_dir)"
+  mkdir -p "$RLS_LOG_DIR"
+  python3 - "$RLS_LOG_DIR/rls-mutation-runs.jsonl" "$fail" "$killed" "$survived" "$errors" \
+    "$(git rev-parse "HEAD:supabase" 2>/dev/null || echo unknown)" \
+    "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+    "$(git branch --show-current 2>/dev/null || echo unknown)" \
+    "$(git diff --quiet -- supabase 2>/dev/null && echo false || echo true)" \
+    "$(worktree_hash supabase)" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+
+log_file, fail, killed, survived, errors, tree, commit, branch, dirty, worktree = sys.argv[1:11]
+row = {
+    "at": datetime.now(timezone.utc).isoformat(),
+    "result": "pass" if fail == "0" else "fail",
+    "exitCode": int(fail),
+    "killed": int(killed),
+    "survived": int(survived),
+    "errors": int(errors),
+    "supabaseTree": tree,
+    "commit": commit,
+    "branch": branch,
+    "supabaseDirty": dirty == "true",
+    "supabaseWorktree": worktree,
+}
+with open(log_file, "a", encoding="utf-8") as f:
+    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+print(f"[check-rls-mutation] {row['result']} を記録しました: {log_file}")
+PY
 fi
 
 if [ "$fail" -ne 0 ]; then

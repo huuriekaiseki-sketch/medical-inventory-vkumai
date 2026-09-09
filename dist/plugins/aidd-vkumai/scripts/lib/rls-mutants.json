@@ -14,9 +14,9 @@
       "id": "RM-002",
       "breaks": "施設スコープの書き込み（case_orders）から aal2 の要求を外す",
       "sql": "DROP POLICY IF EXISTS \"facility_writer_or_admin\" ON case_orders;\nCREATE POLICY \"facility_writer_or_admin\" ON case_orders\n  FOR ALL TO authenticated\n  USING (is_facility_writer(facility_id) OR is_admin())\n  WITH CHECK (is_facility_writer(facility_id) OR is_admin());",
-      "expect": "supabase/__tests__/integration/require-aal2-for-order-rpcs.integration.test.ts",
-      "promise": "P-030",
-      "note": "2026-09-07 の初回計測で生き残った。RPC 経由しか見ていなかったので、表への直接書き込みのテストを同じファイルに足して倒した"
+      "expect": "supabase/__tests__/integration/require-aal2-in-facility-writer-rls.integration.test.ts",
+      "promise": "P-031",
+      "note": "2026-09-07 の初回計測で生き残り、直接書き込みのテストを足して倒した。**2026-09-10 にまた生き残った**——2026-09-09 に直接 INSERT を権限ごと剥がしたので、そのテストは権限の層で止まるようになり、ポリシーを壊しても気づかなくなっていた（C-023 の逆向き。E-066）。取り消し（UPDATE）の aal2 テストを 4 表すべてへ広げて倒した。測る先も P-030 のファイルから P-031 のファイルへ移した"
     },
     {
       "id": "RM-003",
