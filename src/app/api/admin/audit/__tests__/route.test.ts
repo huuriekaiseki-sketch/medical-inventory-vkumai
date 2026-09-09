@@ -124,6 +124,37 @@ describe('GET /api/admin/audit', () => {
     })
   })
 
+  // WHY(2026-09-09、クエリを唯一の入口へ移したときに足した): 移す前は
+  //      facility_id / actor_id / table_name / guard を**素通し**していた。
+  //      絞り込みの語はそのまま DB の問い合わせに乗るので、入口で長さを止める。
+  it('絞り込みの語が長すぎると 400 で止まり、記録を読みに行かない', async () => {
+    authenticated()
+    mockResolveIsAdmin.mockResolvedValue(true)
+    const long = 'x'.repeat(201)
+    expect((await get(`http://localhost/api/admin/audit?table_name=${long}`)).status).toBe(400)
+    expect((await get(`http://localhost/api/admin/audit?guard=${long}`)).status).toBe(400)
+    expect((await get(`http://localhost/api/admin/audit?actor_id=${long}`)).status).toBe(400)
+    expect(mockListAuditLog).not.toHaveBeenCalled()
+  })
+
+  it('上限ちょうど（200 文字）は通る（境界の反対側）', async () => {
+    authenticated()
+    mockResolveIsAdmin.mockResolvedValue(true)
+    const res = await get(`http://localhost/api/admin/audit?table_name=${'x'.repeat(200)}`)
+    expect(res.status).toBe(200)
+  })
+
+  // WHY(パラメータ汚染): `get()` は先頭だけを返すので 2 つ目が黙って捨てられる。
+  //      層ごとに採る側が違うと境界の検査をすり抜ける道になりうるので、受け取らない
+  it('同じ鍵を 2 回渡すと 400（先頭だけを黙って採らない）', async () => {
+    authenticated()
+    mockResolveIsAdmin.mockResolvedValue(true)
+    const res = await get('http://localhost/api/admin/audit?kind=changes&kind=denials')
+    expect(res.status).toBe(400)
+    expect(mockListAuditLog).not.toHaveBeenCalled()
+    expect(mockListAccessDenials).not.toHaveBeenCalled()
+  })
+
   it('権限のエラーが漏れてきたら 500 で隠さず 403 にする', async () => {
     authenticated()
     mockResolveIsAdmin.mockResolvedValue(true)

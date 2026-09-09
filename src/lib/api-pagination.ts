@@ -48,10 +48,10 @@ const numeric = (fallback: number, message: string, min: number, max: number) =>
  *      値ではない。`/api/news` は上限 100・下限 0 を意図して選んでいた（テストで明示されている）。
  *      判定を 1 か所に寄せつつ、その意図は壊さない。
  */
-export const paginationQuerySchema = (
+export const paginationQueryShape = (
   options: { limit?: number; offset?: number; minLimit?: number; maxLimit?: number } = {}
 ) =>
-  z.object({
+  ({
     limit: numeric(
       options.limit ?? 50,
       `limit は ${options.minLimit ?? MIN_LIMIT}〜${options.maxLimit ?? MAX_LIMIT} の整数で指定してください`,
@@ -59,7 +59,16 @@ export const paginationQuerySchema = (
       options.maxLimit ?? MAX_LIMIT
     ),
     offset: numeric(options.offset ?? 0, OFFSET_ERROR, 0, MAX_OFFSET),
-  })
+  }) as const
+
+/**
+ * WHY(形（shape）も出す): ほかの項目と一緒に 1 つの `z.object` へ混ぜたい route がある
+ *      （監査 route は kind・日付・絞り込みとページ送りを同時に受ける）。
+ *      `.and()` で交差型にすると `superRefine` を掛けにくいので、**形を配って平らに合成**する。
+ */
+export const paginationQuerySchema = (
+  options: { limit?: number; offset?: number; minLimit?: number; maxLimit?: number } = {}
+) => z.object(paginationQueryShape(options))
 
 export function parsePagination(
   params: URLSearchParams,

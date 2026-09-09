@@ -1,12 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
-import { parsePagination } from '@/lib/api-pagination'
-import { isValidDateString } from '@/lib/jst-date-range'
+import { paginationQueryShape } from '@/lib/api-pagination'
+import { dateRangeShape, refineDateRange } from '@/lib/jst-date-range'
+import { parseQuery } from '@/lib/validation/parse-query'
 import { listAccessDenials, listAuditLog } from '@/lib/audit/repository'
-import { AUDIT_KINDS, type AuditApiErrorResponse, type AuditApiResponse, type AuditKind, type AuditQuery } from '@/types/audit'
+import { AUDIT_KINDS, type AuditApiErrorResponse, type AuditApiResponse, type AuditQuery } from '@/types/audit'
+
+// WHY(2026-09-09、クエリの読み取りを唯一の入口へ): この route はクエリを 7 か所で生読みし、
+//      kind と日付だけを手書きで検証、`facility_id` / `actor_id` / `table_name` / `guard` は
+//      **素通し**だった（壊れた値は 400 ではなく 500 になる）。
+//      日付の 3 条件はレポート route（/api/admin/reports）と**同じ文言で 2 回**書かれており、
+//      片方だけ直せば食い違う形だった（E-053 の予備軍）。判定を共有へ寄せる。
+//
+// WHY(自由入力に上限を付ける): `table_name` / `guard` は絞り込みの語で、そのまま DB のクエリへ渡る。
+//      語彙を閉じるところまでは踏み込まないが（表名は増えるため）、**長さの上限**は入れる。
+//      入口で止めないと、長い文字列がそのまま問い合わせに乗る。
+const auditQuerySchema = refineDateRange(
+  z.object({
+    kind: z
+      .enum(AUDIT_KINDS, { error: 'kind は changes / denials のいずれかで指定してください' })
+      .optional(),
+    facility_id: z.string().max(200, { error: 'facility_id が長すぎます' }).optional(),
+    actor_id: z.string().max(200, { error: 'actor_id が長すぎます' }).optional(),
+    table_name: z.string().max(200, { error: 'table_name が長すぎます' }).optional(),
+    guard: z.string().max(200, { error: 'guard が長すぎます' }).optional(),
+    ...dateRangeShape,
+    ...paginationQueryShape(),
+  })
+)
 
 // WHY: apiError は共通の { error: string } を返すが、この route の型と一致することを
 //      コンパイル時に保証するためにラップする（他の admin route と同じ書き方）
@@ -39,38 +64,21 @@ export async function GET(
   const isAdmin = await resolveIsAdmin(db, user)
   if (!isAdmin) return auditApiError('権限がありません', 403)
 
-  const params = request.nextUrl.searchParams
-  const kindParam = params.get('kind') ?? 'changes'
-  if (!AUDIT_KINDS.includes(kindParam as AuditKind)) {
-    return auditApiError('kind は changes / denials のいずれかで指定してください', 400)
-  }
-  const kind = kindParam as AuditKind
-
-  const dateFrom = params.get('date_from')
-  const dateTo = params.get('date_to')
-  if (dateFrom && !isValidDateString(dateFrom)) {
-    return auditApiError('date_from は YYYY-MM-DD 形式で指定してください', 400)
-  }
-  if (dateTo && !isValidDateString(dateTo)) {
-    return auditApiError('date_to は YYYY-MM-DD 形式で指定してください', 400)
-  }
-  if (dateFrom && dateTo && dateFrom > dateTo) {
-    return auditApiError('date_from は date_to 以前の日付を指定してください', 400)
-  }
-
-  const pagination = parsePagination(params)
-  if (!pagination.ok) return pagination.response
+  const parsed = parseQuery(request, auditQuerySchema)
+  if (!parsed.ok) return parsed.response
+  const p = parsed.data
+  const kind = p.kind ?? 'changes'
 
   const query: AuditQuery = {
     kind,
-    limit: pagination.limit,
-    offset: pagination.offset,
-    ...(params.get('facility_id') ? { facilityId: params.get('facility_id')! } : {}),
-    ...(params.get('actor_id') ? { actorId: params.get('actor_id')! } : {}),
-    ...(params.get('table_name') ? { tableName: params.get('table_name')! } : {}),
-    ...(params.get('guard') ? { guard: params.get('guard')! } : {}),
-    ...(dateFrom ? { dateFrom } : {}),
-    ...(dateTo ? { dateTo } : {}),
+    limit: p.limit,
+    offset: p.offset,
+    ...(p.facility_id ? { facilityId: p.facility_id } : {}),
+    ...(p.actor_id ? { actorId: p.actor_id } : {}),
+    ...(p.table_name ? { tableName: p.table_name } : {}),
+    ...(p.guard ? { guard: p.guard } : {}),
+    ...(p.date_from ? { dateFrom: p.date_from } : {}),
+    ...(p.date_to ? { dateTo: p.date_to } : {}),
   }
 
   try {

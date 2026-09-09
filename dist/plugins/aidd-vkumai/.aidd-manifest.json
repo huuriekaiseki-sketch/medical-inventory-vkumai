@@ -59,7 +59,7 @@
     "scripts/lib/extract-api-rules.ts": "42277ee68e58b9d6df914e71ad1f17b1d40ca7fdb9725869ead763ec6ef14a26",
     "scripts/lib/fixture-guard.mjs": "7a180fc61093409a5491e01ac0b376bc0496be1c274375f2d8e1cbf1873370ba",
     "scripts/lib/merge-queue.json": "185be9b2103ef56325b8490d847fd3849c139b35bab286b90d95664bba989da9",
-    "scripts/lib/query-validation-baseline.json": "430a0bb89c167ec813196b3e3bed87a3078a8a2a0a16a8269b2012f5d18f2388",
+    "scripts/lib/query-validation-baseline.json": "cfefbde90433f78444db5ccdf842b44094fe2880036a15b60556b241f2c68007",
     "scripts/lib/resolve-log-dir.sh": "b459c3da39017bf468d885803e8bfa05b01b91b8059591103fdca4f6c1cf8b4e",
     "scripts/lib/resolve-log-dir.test.sh": "21aa497a006ea1566d72dcaf7dec621673d11d7c64640eb0dee62b217c77c5a0",
     "scripts/lib/rls-mutants.json": "7ef3d625250c96386ef653efb3aed4cb2e1fcec3ffea984379323235189a1fad",
