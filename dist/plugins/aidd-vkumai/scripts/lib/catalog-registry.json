@@ -380,6 +380,29 @@
         40
       ],
       "purpose": "検査そのものを設計するときの間違え方を型で並べる。値ではなく型を他リポジトリへ持ち出すための一枚"
+    },
+    {
+      "id": "operation-contracts",
+      "file": "docs/agents/operation-contracts.md",
+      "idPrefix": "O",
+      "columns": 8,
+      "statusColumn": 8,
+      "states": [
+        "実装済み",
+        "計画",
+        "対象外"
+      ],
+      "idBands": [
+        10,
+        20,
+        30,
+        40,
+        50,
+        60
+      ],
+      "purpose": "1 操作（表 × 動詞）= 1 行。入口をどれに絞るか・直接書き込みを禁じるか・誰に許すか・危険度の正本",
+      "limits": "宣言と実態（DB 権限・アプリの直接書き込み・入口の実在・攻撃表への登録）は突き合わせるが、**認可の列は突き合わせていない**。入口が実在することは見るが、その中で認可を呼んでいるかは見ない",
+      "_note": "bespoke な scripts/lib/check-operation-contracts.mjs も残す（宣言と実態の突合はエンジンの範囲外）。エンジンは形、bespoke は中身。守るテストの列を持たないので evidenceColumn は無い（テストの紐づけは P-xxx が受け持つ）"
     }
   ]
 }

@@ -46,6 +46,20 @@ paths:
   - **この検査は名前があるかどうかしか見ない。** `IF NOT is_admin() THEN` を `IF true THEN` に
     すれば素通りする。それは RLS 変異計測（`scripts/check-rls-mutation.sh`）の担当
 
+- **新しい「操作」（表 × 動詞）を足すときは、先に契約を 1 行書く（2026-09-09）。**
+  決める単位は表ではなく**操作**。`GRANT ALL` は 3 文字で 4 動詞を開くので、表単位で決めていると
+  **誰も決めていない権限**が積み上がる（実測: 3 か月で 20 件。E-056 / E-057）。
+  - [`docs/agents/operation-contracts.md`](../../docs/agents/operation-contracts.md)（O-xxx）に
+    1 行足す。決めるのは 4 つ: **入口**（route か RPC か）／**直接書き込み**（許可 / 禁止）／
+    **認可**（誰に）／**危険度**。
+  - `禁止` にしたらクライアント権限を与えない（作成は SECURITY DEFINER の RPC だけにする）。
+    `許可` にしたら **GRANT とポリシーをその動詞だけ**に付ける（`GRANT ALL` / `FOR ALL` にしない）。
+  - `scripts/lib/check-operation-contracts.mjs`（CI `hooks-test`）が宣言と実態を**両方向**で突き合わせる:
+    権限があるのに行が無い／行があるのに権限が無い／`禁止` なのに権限がある／`禁止` なのにアプリが
+    直接書いている／入口の route・RPC が実在しない／route が攻撃表に載っていない。
+  - **見ていないもの**: 認可の列（「施設 writer + aal2」）とポリシー本文の一致。
+    route の中で認可を呼んでいるか（それは攻撃表 P-017 と RLS の変異計測の担当）。
+
 - **新しい施設ロールを足すときは 4 軸すべてを決める（2026-09-07）。**
   読む / 書く / マスタを書く / 画面の書き込み UI。決めた内容は
   [`docs/agents/role-rulebook.md`](../../docs/agents/role-rulebook.md)（R-xxx）に 1 行書く。
