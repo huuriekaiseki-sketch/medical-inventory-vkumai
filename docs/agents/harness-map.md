@@ -13,15 +13,43 @@
 
 ## 地図
 
-| 役割 | 何を守るか | 主なもの | 状態 |
+**この節の 2 つの表は生成物。手で編集しない。** 正本は `scripts/lib/harness-registry.json` と
+各台帳の実物で、`bash scripts/render-harness-map.sh` で作り直す。
+最新かどうかは `scripts/check-harness-map.test.sh`（CI `hooks-test`）が検査する。
+
+**手で書いていたときに 2 回間違えた**（2026-09-09、台帳の数字を取り違え）。
+数字は台帳から読み、宣言した入口・検査・限界の文書が**実在するか**も同時に見る。
+
+<!-- generated:harness-map start -->
+
+| 役割 | 何を守るか | 起動 | 入口 | 状態 |
+| --- | --- | --- | --- | --- |
+| ワークフロー（H-01） | 決めた順番（調査 → 仕様 → 実装 → 統合 → 検証）を飛ばさない。飛ばしたら気づく | **人**（フローの起動は人。**記録漏れの検知だけ**が Stop hook で機械化されている） | `.claude/workflows/aidd-phase1-router.js`<br>`.claude/workflows/aidd-phase2.js` | 一部 |
+| データ（H-02） | テストのデータが互いを壊さない。消しすぎない・消し残さない | **機械**（統合テスト・E2E を回すたびに走行の前後で実測する（走らせるのは人だが、走れば必ず測る）） | `scripts/run-integration-tests.sh`<br>`scripts/run-e2e-tests.sh` | あり |
+| 契約（H-03） | 決めたことと動くものが食い違わない（操作の契約・層の突合・入口の検証） | **機械**（npm test と hooks-test が毎回回す） | `npm test`<br>`bash scripts/check-operation-contracts.test.sh` | あり |
+| 実装（H-04） | 書いたものが型として通り、単体で動き、ビルドできる | **機械**（npm test / npm run typecheck / npm run lint / next build） | `npm test`<br>`npm run typecheck`<br>`npm run lint` | あり |
+| セキュリティ・回帰（H-05） | 施設の境界を越えられない。4 つの入口すべてを総当たりする | **機械**（静的な検査は hooks-test。**実 DB を叩く総当たりは人が起動する**（統合テスト）） | `scripts/run-integration-tests.sh`<br>`bash scripts/check-guard-regressions.test.sh` | 一部 |
+| ミューテーション（H-06） | 検査が本当に効いている（壊したら落ちる） | **機械**（判定エンジンの変異（CM）と hook の no-op 化は hooks-test。**RLS 変異と Stryker は人が起動する**） | `bash scripts/check-detectors-effective.test.sh`<br>`bash scripts/check-rls-mutation.sh`<br>`npm run test:mutation` | 一部 |
+| 監視・観測（H-07） | 起きたことに気づける（夜間検査・鮮度・記録漏れ） | **機械**（夜間検査は pg_cron、鮮度は SessionStart / Stop hook。**本番の監視は外部待ち**（#757-8）） | `scripts/check-integration-freshness.sh`<br>`scripts/check-e2e-freshness.sh`<br>`scripts/maintenance-digest.sh` | 一部 |
+| リリース（H-08） | 出す順番を間違えても壊れない（順序・巻き戻し・ロック） | **機械**（hooks-test が migration の注記を毎回検査する） | `bash scripts/check-migration-release-safety.test.sh`<br>`bash scripts/rehearse-merge.sh` | 一部 |
+
+**台帳（数字はここから読む。足し算しない）**
+
+| 台帳 | 何を数えているか | 単位 | いま |
 | --- | --- | --- | --- |
-| データ | テストのデータが互いを壊さない | 走行前後で**消しすぎ（C-030）と消し残しの両方**を見る——E2E と統合テストの両方（`e2e/fixture-guard.ts` / `supabase/__tests__/integration/helpers/fixture-guard.ts`）。消し残しの判定は `run-integration-tests.sh`（全件・緑のときだけ）で**現在 0 件**。ほかに `seed-rls-idor.ts`、テーブル台帳 TB-xxx、追記専用表の積み上がり警告 | あり |
-| 契約（宣言と実態） | 決めたことと動くものが食い違わない | 操作の契約 O-xxx（35 操作・両方向）、層の突合 `compare-layers.mjs`（DB の CHECK と zod を**値まで**）、ルールブック 16 本を 1 エンジンで検査 | あり |
-| 契約（入口の検証） | 受け取る値の形を 1 か所で決める | 本文 `parseBody` と クエリ `parseQuery`。どちらも**唯一の入口 ＋ eslint で直接読みを禁止 ＋ 借金 0**（クエリは 2026-09-09 に 13 → 0）。route は `request.json()` にも `searchParams` にも**触れない** | あり |
-| セキュリティ・回帰 | 施設の境界を越えられない | 4 つの入口の総当たり——route（P-017）／REST 直叩き（P-018）／RPC（P-019）／**RPC に渡す参照先**（2026-09-09）。認可判定の消失検知 `check-guard-regressions`、到達範囲 B-xxx、依存監査・秘密走査 | 一部 |
-| ミューテーション | 検査が本当に効いている | 4 種類——製品コード（Stryker）／RLS ポリシー（RM-xxx）／hook を no-op 化／判定エンジンの枝（CM-xxx）。一覧は [`mutation-testing.md`](./mutation-testing.md) の冒頭 | 一部 |
-| 監視・観測 | 起きたことに気づける | 夜間検査（不変条件 I-050・拒否の異常 P-065・スキーマドリフト）、エージェントの進捗と記録漏れ検知、鮮度（C-041） | 一部 |
-| リリース | 出す順番を間違えても壊れない | `-- release-order:` と `-- ROLLBACK:` の必須化、`-- lock:` 注記、[`release-safety-runbook.md`](./release-safety-runbook.md) | 一部 |
+| `integration-leak-baseline.json`#maxLeakedRows | 統合テストの消し残しの上限（H-02） | 緑の全件実行 1 回で業務表に残る行 | **0** |
+| `input-validation-baseline.json`#pending.length | 本文を検証せずに読む route（H-03） | route | **0** |
+| `query-validation-baseline.json`#pending.length | クエリを検証せずに読む route（H-03） | route | **0** |
+| `write-path-registry.json`#maxGaps | DB は書けるのにアプリに道が無い組み合わせ（H-05） | 組み合わせ | **0** |
+| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **20** |
+| `rls-mutants.json`#mutants.length | RLS・RPC の壊し方（H-06） | 件 | **18** |
+
+（ハーネス 8 件・台帳 6 件）
+
+<!-- generated:harness-map end -->
+
+**「起動」の欄がいちばん大事。** ここが `人` のものは、誰かが打たなければ止まる——
+つまり**つながっていない**。`機械` に変えられるものから変えていく。
 
 ## いま空いているところ（状態が「一部」の中身）
 
@@ -46,14 +74,8 @@
 
 ratchet を持つ仕組みはそれぞれ**別の台帳**を持っている。**足し算しないし、比べられない。**
 
-| 台帳 | 何を数えているか | いま |
-| --- | --- | --- |
-| `input-validation-baseline.json` | 本文（body）を検証せずに読む route | 0 本 |
-| `query-validation-baseline.json` | クエリ文字列を検証せずに読む route | **0 本**（2026-09-09 に 13 → 0） |
-| `write-path-registry.json` | DB は書けるのにアプリに道が無い組み合わせ | 宣言済み 4 件・未宣言 0 件 |
-| 統合テストの消し残し | 緑の全件実行 1 回で業務表に残る行 | **0 行**（2026-09-10 に 41 → 0） |
-| `check-mutants.json` の `minMutants` | 判定エンジンの壊し方（下限） | 18 件 |
-| `rls-mutants.json` | RLS・RPC の壊し方 | 18 件 |
+**一覧と現在値は上の「地図」の 2 つ目の表**（生成物）にある。ここには読み方だけを書く。
+
 
 **新しい検査を作ると、それまで誰も数えていなかったものが台帳に載る。**
 0 だった数字が 13 になったように見えても、増えたのは**見えている範囲**であって借金そのものではない。

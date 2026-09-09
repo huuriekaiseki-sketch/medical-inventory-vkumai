@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 18,
+  "minMutants": 20,
   "mutants": [
     {
       "id": "CM-001",
@@ -173,6 +173,24 @@
       "expect": "scripts/check-fixture-guard.test.sh",
       "guards": "消し残し（緑の全件実行 1 回につき 41 行が積み上がっていた実害。E-022 / E-023 へ育つ）",
       "note": "CM-011 が『消しすぎ』の側で、これは**逆向き**。判定を取り違えると常に 0 件で緑になるので、両方を別々に壊して測る"
+    },
+    {
+      "id": "CM-019",
+      "breaks": "ハーネスの地図から、「宣言した検査が実在しない」の報告を外す",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "    for (const c of h.checks ?? []) {",
+      "replace": "    for (const c of []) {",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "地図に書いてあるのに無い（事故のとき最初に開く 1 枚が嘘をつく）"
+    },
+    {
+      "id": "CM-020",
+      "breaks": "ハーネスの地図から、台帳の数字が読めているかの検査を外す",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "      if (typeof value !== 'number') {",
+      "replace": "      if (false) {",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "台帳の数字を手で書かないこと（2026-09-09 に 2 回取り違えた）"
     }
   ]
 }

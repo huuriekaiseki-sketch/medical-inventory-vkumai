@@ -227,12 +227,20 @@ elif [ ! -f "$LEAK_REPORT" ]; then
   echo "[run-integration-tests] 後片付けの漏れの報告がありません（fixture-guard の配線が外れている疑い）" >&2
   LEAK_FAILED=1
 else
+  # 上限は台帳から読む（ratchet）。台帳が無ければ 0（fail-closed）
+  MAX_LEAKED="$(python3 -c "
+import json, sys
+try:
+    print(json.load(open(sys.argv[1]))['maxLeakedRows'])
+except Exception:
+    print(0)
+" "$REPO_ROOT/scripts/lib/integration-leak-baseline.json" 2>/dev/null || echo 0)"
   LEAKED="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['count'])" "$LEAK_REPORT" 2>/dev/null || echo unknown)"
   if [ "$LEAKED" = "unknown" ]; then
     echo "[run-integration-tests] 後片付けの漏れの報告を読めません: $LEAK_REPORT" >&2
     LEAK_FAILED=1
-  elif [ "$LEAKED" -ne 0 ]; then
-    echo "[run-integration-tests] **走行中に作った行が $LEAKED 件残りました**（後片付けの漏れ）。" >&2
+  elif [ "$LEAKED" -gt "$MAX_LEAKED" ]; then
+    echo "[run-integration-tests] **走行中に作った行が $LEAKED 件残りました**（後片付けの漏れ。上限 $MAX_LEAKED）。" >&2
     echo "  各ファイルの afterAll は、自分が作った行を必ず消してください。" >&2
     echo "  削除の戻り値のエラーを捨てないこと（2026-09-10 まで 41 行/回が黙って積み上がっていました）。" >&2
     python3 -c "

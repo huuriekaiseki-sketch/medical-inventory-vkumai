@@ -1,0 +1,176 @@
+{
+  "_comment": "ハーネス（守る仕組み）の登録簿。docs/agents/harness-map.md の表はここから生成する（bash scripts/render-harness-map.sh）。手で書いた表は必ず古くなる——実際に 2026-09-09 に台帳の数字を 2 回取り違えた。数字は台帳の実物から読む。エンジンは共通側（aidd-core）、この登録簿は導入先（aidd-vkumai）。",
+  "_design": "1 ハーネス = 1 行。決めるのは 5 つ: 何を守るか / **どうやって起動するか**（機械か人か外部待ちか）/ 入口のコマンド / 台帳（数字の在り処）/ 限界を書いた文書。**起動の欄がいちばん大事**で、ここが『人』のものは誰かが忘れれば止まる。",
+  "_limits": "『あり』の判定は「機械で起動するか」と「宣言したファイルが実在するか」だけを見る。中身が十分かは見ない。台帳を持たないハーネスの進み具合は数字にならない。",
+  "generatedMarker": "harness-map",
+  "output": "docs/agents/harness-map.md",
+  "triggers": {
+    "機械": "hook / CI / npm test / cron のどれかが人の意思と無関係に起動する",
+    "人": "人（またはエージェント）がコマンドを打たないと動かない",
+    "外部待ち": "設計は決まっているが、GitHub / Supabase cloud など外部への到達が要るので今は動かせない"
+  },
+  "harnesses": [
+    {
+      "id": "H-01",
+      "role": "ワークフロー",
+      "guards": "決めた順番（調査 → 仕様 → 実装 → 統合 → 検証）を飛ばさない。飛ばしたら気づく",
+      "trigger": "人",
+      "triggerDetail": "フローの起動は人。**記録漏れの検知だけ**が Stop hook で機械化されている",
+      "entrypoints": [".claude/workflows/aidd-phase1-router.js", ".claude/workflows/aidd-phase2.js"],
+      "checks": [
+        "scripts/check-gap-check-state.sh",
+        "scripts/check-aidd-stats-recorded.sh",
+        "scripts/check-aidd-phase-stats-recorded.sh",
+        "scripts/check-run-manifest-presence.sh"
+      ],
+      "ledgers": [],
+      "limitsDoc": "docs/agents/observability-internals.md",
+      "state": "一部"
+    },
+    {
+      "id": "H-02",
+      "role": "データ",
+      "guards": "テストのデータが互いを壊さない。消しすぎない・消し残さない",
+      "trigger": "機械",
+      "triggerDetail": "統合テスト・E2E を回すたびに走行の前後で実測する（走らせるのは人だが、走れば必ず測る）",
+      "entrypoints": ["scripts/run-integration-tests.sh", "scripts/run-e2e-tests.sh"],
+      "checks": ["scripts/check-fixture-guard.test.sh", "scripts/run-integration-tests.test.sh"],
+      "ledgers": [
+        {
+          "name": "統合テストの消し残しの上限",
+          "unit": "緑の全件実行 1 回で業務表に残る行",
+          "file": "scripts/lib/integration-leak-baseline.json",
+          "path": "maxLeakedRows"
+        }
+      ],
+      "limitsDoc": "docs/agents/check-design-pitfalls.md",
+      "state": "あり"
+    },
+    {
+      "id": "H-03",
+      "role": "契約",
+      "guards": "決めたことと動くものが食い違わない（操作の契約・層の突合・入口の検証）",
+      "trigger": "機械",
+      "triggerDetail": "npm test と hooks-test が毎回回す",
+      "entrypoints": ["npm test", "bash scripts/check-operation-contracts.test.sh"],
+      "checks": [
+        "scripts/check-operation-contracts.test.sh",
+        "scripts/check-layer-consistency.test.sh",
+        "scripts/check-catalogs.test.sh",
+        "scripts/check-input-validation-coverage.test.sh",
+        "scripts/check-query-validation-coverage.test.sh"
+      ],
+      "ledgers": [
+        {
+          "name": "本文を検証せずに読む route",
+          "unit": "route",
+          "file": "scripts/lib/input-validation-baseline.json",
+          "path": "pending.length"
+        },
+        {
+          "name": "クエリを検証せずに読む route",
+          "unit": "route",
+          "file": "scripts/lib/query-validation-baseline.json",
+          "path": "pending.length"
+        }
+      ],
+      "limitsDoc": "docs/agents/operation-contracts.md",
+      "state": "あり"
+    },
+    {
+      "id": "H-04",
+      "role": "実装",
+      "guards": "書いたものが型として通り、単体で動き、ビルドできる",
+      "trigger": "機械",
+      "triggerDetail": "npm test / npm run typecheck / npm run lint / next build",
+      "entrypoints": ["npm test", "npm run typecheck", "npm run lint"],
+      "checks": ["scripts/check-fail-open.test.sh", "scripts/check-export-paths.test.sh"],
+      "ledgers": [],
+      "limitsDoc": "docs/agents/known-failure-patterns.md",
+      "state": "あり"
+    },
+    {
+      "id": "H-05",
+      "role": "セキュリティ・回帰",
+      "guards": "施設の境界を越えられない。4 つの入口すべてを総当たりする",
+      "trigger": "機械",
+      "triggerDetail": "静的な検査は hooks-test。**実 DB を叩く総当たりは人が起動する**（統合テスト）",
+      "entrypoints": ["scripts/run-integration-tests.sh", "bash scripts/check-guard-regressions.test.sh"],
+      "checks": [
+        "scripts/check-guard-regressions.test.sh",
+        "scripts/check-rls-grant-gaps.test.sh",
+        "scripts/check-write-path-gaps.test.sh",
+        "scripts/check-secret-leak.test.sh",
+        "scripts/check-pii-leak.test.sh"
+      ],
+      "ledgers": [
+        {
+          "name": "DB は書けるのにアプリに道が無い組み合わせ",
+          "unit": "組み合わせ",
+          "file": "scripts/lib/write-path-registry.json",
+          "path": "maxGaps"
+        }
+      ],
+      "limitsDoc": "docs/agents/threat-model.md",
+      "state": "一部"
+    },
+    {
+      "id": "H-06",
+      "role": "ミューテーション",
+      "guards": "検査が本当に効いている（壊したら落ちる）",
+      "trigger": "機械",
+      "triggerDetail": "判定エンジンの変異（CM）と hook の no-op 化は hooks-test。**RLS 変異と Stryker は人が起動する**",
+      "entrypoints": ["bash scripts/check-detectors-effective.test.sh", "bash scripts/check-rls-mutation.sh", "npm run test:mutation"],
+      "checks": ["scripts/check-detectors-effective.test.sh", "scripts/check-rule-guard-effective.test.sh"],
+      "ledgers": [
+        {
+          "name": "判定エンジンの壊し方（下限）",
+          "unit": "件",
+          "file": "scripts/lib/check-mutants.json",
+          "path": "minMutants"
+        },
+        {
+          "name": "RLS・RPC の壊し方",
+          "unit": "件",
+          "file": "scripts/lib/rls-mutants.json",
+          "path": "mutants.length"
+        }
+      ],
+      "limitsDoc": "docs/agents/mutation-testing.md",
+      "state": "一部"
+    },
+    {
+      "id": "H-07",
+      "role": "監視・観測",
+      "guards": "起きたことに気づける（夜間検査・鮮度・記録漏れ）",
+      "trigger": "機械",
+      "triggerDetail": "夜間検査は pg_cron、鮮度は SessionStart / Stop hook。**本番の監視は外部待ち**（#757-8）",
+      "entrypoints": ["scripts/check-integration-freshness.sh", "scripts/check-e2e-freshness.sh", "scripts/maintenance-digest.sh"],
+      "checks": [
+        "scripts/check-integration-freshness.test.sh",
+        "scripts/check-e2e-freshness.test.sh",
+        "scripts/check-full-run-before-finish.test.sh",
+        "scripts/check-flaky-tests.test.sh"
+      ],
+      "ledgers": [],
+      "limitsDoc": "docs/agents/observability-internals.md",
+      "state": "一部"
+    },
+    {
+      "id": "H-08",
+      "role": "リリース",
+      "guards": "出す順番を間違えても壊れない（順序・巻き戻し・ロック）",
+      "trigger": "機械",
+      "triggerDetail": "hooks-test が migration の注記を毎回検査する",
+      "entrypoints": ["bash scripts/check-migration-release-safety.test.sh", "bash scripts/rehearse-merge.sh"],
+      "checks": [
+        "scripts/check-migration-release-safety.test.sh",
+        "scripts/check-migration-lock-safety.test.sh",
+        "scripts/rehearse-merge.test.sh"
+      ],
+      "ledgers": [],
+      "limitsDoc": "docs/agents/release-safety-runbook.md",
+      "state": "一部"
+    }
+  ]
+}
