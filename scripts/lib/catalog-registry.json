@@ -357,6 +357,29 @@
       "evidenceRequiredStates": [
         "限定済み"
       ]
+    },
+    {
+      "id": "check-design-pitfalls",
+      "file": "docs/agents/check-design-pitfalls.md",
+      "idPrefix": "C",
+      "columns": 8,
+      "evidenceColumn": 7,
+      "statusColumn": 8,
+      "states": [
+        "検知あり",
+        "検知なし"
+      ],
+      "evidenceRequiredStates": [
+        "検知あり"
+      ],
+      "limits": "実際に起きて実測した型しか載らない。すり抜けを型に当てはめる判断は人がやる。守るテストはその型の実例 1 つを止めるだけで、型そのものを全部は止めない",
+      "idBands": [
+        10,
+        20,
+        30,
+        40
+      ],
+      "purpose": "検査そのものを設計するときの間違え方を型で並べる。値ではなく型を他リポジトリへ持ち出すための一枚"
     }
   ]
 }
