@@ -71,6 +71,7 @@ interface Fx {
   loanOrderId: string
   loanReturnId: string
   loanReturnItemId: string
+  consumableId: string
   distributorProductId: string
   hospitalPriceId: string
   productId: string
@@ -171,6 +172,7 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
       distributorProductId: fixtures!.distributorProductId!,
       loanReturnId: fixtures!.loanReturnId!,
       loanReturnItemId: fixtures!.loanReturnItemId!,
+      consumableId: fixtures!.consumableId!,
       hospitalPriceId: fixtures!.facilityAHospitalPriceId!,
       productId: fixtures!.productId!,
       secondProductId: fixtures!.secondProductId!,
@@ -189,6 +191,8 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
       fixtures!.loanOrderProcedureName,
       String(fixtures!.facilityAPurchasePrice),
       fixtures!.facilityAName!,
+      // 消耗品の品名も施設の運用が見える情報（2026-09-09）
+      fixtures!.consumableName!,
     ]
     const db = serviceRoleClient()
     const before = await snapshotFacilityA(db, fx.facilityAId)
@@ -213,6 +217,7 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
             loanOrderA: fx.loanOrderId,
             loanReturnA: fx.loanReturnId,
             loanReturnItemA: fx.loanReturnItemId,
+            consumableA: fx.consumableId,
             distributorProductA: fx.distributorProductId,
             hospitalPriceA: fx.hospitalPriceId,
             productA: fx.productId,

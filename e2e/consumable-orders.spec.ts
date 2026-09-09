@@ -6,7 +6,7 @@
 //      2) 他施設ユーザーが自施設の消耗品しか登録・閲覧できないこと（facility-scope維持）を
 //         cross-facility-boundary.spec.tsと同じフィクスチャ方式で検証する
 
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import {
   readCrossFacilityFixtures,
   CROSS_FACILITY_USER_A_AUTH_PATH,
@@ -120,5 +120,119 @@ test.describe('消耗品登録の施設間境界（issue #647）', () => {
 
     await expect(pageB.getByText(name)).not.toBeVisible()
     await contextB.close()
+  })
+})
+
+// WHY(E-057、2026-09-09): 消耗品は**作成と一覧しかできなかった**。
+//      打ち間違えた名前を直せず、廃番になっても発注の選択肢に残り続けた。
+//      DB は施設の writer に UPDATE / DELETE を許していたので、層が食い違っていた。
+//      ここでは**画面から通しで**「直す」「消す」「止める」を動かし、
+//      止めたものが発注の選択肢から消えることまで確かめる（止めた意味があるか）。
+test.describe('消耗品を直す・止める・消す（E-057）', () => {
+  const fixtures = readCrossFacilityFixtures()
+  test.skip(!fixtures, 'cross-facilityフィクスチャが生成されていない（SUPABASE_SERVICE_ROLE_KEY等が未設定）')
+
+  /** 施設 A に消耗品を 1 件登録して、その品名を返す */
+  async function register(page: Page, label: string) {
+    const name = `${label}-${uniqueSuffix()}`
+    await page.goto(`/facilities/${fixtures!.facilityAId}/consumable-orders`)
+    await page.waitForLoadState('networkidle')
+    await page.getByLabel('品名').fill(name)
+    await page.getByLabel('用途').fill('ABL')
+    const [res] = await Promise.all([
+      page.waitForResponse(r => r.url().includes('/api/consumables') && r.request().method() === 'POST'),
+      page.getByRole('button', { name: '登録する' }).click(),
+    ])
+    expect(res.ok(), `登録に失敗 (${res.status()}): ${await res.text()}`).toBe(true)
+    await expect(page.getByText(name)).toBeVisible()
+    return name
+  }
+
+  /** 品名で 1 行に絞る（画面全体から役割で引くと、他の行のボタンに当たる） */
+  function row(page: Page, name: string) {
+    return page.locator('li').filter({ hasText: name })
+  }
+
+  test('打ち間違えた品名を編集して直せる', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: CROSS_FACILITY_USER_A_AUTH_PATH })
+    const page = await context.newPage()
+    const name = await register(page, 'E2E編集前')
+    const renamed = `${name}-直した`
+
+    // WHY(先に行の id を取る): 編集を押すと品名は入力欄の**値**になり、
+    //      行のテキストから消える。品名で絞る書き方のままだと行を見失う（実測で失敗した）
+    const testId = await row(page, name).getAttribute('data-testid')
+    expect(testId, '行に data-testid が無い').toBeTruthy()
+    const editing = page.getByTestId(testId!)
+
+    await editing.getByRole('button', { name: '編集' }).click()
+    await editing.getByLabel('品名').fill(renamed)
+    const [res] = await Promise.all([
+      page.waitForResponse(r => r.url().includes('/api/consumables/') && r.request().method() === 'PUT'),
+      editing.getByRole('button', { name: '保存' }).click(),
+    ])
+    expect(res.ok(), `更新に失敗 (${res.status()}): ${await res.text()}`).toBe(true)
+
+    await expect(page.getByText(renamed)).toBeVisible()
+    await context.close()
+  })
+
+  test('発注で使っていない消耗品は削除できる（確認してから消える）', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: CROSS_FACILITY_USER_A_AUTH_PATH })
+    const page = await context.newPage()
+    const name = await register(page, 'E2E削除する')
+
+    page.on('dialog', d => d.accept())
+    const [res] = await Promise.all([
+      page.waitForResponse(r => r.url().includes('/api/consumables/') && r.request().method() === 'DELETE'),
+      row(page, name).getByRole('button', { name: '削除' }).click(),
+    ])
+    expect(res.ok(), `削除に失敗 (${res.status()}): ${await res.text()}`).toBe(true)
+
+    await expect(page.getByText(name)).toHaveCount(0)
+    await context.close()
+  })
+
+  test('発注で使った消耗品は消せず、使用停止にすると発注の選択肢から消える', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: CROSS_FACILITY_USER_A_AUTH_PATH })
+    const page = await context.newPage()
+    // WHY(品名に「使用停止」を入れない): 行の中で `getByText('使用停止')` を使うので、
+    //      品名がその語を含むと印とぶつかる（実測で strict mode violation になった）
+    const name = await register(page, 'E2E廃番になった品目')
+
+    // 発注に使う（これで削除できなくなる）
+    await page.goto(`/facilities/${fixtures!.facilityAId}/consumable-orders/new`)
+    await page.waitForLoadState('networkidle')
+    await page.getByLabel(name).check()
+    await Promise.all([
+      page.waitForResponse(r => r.url().includes('/api/consumable-orders') && r.request().method() === 'POST'),
+      page.getByRole('button', { name: '発注する' }).click(),
+    ])
+
+    await page.goto(`/facilities/${fixtures!.facilityAId}/consumable-orders`)
+    await page.waitForLoadState('networkidle')
+
+    // WHY(押す前に分かる): 使われているので「削除」は出さず「使用停止」だけを出す
+    await expect(row(page, name).getByRole('button', { name: '使用停止' })).toBeVisible()
+    await expect(row(page, name).getByRole('button', { name: '削除' })).toHaveCount(0)
+
+    page.on('dialog', d => d.accept())
+    const [res] = await Promise.all([
+      page.waitForResponse(r => r.url().includes('/api/consumables/') && r.request().method() === 'PATCH'),
+      row(page, name).getByRole('button', { name: '使用停止' }).click(),
+    ])
+    expect(res.ok(), `使用停止に失敗 (${res.status()}): ${await res.text()}`).toBe(true)
+
+    // 一覧には「使用停止」として残る（過去の発注が読めなくならないように行は消さない）
+    await expect(row(page, name).getByText('使用停止', { exact: true })).toBeVisible()
+    // 止めたら直す・止めるボタンは出ない
+    await expect(row(page, name).getByRole('button', { name: '編集' })).toHaveCount(0)
+
+    // **止めた意味があるか**: 発注の選択肢から消えている
+    await page.goto(`/facilities/${fixtures!.facilityAId}/consumable-orders/new`)
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByText(name)).toHaveCount(0)
+
+    await context.close()
   })
 })

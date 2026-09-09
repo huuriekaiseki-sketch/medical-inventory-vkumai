@@ -26,6 +26,7 @@ export type PathId =
   | 'loanOrderA'
   | 'loanReturnA'
   | 'loanReturnItemA'
+  | 'consumableA'
   | 'distributorProductA'
   | 'hospitalPriceA'
   | 'productA'
@@ -94,6 +95,13 @@ export const ATTACK_MATRIX: Record<string, RouteAttacks> = {
   },
   '/api/consumables': {
     POST: { body: { facilityId: FACILITY_A, name: '攻撃テスト用消耗品', purpose: '攻撃テスト' } },
+  },
+  // 施設 A の**実在する**消耗品を、他施設の利用者が直せず・止められず・消せないこと（2026-09-09）。
+  // 品名と用途は施設の運用が見える情報で、DELETE は行が消えるので取り返しがつかない
+  '/api/consumables/[id]': {
+    PUT: { pathId: 'consumableA', body: { facilityId: FACILITY_A, name: '攻撃テストで改名', purpose: '攻撃テスト' } },
+    PATCH: { pathId: 'consumableA', body: { facilityId: FACILITY_A, action: 'retire' } },
+    DELETE: { pathId: 'consumableA' },
   },
   '/api/hospital-prices': {
     POST: { body: { facilityId: FACILITY_A, distributorProductId: DISTRIBUTOR_PRODUCT_A, purchasePrice: 1, deliveryPrice: 1 } },

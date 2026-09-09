@@ -78,6 +78,15 @@ export interface CrossFacilityFixtures {
    */
   loanReturnId?: string
   loanReturnItemId?: string
+  /**
+   * 施設 A の消耗品（2026-09-09 追加）。
+   *
+   * WHY: 消耗品を直す・止める・消す道（`/api/consumables/[id]`）を攻撃表で測るには、
+   *      **実在する行**が要る。存在しない UUID では 404 で止まり、認可に届かない（weak）。
+   *      品名は漏洩の目印に使う（施設の運用が見える情報）。
+   */
+  consumableId?: string
+  consumableName?: string
 }
 
 export const CROSS_FACILITY_FIXTURES_PATH = path.join(process.cwd(), 'e2e', '.auth', 'cross-facility-fixtures.json')
@@ -284,6 +293,26 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     throw new Error(`[E2E cross-facility auth] 価格改定シード失敗: ${priceUpdateError.message}`)
   }
 
+  // 施設 A の消耗品を 1 件作る。
+  //
+  // WHY(2026-09-09 追加): `/api/consumables/[id]` の PUT / PATCH / DELETE を、
+  //      **実在する行**に対して測るため。存在しない UUID を渡すと 404 で止まり、
+  //      認可の境界に一度も届かない（攻撃表の weak になる）。
+  //      消耗品の品名・用途は施設の運用が見える情報なので、他施設から読めないことを実際に測る。
+  const consumableName = `E2E消耗品-${runId}`
+  const { data: consumable, error: consumableError } = await supabase
+    .from('consumables')
+    .insert({
+      facility_id: facilityA.id,
+      name: consumableName,
+      purpose: 'クロス施設境界テスト',
+    })
+    .select('id')
+    .single()
+  if (consumableError || !consumable) {
+    throw new Error(`[E2E cross-facility auth] consumables シード失敗: ${consumableError?.message}`)
+  }
+
   await signInAndSaveStorageState(supabase, emailA, CROSS_FACILITY_USER_A_AUTH_PATH)
   await signInAndSaveStorageState(supabase, emailB, CROSS_FACILITY_USER_B_AUTH_PATH)
 
@@ -304,6 +333,8 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     compatibilityId: compatibility.id as string,
     loanReturnId: loanReturn.id as string,
     loanReturnItemId: loanReturnItem.id as string,
+    consumableId: consumable.id as string,
+    consumableName,
   }
   fs.writeFileSync(CROSS_FACILITY_FIXTURES_PATH, JSON.stringify(fixtures))
   console.log(`[E2E cross-facility auth] フィクスチャを書き出しました: ${CROSS_FACILITY_FIXTURES_PATH}`)

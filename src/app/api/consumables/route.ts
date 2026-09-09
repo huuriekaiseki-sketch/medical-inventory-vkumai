@@ -19,8 +19,12 @@ export async function GET(request: NextRequest) {
     if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('施設IDは必須です', 400)
     return apiError('アクセス権限がありません', 403)
   }
+  // WHY(既定では使用停止を返さない、2026-09-09): 呼び出し元の多くは発注の選択肢として使う。
+  //      管理の画面だけが `includeRetired=1` を付ける。**明示しない限り安全側**にしておかないと、
+  //      新しい呼び出し元が黙って止めたものを混ぜる
+  const includeRetired = request.nextUrl.searchParams.get('includeRetired') === '1'
   try {
-    const consumables = await listConsumablesByFacility(db, facilityId!)
+    const consumables = await listConsumablesByFacility(db, facilityId!, { includeRetired })
     return NextResponse.json({ consumables })
   } catch (error) {
     return apiError(toClientErrorMessage(error, '消耗品の取得に失敗しました'))

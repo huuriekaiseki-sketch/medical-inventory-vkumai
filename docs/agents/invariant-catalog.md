@@ -36,8 +36,8 @@
 
 | ID | 不変条件 | 守る場所 | 破る操作 | 期待 | 守るテスト | 状態 |
 | --- | --- | --- | --- | --- | --- | --- |
-| I-020 | 発注（3 種）と返却の状態は前にしか進まない（draft → submitted / returned）。draft 以外からは変えられない。**cancelled へはいつでも進めるが、cancelled からは戻れない**（2026-09-08・E-056。発注 3 種・返却の 4 表すべてが取り消せる） | トリガー `enforce_status_forward_only`（BEFORE UPDATE OF status、check_violation） | service_role で submitted → draft に UPDATE | 23514。status は submitted のまま | `supabase/__tests__/integration/business-invariants.integration.test.ts`、`supabase/migrations/__tests__/add_business_invariant_checks.test.ts`。順番の組み合わせは `supabase/__tests__/integration/invariant-properties.integration.test.ts` | 実装済み |
-| I-021 | 状態の値は決められた語だけ（発注 3 種は draft / submitted / cancelled、返却は draft / returned / cancelled。cancelled は 2026-09-08 に足した取り消し状態・E-056） | CHECK（20260624000000 の `status IN (...)`） | 未知の status へ UPDATE する | 23514。決めてある値へは進める（対照） | `supabase/__tests__/integration/business-invariants.integration.test.ts`（消耗品発注で実測。他の 3 表は同じ形の CHECK で未実測） | 実装済み |
+| I-020 | 状態は前にしか進まない（draft → submitted / returned）。draft 以外からは変えられない。**終端（cancelled / retired）へはいつでも進めるが、終端からは戻れない**（2026-09-08・E-056 で cancelled、2026-09-09 で retired。対象は発注 3 種・返却・返却明細・消耗品の 6 表） | トリガー `enforce_status_forward_only`（BEFORE UPDATE OF status、check_violation） | service_role で submitted → draft に UPDATE | 23514。status は submitted のまま | `supabase/__tests__/integration/business-invariants.integration.test.ts`、`supabase/migrations/__tests__/add_business_invariant_checks.test.ts`、`supabase/migrations/__tests__/allow_retiring_consumables.test.ts`。順番の組み合わせは `supabase/__tests__/integration/invariant-properties.integration.test.ts` | 実装済み |
+| I-021 | 状態の値は決められた語だけ（発注 3 種は draft / submitted / cancelled、返却は draft / returned / cancelled、返却明細は active / cancelled、消耗品は active / retired） | CHECK（20260624000000 の `status IN (...)`、返却明細は 20260909000000、消耗品は 20260909010000） | 未知の status へ UPDATE する | 23514。決めてある値へは進める（対照） | `supabase/__tests__/integration/business-invariants.integration.test.ts`（消耗品発注と消耗品で実測。他の 4 表は同じ形の CHECK で未実測） | 実装済み |
 
 ## 関係の個数
 

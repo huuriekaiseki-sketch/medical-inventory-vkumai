@@ -53,6 +53,14 @@ export type Consumable = {
   purpose: string
   createdAt: string
   updatedAt: string
+  /** retired は 2026-09-09 に足した使用停止（一覧と発注の選択肢から外れるが、過去の発注は残る） */
+  status: 'active' | 'retired'
+  /**
+   * 発注で使われたことがあるか（2026-09-09）。
+   * WHY(画面が押す前に知る必要がある): 使われていれば消せず、使用停止にするしかない。
+   *      押してから 409 で気づかせるより、ボタンの出し分けで先に示す
+   */
+  inUse: boolean
 }
 
 export type ConsumableInput = {

@@ -239,6 +239,15 @@ export const orderCancelSchema = z.object({
   action: z.literal('cancel', { error: 'action は cancel のみ指定できます' }),
 })
 
+/**
+ * 消耗品の使用停止（2026-09-09）。取り消しと同じ形で、**できるのは止めることだけ**。
+ * 戻す道は入口の形からして無い（DB のトリガーも `retired` からの遷移を拒む）
+ */
+export const consumableRetireSchema = z.object({
+  facilityId,
+  action: z.literal('retire', { error: 'action は retire のみ指定できます' }),
+})
+
 /** 消耗品発注（consumable_orders）。明細は消耗品の ID と数量だけ */
 export const consumableOrderInputSchema = z.object({
   facilityId,

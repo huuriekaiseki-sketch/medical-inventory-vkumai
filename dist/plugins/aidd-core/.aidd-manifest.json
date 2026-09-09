@@ -136,7 +136,7 @@
     "templates/consumer/README.md": "a1b9f3ce73f162b2690778818d18a717790f82cd68ec4305a932312ec5d0f4e2",
     "templates/consumer/aidd.config.json": "8a79d67a78bc2cdd442302de93b9c440d108e4374ab1ee314c0455f8ede8ecff",
     "templates/consumer/catalog-registry.json": "37fff591c33c4eed46cc42b9fbba0dc4d966415e576ddb7917800731d1328f4b",
-    "templates/consumer/check-design-pitfalls.md": "6447d3afe7d0eb612eccccf096b5390206d3bb7aa947fb184193252810e581b2",
+    "templates/consumer/check-design-pitfalls.md": "15ec35b479d9d39729e5dc9768bfa8d38d1b119a69e9bb04949e4bb57beabba2",
     "templates/consumer/roadmap-registry.json": "d7d469ebcda87636d625659203e786226439a7d4cfc28db50fabb6248f0cb9ba",
     "templates/consumer/rule-guard-registry.json": "79070efd33023b8789872cd61037e5caf0597500c9f692fdb2ce34d25bd35b9d",
     "templates/consumer/table-duplicates-registry.json": "1aba74d2c9e982de324fec7133e83cc35686d68166b856c12a2f7d5029e5fd6e"

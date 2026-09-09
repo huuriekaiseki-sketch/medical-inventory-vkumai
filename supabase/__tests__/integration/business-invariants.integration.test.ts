@@ -275,6 +275,36 @@ describe('業務不変条件（DB 制約・トリガー） [I-010 I-011 I-012 I-
       const { error: backward } = await serviceClient.from('loan_returns').update({ status: 'draft' }).eq('id', returnId)
       expect(backward?.code).toBe(CHECK_VIOLATION)
     })
+
+    // WHY(2026-09-09): 消耗品に使用停止（`retired`）を足した。**同じ汎用トリガーを付けただけでは
+    //      進めない**（この関数は元々 `draft` からしか動かせず、終端の語彙は `cancelled` だけだった）。
+    //      「付けたから効くはず」で終わらせず、進む向きと戻る向きの両方を実測する（C-022）。
+    it('consumables: active → retired は通り、retired → active は service_role でも 23514', async () => {
+      const { data: consumable } = await serviceClient
+        .from('consumables')
+        .insert({ facility_id: fx.facilityA.id, name: '使用停止テスト消耗品', purpose: 'test' })
+        .select('id, status')
+        .single()
+      expect(consumable?.status).toBe('active')
+
+      const { error: forward } = await serviceClient.from('consumables').update({ status: 'retired' }).eq('id', consumable!.id)
+      expect(forward, '使用停止にできない（前へ進めない）').toBeNull()
+
+      const { error: backward } = await serviceClient.from('consumables').update({ status: 'active' }).eq('id', consumable!.id)
+      expect(backward?.code).toBe(CHECK_VIOLATION)
+
+      const { data: after } = await serviceClient.from('consumables').select('status').eq('id', consumable!.id).single()
+      expect(after?.status).toBe('retired')
+
+      // WHY(語彙の対照): 決めていない状態へは進めない（I-021 と同じ形）
+      const { data: other } = await serviceClient
+        .from('consumables')
+        .insert({ facility_id: fx.facilityA.id, name: '語彙テスト消耗品', purpose: 'test' })
+        .select('id')
+        .single()
+      const { error: unknownStatus } = await serviceClient.from('consumables').update({ status: 'archived' }).eq('id', other!.id)
+      expect(unknownStatus?.code).toBe(CHECK_VIOLATION)
+    })
   })
 
   describe('I-040 粗利と掛け率は常に価格から導かれる', () => {
