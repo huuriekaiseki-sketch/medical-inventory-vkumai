@@ -446,6 +446,28 @@ Playwright は既定でファイル単位に並列実行するため、**他の 
 書き方を変えれば外れるので作っていない。構造で消すなら「spec ごとに施設を分ける」方向だが、
 フィクスチャ生成の作り直しになるため未着手（`docs/agents/undetectable-rules-inventory.md` に載せる候補）。
 
+### storageState を作る関数を spec の中から呼び、黙って別人のセッションを書き出す（2026-09-09）
+
+**チェック内容:** `signInAndSaveStorageState()` は `chromium.launch()` を使う。**spec の中から呼ぶと**、
+テストランナーが差し替えた `chromium` が `playwright.config.ts` の `use.storageState`
+（＝共有のテストユーザー）を新しいコンテキストに引き継ぐ。するとマジックリンクの着地が
+`/login` ではなく保護ページになり、`/login` のハッシュ処理（`setSession`）が走らないまま、
+**共有ユーザーの cookie がそのまま書き出される**。新しい利用者を作る spec は、
+コンテキストを空の storageState から始めること。
+
+**なぜ再発したか:** 成功判定が「`sb-*-auth-token` cookie が現れたか」だけで、
+**誰の cookie かを一度も見ていなかった**。globalSetup から呼ぶ限り正しく動いていたので、
+呼び出し方によって意味が変わることに気づく機会が無かった。
+実害として、MFA の spec が「新しく作った利用者」ではなく**共有のテストユーザーとして走り、
+共有ユーザーに MFA を有効化してしまった**（手元の DB のみ。`supabase db reset` で復旧）。
+これは他の全 spec を aal1 で 0 行にする、静かで広い壊し方だった。
+`price-history.spec.ts` の件と合わせて、**共有物に触る道が 2 本見つかった**のが同じ日。
+
+**機械検知:** `signInAndSaveStorageState()` が、書き出す直前に cookie を復号して
+**頼んだメールと一致するか**を確かめ、違えば両者の名前を出して落とす
+（`e2e/generate-auth-state.ts`。分割 cookie `.0` / `.1` も繋いでから読む）。
+2026-09-09 に、直しを一時的に外して**実際にこの関門が落ちること**を確認済み。
+
 ## RLS/テナント分離層
 
 ### 「動いたからOK」でfacility_idフィルタ漏れ・RLS未設定を見逃す（issue #24再発防止）
