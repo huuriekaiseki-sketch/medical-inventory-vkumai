@@ -51,6 +51,12 @@ for (const n of Object.keys(layout.bin ?? {})) add(n)
 const declared = new Set(Object.keys(layout.checks ?? {}).filter((k) => !k.startsWith("_")))
 const notDistributed = Object.entries(layout.checksNotDistributed ?? {}).filter(([k]) => !k.startsWith("_"))
 const notDistributedNames = new Set(notDistributed.map(([k]) => k))
+// 「分ければ配れる」= 返す当てのある借金。エンジンは汎用で、対象・閾値だけが固有なもの
+const splittable = Object.entries(layout.checksSplittable ?? {}).filter(
+  ([k]) => !k.startsWith("_") && k !== "splittableMax",
+)
+const splittableNames = new Set(splittable.map(([k]) => k))
+const splittableMax = layout.checksSplittable?.splittableMax
 
 // 実在する検査を集める（scripts/ と scripts/lib/）
 const tests = []
@@ -64,16 +70,31 @@ for (const dir of ["scripts", "scripts/lib"]) {
 }
 
 for (const t of tests) {
-  if (withSubject.has(t) || declared.has(t) || notDistributedNames.has(t)) continue
-  console.log(`unclassified: ${t}（対象スクリプトが層の表に無く、checks / checksNotDistributed にも無い）`)
+  if (withSubject.has(t) || declared.has(t) || notDistributedNames.has(t) || splittableNames.has(t)) continue
+  console.log(`unclassified: ${t}（対象スクリプトが層の表に無く、checks / checksNotDistributed / checksSplittable にも無い）`)
 }
 // 表に残った幽霊
-for (const name of [...declared, ...notDistributedNames]) {
+for (const name of [...declared, ...notDistributedNames, ...splittableNames]) {
   const rel = name.startsWith("lib/") ? path.join("scripts", name) : path.join("scripts", name)
   if (!fs.existsSync(path.join(root, rel))) console.log(`stale: ${name}（ファイルが無いのに層の表に残っている）`)
 }
 for (const [name, reason] of notDistributed) {
   if (!String(reason ?? "").trim()) console.log(`no-reason: ${name}（配らない理由が空）`)
+}
+// 分ければ配れるものは「何を出せば配れるか」を書かせる（「あとで」で済ませない）
+for (const [name, reason] of splittable) {
+  if (String(reason ?? "").trim().length < 20) {
+    console.log(`no-plan: ${name}（何を登録簿・設定へ出せば配れるかが書かれていない）`)
+  }
+}
+// ratchet: 返す当てのある借金は**増やさない**（減らすのは人が決めるので上限だけを見る）
+if (typeof splittableMax !== "number") {
+  console.log("no-max: checksSplittable.splittableMax が無い（増えても気づけない）")
+} else if (splittable.length > splittableMax) {
+  console.log(
+    `over-max: 分ければ配れる検査が ${splittable.length} 件で上限 ${splittableMax} を超えた` +
+      "（出してから足すか、出せない理由なら checksNotDistributed へ）",
+  )
 }
 ' "$1"
 }
@@ -128,6 +149,67 @@ if printf '%s\n' "$OUT" | grep -q 'no-reason: check-skipped.test.sh'; then
   assert_ok "配らない理由が空なのを検知"
 else
   assert_fail "理由なしを検知できない" "$OUT"
+fi
+
+echo "=== scenario 3: 「分ければ配れる」の借金が増えたら落ちる（RED 方向の自己検証） ==="
+# WHY(2026-09-09 新設): 「エンジンが固有で配れない」と「対象だけが固有で、分ければ配れる」は別物。
+#      後者は**返す当てのある借金**なので、理由の文章ではなく件数で見る。
+#      作業ディレクトリは $WORK の下に作り、既存の trap で片付ける
+WORK2="$WORK/fx2"
+mkdir -p "$WORK2/scripts/lib"
+cat > "$WORK2/scripts/lib/plugin-layout.json" <<'EOF'
+{
+  "hookScripts": {},
+  "supportScripts": {},
+  "bin": {},
+  "checks": {},
+  "checksNotDistributed": {},
+  "checksSplittable": {
+    "splittableMax": 1,
+    "check-a.test.sh": "対象の一覧を登録簿へ出せば配れる（何を出すかを具体的に書いた行）",
+    "check-b.test.sh": "あとで"
+  }
+}
+EOF
+printf 'echo test\n' > "$WORK2/scripts/check-a.test.sh"
+printf 'echo test\n' > "$WORK2/scripts/check-b.test.sh"
+
+OUT2="$(find_unclassified "$WORK2")"
+if printf '%s\n' "$OUT2" | grep -q 'over-max: 分ければ配れる検査が 2 件'; then
+  assert_ok "借金が上限を超えたのを検知"
+else
+  assert_fail "上限超過を検知できない" "$OUT2"
+fi
+if printf '%s\n' "$OUT2" | grep -q 'no-plan: check-b.test.sh'; then
+  assert_ok "「あとで」のような中身の無い理由を検知"
+else
+  assert_fail "出し方が書かれていないのを検知できない" "$OUT2"
+fi
+if printf '%s\n' "$OUT2" | grep -q 'unclassified: check-a.test.sh'; then
+  assert_fail "checksSplittable に書いた検査を未分類と誤検知した" "$OUT2"
+else
+  assert_ok "checksSplittable も層として数える"
+fi
+
+echo "=== scenario 4: 上限を書き忘れたら落ちる（増えても気づけない状態を許さない） ==="
+WORK3="$WORK/fx3"
+mkdir -p "$WORK3/scripts/lib"
+cat > "$WORK3/scripts/lib/plugin-layout.json" <<'EOF'
+{
+  "hookScripts": {},
+  "supportScripts": {},
+  "bin": {},
+  "checks": {},
+  "checksNotDistributed": {},
+  "checksSplittable": { "check-a.test.sh": "対象の一覧を登録簿へ出せば配れる（何を出すかを具体的に書いた行）" }
+}
+EOF
+printf 'echo test\n' > "$WORK3/scripts/check-a.test.sh"
+OUT3="$(find_unclassified "$WORK3")"
+if printf '%s\n' "$OUT3" | grep -q 'no-max:'; then
+  assert_ok "上限の書き忘れを検知"
+else
+  assert_fail "上限の書き忘れを検知できない" "$OUT3"
 fi
 
 if [ "$fail" -ne 0 ]; then

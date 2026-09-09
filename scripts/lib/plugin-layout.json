@@ -254,7 +254,7 @@
     "scripts/lib/check-roadmap-staleness.mjs": "登録簿（roadmap-registry.json）が「自分を読むエンジン」として参照する。エンジンは aidd-core が同梱し、依存関係（aidd-vkumai → aidd-core）で解決される"
   },
   "checks": {
-    "_comment": "検査（*.test.sh）の層。check-x.sh に対する check-x.test.sh は自動で対象と同じプラグインへ付いていくので、ここに書くのは (1) 対象スクリプトを持たない構造テスト (2) 自動判定を上書きしたいもの の 2 つだけ。上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙（高リスクパスの例・ドメイン語・スタック名）で書かれている検査で、共通側の禁止語検査に引っかかるもの。",
+    "_comment": "検査（*.test.sh）の層。check-x.sh に対する check-x.test.sh は自動で対象と同じプラグインへ付いていくので、ここに書くのは (1) 対象スクリプトを持たない構造テスト (2) 自動判定を上書きしたいもの の 2 つだけ。上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙（高リスクパスの例・ドメイン語・スタック名）で書かれている検査で、共通側の禁止語検査に引っかかるもの。 層は 3 つある: ここ（配る）／checksNotDistributed（エンジン自体が固有で配れない）／checksSplittable（**対象・閾値だけが固有で、登録簿へ出せば配れる**＝返す当てのある借金。件数の上限を機械で見る）。",
     "check-session-start-matchers.test.sh": "aidd-core",
     "check-hook-doc-pointers.test.sh": "aidd-core",
     "check-skill-size.test.sh": "aidd-core",
@@ -275,7 +275,6 @@
     "check-promise-catalog.test.sh": "同上（promise-catalog.md の実データ）",
     "check-invariant-catalog.test.sh": "同上（invariant-catalog.md の実データ）",
     "check-docs-integrity.test.sh": "同上（docs/agents 配下の実データ）",
-    "check-secret-leak.test.sh": "Supabase の鍵の形と src/lib/supabase/server.ts の存在を前提にする。走査の型は汎用なので、鍵の種類を設定に出せたら配れる",
     "check-secret-leak-history.test.sh": "同上（パターン表を共有する）。走査の型は汎用だが、鍵の種類がこのスタック固有",
     "check-pii-leak.test.sh": "許可ドメインと追跡ファイルの構成がこのリポジトリ固有",
     "check-lockfile-integrity.test.sh": "npm の package-lock.json 前提（禁止語 npm を含む）",
@@ -323,7 +322,13 @@
     "check-catalogs.test.sh": "登録簿（catalog-registry.json）と索引の実データを検査する。登録簿は導入先のものなので中心リポジトリの実データでは配れない",
     "check-design-answers.test.sh": "aidd.config.json の limits と design-questions.md の実データを突合する。値が導入先ごとに違う",
     "check-design-questions.test.sh": "supabase/migrations/ の実データを走査する",
-    "check-export-paths.test.sh": "src/ の実コードと依存名を走査する（エクスポート経路が生えた瞬間に落とす ratchet）",
-    "check-rule-guard-effective.test.sh": "no-op 置換の手法自体は汎用で、対象の抽出は 2026-09-09 に登録簿（scripts/lib/rule-guard-registry.json）から取るようにした。残る固有部分は sandbox が symlink で見せる top-level の構成で、そこを設定に出せば共通側へ移せる"
+    "check-export-paths.test.sh": "src/ の実コードと依存名を走査する（エクスポート経路が生えた瞬間に落とす ratchet）"
+  },
+  "checksSplittable": {
+    "_comment": "**分ければ配れる**検査の層（2026-09-09 新設）。エンジンは汎用で、固有なのは対象・閾値・対応表だけ、というもの。`checksNotDistributed`（エンジン自体が固有で本当に配れない）とは別物で、ここは**返す当てのある借金**。増やさないことだけを機械で守る（減らすのは人が決める）。",
+    "_howto": "値は「何を登録簿・設定へ出せば配れるか」を具体的に書く。出したら checks へ移し、ここから消す。`scripts/check-plugin-check-coverage.test.sh` が件数の上限（splittableMax）と理由の有無を見る。",
+    "splittableMax": 2,
+    "check-secret-leak.test.sh": "走査の型（追跡ファイルから鍵らしき文字列を探す）は汎用。固有なのは**探す語のパターンと除外するパス**で、それを登録簿へ出せば配れる。（元の理由: Supabase の鍵の形と src/lib/supabase/server.ts の存在を前提にする。走査の型は汎用な…）",
+    "check-rule-guard-effective.test.sh": "no-op 置換の手法も対象の抽出（登録簿から取る、2026-09-09）も汎用になった。残る固有は **sandbox が symlink で見せる top-level の構成**で、そこを設定へ出せば配れる。"
   }
 }
