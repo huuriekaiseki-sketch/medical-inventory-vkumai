@@ -225,6 +225,62 @@ describe('listOrders', () => {
     expect(lo3?.unreturned, 'draft は未返却にしない').toBe(false)
   })
 
+  // WHY(E-056 の残り、2026-09-09): 返却は**回ごと**にも**品目ごとにも**取り消せる。
+  //      どちらか片方だけを残数から除くと、「取り消したのに返し直せない」か
+  //      「取り消していないのに残数が戻る」のどちらかになる（E-053 と同じ食い違い）。
+  //      **同じ問いの答えを 4 か所で揃える**うちの 1 か所をここで固定する。
+  it('残数は、回ごと取り消した返却も品目ごと取り消した明細も数えない', async () => {
+    const rows = [
+      {
+        // 5 本借り、2 本返したが**その明細を取り消した** = 残り 5
+        id: 'lo-c1', facility_id: 'f-1', procedure_name: '品目取り消し', maker: 'M', status: 'submitted',
+        created_at: '2026-09-09T00:00:00Z',
+        loan_order_items: [
+          { name: 'カテーテルA', quantity: 5, loan_return_items: [{ quantity: 2, status: 'cancelled' }] },
+        ],
+      },
+      {
+        // 5 本借り、2 本返したが**返却ごと取り消した** = 残り 5
+        id: 'lo-c2', facility_id: 'f-1', procedure_name: '回ごと取り消し', maker: 'M', status: 'submitted',
+        created_at: '2026-09-09T00:00:00Z',
+        loan_order_items: [
+          {
+            name: 'カテーテルA', quantity: 5,
+            loan_return_items: [{ quantity: 2, status: 'active', loan_returns: { status: 'cancelled' } }],
+          },
+        ],
+      },
+      {
+        // 5 本借り、2 本返して 1 本ぶんの明細だけ取り消した = 残り 4
+        id: 'lo-c3', facility_id: 'f-1', procedure_name: '一部だけ取り消し', maker: 'M', status: 'submitted',
+        created_at: '2026-09-09T00:00:00Z',
+        loan_order_items: [
+          {
+            name: 'カテーテルA', quantity: 5,
+            loan_return_items: [
+              { quantity: 1, status: 'active' },
+              { quantity: 1, status: 'cancelled' },
+            ],
+          },
+        ],
+      },
+    ]
+    const { db } = makeMockOrdersDb({ ...allTableResults(), loan_orders: { data: rows, error: null } })
+    const result = await listOrders(db, 'f-1', { kind: 'loan_order' }, 50, 0)
+    expect(
+      result.find(o => o.id === 'lo-c1')?.outstandingQuantity,
+      '品目を取り消したのに残数が戻っていない'
+    ).toBe(5)
+    expect(
+      result.find(o => o.id === 'lo-c2')?.outstandingQuantity,
+      '回ごと取り消したのに残数が戻っていない'
+    ).toBe(5)
+    expect(
+      result.find(o => o.id === 'lo-c3')?.outstandingQuantity,
+      '生きている明細まで数えていない（1 本ぶんだけ戻る）'
+    ).toBe(4)
+  })
+
   it('loan_returnのsummaryは返却日時のJST日付になる（UTC 15:00 = JST 翌日 0:00。issue #757 の 15）', async () => {
     // WHY: 以前は期待値を実装と同じ式（環境のタイムゾーンで整形）で作っていたため、
     //      Vercel（UTC）で前日になる不具合をテストが見逃していた。JST の日付を文字列で固定する

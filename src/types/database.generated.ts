@@ -586,6 +586,7 @@ export type Database = {
           loan_return_id: string
           lot: string | null
           quantity: number
+          status: string
           ubd: string | null
           updated_at: string
         }
@@ -597,6 +598,7 @@ export type Database = {
           loan_return_id: string
           lot?: string | null
           quantity?: number
+          status?: string
           ubd?: string | null
           updated_at?: string
         }
@@ -608,6 +610,7 @@ export type Database = {
           loan_return_id?: string
           lot?: string | null
           quantity?: number
+          status?: string
           ubd?: string | null
           updated_at?: string
         }

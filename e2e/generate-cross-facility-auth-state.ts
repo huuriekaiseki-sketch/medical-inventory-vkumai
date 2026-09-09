@@ -68,6 +68,16 @@ export interface CrossFacilityFixtures {
   secondProductId?: string
   categoryId?: string
   compatibilityId?: string
+  /**
+   * 施設 A の返却と、その明細（2026-09-09 追加）。
+   *
+   * WHY: 品目ごとの取り消し（`/api/loan-returns/[id]/items/[itemId]`）を攻撃表で測るには、
+   *      **実在する返却と明細**が要る。存在しない UUID では 404 で止まり、
+   *      認可の判定に一度も届かない（weak）。
+   *      紐付け（`loan_order_item_id`）は付けないので、他の spec の残数・未返却には影響しない。
+   */
+  loanReturnId?: string
+  loanReturnItemId?: string
 }
 
 export const CROSS_FACILITY_FIXTURES_PATH = path.join(process.cwd(), 'e2e', '.auth', 'cross-facility-fixtures.json')
@@ -185,6 +195,24 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     throw new Error(`[E2E cross-facility auth] categories シード失敗: ${categoryError?.message}`)
   }
 
+  // 施設 A の返却を 1 件（明細つき）作る。品目ごとの取り消しの攻撃で叩く実物
+  const { data: loanReturn, error: loanReturnError } = await supabase
+    .from('loan_returns')
+    .insert({ facility_id: facilityA.id, return_datetime: new Date().toISOString() })
+    .select('id')
+    .single()
+  if (loanReturnError || !loanReturn) {
+    throw new Error(`[E2E cross-facility auth] loan_returns シード失敗: ${loanReturnError?.message}`)
+  }
+  const { data: loanReturnItem, error: loanReturnItemError } = await supabase
+    .from('loan_return_items')
+    .insert({ loan_return_id: loanReturn.id, jan: productJan, quantity: 1 })
+    .select('id')
+    .single()
+  if (loanReturnItemError || !loanReturnItem) {
+    throw new Error(`[E2E cross-facility auth] loan_return_items シード失敗: ${loanReturnItemError?.message}`)
+  }
+
   // 互換ペア（product_compatibilities）を 1 件作るには製品が 2 つ要る。
   // `ordered_pair` の CHECK（product_id_1 < product_id_2）があるので、UUID の辞書順に並べて入れる
   const { data: secondProduct, error: secondProductError } = await supabase
@@ -274,6 +302,8 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     secondProductId: secondProduct.id as string,
     categoryId: category.id as string,
     compatibilityId: compatibility.id as string,
+    loanReturnId: loanReturn.id as string,
+    loanReturnItemId: loanReturnItem.id as string,
   }
   fs.writeFileSync(CROSS_FACILITY_FIXTURES_PATH, JSON.stringify(fixtures))
   console.log(`[E2E cross-facility auth] フィクスチャを書き出しました: ${CROSS_FACILITY_FIXTURES_PATH}`)

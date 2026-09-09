@@ -24,6 +24,8 @@ export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 export type PathId =
   | 'facilityA'
   | 'loanOrderA'
+  | 'loanReturnA'
+  | 'loanReturnItemA'
   | 'distributorProductA'
   | 'hospitalPriceA'
   | 'productA'
@@ -35,6 +37,8 @@ export interface AttackCase {
   query?: Record<string, string>
   body?: unknown
   pathId?: PathId
+  /** `[itemId]` のように 2 つ目の動的部分がある route で使う（省略時は 'random'） */
+  itemPathId?: PathId
   weak?: boolean
   note?: string
 }
@@ -79,6 +83,14 @@ export const ATTACK_MATRIX: Record<string, RouteAttacks> = {
   },
   '/api/loan-returns/[id]': {
     PATCH: { pathId: 'random', body: { facilityId: FACILITY_A, action: 'cancel' }, note: '施設 A の返却を勝手に取り消せない（E-056）。id は存在しない UUID で、認可が先に 403 を返すこと' },
+  },
+  '/api/loan-returns/[id]/items/[itemId]': {
+    PATCH: {
+      pathId: 'loanReturnA',
+      itemPathId: 'loanReturnItemA',
+      body: { facilityId: FACILITY_A, action: 'cancel' },
+      note: '施設 A の**実在する**返却明細を、他施設の利用者が品目ごとに取り消せないこと（E-056 の残り、2026-09-09）',
+    },
   },
   '/api/consumables': {
     POST: { body: { facilityId: FACILITY_A, name: '攻撃テスト用消耗品', purpose: '攻撃テスト' } },

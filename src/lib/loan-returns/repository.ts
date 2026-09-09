@@ -7,16 +7,22 @@ import { toRepositoryError } from '@/lib/invariant-error'
 import type { LoanReturn, LoanReturnInput, LoanReturnItem } from '@/types/order'
 
 const STATUSES = ['draft', 'returned', 'cancelled'] as const
+/** 明細ごとの取り消し（2026-09-09、E-056 の残り） */
+const ITEM_STATUSES = ['active', 'cancelled'] as const
 
 /** 取り消そうとした返却が見つからない（他施設のものを含む）。route が 404 に写す */
 export const LOAN_RETURN_NOT_FOUND_ERROR = '返却が見つかりません'
 /** すでに取り消し済み。route が 409 に写す */
 export const LOAN_RETURN_ALREADY_CANCELLED_ERROR = 'この返却はすでに取り消されています'
+/** 取り消そうとした明細が見つからない（他施設・他の返却のものを含む）。route が 404 に写す */
+export const LOAN_RETURN_ITEM_NOT_FOUND_ERROR = '返却の明細が見つかりません'
+/** すでに取り消し済みの明細。route が 409 に写す */
+export const LOAN_RETURN_ITEM_ALREADY_CANCELLED_ERROR = 'この明細はすでに取り消されています'
 
 // loan_order_id: issue #20 (Set A) で追加した loan_orders への FK。既存行は NULL のまま
 const LOAN_RETURN_COLUMNS = 'id, facility_id, return_datetime, status, created_at, updated_at, loan_order_id'
 // 注: updated_at は Group A のマイグレーション適用前のため明細列挙には含めない
-const LOAN_RETURN_ITEM_COLUMNS = 'id, loan_return_id, jan, lot, ubd, quantity, created_at, loan_order_item_id'
+const LOAN_RETURN_ITEM_COLUMNS = 'id, loan_return_id, jan, lot, ubd, quantity, created_at, loan_order_item_id, status'
 
 // WHY: 重複定義していたフィルタ型を src/lib/orders/list-filter.ts に統合（issue #20 レビュー指摘）
 export type LoanReturnListFilter = OrderRepositoryFilter
@@ -36,6 +42,7 @@ interface LoanReturnItemRow {
   quantity?: unknown
   created_at?: unknown
   loan_order_item_id?: unknown
+  status?: unknown
 }
 
 interface LoanReturnRow {
@@ -58,6 +65,7 @@ export function mapItem(row: LoanReturnItemRow): LoanReturnItem {
     quantity: asNumber(row.quantity),
     createdAt: asString(row.created_at),
     loanOrderItemId: asOptionalString(row.loan_order_item_id),
+    status: asEnum(row.status, ITEM_STATUSES, 'active'),
   }
 }
 
@@ -238,4 +246,64 @@ export async function cancelLoanReturn(
     updatedAt: asString(r.updated_at),
     loanOrderId: asOptionalString(r.loan_order_id),
   }
+}
+
+/**
+ * 返却の**明細 1 件だけ**を取り消す（E-056 の残り、2026-09-09）。
+ *
+ * WHY(品目ごとに取り消す): 1 回の返却で複数の品目を返したとき、そのうち 1 品目だけが
+ *      間違いということが起きる。回ごと取り消して全部入れ直すのは、正しく返した品目まで
+ *      記録を作り直すことになり、実態とずれる。
+ *
+ * WHY(数量を書き換えない): 「返した数を後から直す」案もあったが、**元は何本だったか**が
+ *      一覧から追えなくなる。行を残して `cancelled` にすれば一覧で「取り消し済み」と見え、
+ *      親の返却の取り消しと同じ考え方で揃う（人の判断、2026-09-09）。
+ *
+ * WHY(親をたどって施設を確かめる): `loan_return_items` は `facility_id` を持たない。
+ *      親の `loan_returns` を施設で絞って引き、そこにぶら下がる明細だけを対象にする。
+ *      RLS は拒否ではなく 0 行にするので、0 行を 404 に写す（`cancelLoanReturn` と同じ多層防御）。
+ */
+export async function cancelLoanReturnItem(
+  db: SupabaseClient,
+  facilityId: string,
+  returnId: string,
+  itemId: string
+): Promise<LoanReturnItem> {
+  const { data: parent, error: parentError } = await db
+    .from('loan_returns')
+    .select('id, status')
+    .eq('id', returnId)
+    .eq('facility_id', facilityId)
+    .maybeSingle()
+  if (parentError) throw toRepositoryError(parentError)
+  if (!parent) throw new ClientVisibleError(LOAN_RETURN_NOT_FOUND_ERROR)
+  // WHY: 親ごと取り消してあるなら、明細を個別に取り消す意味は無い（数にも入っていない）
+  if ((parent as LoanReturnRow).status === 'cancelled') {
+    throw new ClientVisibleError(LOAN_RETURN_ALREADY_CANCELLED_ERROR)
+  }
+
+  const { data: current, error: readError } = await db
+    .from('loan_return_items')
+    .select(LOAN_RETURN_ITEM_COLUMNS)
+    .eq('id', itemId)
+    .eq('loan_return_id', returnId)
+    .maybeSingle()
+  if (readError) throw toRepositoryError(readError)
+  if (!current) throw new ClientVisibleError(LOAN_RETURN_ITEM_NOT_FOUND_ERROR)
+  if ((current as LoanReturnItemRow).status === 'cancelled') {
+    throw new ClientVisibleError(LOAN_RETURN_ITEM_ALREADY_CANCELLED_ERROR)
+  }
+
+  const { data, error } = await db
+    .from('loan_return_items')
+    .update({ status: 'cancelled' })
+    .eq('id', itemId)
+    .eq('loan_return_id', returnId)
+    .select(LOAN_RETURN_ITEM_COLUMNS)
+    .maybeSingle()
+  if (error) throw toRepositoryError(error)
+  // RLS で 0 行になった場合（読めるが書けない立場＝viewer）
+  if (!data) throw new ClientVisibleError('明細を取り消す権限がありません')
+
+  return mapItem(data as LoanReturnItemRow)
 }

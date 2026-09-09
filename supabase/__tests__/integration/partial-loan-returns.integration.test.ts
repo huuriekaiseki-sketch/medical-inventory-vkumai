@@ -171,6 +171,70 @@ describe('分割返却と過剰返却の拒否 [I-030 P-050]', () => {
     expect(crossed as number, '他施設の未返却件数が数えられてしまった').toBe(0)
   })
 
+  // WHY(E-056 の残り、2026-09-09): 1 回の返却で複数の品目を返したとき、
+  //      そのうち 1 品目だけが間違いということが起きる。品目ごとに取り消せるようにした
+  //      （`loan_return_items.status`）。残数と未返却の数え方が**回ごとの取り消しと同じように**
+  //      明細の取り消しも除くことを、実 DB で固定する。
+  it('品目ごとに取り消すと、その品目のぶんだけ残数が戻り、返し直せる', async () => {
+    const before = await outstanding()
+    const { orderId, itemId } = await createOrder(5)
+
+    // 3 本 + 2 本を **1 回の返却で** 2 明細に分けて返す（合計 5 本 = 返しきる）
+    const res = await fx.userA.client.rpc('create_loan_return_atomic', {
+      p_header: {
+        facility_id: fx.facilityA.id,
+        return_datetime: new Date().toISOString(),
+        loan_order_id: orderId,
+        client_request_id: randomUUID(),
+      },
+      p_items: [
+        { jan, lot: null, ubd: null, quantity: 3, loan_order_item_id: itemId },
+        { jan, lot: null, ubd: null, quantity: 2, loan_order_item_id: itemId },
+      ],
+    })
+    expect(res.error, JSON.stringify(res.error)).toBeNull()
+    const created = res.data as RpcRow & { items: { id: string; quantity: number }[] }
+    expect(await outstanding(), '5 本返したのに未返却のまま').toBe(before)
+
+    // 2 本のほうの明細だけを取り消す
+    const twoItem = created.items.find((i) => i.quantity === 2)!
+    const { error: cancelError } = await serviceClient
+      .from('loan_return_items')
+      .update({ status: 'cancelled' })
+      .eq('id', twoItem.id)
+    expect(cancelError, JSON.stringify(cancelError)).toBeNull()
+
+    expect(await outstanding(), '品目を取り消したのに未返却へ戻らない').toBe(before + 1)
+
+    // 取り消したぶん（2 本）だけ返し直せる。3 本は返したままなので 3 本は超過で拒否される
+    const tooMany = await returnItems(orderId, [{ itemId, quantity: 3 }])
+    expect(tooMany.error?.code, '取り消したぶんを超えて返せてしまった').toBe(CHECK_VIOLATION)
+
+    const again = await returnItems(orderId, [{ itemId, quantity: 2 }])
+    expect(again.error, `取り消したのに返し直せない: ${JSON.stringify(again.error)}`).toBeNull()
+    expect(await outstanding(), '返し直したのに未返却のまま').toBe(before)
+  })
+
+  it('取り消した品目は元に戻せない（取り消しは終端）', async () => {
+    const { orderId, itemId } = await createOrder(1)
+    const res = await returnItems(orderId, [{ itemId, quantity: 1 }])
+    expect(res.error).toBeNull()
+    const returnId = (res.data as RpcRow).id
+
+    const { data: items } = await serviceClient
+      .from('loan_return_items')
+      .select('id')
+      .eq('loan_return_id', returnId)
+    const targetId = (items as { id: string }[])[0].id
+
+    await serviceClient.from('loan_return_items').update({ status: 'cancelled' }).eq('id', targetId)
+    const { error } = await serviceClient
+      .from('loan_return_items')
+      .update({ status: 'active' })
+      .eq('id', targetId)
+    expect(error, '取り消した明細を生き返らせられてしまった').not.toBeNull()
+  })
+
   it('他施設の発注明細には紐付けられない', async () => {
     // WHY: loan_order_item_id はクライアントから来る値。施設をまたいで紐付けられると、
     //      他施設の発注の残数を自施設の返却で動かせてしまう

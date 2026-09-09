@@ -25,6 +25,7 @@
     "loan_orders.status": { "serverOnly": "同上（I-020）" },
     "loan_returns.status": { "serverOnly": "同上（I-020）" },
     "consumable_orders.status": { "serverOnly": "同上（I-020）" },
+    "loan_return_items.status": { "serverOnly": "明細ごとの取り消し（2026-09-09）。作成時は必ず active で、取り消しは専用の route（PATCH /api/loan-returns/[id]/items/[itemId]）が `action: 'cancel'` だけを受ける。返却の作成本文（janItemSchema）からは送れない" },
 
     "case_order_items.unit_price": { "serverOnly": "発注時の単価スナップショット。RPC が価格表から写す" },
     "loan_order_items.unit_price": { "serverOnly": "同上" },

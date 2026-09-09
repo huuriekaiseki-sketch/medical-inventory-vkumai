@@ -69,6 +69,8 @@ function discoverRoutes(): { route: string; methods: Method[] }[] {
 interface Fx {
   facilityAId: string
   loanOrderId: string
+  loanReturnId: string
+  loanReturnItemId: string
   distributorProductId: string
   hospitalPriceId: string
   productId: string
@@ -167,6 +169,8 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
       facilityAId: fixtures!.facilityAId,
       loanOrderId: fixtures!.loanOrderId!,
       distributorProductId: fixtures!.distributorProductId!,
+      loanReturnId: fixtures!.loanReturnId!,
+      loanReturnItemId: fixtures!.loanReturnItemId!,
       hospitalPriceId: fixtures!.facilityAHospitalPriceId!,
       productId: fixtures!.productId!,
       secondProductId: fixtures!.secondProductId!,
@@ -207,6 +211,8 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
           const idFor: Record<PathId, string> = {
             facilityA: fx.facilityAId,
             loanOrderA: fx.loanOrderId,
+            loanReturnA: fx.loanReturnId,
+            loanReturnItemA: fx.loanReturnItemId,
             distributorProductA: fx.distributorProductId,
             hospitalPriceA: fx.hospitalPriceId,
             productA: fx.productId,
@@ -215,7 +221,12 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
             random: randomUUID(),
           }
           const pathId: PathId = c.pathId ?? 'random'
-          const url = route.replace('[id]', idFor[pathId])
+          // WHY(2 つ目の動的部分、2026-09-09): `/api/loan-returns/[id]/items/[itemId]` のように
+          //      動的部分が 2 つある route がある。`[itemId]` を置き換え忘れると
+          //      URL に文字列がそのまま残り、認可まで届かない（weak として落ちる）
+          const url = route
+            .replace('[id]', idFor[pathId])
+            .replace('[itemId]', idFor[c.itemPathId ?? 'random'])
           const query = new URLSearchParams(c.query ?? { facility_id: fx.facilityAId, facilityId: fx.facilityAId })
           const res = await ctx.fetch(`${url}?${query.toString()}`, {
             method: m,

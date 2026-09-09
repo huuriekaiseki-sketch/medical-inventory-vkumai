@@ -194,6 +194,14 @@ export type LoanReturnItem = {
   createdAt: string
   /** どの発注明細に対する返却か。紐付けない返却では undefined（2026-09-08） */
   loanOrderItemId?: string
+  /**
+   * 品目ごとの取り消し（2026-09-09、E-056 の残り）。
+   *
+   * WHY: 1 回の返却で複数の品目を返したとき、そのうち 1 品目だけが間違いということが起きる。
+   *      回ごと取り消して全部入れ直すのではなく、その品目だけを `cancelled` にする。
+   *      `cancelled` の明細は残数・未返却の計算から除かれる（DB・アプリの 4 か所で同じ条件）。
+   */
+  status: 'active' | 'cancelled'
 }
 
 export type LoanReturnInput = {

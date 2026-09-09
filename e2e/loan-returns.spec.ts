@@ -488,6 +488,106 @@ test.describe('未返却の通し（発注 → 未返却 → 対象を選んで�
     await context.close()
   })
 
+  // WHY(E-056 の残り、2026-09-09): 1 回の返却で複数の品目を返したとき、
+  //      そのうち 1 品目だけが間違いということが起きる。回ごと取り消して全部入れ直すのではなく、
+  //      **その品目だけ**を取り消せることを画面から通しで測る。
+  //      人の判断で「数量の書き換え」ではなく「品目ごとの取り消し」にした（2026-09-09）。
+  test('1 回の返却のうち 1 品目だけを取り消すと、その品目のぶんだけ未返却が戻る', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: CROSS_FACILITY_USER_A_AUTH_PATH })
+    const page = await context.newPage()
+    const facilityId = fixtures!.facilityAId
+    const suffix = uniqueSuffix()
+    const procedureName = `E2E品目取り消し術式-${suffix}`
+    const maker = `E2E品目取り消しメーカー-${suffix}`
+    const summary = `${procedureName}（${maker}）`
+    const keepName = `E2E残す品-${suffix}`
+    const cancelName = `E2E取り消す品-${suffix}`
+
+    // 1. 2 品目の発注（残す品 2 本・取り消す品 3 本）
+    await page.goto(`/facilities/${facilityId}/loan-orders/new`)
+    await page.waitForLoadState('networkidle')
+    await page.getByLabel('手技名').fill(procedureName)
+    await page.getByLabel('メーカー').fill(maker)
+    await page.getByPlaceholder('JAN').first().fill(fixtures!.productJan!)
+    await page.getByPlaceholder('品名').first().fill(keepName)
+    await page.getByRole('spinbutton').first().fill('2')
+    await page.getByRole('button', { name: '+ 行を追加' }).click()
+    await page.getByPlaceholder('JAN').nth(1).fill(fixtures!.productJan!)
+    await page.getByPlaceholder('品名').nth(1).fill(cancelName)
+    await page.getByRole('spinbutton').nth(1).fill('3')
+    const [orderRes] = await Promise.all([
+      page.waitForResponse(
+        (res) => res.url().includes('/api/loan-orders') && res.request().method() === 'POST'
+      ),
+      page.getByRole('button', { name: '発注する' }).click(),
+    ])
+    expect(orderRes.status(), await orderRes.text()).toBe(201)
+
+    // 2. 1 回の返却で両方を返す（合計 5 本 = 返しきる）
+    await page.goto(`/facilities/${facilityId}/loan-returns/new`)
+    await page.waitForLoadState('networkidle')
+    await page.getByLabel('対象の短貸発注').selectOption({ label: summary })
+    await page.getByLabel(`${keepName} の返す数`).fill('2')
+    await page.getByLabel(`${cancelName} の返す数`).fill('3')
+    const when = uniqueReturnDatetime()
+    await page.getByLabel('返却日時').fill(when.input)
+    const [returnRes] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/api/loan-returns') && r.request().method() === 'POST'
+      ),
+      page.getByRole('button', { name: '返却する' }).click(),
+    ])
+    expect(returnRes.status(), await returnRes.text()).toBe(201)
+
+    await page.goto(`/orders?facilityId=${facilityId}&kind=loan_order`)
+    await page.waitForLoadState('networkidle')
+    await expect(
+      page.getByRole('row', { name: new RegExp(procedureName) }).getByText(/未返却/),
+      '5 本返したのに未返却が残っている'
+    ).toHaveCount(0)
+
+    // 3. 一覧で、間違えた品目だけを取り消す
+    await page.goto(`/facilities/${facilityId}/loan-returns`)
+    await page.waitForLoadState('networkidle')
+    const row = page.getByRole('row', { name: new RegExp(when.jstDisplay) })
+    await expect(row, '登録した返却が一覧に出ない').toBeVisible()
+    // WHY(直後の行に絞る): 一覧には他のテストが作った返却も並ぶので、
+    //      画面全体でボタンを数えると件数が合わない（2026-09-09 実測で 3 件になった）。
+    //      明細は自分の返却の**直後の行**に出るので、そこだけを見る
+    const itemsRow = row.locator('xpath=following-sibling::tr[1]')
+    const itemButtons = itemsRow.getByRole('button', { name: 'この品目を取り消す' })
+    await expect(itemButtons, '品目ごとの取り消しボタンが出ていない').toHaveCount(2)
+    page.once('dialog', (d) => d.accept())
+    const [cancelRes] = await Promise.all([
+      page.waitForResponse((r) => /\/api\/loan-returns\/.+\/items\//.test(r.url()) && r.request().method() === 'PATCH'),
+      itemButtons.last().click(),
+    ])
+    expect(cancelRes.status(), `品目の取り消しに失敗: ${await cancelRes.text()}`).toBe(200)
+
+    // 4. 明細は消えず「取り消し済」になる（証跡が残る）。返却そのものは生きたまま
+    await page.goto(`/facilities/${facilityId}/loan-returns`)
+    await page.waitForLoadState('networkidle')
+    const afterRow = page.getByRole('row', { name: new RegExp(when.jstDisplay) })
+    await expect(afterRow, '取り消したら返却ごと消えてしまった').toBeVisible()
+    await expect(afterRow, '返却まるごと取り消されている').not.toContainText('取り消し済')
+    const afterItemsRow = afterRow.locator('xpath=following-sibling::tr[1]')
+    await expect(
+      afterItemsRow.getByRole('button', { name: 'この品目を取り消す' }),
+      '取り消した品目にまだ取り消しボタンが出ている'
+    ).toHaveCount(1)
+    await expect(afterItemsRow, '取り消した品目が「取り消し済」と出ていない').toContainText('取り消し済')
+
+    // 5. 取り消した品目のぶんだけ未返却が戻る（3 本。残す品の 2 本は戻らない）
+    await page.goto(`/orders?facilityId=${facilityId}&kind=loan_order`)
+    await page.waitForLoadState('networkidle')
+    await expect(
+      page.getByRole('row', { name: new RegExp(procedureName) }).getByText('未返却 3'),
+      '取り消した品目のぶんだけ戻っていない（残す品まで戻っている・または戻っていない）'
+    ).toBeVisible()
+
+    await context.close()
+  })
+
   // WHY(E-056 の残り): 返却だけでなく**発注**も取り消せるようにした（20260908070000）。
   //      間違えた短貸発注は、返す物が無いのに**永久に「未返却」として残る**（返却もできない）。
   //      取り消しは横断の発注履歴（/orders）から行う。3 種が 1 か所に出る唯一の画面。
