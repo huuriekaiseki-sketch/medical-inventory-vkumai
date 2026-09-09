@@ -1,5 +1,7 @@
 import type { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { apiError } from '@/lib/api-error'
+import { firstIssueMessage } from '@/lib/validation/text-limits'
 
 // WHY: limit/offset バリデーションが case-orders/consumable-orders/loan-orders/loan-returns/orders の
 //      各 route.ts に完全に同一のロジックとして重複実装されていた（issue #20 レビュー指摘:
@@ -15,22 +17,60 @@ export type PaginationResult =
 //      要求できてしまい、DoSベクタになる（issue #20 レビュー指摘: 正しさ important）。
 //      offsetにも他パラメータ同様、常識的な上限を設ける
 export const MAX_OFFSET = 100_000
+export const MIN_LIMIT = 1
+export const MAX_LIMIT = 200
+
+export const LIMIT_ERROR = `limit は ${MIN_LIMIT}〜${MAX_LIMIT} の整数で指定してください`
+export const OFFSET_ERROR = `offset は 0〜${MAX_OFFSET} の整数で指定してください`
+
+// WHY(2026-09-09、判定を 1 つにする): この関数と別に `/api/news` が独自の limit/offset 検証を
+//      持っていて、**条件が食い違っていた**（あちらは Number.isFinite なので 1.5 が通り、
+//      `< 0` なので 0 も通った）。E-053（同じ問いの答えが 2 か所にあって食い違う）そのもの。
+//      判定をこのスキーマ 1 つにして、`parsePagination`（従来の呼び出し元）と
+//      `parseQuery`（クエリ文字列の唯一の入口）の**両方がこれを使う**形にする。
+//
+// WHY(coerce を使う): クエリ文字列の値は必ず文字列。`z.coerce.number()` は空文字を 0 にするので、
+//      未指定は `.optional()` で既定値へ倒し、**空文字は数値として不正**にしたい。
+//      そのため文字列のまま受けて自前で数値へ写す（空文字は NaN になり int() で落ちる）。
+const numeric = (fallback: number, message: string, min: number, max: number) =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined ? fallback : Number(v)))
+    .refine((n) => Number.isInteger(n) && n >= min && n <= max, { error: message })
+
+/**
+ * 一覧のページ送りのスキーマ。
+ *
+ * **判定（整数か・範囲に入るか）はここにしか無い。** 値（既定値と上下限）は route ごとに違ってよい。
+ *
+ * WHY(値だけを route ごとに変えられるようにする): E-053 で食い違っていたのは**判定**であって、
+ *      値ではない。`/api/news` は上限 100・下限 0 を意図して選んでいた（テストで明示されている）。
+ *      判定を 1 か所に寄せつつ、その意図は壊さない。
+ */
+export const paginationQuerySchema = (
+  options: { limit?: number; offset?: number; minLimit?: number; maxLimit?: number } = {}
+) =>
+  z.object({
+    limit: numeric(
+      options.limit ?? 50,
+      `limit は ${options.minLimit ?? MIN_LIMIT}〜${options.maxLimit ?? MAX_LIMIT} の整数で指定してください`,
+      options.minLimit ?? MIN_LIMIT,
+      options.maxLimit ?? MAX_LIMIT
+    ),
+    offset: numeric(options.offset ?? 0, OFFSET_ERROR, 0, MAX_OFFSET),
+  })
 
 export function parsePagination(
   params: URLSearchParams,
   defaults: { limit?: number; offset?: number } = {}
 ): PaginationResult {
-  const limit = Number(params.get('limit') ?? String(defaults.limit ?? 50))
-  const offset = Number(params.get('offset') ?? String(defaults.offset ?? 0))
-
-  // WHY: Number.isFinite(1.5) は true になるため、これだけでは小数値を弾けない。
-  //      DBのLIMIT/OFFSETは整数のみ有効なため、Number.isInteger で整数であることも検証する
-  //      （issue #20 レビュー指摘: 正しさ・型安全 minor）
-  if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
-    return { ok: false, response: apiError('limit は 1〜200 の整数で指定してください', 400) }
+  const parsed = paginationQuerySchema(defaults).safeParse({
+    ...(params.get('limit') !== null ? { limit: params.get('limit')! } : {}),
+    ...(params.get('offset') !== null ? { offset: params.get('offset')! } : {}),
+  })
+  if (!parsed.success) {
+    return { ok: false, response: apiError(firstIssueMessage(parsed.error), 400) }
   }
-  if (!Number.isInteger(offset) || offset < 0 || offset > MAX_OFFSET) {
-    return { ok: false, response: apiError(`offset は 0〜${MAX_OFFSET} の整数で指定してください`, 400) }
-  }
-  return { ok: true, limit, offset }
+  return { ok: true, limit: parsed.data.limit, offset: parsed.data.offset }
 }

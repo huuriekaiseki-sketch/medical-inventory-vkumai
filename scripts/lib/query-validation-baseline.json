@@ -1,0 +1,60 @@
+{
+  "_comment": "issue #757 の 20 の続き（2026-09-09）。**本文（body）は閉じたのに、クエリ文字列は開いていた。** 本文は `parseBody` という唯一の入口へ寄せ、`request.json()` を eslint で禁止して 0 本まで移した。クエリ文字列には同じ仕組みが無く、実測で 12 の route が 26 か所を生読みし、検証は route ごとの手書きだった。手書きが分散すると同じ問いの答えが食い違う——実際に `/api/news` の limit は `Number.isFinite` で **1.5 が素通り**していた（共通の `parsePagination` は `Number.isInteger` で弾いていた。E-053）。この一覧は**増やせない**（`scripts/check-query-validation-coverage.test.sh` が maxPending で止める）。",
+  "_howto": "移し方: (1) その route のクエリのスキーマを書く（ページ送りは `paginationQuerySchema` を and で合成する。上限の数字を route に書かない） (2) `parseQuery(request, schema)` に置き換える (3) この一覧から行を消す (4) bash scripts/check-query-validation-coverage.test.sh",
+  "_limits": "見ているのは「生読みが残っているか」だけ。**スキーマの中身が十分かは見ていない**（それは層の突合 check-layer-consistency の担当）。また `[id]` のようなパスの一部は対象外（クエリ文字列ではないため）。",
+  "maxPending": 13,
+  "pending": [
+    {
+      "route": "api/admin/audit/route.ts",
+      "why": "kind・日付は手書きで検証済みだが facility_id / actor_id / table_name が生。UUID の形を見ておらず、壊れた値は 500 になる"
+    },
+    {
+      "route": "api/admin/reports/route.ts",
+      "why": "date_from / date_to を生読み。監査 route と同じ日付の検証を別々に書いている"
+    },
+    {
+      "route": "api/case-orders/route.ts",
+      "why": "facility_id が生。所属判定（requireFacilityAccess）は通るが UUID の形は見ていない"
+    },
+    {
+      "route": "api/compat/route.ts",
+      "why": "categoryId / keyword が生。ページ送りも無く、件数の上限は repository 任せ"
+    },
+    {
+      "route": "api/compat/products/route.ts",
+      "why": "categoryId が生。UUID の形を見ていない"
+    },
+    {
+      "route": "api/consumable-orders/route.ts",
+      "why": "facility_id が生。case-orders とまったく同じ形で、同じ検証を別々に書いている"
+    },
+    {
+      "route": "api/consumables/route.ts",
+      "why": "facilityId と includeRetired が生。includeRetired は '1' との一致で見ており、語彙が route にしかない"
+    },
+    {
+      "route": "api/consumables/[id]/route.ts",
+      "why": "DELETE のクエリ facilityId が生。UUID の形を見ておらず、壊れた値は 500 になる"
+    },
+    {
+      "route": "api/distributor-products/route.ts",
+      "why": "categoryId が生（keyword は parseKeyword を通っている）"
+    },
+    {
+      "route": "api/hospital-prices/route.ts",
+      "why": "facilityId が生。所属判定は通るが UUID の形は見ていない（case-orders と同じ形）"
+    },
+    {
+      "route": "api/loan-orders/route.ts",
+      "why": "facility_id が生。case-orders とまったく同じ形で、同じ検証を別々に書いている"
+    },
+    {
+      "route": "api/loan-returns/route.ts",
+      "why": "facility_id が生。case-orders とまったく同じ形で、同じ検証を別々に書いている"
+    },
+    {
+      "route": "api/orders/route.ts",
+      "why": "facility_id / kind / 日付 / keyword が生。kind の語彙が route にしかない"
+    }
+  ]
+}

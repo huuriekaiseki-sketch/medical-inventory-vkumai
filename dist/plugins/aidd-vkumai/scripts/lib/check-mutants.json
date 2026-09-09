@@ -4,9 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-
-  "minMutants": 16,
-
+  "minMutants": 17,
   "mutants": [
     {
       "id": "CM-001",
@@ -44,7 +42,6 @@
       "expect": "scripts/check-write-path-gaps.test.sh",
       "guards": "C-010（印が実態とずれたまま残る）"
     },
-
     {
       "id": "CM-005",
       "breaks": "操作の契約から、「禁止と宣言したのに DB が許している」の報告を外す",
@@ -82,7 +79,6 @@
       "expect": "scripts/check-operation-contracts.test.sh",
       "guards": "C-031（数える単位が違うまま数える）"
     },
-
     {
       "id": "CM-009",
       "breaks": "「権限はあるが規則が無い」＝触れるが何も起きない道の報告を外す",
@@ -101,7 +97,6 @@
       "expect": "scripts/check-rls-grant-gaps.test.sh",
       "guards": "E-055 の逆向き（書いたのに効いていない規則）"
     },
-
     {
       "id": "CM-011",
       "breaks": "後片付けの見張りから、消えた行の報告を外す",
@@ -131,7 +126,6 @@
       "guards": "E2E の途中で詰まったとき、どの表かが読めること",
       "note": "初回の計測で**生き残り**。名指しを外しても素の TypeError で落ちるので「落ちた」だけでは差が出なかった（同じ意味の変異）。文言まで見るように検査を強くして倒した"
     },
-
     {
       "id": "CM-014",
       "breaks": "鮮度の判定から、「いまの姿では全件を通していない」の報告を外す",
@@ -160,6 +154,15 @@
       "expect": "scripts/check-full-run-before-finish.test.sh",
       "guards": "「その木で通した」と言えない記録を証拠に使わないこと",
       "note": "初回の計測で**生き残り**。古い記録へ落ちたときの道が測られていなかった（scenario 8 を足して倒した）"
+    },
+    {
+      "id": "CM-017",
+      "breaks": "クエリ文字列の検証を通さない新しい route の報告を外す",
+      "file": "scripts/check-query-validation-coverage.test.sh",
+      "find": "  if (rawReads && !pending.has(rel)) console.log(\"new \" + rel)",
+      "replace": "  if (false) console.log(\"new \" + rel)",
+      "expect": "scripts/check-query-validation-coverage.test.sh",
+      "guards": "E-053（同じ問いの答えが 2 か所にあって食い違う）を、クエリ文字列の入口で止める"
     }
   ]
 }

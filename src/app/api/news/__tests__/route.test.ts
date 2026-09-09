@@ -112,6 +112,33 @@ describe('GET /api/news', () => {
     expect(mockListNewsFeed).toHaveBeenCalledWith(expect.anything(), { facilityId: 'f1', limit: 0, offset: 0 })
   })
 
+  // WHY(2026-09-09、E-053 の実害): この route は limit を独自に検証していて、
+  //      共通の parsePagination と条件が食い違っていた。あちらは Number.isInteger で小数を弾くが、
+  //      こちらは Number.isFinite だったので **1.5 がそのまま listNewsFeed へ渡っていた**
+  //      （DB の LIMIT は整数しか受けない）。判定を共有スキーマへ寄せて塞いだ。
+  it('limit が小数(1.5)の場合は400を返す（判定を共有スキーマへ寄せる前は素通りしていた）', async () => {
+    authenticated()
+    const res = await GET(new NextRequest('http://localhost/api/news?facilityId=f1&limit=1.5'))
+    expect(res.status).toBe(400)
+    expect(mockListNewsFeed).not.toHaveBeenCalled()
+  })
+
+  it('offset が小数(2.5)の場合も400を返す', async () => {
+    authenticated()
+    const res = await GET(new NextRequest('http://localhost/api/news?facilityId=f1&offset=2.5'))
+    expect(res.status).toBe(400)
+    expect(mockListNewsFeed).not.toHaveBeenCalled()
+  })
+
+  // WHY(パラメータ汚染): `get()` は先頭だけを返すので、2 つ目が黙って捨てられる。
+  //      層ごとに採る側が違うと境界の検査をすり抜ける道になりうるので、受け取らない
+  it('同じ鍵を 2 回渡すと400を返す（先頭だけを黙って採らない）', async () => {
+    authenticated()
+    const res = await GET(new NextRequest('http://localhost/api/news?facilityId=f1&limit=1&limit=99'))
+    expect(res.status).toBe(400)
+    expect(mockListNewsFeed).not.toHaveBeenCalled()
+  })
+
   it('limit が上限(100)を超える場合は400を返す', async () => {
     authenticated()
     const res = await GET(new NextRequest('http://localhost/api/news?facilityId=f1&limit=101'))
