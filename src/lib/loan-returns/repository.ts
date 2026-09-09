@@ -140,7 +140,15 @@ export async function createLoanReturn(db: SupabaseClient, facilityId: string, i
   // WHY: header/itemsを別々にINSERTすると、items失敗時にheaderだけが孤児レコードとして
   //      残るリスクがある(architecture review 2026-07-26 issue #2)。既存のatomic RPC
   //      (supabase/migrations/20260629000002_loan_return_atomic_rpc.sql)で単一トランザクションに
-  //      統一する。loanOrderIdのテナント境界検証は上記で完了済みのため、RPC側では再検証しない
+  //      統一する。
+  //
+  // WHY(2026-09-09 訂正): ここには **「テナント境界検証は上記で完了済みのため、RPC 側では再検証しない」**
+  //      と書いてあったが、**その前提は誤りだった**。この RPC は `authenticated` に GRANT されていて、
+  //      利用者は Next.js を経由せず PostgREST から直接呼べる（実効的な境界は DB。decisions/db-rls.md）。
+  //      実測すると、明細を紐付けずに他施設の発注 ID を header に入れた返却が通っていた。
+  //      **検証は RPC 側へ移した**（20260909070000、I-036）。
+  //      上のアプリ側の確認は残す——利用者に読める文言（LOAN_ORDER_NOT_FOUND_ERROR）を返すためで、
+  //      防御の本体ではない（多層防御の外側）
   const { data, error } = await db.rpc('create_loan_return_atomic', {
     p_header: {
       facility_id: facilityId,

@@ -60,7 +60,7 @@
     "scripts/lib/merge-queue.json": "185be9b2103ef56325b8490d847fd3849c139b35bab286b90d95664bba989da9",
     "scripts/lib/resolve-log-dir.sh": "b459c3da39017bf468d885803e8bfa05b01b91b8059591103fdca4f6c1cf8b4e",
     "scripts/lib/resolve-log-dir.test.sh": "21aa497a006ea1566d72dcaf7dec621673d11d7c64640eb0dee62b217c77c5a0",
-    "scripts/lib/rls-mutants.json": "54a7d9f65ce8c24c4b93249ba669629e8426bdb3db0bb04efbcbfab5ff5e534b",
+    "scripts/lib/rls-mutants.json": "ff0d1b0dd1ec74e50f69239892db7b4d0d18c998916e8110b99b37dd7c15f413",
     "scripts/lib/roadmap-registry.json": "d28b8e4fec1ed62ee26074d986e5674d07201551c443a7e0185f90c6ef3c67fd",
     "scripts/lib/rule-guard-registry.json": "32d80ce2452d565527c862aac76e1dcf7956ccefad51528fdd0f7b40fc74ecc8",
     "scripts/lib/run-freshness.py": "9f04444987a2e0c48dd162643365e44f0f0e05e9cf936853df75a9397b8af9c6",
