@@ -16,7 +16,7 @@
 //
 // --check: 書き込まず、いまの文書が生成物と一致するかだけ見る（一致すれば exit 0、違えば 1）
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 
 /** `a.b.length` のような単純な道をたどる。配列には `.length` だけ許す */
@@ -34,16 +34,45 @@ export function resolvePath(obj, dotted) {
 }
 
 /**
+ * リポジトリにある検査スクリプトを全部数える（`scripts/*.test.sh` と `scripts/lib/*.test.sh`）。
+ *
+ * WHY(hooks-test が回すのと同じ集合にする): CI の hooks-test は この 2 つの glob を回す。
+ *      違う集合を数えると「地図には載っているが誰も回していない」検査が生まれる。
+ */
+export function listCheckScripts(root, readdir = readdirSync) {
+  const out = []
+  for (const dir of ['scripts', 'scripts/lib']) {
+    let names
+    try {
+      names = readdir(path.join(root, dir))
+    } catch {
+      continue
+    }
+    for (const n of names) {
+      if (typeof n === 'string' && n.endsWith('.test.sh')) out.push(`${dir}/${n}`)
+    }
+  }
+  return out.sort()
+}
+
+/**
  * 登録簿の宣言が実物と食い違っていないかを見る。
  *
  * 返すのは違反の一覧（空なら健全）。**空振りを避けるため、0 件のときは登録簿が
  * 読めていない可能性を別に見る**（呼び出し側が harnesses.length を確かめる）。
  */
-export function checkRegistry({ registry, root, exists = (p) => existsSync(p) }) {
+export function checkRegistry({
+  registry,
+  root,
+  exists = (p) => existsSync(p),
+  listChecks = (r) => listCheckScripts(r),
+}) {
   const violations = []
   const triggers = Object.keys(registry.triggers ?? {})
   const states = ['あり', '一部', '外部待ち']
   const seen = new Set()
+  /** 検査 → それを持つハーネス。同じ検査を 2 か所に置かせない */
+  const checkOwner = new Map()
 
   for (const h of registry.harnesses ?? []) {
     const at = `${h.id} ${h.role}`
@@ -64,6 +93,10 @@ export function checkRegistry({ registry, root, exists = (p) => existsSync(p) })
     }
     for (const c of h.checks ?? []) {
       if (!exists(path.join(root, c))) violations.push(`missing-check: ${at} → ${c}`)
+      // 同じ検査を 2 か所に置かせない（どの役割が守るのかが決まらなくなる）
+      const owner = checkOwner.get(c)
+      if (owner) violations.push(`duplicate-check: ${c} が ${owner} と ${h.id} の両方にある`)
+      else checkOwner.set(c, h.id)
     }
     if (!h.limitsDoc || !exists(path.join(root, h.limitsDoc))) {
       violations.push(`missing-limits-doc: ${at} → ${h.limitsDoc ?? '(宣言なし)'}`)
@@ -90,6 +123,20 @@ export function checkRegistry({ registry, root, exists = (p) => existsSync(p) })
       }
     }
   }
+
+  // WHY(逆向きの ratchet、2026-09-10): 宣言した検査が実在するかは上で見ているが、
+  //      **実在する検査が全部どこかのハーネスに属するか**は見ていなかった。
+  //      それだと「新しい検査を足したのに地図に載らない」＝**役割の分からない検査**が静かに増える。
+  //      新しい検査を足した人に「これはどの役割を守るのか」を 1 回決めさせる。
+  const declared = new Set(checkOwner.keys())
+  const actual = listChecks(root)
+  // 空振り防止: 1 本も見つからないなら走査が壊れている（違反 0 件で通してはいけない）
+  if (actual.length === 0) {
+    violations.push('no-check-scripts: 検査スクリプトを 1 本も見つけられない（走査が壊れている疑い）')
+  }
+  for (const c of actual) {
+    if (!declared.has(c)) violations.push(`unassigned-check: ${c} がどのハーネスにも属していない`)
+  }
   return violations
 }
 
@@ -107,12 +154,12 @@ const cell = (s) => String(s ?? '').replace(/\|/g, '／')
 
 export function renderTables({ registry, root }) {
   const lines = []
-  lines.push('| 役割 | 何を守るか | 起動 | 入口 | 状態 |')
-  lines.push('| --- | --- | --- | --- | --- |')
+  lines.push('| 役割 | 何を守るか | 起動 | 入口 | 検査 | 状態 |')
+  lines.push('| --- | --- | --- | --- | --- | --- |')
   for (const h of registry.harnesses ?? []) {
     const entry = (h.entrypoints ?? []).map((e) => `\`${e}\``).join('<br>')
     lines.push(
-      `| ${cell(h.role)}（${h.id}） | ${cell(h.guards)} | **${cell(h.trigger)}**（${cell(h.triggerDetail)}） | ${entry} | ${cell(h.state)} |`,
+      `| ${cell(h.role)}（${h.id}） | ${cell(h.guards)} | **${cell(h.trigger)}**（${cell(h.triggerDetail)}） | ${entry} | ${(h.checks ?? []).length} 本 | ${cell(h.state)} |`,
     )
   }
   lines.push('')
@@ -127,7 +174,11 @@ export function renderTables({ registry, root }) {
     )
   }
   lines.push('')
-  lines.push(`（ハーネス ${(registry.harnesses ?? []).length} 件・台帳 ${ledgers.length} 件）`)
+  const checkTotal = (registry.harnesses ?? []).reduce((n, h) => n + (h.checks ?? []).length, 0)
+  lines.push(
+    `（ハーネス ${(registry.harnesses ?? []).length} 件・検査 ${checkTotal} 本・台帳 ${ledgers.length} 件。` +
+      `**検査はこの表で全数**——どこにも属さない検査があれば生成そのものが落ちる）`,
+  )
   return lines.join('\n')
 }
 

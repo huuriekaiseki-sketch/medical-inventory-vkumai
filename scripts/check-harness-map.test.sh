@@ -13,6 +13,8 @@
 #   6. 登録簿を読めていないとき（0 件）は落ちる（fail-open 防止）
 #   7. 生成物が古いと `--check` が落ちる（**最新なら通る**の対照つき）
 #   8. 登録簿が無い導入先は対象 0 件で通る（エンジンだけ配られた先で赤くしない）
+#   9. **逆向きの ratchet**——実在する検査が全部どこかのハーネスに属している。
+#      同じ検査を 2 か所に置けない。検査を 1 本も見つけられなければ落ちる（走査の空振り防止）
 #
 # 実行: bash scripts/check-harness-map.test.sh
 set -uo pipefail
@@ -136,6 +138,59 @@ write_registry "$(printf '%s' "$GOOD" | sed 's#"checks": \["scripts/check-thing.
 run_engine --check
 assert_eq "$ENGINE_CODE" "1" "検査 0 件で落ちる"
 assert_contains "$ENGINE_OUT" "no-checks" "「測る検査が無い」と名指しする"
+
+echo "=== scenario 10: 実在する検査が全部どこかのハーネスに属している（逆向きの ratchet） ==="
+# WHY(2026-09-10): 宣言した検査が実在するか（scenario 3）は見ていたが、**逆向き**——
+#      実在する検査が全部どこかに属するか——を見ていなかった。
+#      それだと「新しい検査を足したのに地図に載らない」＝役割の分からない検査が静かに増える。
+write_registry "$GOOD"
+write_doc
+run_engine   # 先に書き出す（--check は生成物の鮮度も見るので、印だけの文書だと古い扱いになる）
+# 土台には check-thing.test.sh しか無く、それは GOOD が宣言している → 通る（対照）
+run_engine --check
+assert_eq "$ENGINE_CODE" "0" "全部が属していれば通る（対照）"
+
+# 属していない検査を 1 本置く → 落ちる
+printf '#!/usr/bin/env bash\n' > "$WORK/root/scripts/check-orphan.test.sh"
+run_engine --check
+assert_eq "$ENGINE_CODE" "1" "どこにも属さない検査があれば落ちる"
+assert_contains "$ENGINE_OUT" "unassigned-check" "属していない検査を名指しする"
+assert_contains "$ENGINE_OUT" "check-orphan.test.sh" "ファイル名を出す"
+rm -f "$WORK/root/scripts/check-orphan.test.sh"
+
+# scripts/lib/ 側も対象（hooks-test が回すのと同じ集合）
+mkdir -p "$WORK/root/scripts/lib"
+printf '#!/usr/bin/env bash\n' > "$WORK/root/scripts/lib/check-lib-orphan.test.sh"
+run_engine --check
+assert_eq "$ENGINE_CODE" "1" "scripts/lib/ の検査も数える"
+assert_contains "$ENGINE_OUT" "scripts/lib/check-lib-orphan.test.sh" "lib 側も名指しする"
+rm -f "$WORK/root/scripts/lib/check-lib-orphan.test.sh"
+
+echo "=== scenario 11: 同じ検査を 2 つのハーネスに置けない ==="
+# WHY: 2 か所に置けると「どの役割が守っているのか」が決まらない。数え上げも二重になる
+TWO='{
+  "id": "H-01", "role": "あ", "guards": "a", "trigger": "機械", "triggerDetail": "b",
+  "entrypoints": ["scripts/entry.sh"], "checks": ["scripts/check-thing.test.sh"],
+  "ledgers": [], "limitsDoc": "docs/limits.md", "state": "あり"
+},
+{
+  "id": "H-02", "role": "い", "guards": "a", "trigger": "機械", "triggerDetail": "b",
+  "entrypoints": ["scripts/entry.sh"], "checks": ["scripts/check-thing.test.sh"],
+  "ledgers": [], "limitsDoc": "docs/limits.md", "state": "あり"
+}'
+write_registry "$TWO"
+run_engine --check
+assert_eq "$ENGINE_CODE" "1" "同じ検査が 2 か所にあれば落ちる"
+assert_contains "$ENGINE_OUT" "duplicate-check" "二重の割り当てを名指しする"
+
+echo "=== scenario 12: 検査を 1 本も見つけられなければ落ちる（走査の空振り防止） ==="
+# WHY: 走査が壊れると「違反 0 件」で通ってしまう。**0 本は健全ではなく異常**（C-021）
+write_registry "$GOOD"
+mv "$WORK/root/scripts/check-thing.test.sh" "$WORK/root/scripts/check-thing.hidden"
+run_engine --check
+assert_eq "$ENGINE_CODE" "1" "検査が 0 本なら落ちる"
+assert_contains "$ENGINE_OUT" "no-check-scripts" "走査が壊れている疑いだと言う"
+mv "$WORK/root/scripts/check-thing.hidden" "$WORK/root/scripts/check-thing.test.sh"
 
 echo "=== scenario 6: 登録簿を読めていないとき（0 件）は落ちる ==="
 printf '{"generatedMarker":"m","output":"docs/map.md","triggers":{},"harnesses":[]}' > "$WORK/registry.json"

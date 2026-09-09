@@ -1,6 +1,6 @@
 {
   "_comment": "ハーネス（守る仕組み）の登録簿。docs/agents/harness-map.md の表はここから生成する（bash scripts/render-harness-map.sh）。手で書いた表は必ず古くなる——実際に 2026-09-09 に台帳の数字を 2 回取り違えた。数字は台帳の実物から読む。エンジンは共通側（aidd-core）、この登録簿は導入先（aidd-vkumai）。",
-  "_design": "1 ハーネス = 1 行。決めるのは 5 つ: 何を守るか / **どうやって起動するか**（機械か人か外部待ちか）/ 入口のコマンド / 台帳（数字の在り処）/ 限界を書いた文書。**起動の欄がいちばん大事**で、ここが『人』のものは誰かが忘れれば止まる。",
+  "_design": "1 ハーネス = 1 行。決めるのは 5 つ: 何を守るか / **どうやって起動するか**（機械か人か外部待ちか）/ 入口のコマンド / **その役割を守る検査の全件** / 台帳（数字の在り処）/ 限界を書いた文書。**起動の欄がいちばん大事**で、ここが『人』のものは誰かが忘れれば止まる。",
   "_limits": "『あり』の判定は「機械で起動するか」と「宣言したファイルが実在するか」だけを見る。中身が十分かは見ない。台帳を持たないハーネスの進み具合は数字にならない。",
   "generatedMarker": "harness-map",
   "output": "docs/agents/harness-map.md",
@@ -16,12 +16,40 @@
       "guards": "決めた順番（調査 → 仕様 → 実装 → 統合 → 検証）を飛ばさない。飛ばしたら気づく",
       "trigger": "人",
       "triggerDetail": "フローの起動は人。**記録漏れの検知だけ**が Stop hook で機械化されている",
-      "entrypoints": [".claude/workflows/aidd-phase1-router.js", ".claude/workflows/aidd-phase2.js"],
+      "entrypoints": [
+        ".claude/workflows/aidd-phase1-router.js",
+        ".claude/workflows/aidd-phase2.js"
+      ],
       "checks": [
-        "scripts/check-gap-check-state.sh",
-        "scripts/check-aidd-stats-recorded.sh",
-        "scripts/check-aidd-phase-stats-recorded.sh",
-        "scripts/check-run-manifest-presence.sh"
+        "scripts/ai-check-suggest.test.sh",
+        "scripts/check-aidd-graph-rendered.test.sh",
+        "scripts/check-aidd-phase-stats-recorded.test.sh",
+        "scripts/check-aidd-stats-recorded.test.sh",
+        "scripts/check-automode-config.test.sh",
+        "scripts/check-branch-pr-status.test.sh",
+        "scripts/check-branch-tool-ownership.test.sh",
+        "scripts/check-domain-decisions-suggest.test.sh",
+        "scripts/check-eval-fixtures-neutral.test.sh",
+        "scripts/check-gap-check-state.test.sh",
+        "scripts/check-handoff-format.test.sh",
+        "scripts/check-local-main-freshness.test.sh",
+        "scripts/check-readonly-bash.test.sh",
+        "scripts/check-run-manifest-presence.test.sh",
+        "scripts/check-skip-marker-write.test.sh",
+        "scripts/check-stale-worktrees.test.sh",
+        "scripts/check-subagent-model-force.test.sh",
+        "scripts/check-test-matrix.test.sh",
+        "scripts/check-workflow-interruption.test.sh",
+        "scripts/codex-agents-sandbox.test.sh",
+        "scripts/codex-config-separation.test.sh",
+        "scripts/codex-skip-marker-deny.test.sh",
+        "scripts/create-worktree.test.sh",
+        "scripts/derive-test-selection.test.sh",
+        "scripts/eval-sweep-recall.test.sh",
+        "scripts/eval-workflow-prompts.test.sh",
+        "scripts/log-subagent-hook-skeleton.test.sh",
+        "scripts/record-gap-check-state.test.sh",
+        "scripts/reinject-aidd-run-state.test.sh"
       ],
       "ledgers": [],
       "limitsDoc": "docs/agents/observability-internals.md",
@@ -33,8 +61,16 @@
       "guards": "テストのデータが互いを壊さない。消しすぎない・消し残さない",
       "trigger": "機械",
       "triggerDetail": "統合テスト・E2E を回すたびに走行の前後で実測する（走らせるのは人だが、走れば必ず測る）",
-      "entrypoints": ["scripts/run-integration-tests.sh", "scripts/run-e2e-tests.sh"],
-      "checks": ["scripts/check-fixture-guard.test.sh", "scripts/run-integration-tests.test.sh"],
+      "entrypoints": [
+        "scripts/run-integration-tests.sh",
+        "scripts/run-e2e-tests.sh"
+      ],
+      "checks": [
+        "scripts/check-append-only-log-indexes.test.sh",
+        "scripts/check-fixture-guard.test.sh",
+        "scripts/check-table-row-duplicates.test.sh",
+        "scripts/run-integration-tests.test.sh"
+      ],
       "ledgers": [
         {
           "name": "統合テストの消し残しの上限",
@@ -52,13 +88,40 @@
       "guards": "決めたことと動くものが食い違わない（操作の契約・層の突合・入口の検証）",
       "trigger": "機械",
       "triggerDetail": "npm test と hooks-test が毎回回す",
-      "entrypoints": ["npm test", "bash scripts/check-operation-contracts.test.sh"],
+      "entrypoints": [
+        "npm test",
+        "bash scripts/check-operation-contracts.test.sh"
+      ],
       "checks": [
-        "scripts/check-operation-contracts.test.sh",
-        "scripts/check-layer-consistency.test.sh",
+        "scripts/build-plugin.test.sh",
+        "scripts/check-access-path-inventory.test.sh",
         "scripts/check-catalogs.test.sh",
+        "scripts/check-claude-md-size.test.sh",
+        "scripts/check-design-answers.test.sh",
+        "scripts/check-design-questions.test.sh",
+        "scripts/check-docs-integrity.test.sh",
+        "scripts/check-docs-issue-refs.test.sh",
+        "scripts/check-export-paths.test.sh",
+        "scripts/check-harness-map.test.sh",
+        "scripts/check-hook-doc-pointers.test.sh",
+        "scripts/check-human-bypass-inventory.test.sh",
         "scripts/check-input-validation-coverage.test.sh",
-        "scripts/check-query-validation-coverage.test.sh"
+        "scripts/check-invariant-catalog.test.sh",
+        "scripts/check-layer-consistency.test.sh",
+        "scripts/check-no-registry-fetch.test.sh",
+        "scripts/check-operation-contracts.test.sh",
+        "scripts/check-pitfall-rulebook.test.sh",
+        "scripts/check-plugin-check-coverage.test.sh",
+        "scripts/check-plugin-integrity.test.sh",
+        "scripts/check-promise-catalog.test.sh",
+        "scripts/check-query-validation-coverage.test.sh",
+        "scripts/check-rule-guard-coverage.test.sh",
+        "scripts/check-session-start-matchers.test.sh",
+        "scripts/check-skill-size.test.sh",
+        "scripts/check-text-length-consistency.test.sh",
+        "scripts/check-threat-model.test.sh",
+        "scripts/lib/aidd-config.test.sh",
+        "scripts/lib/resolve-log-dir.test.sh"
       ],
       "ledgers": [
         {
@@ -83,8 +146,18 @@
       "guards": "書いたものが型として通り、単体で動き、ビルドできる",
       "trigger": "機械",
       "triggerDetail": "npm test / npm run typecheck / npm run lint / next build",
-      "entrypoints": ["npm test", "npm run typecheck", "npm run lint"],
-      "checks": ["scripts/check-fail-open.test.sh", "scripts/check-export-paths.test.sh"],
+      "entrypoints": [
+        "npm test",
+        "npm run typecheck",
+        "npm run lint"
+      ],
+      "checks": [
+        "scripts/check-fail-open.test.sh",
+        "scripts/check-foreign-key-indexes.test.sh",
+        "scripts/check-rate-limit-coverage.test.sh",
+        "scripts/check-text-column-limits.test.sh",
+        "scripts/check-text-contrast.test.sh"
+      ],
       "ledgers": [],
       "limitsDoc": "docs/agents/known-failure-patterns.md",
       "state": "あり"
@@ -95,13 +168,22 @@
       "guards": "施設の境界を越えられない。4 つの入口すべてを総当たりする",
       "trigger": "機械",
       "triggerDetail": "静的な検査は hooks-test。**実 DB を叩く総当たりは人が起動する**（統合テスト）",
-      "entrypoints": ["scripts/run-integration-tests.sh", "bash scripts/check-guard-regressions.test.sh"],
+      "entrypoints": [
+        "scripts/run-integration-tests.sh",
+        "bash scripts/check-guard-regressions.test.sh"
+      ],
       "checks": [
+        "scripts/check-dependency-change.test.sh",
+        "scripts/check-direct-ddl-execution.test.sh",
         "scripts/check-guard-regressions.test.sh",
+        "scripts/check-lockfile-integrity.test.sh",
+        "scripts/check-pii-leak.test.sh",
         "scripts/check-rls-grant-gaps.test.sh",
-        "scripts/check-write-path-gaps.test.sh",
         "scripts/check-secret-leak.test.sh",
-        "scripts/check-pii-leak.test.sh"
+        "scripts/check-secret-leak-history.test.sh",
+        "scripts/check-write-path-gaps.test.sh",
+        "scripts/schema-drift-reconcile.test.sh",
+        "scripts/supply-chain-drill.test.sh"
       ],
       "ledgers": [
         {
@@ -127,9 +209,9 @@
       ],
       "checks": [
         "scripts/check-detectors-effective.test.sh",
-        "scripts/check-rule-guard-effective.test.sh",
+        "scripts/check-mutation-freshness.test.sh",
         "scripts/check-rls-mutation-freshness.test.sh",
-        "scripts/check-mutation-freshness.test.sh"
+        "scripts/check-rule-guard-effective.test.sh"
       ],
       "ledgers": [
         {
@@ -154,12 +236,44 @@
       "guards": "起きたことに気づける（夜間検査・鮮度・記録漏れ）",
       "trigger": "機械",
       "triggerDetail": "夜間検査は pg_cron、鮮度は SessionStart / Stop hook。**本番の監視は外部待ち**（#757-8）",
-      "entrypoints": ["scripts/check-integration-freshness.sh", "scripts/check-e2e-freshness.sh", "scripts/maintenance-digest.sh"],
+      "entrypoints": [
+        "scripts/check-integration-freshness.sh",
+        "scripts/check-e2e-freshness.sh",
+        "scripts/maintenance-digest.sh"
+      ],
       "checks": [
-        "scripts/check-integration-freshness.test.sh",
+        "scripts/check-access-review-staleness.test.sh",
+        "scripts/check-agent-baseline-freshness.test.sh",
+        "scripts/check-blocked-issues-staleness.test.sh",
+        "scripts/check-dependency-update-staleness.test.sh",
         "scripts/check-e2e-freshness.test.sh",
+        "scripts/check-empty-session-report.test.sh",
+        "scripts/check-escape-ledger.test.sh",
+        "scripts/check-eval-runs-freshness.test.sh",
+        "scripts/check-fault-injection-drill-staleness.test.sh",
+        "scripts/check-find-av-precision-recorded.test.sh",
+        "scripts/check-flaky-tests.test.sh",
         "scripts/check-full-run-before-finish.test.sh",
-        "scripts/check-flaky-tests.test.sh"
+        "scripts/check-integration-freshness.test.sh",
+        "scripts/check-otel-collector-status.test.sh",
+        "scripts/check-recovery-queue.test.sh",
+        "scripts/check-roadmap-staleness.test.sh",
+        "scripts/check-upstream-docs-review-staleness.test.sh",
+        "scripts/check-verify-claims-fail-open-streak.test.sh",
+        "scripts/gate-effectiveness-monthly-check.test.sh",
+        "scripts/harvest-journal-events.test.sh",
+        "scripts/lib/flaky-issue.test.sh",
+        "scripts/log-find-av-precision.test.sh",
+        "scripts/log-instructions-loaded.test.sh",
+        "scripts/log-manual-override.test.sh",
+        "scripts/maintenance-digest.test.sh",
+        "scripts/queue-recovery-task.test.sh",
+        "scripts/resolve-recovery-task.test.sh",
+        "scripts/show-agent-status.test.sh",
+        "scripts/snapshot-agent-baseline.test.sh",
+        "scripts/statusline.test.sh",
+        "scripts/subagent-statusline.test.sh",
+        "scripts/verify-claims.test.sh"
       ],
       "ledgers": [],
       "limitsDoc": "docs/agents/observability-internals.md",
@@ -171,15 +285,19 @@
       "guards": "出す順番を間違えても壊れない（順序・巻き戻し・ロック）",
       "trigger": "機械",
       "triggerDetail": "hooks-test が migration の注記を毎回検査する",
-      "entrypoints": ["bash scripts/check-migration-release-safety.test.sh", "bash scripts/rehearse-merge.sh"],
+      "entrypoints": [
+        "bash scripts/check-migration-release-safety.test.sh",
+        "bash scripts/rehearse-merge.sh"
+      ],
       "checks": [
-        "scripts/check-migration-release-safety.test.sh",
         "scripts/check-migration-lock-safety.test.sh",
+        "scripts/check-migration-release-safety.test.sh",
         "scripts/rehearse-merge.test.sh"
       ],
       "ledgers": [],
       "limitsDoc": "docs/agents/release-safety-runbook.md",
       "state": "一部"
     }
-  ]
+  ],
+  "_checks": "`checks` は代表例ではなく**全件**。`scripts/*.test.sh` と `scripts/lib/*.test.sh` の全部がどれか 1 つのハーネスに属していなければ生成が落ちる（2026-09-10 に入れた逆向きの ratchet）。割り当ての規則は**「この検査を外したら、何が分からなくなるか」**——AIDD フロー自体が劣化する→H-01 / テストのデータが互いを壊す→H-02 / 宣言と実態の食い違いに気づけない→H-03 / 製品コードの正しさが崩れる→H-04 / 施設の境界・秘密・依存が守れない→H-05 / 検査の効き目が測れない→H-06 / 起きたことに気づけない→H-07 / 出す順番を間違えても気づけない→H-08。**この割り当ては宣言であって、正しさを機械が判定するわけではない**（他のルールブックと同じ）。"
 }
