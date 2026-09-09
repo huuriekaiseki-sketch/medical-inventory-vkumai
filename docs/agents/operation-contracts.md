@@ -47,6 +47,9 @@
 3. `許可` にしたなら、GRANT とポリシーを**その動詞だけ**に付ける（`GRANT ALL` / `FOR ALL` にしない）。
 4. 入口（route か RPC）を作る。route なら攻撃表（`e2e/api-attack-matrix.ts`）にも載せる。
 5. 突合の検査を回す: `node scripts/lib/check-operation-contracts.mjs`
+6. **立場ごとの実測**に、その操作の試し方を足す
+   （`supabase/__tests__/integration/operation-authz-sweep.integration.test.ts` の `ATTEMPTS`）。
+   足さないと「契約に操作が増えたのに試す方法が無い」で落ちる。
 
 ## 一覧
 
@@ -103,9 +106,16 @@
 - **入口が「呼ばれているか」は見ない。** route が実在し、そのメソッドを export していることまで。
   route の中で認可を呼んでいるかは `check-rate-limit-coverage` / 攻撃表（P-017）の担当で、
   **その認可判定が正しいかは RLS の変異計測**（`scripts/check-rls-mutation.sh`）まで行かないと分からない。
-- **認可の列は突き合わせていない。** 「施設 writer + aal2」と書いてあるかどうかと、
-  実際のポリシー本文が一致するかは見ていない（本文の一致は
-  `check-guard-regressions` が「関数名が消えていないか」だけ見る）。**ここが今いちばん弱い**。
+- **認可の列は「本文」ではなく「振る舞い」で突き合わせている。**
+  `supabase/__tests__/integration/operation-authz-sweep.integration.test.ts` が
+  この列の語から**立場ごとの期待値を導出**し、実 DB で 6 立場 × 全操作を叩いて測る
+  （通る立場は通る・通らない立場は通らない・**どの層で止まったか**）。
+  ポリシー本文の文字列とは突き合わせていないので、
+  **同じ振る舞いをする別の書き方**（条件を書き換えたが結果が同じ）は区別できない。
+- **立場の切り方は人が決める。** 未ログイン / viewer / staff(aal1) / staff / 他施設 staff / admin の
+  6 つで、ここに無い立場（別の admin、退職直後のセッション）は測っていない。
 - **危険度は人が決める。** 高い順に返す運用に使うだけで、機械は語彙しか見ない。
+- **「違反 0」は「この検査が見た範囲で 0」**であって、安全が保証された意味ではない。
+  見ていない軸は検査の出力にも毎回書き出す。
 - 読み取り（SELECT）の操作は載せていない。読みの境界は P-010〜P-018 と表の掃きが受け持つ。
 - `service_role` からの書き込みはこの表の対象外（[`privileged-write-rulebook.md`](./privileged-write-rulebook.md) の W-xxx）。

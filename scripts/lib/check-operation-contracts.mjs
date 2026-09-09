@@ -46,6 +46,15 @@ const VERBS = ['insert', 'update', 'delete']
 const DIRECT_WRITE = ['許可', '禁止']
 const RISKS = ['高', '中', '低']
 const STATES = ['実装済み', '計画', '対象外']
+/**
+ * 認可の語彙。**自由記述にしない**（2026-09-09）。
+ *
+ * WHY: この列は長らく「文字列が置いてあるだけ」で、実態と突き合わせていなかった。
+ *      語彙に閉じると、`supabase/__tests__/integration/operation-authz-sweep.integration.test.ts`
+ *      が **1 語から立場ごとの期待値を導出して実 DB で測れる**（宣言 35 行 → 実測 200 件超）。
+ *      語を足すときは、その語の期待値を掃き側にも足さないと落ちる。
+ */
+const AUTHORIZATIONS = ['施設 writer + aal2', '親の施設 writer + aal2', 'admin + aal2', '施設 writer']
 
 /** 契約の 1 行 */
 export function parseContracts(text) {
@@ -119,6 +128,9 @@ export function findViolations({ rows, dbVerbs, writes, dynamicCovered, routes, 
     if (!VERBS.includes(r.operation.toLowerCase())) v.push(`bad-operation: ${r.id} ${r.operation}`)
     if (!DIRECT_WRITE.includes(r.directWrite)) v.push(`bad-direct-write: ${r.id} ${r.directWrite}`)
     if (!RISKS.includes(r.risk)) v.push(`bad-risk: ${r.id} ${r.risk}`)
+    if (!AUTHORIZATIONS.includes(r.authorization)) {
+      v.push(`bad-authorization: ${r.id} ${r.authorization}（語彙は ${AUTHORIZATIONS.join(' / ')}。掃き側に期待値がある語だけを使う）`)
+    }
     if (!STATES.includes(r.state)) v.push(`bad-state: ${r.id} ${r.state}`)
     if (seen.has(key)) v.push(`duplicate: ${r.id} ${key}（同じ操作が 2 行ある）`)
     seen.add(key)
@@ -224,6 +236,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
   for (const x of violations) console.log(x)
   const forbidden = rows.filter((r) => r.directWrite === '禁止').length
+  // WHY(何を測っていないかも出す、2026-09-09): 「violations=0」は**この検査が見た範囲で 0**
+  //      という意味でしかない。見ていない軸（認可の本文・route の中身）を毎回一緒に出して、
+  //      「安全が 0 件保証された」と読まれないようにする
   console.log(`operations=${rows.length} 直接書き込み禁止=${forbidden} violations=${violations.length}`)
+  console.log(
+    '  測っていないもの: 認可の列とポリシー本文の一致（掃き operation-authz-sweep が実 DB で測る）/ ' +
+      'route の中で認可を呼んでいるか（攻撃表 P-017）/ その判定が正しいか（RLS の変異計測）',
+  )
   process.exit(violations.length > 0 ? 1 : 0)
 }

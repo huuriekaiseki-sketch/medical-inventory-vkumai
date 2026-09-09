@@ -401,8 +401,8 @@
         60
       ],
       "purpose": "1 操作（表 × 動詞）= 1 行。入口をどれに絞るか・直接書き込みを禁じるか・誰に許すか・危険度の正本",
-      "limits": "宣言と実態（DB 権限・アプリの直接書き込み・入口の実在・攻撃表への登録）は突き合わせるが、**認可の列は突き合わせていない**。入口が実在することは見るが、その中で認可を呼んでいるかは見ない",
-      "_note": "bespoke な scripts/lib/check-operation-contracts.mjs も残す（宣言と実態の突合はエンジンの範囲外）。エンジンは形、bespoke は中身。守るテストの列を持たないので evidenceColumn は無い（テストの紐づけは P-xxx が受け持つ）"
+      "limits": "宣言と実態（DB 権限・アプリの直接書き込み・入口の実在・攻撃表への登録）を静的に突き合わせ、認可の列は operation-authz-sweep が 6 立場 × 全操作を実 DB で測る。**ポリシー本文の文字列とは突き合わせていない**ので、同じ振る舞いをする別の書き方は区別できない。立場の切り方は人が決める。入口が実在することは見るが、その中で認可を呼んでいるかは見ない",
+      "_note": "bespoke な scripts/lib/check-operation-contracts.mjs（静的な突合）と supabase/__tests__/integration/operation-authz-sweep.integration.test.ts（実 DB の実測）も残す。エンジンは形、bespoke は中身。守るテストの列を持たないので evidenceColumn は無い（テストの紐づけは P-xxx が受け持つ）"
     }
   ]
 }

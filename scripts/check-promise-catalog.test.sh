@@ -37,7 +37,11 @@ ids_in_tests() {
   local roots="$1" r
   for r in $roots; do
     [ -e "$REPO_ROOT/$r" ] || continue
-    grep -rhoE 'P-[0-9]{3}' "$REPO_ROOT/$r" --include='*.test.ts' --include='*.spec.ts' --include='*.test.tsx' --include='*.test.js' --include='*.test.mjs' 2>/dev/null || true
+    # WHY(前後の境界を見る、2026-09-09 実測): 素の `P-[0-9]{3}` は `SWEEP-0001` のような
+    #      **語の途中**にも当たり、存在しない `P-000` を孤児として報告していた。
+    #      直前が英数字・ハイフンでないこと、直後が数字でないことを要求してから ID を切り出す
+    grep -rhoE '(^|[^0-9A-Za-z-])P-[0-9]{3}([^0-9]|$)' "$REPO_ROOT/$r" --include='*.test.ts' --include='*.spec.ts' --include='*.test.tsx' --include='*.test.js' --include='*.test.mjs' 2>/dev/null |
+      grep -oE 'P-[0-9]{3}' || true
   done | sort -u
 }
 
