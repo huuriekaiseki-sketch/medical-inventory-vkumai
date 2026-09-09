@@ -36,3 +36,19 @@ export function classifyManifestCheck(manifest, actualSpecHash) {
 export function applyChangedFiles(manifest, changedFiles) {
   return { ...manifest, changedFiles: [...changedFiles] }
 }
+
+// issue R04: `git diff --name-only <baseCommit>` は**追跡されているファイルの差分しか出さない**。
+// 新しく作ったファイルは追跡されていないので 1 件も出てこない。
+// AIDD が作るものの中で最も高リスクな成果物——**新しい migration**——はまさにこれに当たり、
+// changedFiles から丸ごと抜けていた。抜けると TRI/RISK 判定（router-risk）も
+// 「高リスクパスが 1 件も無い」と読む（実測: 新しい supabase/migrations/*.sql が出てこない）。
+//
+// trackedDiff: `git diff --name-only <baseCommit>` の出力行
+// untracked:   `git ls-files --others --exclude-standard` の出力行
+// 戻り値: 空行を除き、重複を除き、並びを安定させた 1 つの一覧
+export function mergeChangedFiles(trackedDiff, untracked) {
+  const lines = [...(trackedDiff ?? []), ...(untracked ?? [])]
+    .map(line => String(line).trim())
+    .filter(line => line !== '')
+  return [...new Set(lines)].sort()
+}

@@ -67,9 +67,17 @@ for (const file of routes) {
   const src = fs.readFileSync(file, "utf8")
   // WHY(2026-09-07): 全 route を parseBody へ移したので request.json() の文字列は
   //      コメントにしか残らなくなった。「本文を読む」の目印を
-  //      「parseBody を呼ぶ」か「request.json() をコメント以外で呼ぶ」に変える
+  //      「parseBody を呼ぶ」か「.json() をコメント以外で呼ぶ」に変える
+  // WHY(名前で当てるのをやめた・2026-09-10、レビュー指摘 R10): 以前は
+  //      `request.json(` という**引数名を含む文字列**で見ていたので、
+  //      `export async function POST(httpRequest)` のように名前を変えるだけで
+  //      「本文を読む route」の一覧から静かに外れた（=検査対象にすらならない）。
+  //      応答を作る NextResponse.json / Response.json だけを先に取り除き、
+  //      **残った .json() はすべて本文読みとみなす**（知らない名前は対象に入る）。
   const code = src.replace(/\/\/[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ")
-  const readsBody = /parseBody\s*\(/.test(code) || /request\s*\.\s*json\s*\(/.test(code)
+  const withoutResponses = code.replace(/\b(?:NextResponse|Response)\s*\.\s*json\s*\(/g, " ")
+  const readsBody =
+    /parseBody\s*\(/.test(code) || /[A-Za-z_$][\w$]*\s*\.\s*json\s*\(/.test(withoutResponses)
   if (!readsBody) continue
   const rel = "api/" + path.relative(apiDir, file).split(path.sep).join("/")
   seen.add(rel)
@@ -91,7 +99,8 @@ for (const rel of pending) {
 }
 
 echo "=== scenario 1: 走査対象がある（fail-open 防止） ==="
-COUNT="$(find "$API_DIR" -name 'route.ts' -type f -exec grep -lE 'parseBody\(|request\.json\(\)' {} + 2>/dev/null | wc -l | tr -d ' ')"
+# 名前で当てない（R10）。parseBody か、応答を作る以外の `.json(` を持つ route を数える
+COUNT="$(find "$API_DIR" -name 'route.ts' -type f -exec grep -lE 'parseBody\(|[A-Za-z_$][A-Za-z0-9_$]*\.json\(' {} + 2>/dev/null | grep -v '__tests__' | wc -l | tr -d ' ')"
 if [ "$COUNT" -lt 5 ]; then
   assert_fail "本文を読む route が少なすぎる（$COUNT 本）。走査が壊れている疑い"
 else
@@ -149,7 +158,7 @@ MAX_PENDING=0
 if [ "$PENDING_COUNT" -le "$MAX_PENDING" ]; then
   assert_ok "借金は $PENDING_COUNT 本（基準 $MAX_PENDING 以下）"
 else
-  assert_fail "借金が基準（$MAX_PENDING）より増えた（現在 $PENDING_COUNT）" "移行して減らす。基準を上げてはいけない"
+  assert_fail "借金が基準（${MAX_PENDING}）より増えた（現在 ${PENDING_COUNT}）" "移行して減らす。基準を上げてはいけない"
 fi
 
 echo "=== scenario 5: fixture で検知できる（RED 方向の自己検証） ==="
@@ -176,7 +185,13 @@ export async function POST(request) {
 }
 EOF
 cat > "$WORK/api/read-only/route.ts" <<'EOF'
-export async function GET() { return null }
+import { NextResponse } from 'next/server'
+export async function GET() { return NextResponse.json({ ok: true }) }
+EOF
+# R10: 引数名を変えて検査から外れる道（従来はここが素通りだった）
+mkdir -p "$WORK/api/renamed-arg"
+cat > "$WORK/api/renamed-arg/route.ts" <<'EOF'
+export async function POST(httpRequest) { const b = await httpRequest.json(); return b }
 EOF
 cat > "$WORK/baseline.json" <<'EOF'
 { "pending": [
@@ -190,7 +205,8 @@ if printf '%s' "$FOUT" | grep -q '^new api/new-thing/route.ts$'; then assert_ok 
 if printf '%s' "$FOUT" | grep -q '^stale-used api/moved/route.ts$'; then assert_ok "移行済みの消し忘れを検知"; else assert_fail "消し忘れを検知できない" "$FOUT"; fi
 if printf '%s' "$FOUT" | grep -q '^stale-missing api/gone/route.ts$'; then assert_ok "存在しない行を検知"; else assert_fail "存在しない行を検知できない" "$FOUT"; fi
 if printf '%s' "$FOUT" | grep -q 'api/old-thing'; then assert_fail "一覧にある借金を違反にした" "$FOUT"; else assert_ok "一覧にある借金は誤検知しない"; fi
-if printf '%s' "$FOUT" | grep -q 'api/read-only'; then assert_fail "本文を読まない route を違反にした" "$FOUT"; else assert_ok "本文を読まない route は対象外"; fi
+if printf '%s' "$FOUT" | grep -q 'api/read-only'; then assert_fail "応答を作るだけの route を違反にした（NextResponse.json は本文読みではない）" "$FOUT"; else assert_ok "本文を読まない route は対象外"; fi
+if printf '%s' "$FOUT" | grep -q '^new api/renamed-arg/route.ts$'; then assert_ok "引数名を変えても本文読みとして検知（R10）"; else assert_fail "引数名を変えると検査から外れる" "$FOUT"; fi
 if printf '%s' "$FOUT" | grep -q '^undeclared-disable api/sneaky/route.ts$'; then assert_ok "印だけ付けて逃げる route を検知"; else assert_fail "印で逃げる route を検知できない" "$FOUT"; fi
 
 if [ "$fail" -ne 0 ]; then

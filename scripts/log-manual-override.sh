@@ -63,4 +63,4 @@ jq -nc \
   '{timestamp: $timestamp, safeguard: $safeguard, actor: $actor, reason: $reason, ref: $ref, branch: $branch}' \
   >> "$LOG_FILE"
 
-echo "記録しました: $LOG_FILE（$SAFEGUARD / $ACTOR）"
+echo "記録しました: ${LOG_FILE}（$SAFEGUARD / ${ACTOR}）"

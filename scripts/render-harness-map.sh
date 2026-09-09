@@ -25,7 +25,7 @@ REGISTRY="$(resolve_registry "$SCRIPT_DIR")"
 #      登録簿は導入先のもの。まだ地図を作っていないリポジトリで落とすと、
 #      配っただけで赤くなる（check-detectors-effective.mjs と同じ扱い）。
 if [ ! -f "$REGISTRY" ]; then
-  echo "harness-map: 登録簿がありません（$REGISTRY）。対象 0 件で通します"
+  echo "harness-map: 登録簿がありません（${REGISTRY}）。対象 0 件で通します"
   exit 0
 fi
 

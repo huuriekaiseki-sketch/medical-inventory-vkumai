@@ -86,7 +86,7 @@ run_hook "$input"
 assert_eq "$EXIT_CODE" "0" "exit 0"
 LAST_LINE="$(tail -n 1 "$TMP_LOG")"
 if printf '%s' "$LAST_LINE" | grep -qF '"intent"'; then
-  echo "  NG: intentフィールドが付与されないこと（実際: $LAST_LINE）"
+  echo "  NG: intentフィールドが付与されないこと（実際: ${LAST_LINE}）"
   fail=1
 else
   echo "  OK: intentフィールドが付与されない"

@@ -78,7 +78,7 @@ else
     esac
   done
   if [ -z "$orphan" ]; then
-    assert_ok "DB の上限値（$DB_VALUES）はすべて設定にある"
+    assert_ok "DB の上限値（${DB_VALUES}）はすべて設定にある"
   else
     assert_fail "DB にあるのに人が決めていない上限値がある" "$orphan
       aidd.config.json の limits.textLength に項目を足すか、DB の CHECK を直す"

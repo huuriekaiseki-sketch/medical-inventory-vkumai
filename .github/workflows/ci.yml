@@ -91,7 +91,16 @@ jobs:
             echo "::error::e2e/.auth 配下に認証ファイルがコミットされています: $leaked"
             exit 1
           fi
+      # WHY(ロケールを明示する、2026-09-10・レビュー指摘 R12): 検査は日本語でメッセージを出すのに、
+      # 実行ロケールを誰も決めていなかった。bash 3.2 + UTF-8 では `"$VAR）"` の全角文字の
+      # 先頭バイトを変数名の一部と読んで `set -u` で落ちるため、**C ロケールで回すと 117/0、
+      # ja_JP.UTF-8 で回すと 101/16** という差が出ていた（2026-09-10 実測）。
+      # 開発者の手元は UTF-8 なので、CI もそちらに合わせる。
+      # 書き方そのものの検査は scripts/check-shell-locale-safety.test.sh。
       - name: Run hook script regression tests
+        env:
+          LC_ALL: C.UTF-8
+          LANG: C.UTF-8
         run: |
           for t in scripts/*.test.sh scripts/lib/*.test.sh; do
             echo "::group::$t"

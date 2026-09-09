@@ -64,15 +64,18 @@ CONFIG_DIRTY="false"
 if ! git diff --quiet -- src 2>/dev/null; then SRC_DIRTY="true"; fi
 if ! git diff --quiet -- stryker.config.json 2>/dev/null; then CONFIG_DIRTY="true"; fi
 SRC_WORKTREE="$(worktree_hash src)"
+# WHY(対象の一覧も「いまの姿」で残す、2026-09-10): 手元で mutate の一覧を減らせばスコアは上がる。
+#      HEAD の木のハッシュだけだと、その書き換えが未コミットのうちは記録と一致してしまう。
+CONFIG_WORKTREE="$(worktree_hash stryker.config.json)"
 
 python3 - "$LOG_FILE" "$RESULT" "$EXIT_CODE" "$SRC_TREE" "$CONFIG_TREE" "$COMMIT" "$BRANCH" \
   "$SRC_DIRTY" "$CONFIG_DIRTY" "$SRC_WORKTREE" "$REPO_ROOT/reports/mutation/mutation.json" \
-  "$RUN_STARTED_AT" <<'PY'
+  "$RUN_STARTED_AT" "$CONFIG_WORKTREE" <<'PY'
 import json, os, sys
 from datetime import datetime, timezone
 
 (log_file, result, exit_code, src_tree, config_tree, commit, branch,
- src_dirty, config_dirty, src_worktree, report, started_at) = sys.argv[1:13]
+ src_dirty, config_dirty, src_worktree, report, started_at, config_worktree) = sys.argv[1:14]
 
 # WHY(スコアも残す): 「回した」だけでなく「そのとき何%だったか」が残ると、
 #      下限（thresholds.break）を動かしたときに前後を比べられる。読めなければ null。
@@ -109,6 +112,7 @@ row = {
     "strykerDirty": config_dirty == "true",
     # 未コミットの変更まで含めた「いまの姿」（C-041）
     "srcWorktree": src_worktree,
+    "strykerWorktree": config_worktree,
 }
 with open(log_file, "a", encoding="utf-8") as f:
     f.write(json.dumps(row, ensure_ascii=False) + "\n")

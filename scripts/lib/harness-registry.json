@@ -153,6 +153,7 @@
       ],
       "checks": [
         "scripts/check-fail-open.test.sh",
+        "scripts/check-shell-locale-safety.test.sh",
         "scripts/check-foreign-key-indexes.test.sh",
         "scripts/check-rate-limit-coverage.test.sh",
         "scripts/check-text-column-limits.test.sh",
@@ -211,6 +212,7 @@
         "scripts/check-detectors-effective.test.sh",
         "scripts/check-mutation-freshness.test.sh",
         "scripts/check-rls-mutation-freshness.test.sh",
+        "scripts/check-rls-mutation.test.sh",
         "scripts/check-rule-guard-effective.test.sh"
       ],
       "ledgers": [
@@ -250,12 +252,14 @@
         "scripts/check-empty-session-report.test.sh",
         "scripts/check-escape-ledger.test.sh",
         "scripts/check-eval-runs-freshness.test.sh",
+        "scripts/lib/judge-sweep-recall.test.sh",
         "scripts/check-fault-injection-drill-staleness.test.sh",
         "scripts/check-find-av-precision-recorded.test.sh",
         "scripts/check-flaky-tests.test.sh",
         "scripts/check-full-run-before-finish.test.sh",
         "scripts/check-integration-freshness.test.sh",
         "scripts/check-otel-collector-status.test.sh",
+        "scripts/check-test-entrypoints.test.sh",
         "scripts/check-recovery-queue.test.sh",
         "scripts/check-roadmap-staleness.test.sh",
         "scripts/check-upstream-docs-review-staleness.test.sh",

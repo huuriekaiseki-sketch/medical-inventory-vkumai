@@ -1,6 +1,6 @@
 {
   "$schema": "./scripts/lib/aidd-config.schema.json",
-  "_comment": "導入先アダプター（issue #420 v1 仕様 Part 2 セット B）。このリポジトリ固有の値だけを書く。判定エンジン（.claude/workflows/lib/router-risk.js）の汎用既定値（auth / rls / policy / migration）はここに書かなくても常に含まれる（安全側に倒すため、既定値は消せない・足すだけ）。risk の値は aidd-phase1-router.js の LOCAL_RISK_CONFIG と同期テストで突き合わせる。",
+  "_comment": "導入先アダプター（issue #420 v1 仕様 Part 2 セット B）。このリポジトリ固有の値だけを書く。判定エンジン（.claude/workflows/lib/router-risk.js）の汎用既定値（auth / rls / policy / migration）はここに書かなくても常に含まれる（安全側に倒すため、既定値は消せない・足すだけ）。risk の値は aidd-phase1-router.js の LOCAL_RISK_CONFIG と同期テストで突き合わせる。risk.pathPrefixes は「認可の判断が書かれている場所」で、stryker.config.json の mutate と同じ集合を覆う（2026-09-10 まで supabase 配下の 2 件しか無く、src/lib/admin-status.ts・src/lib/security/*.ts・src/app/api/admin/ のような認可の本体が軽量ルートへ落ちていた。対応は .claude/workflows/lib/__tests__/router-risk-authz-coverage.test.js が突き合わせる）。",
   "risk": {
     "keywords": [
       "migrations",
@@ -28,7 +28,15 @@
     ],
     "pathPrefixes": [
       "supabase/migrations/",
-      "src/lib/supabase/"
+      "src/lib/supabase/",
+      "src/lib/security/",
+      "src/lib/audit/",
+      "src/lib/admin-",
+      "src/app/api/admin/",
+      "src/lib/api-error.ts",
+      "src/lib/api-pagination.ts",
+      "src/lib/invariant-error.ts",
+      "src/lib/log-safe.ts"
     ],
     "domainKeywords": [
       "auth",

@@ -181,6 +181,35 @@ write_catalog "$DIR" \
 OUT="$(run_on "$DIR")"
 assert_contains "$OUT" "duplicate: O-011 widgets.insert" "同じ操作の重複を検知"
 
+echo "=== scenario 11: 状態を「計画」に変えても違反が消えない ==="
+# WHY(2026-09-10): 以前は state が「実装済み」でない行を丸ごと continue で飛ばしていたため、
+#      **状態の 1 語を書き換えるだけ**で権限違反も直接書き込みも入口も検査されなくなった。
+#      さらにその行は「宣言あり」として逆向きの undeclared-privilege も抑えていたので、
+#      違反が 1 件も出ない状態を宣言だけで作れた。状態は宣言、権限は実態。実態は消えない。
+DIR="$(make_fixture planned-suppression)"
+write_catalog "$DIR" \
+  '| O-010 | widgets | INSERT | `POST /api/widgets` | 禁止 | 施設 writer | 低 | 計画 |' \
+  '| O-020 | gizmos | INSERT | `rpc:create_gizmo_atomic` / `POST /api/gizmos` | 禁止 | 施設 writer | 高 | 実装済み |'
+OUT="$(run_on "$DIR")"
+assert_contains "$OUT" "unimplemented-but-granted: O-010 widgets.insert" "状態が計画でも実権限があれば検知"
+assert_contains "$OUT" "unimplemented-but-written: O-010 widgets.insert" "状態が計画でもアプリが書いていれば検知"
+assert_contains "$OUT" "unimplemented-but-live: O-010 POST /api/widgets" "状態が計画でも入口が開いていれば検知"
+assert_not_contains "$OUT" "violations=0" "違反 0 件にならない"
+# 二重に出さない（行はあるので「契約に行が無い」ではない）
+assert_not_contains "$OUT" "undeclared-privilege: widgets.insert" "行がある表を「行が無い」とは言わない"
+
+echo "=== scenario 12: 「対象外」でも実態が無ければ黙る（対照） ==="
+# 常に鳴る実装になっていないことを見る。gizmos は権限もアプリの書き込みも無い
+DIR="$(make_fixture planned-clean)"
+write_catalog "$DIR" \
+  '| O-010 | widgets | INSERT | `POST /api/widgets` | 許可 | 施設 writer | 低 | 実装済み |' \
+  '| O-020 | gizmos | INSERT | `rpc:create_gizmo_atomic` | 禁止 | 施設 writer | 高 | 対象外 |'
+OUT="$(run_on "$DIR")"
+assert_not_contains "$OUT" "unimplemented-but-granted" "権限が無ければ言わない"
+assert_not_contains "$OUT" "unimplemented-but-written" "書いていなければ言わない"
+# rpc: の入口は実在するので「開いている」とは言う（道があることは事実）
+assert_contains "$OUT" "unimplemented-but-live: O-020 rpc:create_gizmo_atomic" "実在する RPC は開いていると言う"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

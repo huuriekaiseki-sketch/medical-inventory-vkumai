@@ -107,7 +107,7 @@ EXPECTED=3
 if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
-  assert_fail "違反件数が期待（$EXPECTED）と異なる" "$RESULT"
+  assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
 fi
 for needle in 'release-order: \[20270101000003_missing_order.sql\]' 'rollback: \[20270101000004_missing_rollback.sql\]' 'contract: \[20270101000005_contract_without_note.sql\]'; do
   if printf '%s\n' "$RESULT" | grep -qE "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi

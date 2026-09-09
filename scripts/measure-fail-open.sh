@@ -63,7 +63,7 @@ trap restore EXIT INT TERM
 
 for c in "${CONTAINERS[@]}"; do
   if ! docker inspect "$c" > /dev/null 2>&1; then
-    echo "measure-fail-open: コンテナが無い: $c（supabase start 済みか確認する）" >&2
+    echo "measure-fail-open: コンテナが無い: ${c}（supabase start 済みか確認する）" >&2
     exit 1
   fi
 done

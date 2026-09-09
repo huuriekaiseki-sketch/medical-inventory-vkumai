@@ -59,6 +59,12 @@ green_row() { # $1=supabaseTree $2=supabaseDirty
     "$1" "$2"
 }
 
+# 「いまの姿」まで含めた記録（C-041）。supabaseWorktree を持つ新しい形。
+green_row_wt() { # $1=supabaseTree $2=supabaseWorktree
+  printf '{"at":"2026-09-10T00:00:00Z","result":"pass","exitCode":0,"killed":18,"survived":0,"errors":0,"supabaseTree":"%s","commit":"abc1234","branch":"x","supabaseDirty":false,"supabaseWorktree":"%s"}' \
+    "$1" "$2"
+}
+
 echo "=== scenario 1: 記録が 1 件も無い ==="
 rm -f "$WORK/rls-mutation-runs.jsonl"
 OUT="$(run_check)"
@@ -111,6 +117,22 @@ else
   fail=1
 fi
 
+echo "=== scenario 10: 未コミットの書き換えを見る（C-041） ==="
+# WHY(2026-09-10): 記録側は最初から supabaseWorktree を残していたのに、判定側が
+#      --worktree を渡しておらず、**手元でポリシーを書き換えても記録と一致してしまう**
+#      （HEAD の木のハッシュは変わらないため）。この 2 件が「渡している」ことの実測。
+# shellcheck source=lib/worktree-hash.sh
+source "$SCRIPT_DIR/lib/worktree-hash.sh"
+SUPABASE_WT="$(worktree_hash supabase)"
+write_log "$(green_row_wt "$SUPABASE_TREE" "0000000000000000000000000000000000000000")"
+OUT="$(run_check)"
+contains "$OUT" "いまの" "いまの姿では通していないと言う"
+contains "$OUT" "単体のテストだけを緑にして終えていないか" "C-041 の言葉で伝える"
+
+write_log "$(green_row_wt "$SUPABASE_TREE" "$SUPABASE_WT")"
+OUT="$(run_check)"
+is_empty "$OUT" "いまの姿と一致していれば黙る（対照）"
+
 echo "=== scenario 9: 壊し方の登録簿が無い導入先では黙る ==="
 # WHY: 変異の計測を入れていないリポジトリで「一度も回していない」と言い続けても直しようがない。
 #      登録簿を一時的に隠して、無言になることを実測する（**言わない側も測らないと、
@@ -124,7 +146,7 @@ if [ -f "$REG" ]; then
   mv "$HIDDEN" "$REG"
   is_empty "$OUT" "登録簿が無ければ何も言わない"
 else
-  echo "  NG: 壊し方の登録簿が見つからない（$REG）"
+  echo "  NG: 壊し方の登録簿が見つからない（${REG}）"
   fail=1
 fi
 

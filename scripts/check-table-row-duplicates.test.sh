@@ -35,7 +35,7 @@ fi
 
 echo "=== scenario 2: 実態のリポジトリに重複が無い ==="
 if out="$(cd "$REPO_ROOT" && node "$CHECKER" 2>&1)"; then
-  assert_ok "違反なし（$out）"
+  assert_ok "違反なし（${out}）"
 else
   assert_fail "実態に重複がある" "$out"
 fi

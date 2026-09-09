@@ -83,7 +83,7 @@ check() {
       case "$spec" in
         *.ts|*.js|*.mjs|*.json) target="$(dirname "$ts")/$spec"; queue="$(printf '%s\n%s' "$queue" "$target")" ;;
         *)
-          echo "    ts-import: $(basename "$ts") の相対 import に拡張子が無い: $spec（node 直接実行で解決できない）"
+          echo "    ts-import: $(basename "$ts") の相対 import に拡張子が無い: ${spec}（node 直接実行で解決できない）"
           violations=$((violations+1))
           ;;
       esac
@@ -156,7 +156,7 @@ else
 fi
 PINNED="$(head -n1 "$PIN_FILE" 2>/dev/null || true)"
 if printf '%s' "$PINNED" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-  assert_ok "版が固定の数字（$PINNED）"
+  assert_ok "版が固定の数字（${PINNED}）"
 else
   assert_fail "版が固定の数字でない" "actual=$PINNED"
 fi

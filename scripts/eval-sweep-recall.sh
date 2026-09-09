@@ -185,12 +185,22 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
   IS_HIT="$(EXPECTED_FILE="$expected_file" DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py")"
   rm -f "$DETAIL_FILE"
 
+  # 陰性対照（欠陥の無い fixture）は逆向きに採点する。HIT/MISS の文言もそれに合わせる
+  # （2026-09-10・レビュー指摘 R11。陽性だけを測ると「全部に指摘を出す」エージェントが満点になる）
+  EXPECT_NO_FINDING="$(jq -r '.expectNoFinding // false' "$expected_file")"
   if [ "$IS_HIT" = "true" ]; then
     HIT_COUNT=$((HIT_COUNT + 1))
-    echo "[$case_name] HIT: 期待ファイル($EXPECTED_PATH)とキーワードの両方を検出"
+    if [ "$EXPECT_NO_FINDING" = "true" ]; then
+      echo "[${case_name}] HIT（陰性対照）: 欠陥の無いコードに指摘を出さなかった"
+    else
+      echo "[${case_name}] HIT: 期待ファイル(${EXPECTED_PATH})とキーワードの両方を、指摘として報告した"
+    fi
+  elif [ "$EXPECT_NO_FINDING" = "true" ]; then
+    MISS_LINES="$MISS_LINES
+- [${case_name}] MISS（陰性対照）: 欠陥の無いコードに指摘を出した（過検出）"
   else
     MISS_LINES="$MISS_LINES
-- [$case_name] MISS: 期待ファイル($EXPECTED_PATH)またはキーワードを検出できず"
+- [${case_name}] MISS: 期待ファイル(${EXPECTED_PATH})かキーワードが無い、または「指摘なし」と報告した"
   fi
 done
 

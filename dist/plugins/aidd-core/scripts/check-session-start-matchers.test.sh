@@ -52,7 +52,7 @@ check() {
     if printf '%s\n' "$cmds" | grep -qF "$REINJECT"; then has_reinject=1; reinject_registered=1; fi
 
     if [ -z "$matcher" ] || [ "$matcher" = "*" ]; then
-      echo "    no-matcher: エントリ $i（$(printf '%s' "$cmds" | head -n1 | xargs basename) …）が全 source で実行される"
+      echo "    no-matcher: エントリ ${i}（$(printf '%s' "$cmds" | head -n1 | xargs basename) …）が全 source で実行される"
       violations=$((violations + 1))
       continue
     fi
@@ -60,7 +60,7 @@ check() {
     # compact にマッチするか
     if [[ "compact" =~ ^($matcher)$ ]]; then
       if [ "$has_reinject" -ne 1 ] || [ "$(printf '%s\n' "$cmds" | grep -c .)" -ne 1 ]; then
-        echo "    compact-noise: エントリ $i（matcher=$matcher）が compact 時に reinject 以外を実行する"
+        echo "    compact-noise: エントリ ${i}（matcher=${matcher}）が compact 時に reinject 以外を実行する"
         violations=$((violations + 1))
       fi
     fi
@@ -68,7 +68,7 @@ check() {
     for si in "${!sources[@]}"; do
       if [[ "${sources[$si]}" =~ ^($matcher)$ ]]; then
         if [ "$has_reinject" -eq 1 ]; then
-          echo "    reinject-on-${sources[$si]}: エントリ $i（matcher=$matcher）が ${sources[$si]} で reinject を実行する"
+          echo "    reinject-on-${sources[$si]}: エントリ ${i}（matcher=${matcher}）が ${sources[$si]} で reinject を実行する"
           violations=$((violations + 1))
         else
           startup_ok[$si]=1

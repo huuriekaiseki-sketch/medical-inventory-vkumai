@@ -32,7 +32,7 @@ sha_of() {
 check_plugin() {
   local dir="$1" manifest="$1/$MANIFEST_NAME" problems=0 rel want got
   if [ ! -f "$manifest" ]; then
-    echo "  manifest が無い: $dir/$MANIFEST_NAME（build-plugin.sh で生成し直す）"
+    echo "  manifest が無い: $dir/${MANIFEST_NAME}（build-plugin.sh で生成し直す）"
     return 1
   fi
   # manifest に載っているファイルの照合

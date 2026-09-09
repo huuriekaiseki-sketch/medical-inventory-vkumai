@@ -100,7 +100,7 @@ if [ -n "$REDIRECTS" ]; then
     [ -z "$r" ] && continue
     case "$r" in
       *'>&1'|*'>&2'|*'/dev/null') ;;
-      *) deny "読み取り専用ロールではファイルへのリダイレクト（$r）は許可されません（issue #713）。結果は標準出力に出してください。" ;;
+      *) deny "読み取り専用ロールではファイルへのリダイレクト（${r}）は許可されません（issue #713）。結果は標準出力に出してください。" ;;
     esac
   done <<< "$REDIRECTS"
 fi
@@ -132,7 +132,7 @@ while IFS= read -r RAW_SEG; do
       for sub in $GIT_READONLY_SUBCMDS; do
         [ "$SECOND" = "$sub" ] && continue 2
       done
-      deny "読み取り専用ロールでは git $SECOND は許可されません（許可: $GIT_READONLY_SUBCMDS）（issue #713）"
+      deny "読み取り専用ロールでは git $SECOND は許可されません（許可: ${GIT_READONLY_SUBCMDS}）（issue #713）"
       ;;
     npm)
       case "$SEG" in
@@ -157,7 +157,7 @@ while IFS= read -r RAW_SEG; do
   for cmd in $READONLY_CMDS; do
     [ "$FIRST_BASE" = "$cmd" ] && continue 2
   done
-  deny "読み取り専用ロール（$AGENT_TYPE）では '$FIRST_BASE' は許可されません（issue #713）。許可リスト: $READONLY_CMDS / git <読み取り系> / npm test|run lint|run typecheck / npx tsc|vitest|eslint / bash scripts/*.sh。書き込みが必要なら status: blocked で親に報告してください。"
+  deny "読み取り専用ロール（${AGENT_TYPE}）では '$FIRST_BASE' は許可されません（issue #713）。許可リスト: $READONLY_CMDS / git <読み取り系> / npm test|run lint|run typecheck / npx tsc|vitest|eslint / bash scripts/*.sh。書き込みが必要なら status: blocked で親に報告してください。"
 done <<< "$SEGMENTS"
 
 exit 0

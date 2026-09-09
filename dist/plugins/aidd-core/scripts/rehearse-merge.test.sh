@@ -60,7 +60,7 @@ RC=$?
 if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q 'OK      feat/a' && printf '%s' "$OUT" | grep -q 'OK      feat/c'; then
   assert_ok "2 本とも OK・終了コード 0"
 else
-  assert_fail "衝突しない組を OK と報告しない（rc=$RC）" "$OUT"
+  assert_fail "衝突しない組を OK と報告しない（rc=${RC}）" "$OUT"
 fi
 
 echo "=== scenario 2: 同じ行を変える 2 本は衝突 ==="
@@ -69,7 +69,7 @@ RC=$?
 if [ "$RC" -eq 1 ] && printf '%s' "$OUT" | grep -q '衝突    feat/b'; then
   assert_ok "衝突を検知・終了コード 1"
 else
-  assert_fail "衝突を検知できない（rc=$RC）" "$OUT"
+  assert_fail "衝突を検知できない（rc=${RC}）" "$OUT"
 fi
 if printf '%s' "$OUT" | grep -q 'shared.md'; then
   assert_ok "衝突したファイル名を出す"

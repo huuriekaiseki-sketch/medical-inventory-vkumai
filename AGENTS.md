@@ -83,11 +83,20 @@ Phase 1 調査(並列) → Phase 2 仕様書 → [停止① 人間レビュー]
 
 - `supabase/migrations/` 配下のファイル
 - `src/lib/supabase/` 配下のファイル
+- **認可の判断が書かれているファイル**（`stryker.config.json` の `mutate` と同じ集合。issue R02）：
+  `src/lib/security/` 配下 / `src/lib/audit/` 配下 / `src/app/api/admin/` 配下 /
+  パスが src/lib/admin- で始まるファイル（`src/lib/admin-auth.ts` など） /
+  `src/lib/api-error.ts` / `src/lib/api-pagination.ts` /
+  `src/lib/invariant-error.ts` / `src/lib/log-safe.ts`
 - `middleware.ts` / `proxy.ts`（プロジェクト内のすべてのmiddleware/proxy。proxy.tsはNext.js 16でmiddleware.tsから改名された同一ファイル規約。issue #681）
 - パス・ファイル名・変更内容が以下のドメインに関わるファイル：
   **auth / facility / tenant / organization / inventory / RLS / policy**
 
 この判定は人間の裁量で緩めない（機械判定）。迷ったら高リスク側に倒す。
+
+**説明と変更ファイルが食い違うときは確認ルートへ**（issue R02）: `changedFiles` に高リスクパスが
+1 件も無いのに `taskDescription` が上のドメイン語に当たる場合、`aidd-phase1-router` は
+`light` でも `deep` でもなく `confirm`（人間の確認待ち）を返す。
 
 ## テスト環境・データ衛生ルール
 

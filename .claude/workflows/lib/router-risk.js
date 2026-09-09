@@ -149,18 +149,30 @@ function classifyRisk(taskDescription, changedFiles = [], riskConfig) {
 // （decisions/aidd-pipeline.md「なぜchangedFiles空時のキーワード一致フォールバックを人間確認に変えたか」
 // 参照）。changedFilesが1件以上ある場合（パスベース判定が効く場合）はこの分岐を通らず、
 // 従来通りmatchedPathsのみでisHighRiskが決まる（issue #456の修正は変更しない）。
-// 戻り値: { route: 'meta'|'confirm'|'deep'|'light', isHighRisk, isMetaChange, matchedKeywords, matchedPaths }
+// 【issue R02】changedFilesが1件以上あるとき、判定はmatchedPathsだけを見る（issue #456）。
+// このため「認証と施設分離のルールを変更する」という説明で src/lib/admin-status.ts や
+// src/lib/security/*.ts だけを変えると、説明はドメイン語に当たるのにパスは1件も当たらず、
+// 認可の本体を触っているのに軽量ルートへ落ちていた。
+// 説明とパスが食い違っているのは「どちらかが間違っている」ということなので、
+// 自動でdeepへ振る（=issue #456の過剰調査が戻る）のでも軽量で流すのでもなく、
+// confirmルートで人間に確認させる。あわせて認可を担う実モジュールは
+// aidd.config.json の pathPrefixes へ載せた（stryker.config.json の mutate と
+// router-risk-authz-coverage.test.js で突き合わせる）。
+// 戻り値: { route: 'meta'|'confirm'|'deep'|'light', isHighRisk, isMetaChange, matchedKeywords, matchedPaths, confirmReason }
 function classifyRoute(taskDescription, changedFiles = [], riskConfig) {
   const config = resolveRiskConfig(riskConfig)
   if (isMetaPipelineOnlyChange(changedFiles, config)) {
-    return { route: 'meta', isHighRisk: false, isMetaChange: true, matchedKeywords: [], matchedPaths: [] }
+    return { route: 'meta', isHighRisk: false, isMetaChange: true, matchedKeywords: [], matchedPaths: [], confirmReason: null }
   }
   const { isHighRisk, matchedKeywords, matchedPaths } = classifyRisk(taskDescription, changedFiles, config)
   const hasChangedFiles = (changedFiles ?? []).length > 0
   if (!hasChangedFiles && matchedKeywords.length > 0) {
-    return { route: 'confirm', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths }
+    return { route: 'confirm', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths, confirmReason: 'no-changed-files' }
   }
-  return { route: isHighRisk ? 'deep' : 'light', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths }
+  if (hasChangedFiles && !isHighRisk && matchedKeywords.length > 0) {
+    return { route: 'confirm', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths, confirmReason: 'description-path-mismatch' }
+  }
+  return { route: isHighRisk ? 'deep' : 'light', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths, confirmReason: null }
 }
 
 // 後方互換用に従来のclassifyRiskもexportしたまま維持する（既存テスト・呼び出し元との互換性）。

@@ -124,7 +124,7 @@ if [ "$MAX_PENDING" = "undefined" ]; then
 elif [ "$PENDING_COUNT" -le "$MAX_PENDING" ]; then
   assert_ok "借金は $PENDING_COUNT 本（基準 $MAX_PENDING 以下）"
 else
-  assert_fail "借金が基準（$MAX_PENDING）より増えた（現在 $PENDING_COUNT）" "移行して減らす。基準を上げてはいけない"
+  assert_fail "借金が基準（${MAX_PENDING}）より増えた（現在 ${PENDING_COUNT}）" "移行して減らす。基準を上げてはいけない"
 fi
 
 echo "=== scenario 5: 外す理由が書かれている ==="

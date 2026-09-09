@@ -117,8 +117,28 @@ export function discoverRpcs(migrationsDir) {
   return names
 }
 
+/**
+ * その入口が**実在して公開されているか**。状態が「計画」でも道が開いていれば実在する。
+ * rpc: は migration に定義があるか、HTTP は route.ts がそのメソッドを export しているか。
+ */
+function isLiveEntrypoint(entry, { routes, rpcs }) {
+  if (entry.startsWith('rpc:')) return rpcs.has(entry.slice(4).toLowerCase())
+  const [method, routePath] = entry.split(/\s+/)
+  return routes.get(routePath)?.has(method) ?? false
+}
+
+/** 入口の route が攻撃表に載っているか（rpc: は対象外） */
+function checkAttackMatrix(v, r, entry, attackMatrixText) {
+  if (entry.startsWith('rpc:')) return
+  const routePath = entry.split(/\s+/)[1]
+  if (attackMatrixText !== null && !attackMatrixText.includes(`'${routePath}'`)) {
+    v.push(`not-in-attack-matrix: ${r.id} ${entry}（${ATTACK_MATRIX} に載っていない）`)
+  }
+}
+
 export function findViolations({ rows, dbVerbs, writes, dynamicCovered, routes, rpcs, attackMatrixText }) {
   const v = []
+  // seen は「契約に行がある表 × 動詞」。重複検査と、逆向き突合（下）の両方で使う。
   const seen = new Set()
 
   for (const r of rows) {
@@ -134,10 +154,28 @@ export function findViolations({ rows, dbVerbs, writes, dynamicCovered, routes, 
     if (!STATES.includes(r.state)) v.push(`bad-state: ${r.id} ${r.state}`)
     if (seen.has(key)) v.push(`duplicate: ${r.id} ${key}（同じ操作が 2 行ある）`)
     seen.add(key)
-    if (r.state !== '実装済み') continue
 
     const granted = dbVerbs.get(r.table)?.has(r.operation.toLowerCase()) ?? false
     const writtenDirectly = writes.has(key) || dynamicCovered.has(key)
+    const liveEntrypoints = r.entrypoints.filter((entry) => isLiveEntrypoint(entry, { routes, rpcs }))
+
+    // WHY(状態が「実装済み」でなくても実態は見る、2026-09-10): 以前はここで continue しており、
+    //      行の状態を「計画」「対象外」に書き換えるだけで、その行に関する検査が**全部**消えた。
+    //      状態は宣言でしかなく、DB の権限もアプリの書き込みも入口も、状態を変えても消えない。
+    //      **宣言と実態が食い違っていること自体**が違反なので、状態を変えて黙らせられないようにする。
+    if (r.state !== '実装済み') {
+      if (granted) {
+        v.push(`unimplemented-but-granted: ${r.id} ${key} — 状態は「${r.state}」だが、DB はクライアントにこの操作を許している（状態を変えても権限は残る。権限を剥がすか、状態を実装済みにする）`)
+      }
+      if (writtenDirectly) {
+        v.push(`unimplemented-but-written: ${r.id} ${key} — 状態は「${r.state}」だが、アプリがこの表をその向きに直接書いている`)
+      }
+      for (const entry of liveEntrypoints) {
+        v.push(`unimplemented-but-live: ${r.id} ${entry} — 状態は「${r.state}」だが、入口が実在して公開されている`)
+        checkAttackMatrix(v, r, entry, attackMatrixText)
+      }
+      continue
+    }
 
     // 1. DB の権限 ⟷ 宣言
     if (r.directWrite === '許可' && !granted) {
@@ -175,13 +213,15 @@ export function findViolations({ rows, dbVerbs, writes, dynamicCovered, routes, 
       }
       // WHY(攻撃表への登録を必須にする): 入口を足したのに攻撃表へ載せ忘れると、
       //      その入口だけ他施設からの直接攻撃を一度も試さないまま通る
-      if (attackMatrixText !== null && !attackMatrixText.includes(`'${routePath}'`)) {
-        v.push(`not-in-attack-matrix: ${r.id} ${entry}（${ATTACK_MATRIX} に載っていない）`)
-      }
+      checkAttackMatrix(v, r, entry, attackMatrixText)
     }
   }
 
-  // 1 の逆向き: DB が許しているのに行が無い
+  // 1 の逆向き: DB が許しているのに契約に行が無い。
+  // WHY(状態を見ない、2026-09-10): 以前はここで「実装済みの行だけ」を宣言とみなす案も考えたが、
+  //      行があるのに状態が「計画」の場合は上の unimplemented-but-granted が既に名指ししており、
+  //      ここでも出すと同じことを 2 回言うだけになる。**状態を書き換えて黙らせられない**という
+  //      肝心の性質は、continue を廃した上のループ（unimplemented-but-*）が担っている。
   for (const [table, verbs] of [...dbVerbs].sort()) {
     for (const verb of VERBS) {
       if (!verbs.has(verb)) continue

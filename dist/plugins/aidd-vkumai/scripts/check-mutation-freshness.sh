@@ -37,12 +37,23 @@ SRC_TREE="$(git rev-parse "HEAD:src" 2>/dev/null || echo unknown)"
 CONFIG_TREE="$(git rev-parse "HEAD:stryker.config.json" 2>/dev/null || echo unknown)"
 [ "$SRC_TREE" = "unknown" ] && exit 0
 
+# WHY(C-041、2026-09-10): HEAD の木だけでは**未コミットの変更**が見えない。
+#      記録側は最初から srcWorktree を残していたのに、判定側がそれを渡しておらず、
+#      「認可の判断を手元で書き換えて、計測は前のまま」を素通りさせていた。
+#      測る対象の一覧（stryker.config.json）も同じで、**手元で対象を減らせばスコアは上がる**。
+# shellcheck source=lib/worktree-hash.sh
+source "$SCRIPT_DIR/lib/worktree-hash.sh"
+SRC_WORKTREE="$(worktree_hash src)"
+CONFIG_WORKTREE="$(worktree_hash stryker.config.json)"
+
 MSG="$(python3 "$SCRIPT_DIR/lib/run-freshness.py" \
   --log "$LOG_FILE" \
   --label "製品コードの変異計測" \
   --runner "bash scripts/run-mutation-tests.sh" \
   --tree "src=$SRC_TREE" \
   --tree "stryker=$CONFIG_TREE" \
+  --worktree "src=$SRC_WORKTREE" \
+  --worktree "stryker=$CONFIG_WORKTREE" \
   --changed-note "認可の判断が書かれた場所か、測る対象の一覧が動いたということなので、")"
 
 [ -z "$MSG" ] && exit 0

@@ -279,6 +279,8 @@ run_leak() { # $1 = LEAK_STUB_MODE、$2... = run-integration-tests.sh の引数
 # (a) 漏れ 0 なら通る（対照。ここが落ちる実装は「常に落ちる」だけで何も示さない）
 run_leak none
 assert_eq "$LEAK_CODE" "0" "消し残し 0 件なら通る（対照）"
+assert_contains "$(cat "$REC_LOG")" '"result": "pass"' "漏れが無ければ総合も pass（対照）"
+assert_contains "$(cat "$REC_LOG")" '"dataGuardResult": "pass"' "データ検査も pass と残す（対照）"
 
 # (b) 漏れがあれば落ちる。**どの行が残ったかを名指しする**
 run_leak some
@@ -287,9 +289,15 @@ assert_contains "$LEAK_OUT" "2 件残りました" "件数を出す"
 assert_contains "$LEAK_OUT" "products: p1" "残った行を名指しする"
 # WHY(記録が残ることまで見る): 漏れの判定で早く抜けると「全件を回した記録が無い」ことになり、
 #      鮮度の hook が「一度も回していない」と言い出す（直したはずの E-030 に化ける）。
-#      記録は**テストの結果そのもの**なので、漏れとは別に残す。
+#      記録は残す。ただし **result は総合**（テスト ∧ データ検査）にする。
+# WHY(2026-09-10 に期待値を直した): それまで result はテストの結果そのままで、
+#      41 行漏らした実行も記録上は pass だった。記録しか見ない鮮度の hook は
+#      それを良い実行として信じる。「テストが通った」と「この実行は良かった」は別の問いなので、
+#      testResult / dataGuardResult / result（総合）を別々に残す。
 if [ -s "$REC_LOG" ]; then
-  assert_contains "$(cat "$REC_LOG")" '"result": "pass"' "漏れがあってもテストの結果は記録する"
+  assert_contains "$(cat "$REC_LOG")" '"result": "fail"' "漏れがあれば総合結果は fail で記録する"
+  assert_contains "$(cat "$REC_LOG")" '"testResult": "pass"' "テスト自体が通ったことも別に残す"
+  assert_contains "$(cat "$REC_LOG")" '"dataGuardResult": "fail"' "落ちたのはデータ検査だと分かる形で残す"
 else
   echo "  NG: 漏れの判定で抜けたせいで記録が残っていない（鮮度の hook が「一度も回していない」と言う）"; fail=1
 fi
@@ -298,11 +306,16 @@ fi
 run_leak silent
 assert_eq "$LEAK_CODE" "1" "報告が無ければ落ちる（配線が外れても緑にしない）"
 assert_contains "$LEAK_OUT" "配線が外れている疑い" "測れていないことを名指しする"
+# 「測れていない」を「通った」とも「落ちた」とも書かない（3 つ目の値で残す）
+assert_contains "$(cat "$REC_LOG")" '"dataGuardResult": "unmeasured"' "測れていないことを記録でも区別する"
+assert_contains "$(cat "$REC_LOG")" '"result": "fail"' "測れていない実行を総合 pass にしない"
 
 # (d) 実行が赤のときは判定しない（後片付けが途中で止まるので、残りを漏れと読まない）
 run_leak red
 assert_eq "$LEAK_CODE" "1" "赤い実行はそのまま赤（漏れの判定で上書きしない）"
 assert_contains "$LEAK_OUT" "赤なので後片付けの漏れは判定しません" "赤のときは判定しないと言う"
+assert_contains "$(cat "$REC_LOG")" '"dataGuardResult": "skipped"' "判定していないことを記録でも区別する"
+assert_contains "$(cat "$REC_LOG")" '"testResult": "fail"' "赤いのはテストの方だと分かる形で残す"
 
 # (e) 部分実行では判定しない（他のファイルが作った行を漏れと読むため）
 run_leak some supabase/__tests__/integration/business-invariants.integration.test.ts

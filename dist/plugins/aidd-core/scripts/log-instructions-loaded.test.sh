@@ -67,7 +67,7 @@ run_logger '{"hook_event_name":"SessionStart","file_path":"/x"}'
 run_logger ''
 run_logger '{broken'
 AFTER="$(wc -l < "$LOG" | tr -d ' ')"
-[ "$BEFORE" = "$AFTER" ] && ok "追記なし（$BEFORE 行のまま）" || ng "追記された（$BEFORE → $AFTER）"
+[ "$BEFORE" = "$AFTER" ] && ok "追記なし（$BEFORE 行のまま）" || ng "追記された（$BEFORE → ${AFTER}）"
 
 echo "=== scenario 6: 集計 → 直近セッションの起動時ロード量（session_start + include、project 配下の内数）と loadReason 別回数 ==="
 # 別セッション s2 を足し、直近セッションが s2 に切り替わることを見る（timestamp は追記順で増える）。

@@ -137,7 +137,7 @@ EXPECTED=5
 if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
-  assert_fail "違反件数が期待（$EXPECTED）と異なる" "$RESULT"
+  assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
 fi
 for needle in 'open: \[F-901\]' 'status: \[F-902\]' 'path: \[F-903\]' 'id: \[F-12\]' 'columns: \[F-904\]'; do
   if printf '%s\n' "$RESULT" | grep -qE "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi

@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 21,
+  "minMutants": 28,
   "mutants": [
     {
       "id": "CM-001",
@@ -65,8 +65,8 @@
       "id": "CM-007",
       "breaks": "契約の「route が攻撃表に載っていない」の報告を外す",
       "file": "scripts/lib/check-operation-contracts.mjs",
-      "find": "        v.push(`not-in-attack-matrix:",
-      "replace": "        if (false) v.push(`not-in-attack-matrix:",
+      "find": "    v.push(`not-in-attack-matrix:",
+      "replace": "    if (false) v.push(`not-in-attack-matrix:",
       "expect": "scripts/check-operation-contracts.test.sh",
       "guards": "P-017（入口を作ったら攻撃表に載せる）"
     },
@@ -200,6 +200,69 @@
       "replace": "    if (false) violations.push(`unassigned-check: ",
       "expect": "scripts/check-harness-map.test.sh",
       "guards": "新しい検査を足したときに「どの役割を守るのか」を 1 回決めさせること（逆向きの ratchet）"
+    },
+    {
+      "id": "CM-022",
+      "breaks": "RLS 変異の計測から、「対照が赤いテストは計測不能」の分岐を外す（壊す前から赤いテストを撃破に数える元の姿）",
+      "file": "scripts/check-rls-mutation.sh",
+      "find": "    *\" $EXPECT \"*)",
+      "replace": "    *\"__never_matches__\"*)",
+      "expect": "scripts/check-rls-mutation.test.sh",
+      "guards": "C-020（「何かが起きた」を成功と読む）／ C-022（壊して落ちることを確かめる）"
+    },
+    {
+      "id": "CM-023",
+      "breaks": "RLS 変異の計測から、「計測不能があれば全体を失敗にする」を外す（errors がどこにも効いていなかった元の姿）",
+      "file": "scripts/check-rls-mutation.sh",
+      "find": "if [ \"$errors\" -gt 0 ]; then",
+      "replace": "if [ \"$errors\" -gt 999999 ]; then",
+      "expect": "scripts/check-rls-mutation.test.sh",
+      "guards": "「テスト失敗」「検査不能」を同じ真偽値に潰さないこと"
+    },
+    {
+      "id": "CM-024",
+      "breaks": "統合テストの記録から、データ検査（後片付けの漏れ）の結果を総合結果へ反映しない",
+      "file": "scripts/run-integration-tests.sh",
+      "find": "  OVERALL_RESULT=\"fail\"",
+      "replace": "  OVERALL_RESULT=\"$TEST_RESULT\"",
+      "expect": "scripts/run-integration-tests.test.sh",
+      "guards": "漏れがあった実行を鮮度の hook が「良い実行」として信じないこと"
+    },
+    {
+      "id": "CM-025",
+      "breaks": "操作の契約から、「状態は計画・対象外だが DB は許している」の報告を外す（状態を書き換えるだけで違反を消せた元の姿）",
+      "file": "scripts/lib/check-operation-contracts.mjs",
+      "find": "        v.push(`unimplemented-but-granted:",
+      "replace": "        if (false) v.push(`unimplemented-but-granted:",
+      "expect": "scripts/check-operation-contracts.test.sh",
+      "guards": "状態は宣言であって実態ではない（E-056 / E-057 の同型）"
+    },
+    {
+      "id": "CM-026",
+      "breaks": "操作の契約から、「状態は計画・対象外だが入口が公開されている」の報告を外す",
+      "file": "scripts/lib/check-operation-contracts.mjs",
+      "find": "        v.push(`unimplemented-but-live:",
+      "replace": "        if (false) v.push(`unimplemented-but-live:",
+      "expect": "scripts/check-operation-contracts.test.sh",
+      "guards": "状態を「計画」にしても道は閉じない（P-017 の入口が攻撃表から漏れる）"
+    },
+    {
+      "id": "CM-027",
+      "breaks": "RLS 変異の鮮度から、未コミットの書き換えを見る指定（--worktree）を外す",
+      "file": "scripts/check-rls-mutation-freshness.sh",
+      "find": "  --worktree \"supabase=$SUPABASE_WORKTREE\" \\",
+      "replace": "  --tree \"supabase=$SUPABASE_TREE\" \\",
+      "expect": "scripts/check-rls-mutation-freshness.test.sh",
+      "guards": "C-041（単体だけ緑にして終える形を止める）"
+    },
+    {
+      "id": "CM-028",
+      "breaks": "製品コードの変異計測の鮮度から、未コミットの書き換えを見る指定（--worktree）を外す",
+      "file": "scripts/check-mutation-freshness.sh",
+      "find": "  --worktree \"src=$SRC_WORKTREE\" \\",
+      "replace": "  --tree \"src=$SRC_TREE\" \\",
+      "expect": "scripts/check-mutation-freshness.test.sh",
+      "guards": "C-041（手元で認可の判断を書き換えたまま「前に測ったから大丈夫」と読まない）"
     }
   ]
 }

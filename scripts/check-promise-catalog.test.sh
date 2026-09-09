@@ -176,7 +176,7 @@ EXPECTED=9
 if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
-  assert_fail "違反件数が期待（$EXPECTED）と異なる" "$RESULT"
+  assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
 fi
 for needle in \
   'id-in-test: \[P-901\]' 'path: \[P-902\]' 'tests: \[P-903\]' 'timing: \[P-904\]' \

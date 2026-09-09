@@ -66,7 +66,7 @@ else
 fi
 DEFAULT_RISK_PATTERN='(^|/)middleware\.ts$|(^|/)proxy\.ts$|(auth|rls|polic|migration)'
 EXTRA_RISK_PATTERN="$(aidd_config_query '
-  def esc: gsub("[.^$*+?()\\[\\]{}|\\\\]"; "\\\\" + .);
+  def esc: gsub("(?<c>[.^$*+?()\\[\\]{}|\\\\])"; "\\" + .c);
   def stem: sub("y$"; "");
   [ ((.risk.pathPrefixes // [])[] | "^" + esc),
     ((.risk.domainKeywords // [])[] | stem | esc) ]

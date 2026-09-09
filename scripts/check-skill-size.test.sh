@@ -55,7 +55,7 @@ for dir in $DIRS; do
 done
 
 if [ "$checked" -eq 0 ]; then
-  echo "  NG: 検査対象の SKILL.md が 1 つも見つかりませんでした（SKILL_DIRS=$DIRS）"
+  echo "  NG: 検査対象の SKILL.md が 1 つも見つかりませんでした（SKILL_DIRS=${DIRS}）"
   fail=1
 fi
 

@@ -62,7 +62,7 @@ else
 fi
 DEFAULT_CHECK_PATTERN='npm run (ai:check|typecheck|lint|test)\b'
 CHECK_PATTERN="$(aidd_config_query '
-  def esc: gsub("[.^$*+?()\\[\\]{}|\\\\]"; "\\\\" + .);
+  def esc: gsub("(?<c>[.^$*+?()\\[\\]{}|\\\\])"; "\\" + .c);
   def variants: if test("^npm run ") then [., sub("^npm run "; "npm ")]
                 elif test("^npm ") then [., sub("^npm "; "npm run ")]
                 else [.] end;

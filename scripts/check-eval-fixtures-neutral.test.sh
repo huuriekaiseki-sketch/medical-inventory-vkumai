@@ -23,16 +23,19 @@ ng() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }
 
 scan() {
   # $1: fixtures root。files/ 配下のソースだけを見る（NOTES.md・expected.json・manifest.json は対象外）。
-  # ファイル名（eval-fixture-recall 等）は対象外: import パスや識別子として本文に必ず現れるため
+  # ファイル名（eval-fixture-recall / eval-fixture-clean 等）は対象外:
+  # import パスや識別子として本文に必ず現れるため。
+  # 2026-09-10: 除外を `eval[-_]fixture[-_]recall` 固定から命名規約 `eval-fixture-<名前>` へ広げた
+  # （陰性対照 case-2-negative-control が eval-fixture-clean を使うため。1 事例ではなく規約に合わせる）
   find "$1" -path '*/files/*' -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.sql' -o -name '*.js' \) -print0 \
     | xargs -0 grep -n -E -i "$FORBIDDEN_PATTERN" 2>/dev/null \
-    | grep -v -E 'eval[-_]fixture[-_]recall' || true
+    | grep -v -E 'eval[-_]fixture[-_][a-z]+' || true
 }
 
 echo "=== scenario 1: 実態の fixture コードに自己申告語が無い ==="
 HITS="$(scan "$FIXTURES_ROOT")"
 if [ -z "$HITS" ]; then
-  ok "files/ 配下に自己申告語なし（$FIXTURES_ROOT）"
+  ok "files/ 配下に自己申告語なし（${FIXTURES_ROOT}）"
 else
   ng "files/ 配下に自己申告語がある。説明は case ディレクトリの NOTES.md へ移すこと" "$HITS"
 fi
@@ -68,6 +71,16 @@ if [ -z "$GREEN_HITS" ]; then
 else
   ng "識別子・パスを誤検知" "$GREEN_HITS"
 fi
+
+# 除外を `eval[-_]fixture[-_][a-z]+` へ広げた（2026-09-10）ので、
+# **穴を広げていない**ことを対照で見る: 命名規約に乗らない素の自己申告語は今も落ちる
+printf "// これはベンチマーク用に意図的に再現した欠陥です\nexport const z = 1\n" > "$WORK/sweep-y/case-1/files/src/c.ts"
+if [ -n "$(scan "$WORK/sweep-y")" ]; then
+  ok "命名規約を外れた自己申告語は今も落ちる"
+else
+  ng "除外を広げたせいで自己申告語を見逃す"
+fi
+rm -f "$WORK/sweep-y/case-1/files/src/c.ts"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

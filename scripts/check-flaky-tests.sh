@@ -46,7 +46,7 @@ mkdir -p "$OUT"
 cd "$REPO_ROOT"
 VITEST_BIN="${FLAKY_VITEST_BIN:-npx vitest}"
 
-echo "フレーキー検知: ${RUNS} 回実行（config: ${CONFIG:-vitest.config.ts}、out: $OUT）"
+echo "フレーキー検知: ${RUNS} 回実行（config: ${CONFIG:-vitest.config.ts}、out: ${OUT}）"
 for i in $(seq 1 "$RUNS"); do
   echo "--- run $i / $RUNS ---"
   set +e

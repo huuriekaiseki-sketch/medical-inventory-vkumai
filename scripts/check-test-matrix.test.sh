@@ -247,7 +247,7 @@ EXPECTED=14
 if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
-  assert_fail "違反件数が期待（$EXPECTED）と異なる" "$RESULT"
+  assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
 fi
 for needle in \
   'job: \[CIジョブ不在\]' 'reason: \[理由なし➖\]' 'columns: \[列ずれ\]' 'columns: \[8列の旧形式\]' \
@@ -266,9 +266,9 @@ echo "=== scenario 4: handoff-format スキルの 04 が4値化され、derive �
 if [ -f "$SKILL" ]; then
   for needle in '✅ 実施' '➖ 今回不要' '🟡 一部' '⬜ 未実施'; do
     if grep -qF "$needle" "$SKILL"; then
-      assert_ok "「$needle」がある"
+      assert_ok "「${needle}」がある"
     else
-      assert_fail "「$needle」が無い"
+      assert_fail "「${needle}」が無い"
     fi
   done
   if grep -qF 'test-matrix.md' "$SKILL"; then

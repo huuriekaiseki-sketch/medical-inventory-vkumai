@@ -29,9 +29,16 @@ command -v jq >/dev/null 2>&1 || exit 0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/resolve-log-dir.sh
 source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+# shellcheck source=lib/worktree-hash.sh
+source "$SCRIPT_DIR/lib/worktree-hash.sh"
 
 LOG_FILE="$(resolve_log_dir)/rls-mutation-runs.jsonl"
 SUPABASE_TREE="$(git rev-parse "HEAD:supabase" 2>/dev/null || echo unknown)"
+# WHY(C-041、2026-09-10): HEAD の木だけでは**未コミットの変更**が見えない。
+#      記録側は最初から supabaseWorktree を残していたのに、判定側がそれを渡しておらず、
+#      「ポリシーを手元で書き換えて、計測は前のまま」という一番ありがちな終わり方を素通りさせていた。
+#      check-full-run-before-finish.sh は最初から両方渡している（そちらが正しい形）。
+SUPABASE_WORKTREE="$(worktree_hash supabase)"
 
 # supabase/ を持たないリポジトリ（プラグイン導入先など）では何も言わない
 if [ "$SUPABASE_TREE" = "unknown" ]; then
@@ -47,6 +54,7 @@ MSG="$(python3 "$SCRIPT_DIR/lib/run-freshness.py" \
   --label "認可ポリシーの変異計測（RLS）" \
   --runner "bash scripts/check-rls-mutation.sh" \
   --tree "supabase=$SUPABASE_TREE" \
+  --worktree "supabase=$SUPABASE_WORKTREE" \
   --changed-note "ポリシーか、それを守るテストが動いたということなので、")"
 
 [ -z "$MSG" ] && exit 0

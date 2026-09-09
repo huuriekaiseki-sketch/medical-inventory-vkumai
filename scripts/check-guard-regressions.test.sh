@@ -163,7 +163,7 @@ mkdir -p "$EMPTY"
 OUT="$(run_on "$EMPTY")"
 CODE=$?
 assert_contains "$OUT" "走査が壊れている" "空振りを違反として報告する"
-if [ "$CODE" -ne 0 ]; then echo "  OK: exit $CODE（0 でない）"; else echo "  NG: 空振りなのに exit 0"; fail=1; fi
+if [ "$CODE" -ne 0 ]; then echo "  OK: exit ${CODE}（0 でない）"; else echo "  NG: 空振りなのに exit 0"; fail=1; fi
 
 echo "=== scenario 7: 解析できない書き方があれば落ちる（黙って読み飛ばさない）==="
 # WHY: これが実際に効いた。`$function$` のタグ付きを 1 件読み飛ばしていたのを、

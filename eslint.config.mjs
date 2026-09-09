@@ -56,29 +56,11 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // WHY: issue #757 の 20（入力検証）。「スキーマを読み込んでいるか」を検査しても、読み込んだ
-  //      うえで使っていない route は捕まえられない。本文を読む方法を
-  //      src/lib/validation/parse-body.ts の parseBody だけにし、request.json() の直接呼び出しを
-  //      機械的に禁止する（ログを log-safe.ts に、日付整形を format-date.ts に寄せたのと同じ形）。
-  //      移行が済んでいない route は scripts/lib/input-validation-baseline.json に載っており、
-  //      1 本ずつ移す間だけ eslint-disable を付ける。一覧は減らすことしかできない
-  {
-    files: ["src/app/api/**/*.ts"],
-    ignores: ["**/__tests__/**", "**/*.test.ts"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector: "CallExpression[callee.property.name='json'][callee.object.name='request']",
-          message: "本文は src/lib/validation/parse-body.ts の parseBody(request, schema) で読む（issue #757 の 20）",
-        },
-        {
-          selector: "CallExpression[callee.property.name='json'][callee.object.name='req']",
-          message: "本文は src/lib/validation/parse-body.ts の parseBody(request, schema) で読む（issue #757 の 20）",
-        },
-      ],
-    },
-  },
+  // WHY(2 つあった同じ files のブロックを 1 つにした・2026-09-10): flat config では
+  //      後から来たブロックの no-restricted-syntax が前のものを**丸ごと置き換える**ため、
+  //      同じ files を持つブロックが 2 つあると先のほうは死んだ設定になる。
+  //      「どちらが効いているか読まないと分からない」形は、そこに規則を足したときに
+  //      静かに無効化される（実際、本文側の規則は下のブロックにも重複していた）。
   {
     files: ["src/lib/validation/parse-body.ts", "src/lib/validation/parse-query.ts"],
     rules: { "no-restricted-syntax": "off" },
@@ -104,13 +86,19 @@ const eslintConfig = defineConfig([
     rules: {
       "no-restricted-syntax": [
         "error",
+        // WHY(名前で当てるのをやめた・2026-09-10、レビュー指摘 R10): 以前は
+        //      `callee.object.name='request'` と `'req'` の 2 つだけを禁止していたので、
+        //      **引数の名前を変えるだけ**（`export async function POST(httpRequest)`）で
+        //      検査を外せた。名前で当てる検査は書き方を変えられると外れる。
+        //      そこで向きを逆にする——`.json()` は原則すべて禁止し、
+        //      **応答を作る側だけを明示的に許す**（知らない名前は落ちる＝deny-by-default）。
+        //      応答の本文を読む必要が本当にある場合は理由付きの eslint-disable を付ける
+        //      （印で逃げていないかは scripts/check-input-validation-coverage.test.sh が見る）。
         {
-          selector: "CallExpression[callee.property.name='json'][callee.object.name='request']",
-          message: "本文は src/lib/validation/parse-body.ts の parseBody(request, schema) で読む（issue #757 の 20）",
-        },
-        {
-          selector: "CallExpression[callee.property.name='json'][callee.object.name='req']",
-          message: "本文は src/lib/validation/parse-body.ts の parseBody(request, schema) で読む（issue #757 の 20）",
+          selector:
+            "CallExpression[callee.property.name='json']:not([callee.object.name='NextResponse']):not([callee.object.name='Response'])",
+          message:
+            "本文は src/lib/validation/parse-body.ts の parseBody(request, schema) で読む（issue #757 の 20）。引数名を変えても外れないよう、応答を作る NextResponse.json / Response.json 以外の .json() はすべて禁止している",
         },
         {
           selector: "MemberExpression[property.name='searchParams']",

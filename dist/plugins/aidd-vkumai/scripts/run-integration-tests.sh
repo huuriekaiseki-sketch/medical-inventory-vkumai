@@ -196,9 +196,9 @@ INTEGRATION_LEAK_REPORT="$LEAK_REPORT" \
 EXIT_CODE=$?
 
 if [ "$EXIT_CODE" -eq 0 ]; then
-  RESULT="pass"
+  TEST_RESULT="pass"
 else
-  RESULT="fail"
+  TEST_RESULT="fail"
 fi
 
 # WHY(部分実行は記録しない、2026-09-08): ファイル名や `-t` を渡した実行で「全件通した」と
@@ -218,13 +218,22 @@ fi
 #      ここで抜けると「全件を回した記録が無い」ことになり、鮮度の hook が
 #      「一度も回していない」と言い出す（直したはずの事故に化ける）。判定は旗だけ立てて、
 #      記録を残してから最後に反映する。
+# WHY(結果を 3 つに分けて残す、2026-09-10): 「テストが通ったか」と「データ検査が通ったか」を
+#      1 つの真偽値に潰すと、漏れがあった実行が記録の上では pass になり、
+#      鮮度の hook（記録しか見ない）がそれを良い実行として信じる。
+#      testResult（テスト） / dataGuardResult（後片付け） / result（総合）を別々に残し、
+#      終了コードと監視は**総合**を使う。
 LEAK_FAILED=0
+DATA_GUARD_RESULT="pass"
 if [ "$EXIT_CODE" -ne 0 ]; then
   echo "[run-integration-tests] 実行が赤なので後片付けの漏れは判定しません（後片付けが途中で止まるため）"
+  # 判定していないので「通った」とは書かない（測れていないことと通ったことを混ぜない）
+  DATA_GUARD_RESULT="skipped"
 elif [ ! -f "$LEAK_REPORT" ]; then
   # WHY(**無いなら落とす**): 報告が無いのは「漏れが 0」ではなく「測れていない」。
   #      globalSetup の配線が外れていても緑になる形（C-021）を作らない。
   echo "[run-integration-tests] 後片付けの漏れの報告がありません（fixture-guard の配線が外れている疑い）" >&2
+  DATA_GUARD_RESULT="unmeasured"
   LEAK_FAILED=1
 else
   # 上限は台帳から読む（ratchet）。台帳が無ければ 0（fail-closed）
@@ -238,9 +247,11 @@ except Exception:
   LEAKED="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['count'])" "$LEAK_REPORT" 2>/dev/null || echo unknown)"
   if [ "$LEAKED" = "unknown" ]; then
     echo "[run-integration-tests] 後片付けの漏れの報告を読めません: $LEAK_REPORT" >&2
+    DATA_GUARD_RESULT="unmeasured"
     LEAK_FAILED=1
   elif [ "$LEAKED" -gt "$MAX_LEAKED" ]; then
-    echo "[run-integration-tests] **走行中に作った行が $LEAKED 件残りました**（後片付けの漏れ。上限 $MAX_LEAKED）。" >&2
+    DATA_GUARD_RESULT="fail"
+    echo "[run-integration-tests] **走行中に作った行が $LEAKED 件残りました**（後片付けの漏れ。上限 ${MAX_LEAKED}）。" >&2
     echo "  各ファイルの afterAll は、自分が作った行を必ず消してください。" >&2
     echo "  削除の戻り値のエラーを捨てないこと（2026-09-10 まで 41 行/回が黙って積み上がっていました）。" >&2
     python3 -c "
@@ -267,14 +278,30 @@ if ! git diff --quiet -- supabase 2>/dev/null; then DIRTY="true"; fi
 #      「この状態では全件を通していません」と言えるようにする
 SUPABASE_WORKTREE="$(worktree_hash supabase)"
 
-python3 - "$LOG_FILE" "$RESULT" "$EXIT_CODE" "$SUPABASE_TREE" "$COMMIT" "$BRANCH" "$DIRTY" "$SUPABASE_WORKTREE" <<'PY'
+# 総合結果。テストが緑でも後片付けが赤（または測れていない）なら、この実行は緑ではない。
+OVERALL_RESULT="$TEST_RESULT"
+if [ "$LEAK_FAILED" -ne 0 ]; then
+  OVERALL_RESULT="fail"
+fi
+OVERALL_EXIT="$EXIT_CODE"
+if [ "$LEAK_FAILED" -ne 0 ] && [ "$OVERALL_EXIT" -eq 0 ]; then
+  OVERALL_EXIT=1
+fi
+
+python3 - "$LOG_FILE" "$OVERALL_RESULT" "$OVERALL_EXIT" "$SUPABASE_TREE" "$COMMIT" "$BRANCH" "$DIRTY" "$SUPABASE_WORKTREE" "$TEST_RESULT" "$DATA_GUARD_RESULT" <<'PY'
 import json, sys
 from datetime import datetime, timezone
 
-log_file, result, exit_code, tree, commit, branch, dirty, worktree = sys.argv[1:9]
+(log_file, result, exit_code, tree, commit, branch, dirty, worktree,
+ test_result, data_guard_result) = sys.argv[1:11]
 row = {
     "at": datetime.now(timezone.utc).isoformat(),
+    # result は**総合**（テスト ∧ データ検査）。鮮度の hook はこれを見る
     "result": result,
+    # 内訳。「テストは通ったが後片付けが漏れた」を後から見分けられるようにする
+    "testResult": test_result,
+    # pass / fail / unmeasured（報告が無い・読めない） / skipped（テストが赤で判定していない）
+    "dataGuardResult": data_guard_result,
     "exitCode": int(exit_code),
     "supabaseTree": tree,
     "commit": commit,
@@ -286,11 +313,8 @@ row = {
 }
 with open(log_file, "a", encoding="utf-8") as f:
     f.write(json.dumps(row, ensure_ascii=False) + "\n")
-print(f"[run-integration-tests] {result} を記録しました: {log_file}")
+print(f"[run-integration-tests] {result}（テスト {test_result} / 後片付け {data_guard_result}）を記録しました: {log_file}")
 PY
 
-# 漏れがあったら、テストが緑でも実行としては失敗にする（記録はテストの結果のまま残る）
-if [ "$LEAK_FAILED" -ne 0 ] && [ "$EXIT_CODE" -eq 0 ]; then
-  exit 1
-fi
-exit "$EXIT_CODE"
+# 総合結果をそのまま終了コードにする（記録と終了コードが食い違わないように）
+exit "$OVERALL_EXIT"

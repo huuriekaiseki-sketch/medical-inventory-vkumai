@@ -34,11 +34,21 @@ Claude Code・Codex 等、このリポジトリで作業するすべての AI �
 
 - `supabase/migrations/` 配下のファイル
 - `src/lib/supabase/` 配下のファイル
+- **認可の判断が書かれているファイル**（`stryker.config.json` の `mutate` と同じ集合。issue R02）：
+  `src/lib/security/` 配下 / `src/lib/audit/` 配下 / `src/app/api/admin/` 配下 /
+  パスが src/lib/admin- で始まるファイル（`src/lib/admin-auth.ts` など） /
+  `src/lib/api-error.ts` / `src/lib/api-pagination.ts` /
+  `src/lib/invariant-error.ts` / `src/lib/log-safe.ts`
 - `middleware.ts` / `proxy.ts`（プロジェクト内のすべてのmiddleware/proxy。proxy.tsはNext.js 16でmiddleware.tsから改名された同一ファイル規約。issue #681）
 - パス・ファイル名・変更内容が以下のドメインに関わるファイル：
   **auth / facility / tenant / organization / inventory / RLS / policy**
 
 この判定は人間の裁量で緩めない（機械判定）。迷ったら高リスク側に倒す。
+
+**説明と変更ファイルが食い違うときは確認ルートへ**（issue R02）: `changedFiles` に高リスクパスが
+1 件も無いのに `taskDescription` が上のドメイン語に当たる場合、`aidd-phase1-router` は
+`light` でも `deep` でもなく `confirm`（人間の確認待ち）を返す。説明が正しければ認可の実ファイルが
+一覧から漏れており、一覧が正しければ説明が実態と合っていない。どちらも黙って軽量で流してはいけない。
 理由は [`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#なぜtririsk判定を機械判定にし人の裁量で緩めないことにしたか) を参照。
 
 `aidd-phase1-router`を経由せず直接実装に入った場合の検知（issue #444）: 上記の高リスクパスへの

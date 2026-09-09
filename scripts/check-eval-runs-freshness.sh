@@ -61,7 +61,7 @@ SKIP_LINE="$(printf '%s\n' "${PR_BODY:-}" | grep -m 1 -E '^[[:space:]]*eval-skip
 if [ -n "$SKIP_LINE" ]; then
   SKIP_REASON="$(printf '%s' "$SKIP_LINE" | sed -E 's/^[[:space:]]*eval-skip:[[:space:]]*//')"
   if [ -n "$SKIP_REASON" ]; then
-    echo "::notice::.claude/workflows/*.js が変更されていますが、PR本文の eval-skip 申告により eval 未実行を許容します（理由: $SKIP_REASON）。変更箇所:$WORKFLOWS_DETAIL"
+    echo "::notice::.claude/workflows/*.js が変更されていますが、PR本文の eval-skip 申告により eval 未実行を許容します（理由: ${SKIP_REASON}）。変更箇所:$WORKFLOWS_DETAIL"
     exit 0
   fi
   echo "::error::PR本文に eval-skip がありますが理由が空です。\`eval-skip: <理由>\` の形で理由を書いてください。"

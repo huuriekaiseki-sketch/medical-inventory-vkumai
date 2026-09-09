@@ -63,6 +63,12 @@ green_row() { # $1=srcTree $2=strykerTree $3=srcDirty $4=strykerDirty
     "$1" "$2" "$3" "$4"
 }
 
+# 「いまの姿」まで含めた記録（C-041）。srcWorktree / strykerWorktree を持つ新しい形。
+green_row_wt() { # $1=srcTree $2=strykerTree $3=srcWorktree $4=strykerWorktree
+  printf '{"at":"2026-09-10T00:00:00Z","result":"pass","exitCode":0,"score":92.87,"srcTree":"%s","strykerTree":"%s","commit":"abc1234","branch":"x","srcDirty":false,"strykerDirty":false,"srcWorktree":"%s","strykerWorktree":"%s"}' \
+    "$1" "$2" "$3" "$4"
+}
+
 echo "=== scenario 1: 記録が 1 件も無い ==="
 rm -f "$WORK/mutation-runs.jsonl"
 OUT="$(run_check)"
@@ -133,7 +139,7 @@ if [ -f "$CONFIG" ]; then
   mv "$HIDDEN" "$CONFIG"
   is_empty "$OUT" "設定が無ければ何も言わない"
 else
-  echo "  NG: stryker.config.json が見つからない（$CONFIG）"
+  echo "  NG: stryker.config.json が見つからない（${CONFIG}）"
   fail=1
 fi
 
@@ -164,6 +170,29 @@ chmod +x "$STALE_WORK/fake-stryker"
 STALE_ROW="$(tail -n1 "$STALE_WORK/logs/mutation-runs.jsonl" 2>/dev/null || echo '')"
 contains "$STALE_ROW" '"score": null' "古い出力のスコアは採らない（null で残す）"
 contains "$STALE_ROW" '"result": "pass"' "スコアが読めなくても実行の記録そのものは残す"
+
+echo "=== scenario 13: 未コミットの書き換えを見る（C-041） ==="
+# WHY(2026-09-10): 記録側は最初から srcWorktree を残していたのに、判定側が --worktree を
+#      渡しておらず、**手元で認可の判断を書き換えても記録と一致してしまう**
+#      （HEAD の木のハッシュは変わらないため）。測る対象の一覧も同じで、
+#      **手元で mutate を減らせばスコアは上がる**ので stryker.config.json も見る。
+# shellcheck source=lib/worktree-hash.sh
+source "$SCRIPT_DIR/lib/worktree-hash.sh"
+SRC_WT="$(worktree_hash src)"
+CONFIG_WT="$(worktree_hash stryker.config.json)"
+
+write_log "$(green_row_wt "$SRC_TREE" "$CONFIG_TREE" "0000000000000000000000000000000000000000" "$CONFIG_WT")"
+OUT="$(run_check)"
+contains "$OUT" "いまの" "src/ の未コミットの書き換えを検知する"
+contains "$OUT" "単体のテストだけを緑にして終えていないか" "C-041 の言葉で伝える"
+
+write_log "$(green_row_wt "$SRC_TREE" "$CONFIG_TREE" "$SRC_WT" "0000000000000000000000000000000000000000")"
+OUT="$(run_check)"
+contains "$OUT" "いまの" "測る対象の一覧の未コミットの書き換えも検知する"
+
+write_log "$(green_row_wt "$SRC_TREE" "$CONFIG_TREE" "$SRC_WT" "$CONFIG_WT")"
+OUT="$(run_check)"
+is_empty "$OUT" "いまの姿と一致していれば黙る（対照）"
 
 echo "=== scenario 12: 実行はラッパー経由になっている（素の stryker を打たせない） ==="
 # WHY: package.json が素の `stryker run` のままだと、打っても記録が残らない。

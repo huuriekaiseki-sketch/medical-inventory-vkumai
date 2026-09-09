@@ -37,7 +37,7 @@ if [[ -z "$NOW_EPOCH" ]]; then
 fi
 
 if [[ ! -f "$LOG_FILE" ]]; then
-  echo "進捗ログがありません: $LOG_FILE（エージェントがまだ進捗報告していない可能性があります）"
+  echo "進捗ログがありません: ${LOG_FILE}（エージェントがまだ進捗報告していない可能性があります）"
   exit 0
 fi
 

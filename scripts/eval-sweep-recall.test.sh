@@ -95,7 +95,7 @@ echo "=== scenario 5: 実行痕跡が REPO_DIR の docs/agents/eval-runs.jsonl �
 RUNS="$(cat "$DUMMY_REPO/docs/agents/eval-runs.jsonl")"
 assert_contains "$RUNS" '"fixtureSet":"sweep-x"' "fixtureSet を記録"
 LINES="$(wc -l < "$DUMMY_REPO/docs/agents/eval-runs.jsonl" | tr -d ' ')"
-[ "$LINES" -eq 5 ] && ok "5 回の実行で 5 行" || ng "行数が $LINES（期待 5）"
+[ "$LINES" -eq 5 ] && ok "5 回の実行で 5 行" || ng "行数が ${LINES}（期待 5）"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

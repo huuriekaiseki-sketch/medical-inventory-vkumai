@@ -62,7 +62,7 @@ FUTURE="$(future_iso 30)"
 cat > "$TMPDIR_TEST/drill-future.md" <<EOF
 ## 次回実施予定日
 
-$FUTURE（四半期後の目安。手動で書き換える。リマインド機構は無い）
+${FUTURE}（四半期後の目安。手動で書き換える。リマインド機構は無い）
 EOF
 OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-future.md" bash "$SCRIPT")"
 assert_empty "$OUT" "出力が空である"
@@ -72,7 +72,7 @@ PAST="$(past_iso 10)"
 cat > "$TMPDIR_TEST/drill-past.md" <<EOF
 ## 次回実施予定日
 
-$PAST（四半期後の目安。手動で書き換える。リマインド機構は無い）
+${PAST}（四半期後の目安。手動で書き換える。リマインド機構は無い）
 EOF
 OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-past.md" bash "$SCRIPT")"
 assert_contains "$OUT" "systemMessage" "systemMessageフィールドがある"
@@ -84,7 +84,7 @@ TODAY="$(past_iso 0)"
 cat > "$TMPDIR_TEST/drill-today.md" <<EOF
 ## 次回実施予定日
 
-$TODAY（四半期後の目安。手動で書き換える。リマインド機構は無い）
+${TODAY}（四半期後の目安。手動で書き換える。リマインド機構は無い）
 EOF
 OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-today.md" bash "$SCRIPT")"
 assert_contains "$OUT" "systemMessage" "当日も警告対象になる"
