@@ -74,6 +74,7 @@ interface Seed {
   loanReturnId: string
   hospitalPriceId: string
   productId: string
+  distributorProductId: string
 }
 
 let seed: Seed
@@ -158,6 +159,24 @@ function keyOf(table: string): string {
   return KEY_COLUMN[table] ?? 'id'
 }
 
+/** 条件に合う行の数を service role で数える（応答ではなく DB の実態を見るため） */
+async function countWhere(table: string, column: string, value: string): Promise<number> {
+  const { count, error } = await service
+    .from(table)
+    .select('*', { count: 'exact', head: true })
+    .eq(column, value)
+  if (error) throw new Error(`[sweep] ${table} の件数取得失敗: ${error.message}`)
+  return count ?? 0
+}
+
+/** 1 行を丸ごと文字列にする（前後比較用）。行が無ければ null */
+async function rowSnapshot(table: string, key: string, value: string): Promise<string | null> {
+  const { data, error } = await service.from(table).select('*').eq(key, value)
+  if (error) throw new Error(`[sweep] ${table} の読み出し失敗: ${error.message}`)
+  if ((data ?? []).length === 0) return null
+  return JSON.stringify(data)
+}
+
 async function allIds(table: string): Promise<string[]> {
   const key = keyOf(table)
   const { data, error } = await service.from(table).select(key)
@@ -188,6 +207,71 @@ const NOT_MEASURED_HERE: Record<string, string> = {
   schema_drift_log: '書き手が service_role にも無く、record_schema_drift() 経由でしか増えない。schema-drift-rpc-authz が測る',
   schema_baseline_snapshots: '同上（refresh_schema_baseline_snapshot() 経由）',
   rate_limit_counters: '同上（consume_rate_limit() 経由）。rate-limit-rls-idor が測る',
+}
+
+/**
+ * 施設 B の利用者が「施設 A の行を書き換えよう」として試す更新。
+ *
+ * WHY(表ごとに列を書く): 更新は表ごとに安全な列が違う。数量や状態は業務のトリガー
+ *      （返却が貸出を超えない・状態は前へしか進まない）に当たるので、
+ *      **境界ではなく業務規則で拒否されて**「守れている」と誤読しかねない。
+ *      当たらない列だけを選ぶ。選べない表は下の理由つきで外す。
+ */
+const FORBIDDEN_UPDATE: Record<string, Record<string, unknown>> = {
+  hospital_prices: { purchase_price: 999 },
+  consumables: { purpose: '攻撃テストで書き換え' },
+  case_orders: { doctor_name: '攻撃テストで書き換え' },
+  loan_orders: { maker: '攻撃テストで書き換え' },
+  loan_returns: { return_datetime: '2020-01-01T00:00:00.000Z' },
+  // 他施設の所属の役割を書き換える＝権限の昇格。境界の中でいちばん被害が大きい
+  user_facilities: { role: 'admin' },
+}
+
+/** 更新を試さない表と、その理由（削除は全表で試す） */
+const UPDATE_NOT_TRIED: Record<string, string> = {
+  consumable_orders: '安全に書き換えられる列が無い（status は前へしか進めない業務トリガーに当たり、境界ではなく業務規則で拒否されてしまう）',
+  case_order_items: '数量の更新は在庫・金額の業務トリガーに当たる。明細の更新の境界は order-items-rls-idor が親経由の EXISTS として測る（P-011）',
+  consumable_order_items: '数量の更新は在庫の業務トリガーに当たる。明細の更新の境界は order-items-rls-idor が測る（P-011）',
+  loan_order_items: '数量の更新は未返却数の計算に効く。明細の更新の境界は order-items-rls-idor が測る（P-011）',
+  loan_return_items: '数量の更新は「返却が貸出を超えない」トリガーに当たり、境界ではなく業務規則で拒否されてしまう（P-011 が別に測る）',
+  price_histories: '追記のみの表で、施設 A の利用者にも更新は許されていない。ここでの「変わらなかった」は境界ではなく追記のみの性質を測ることになる（price-histories-rls-idor が測る）',
+  audit_log: '追記のみの表で、誰にも更新は許されていない（append-only トリガー）。境界ではなく追記のみの性質になるので audit-log-rls-idor が測る',
+}
+
+/**
+ * 施設 B の利用者が「施設 A の行を新しく作ろう」として送る中身。
+ * 同じ組み立てを施設 B に対しても使い、**自施設なら通る**ことを対照として測る。
+ *
+ * WHY(作成だけが読み取りと独立している、2026-09-09 実測): PostgreSQL の RLS では、
+ *      `UPDATE ... WHERE` / `DELETE ... WHERE` は**対象の行を SELECT ポリシーで見つけられないと
+ *      0 行で終わる**。実際、更新を許すポリシーだけを足しても 0 行のままで、
+ *      読み取りも開けて初めて 1 行変わった。つまり更新・削除の「変わらなかった」は
+ *      読み取り境界に依存していて、書き込み側の境界を独立には測れない。
+ *      **作成（INSERT）は既存の行を読まない**ので、WITH CHECK だけが効く。ここが独立した測り口。
+ */
+const FORBIDDEN_INSERT: Record<string, (s: Seed, facilityId: string) => Record<string, unknown>> = {
+  hospital_prices: (s, f) => ({
+    distributor_product_id: s.distributorProductId, facility_id: f, purchase_price: 1, delivery_price: 1,
+  }),
+  consumables: (s, f) => ({ facility_id: f, name: `攻撃テスト用消耗品-${randomUUID()}`, purpose: '攻撃テスト' }),
+  case_orders: (s, f) => ({
+    facility_id: f, case_datetime: new Date().toISOString(), procedure_name: '攻撃テスト用術式',
+    patient_id: 'SWEEP-ATTACK-0000', patient_initials: '攻撃', gender: 'other', doctor_name: '攻撃テスト医師',
+  }),
+  consumable_orders: (s, f) => ({ facility_id: f }),
+  loan_orders: (s, f) => ({ facility_id: f, procedure_name: '攻撃テスト用術式', maker: '攻撃テスト用メーカー' }),
+  loan_returns: (s, f) => ({ facility_id: f, return_datetime: new Date().toISOString() }),
+}
+
+/** 作成を試さない表と、その理由 */
+const INSERT_NOT_TRIED: Record<string, string> = {
+  user_facilities: '自分を施設 A の admin にする攻撃は permission-change-authz が測る。ここでは対照が置けない（staff はどこの施設にも所属を足せない設計なので、拒否が境界由来か権限由来か分けられない）',
+  case_order_items: '明細は親の id を指定して作る。親が他施設なら EXISTS の中で親を読めず、結局は読み取り境界に依存する（order-items-rls-idor が親経由で測る）',
+  consumable_order_items: '同じ理由で読み取り境界に依存する。order-items-rls-idor が親経由で測る',
+  loan_order_items: '同じ理由で読み取り境界に依存する。order-items-rls-idor が親経由で測る',
+  loan_return_items: '同じ理由で読み取り境界に依存する。order-items-rls-idor が親経由で測る',
+  price_histories: '追記のみの表で、クライアントからの INSERT はポリシーで一律に拒否される（施設に関係なく落ちるので境界を測れない）',
+  audit_log: '追記のみの表で、監査トリガー（SECURITY DEFINER）だけが書く。クライアントからの INSERT は施設に関係なく落ちる',
 }
 
 const tables = parseRulebook()
@@ -252,6 +336,7 @@ describe('テーブル台帳の全表を Supabase REST で直接叩く総当た�
     seed = {
       facilityA, facilityB, userA, userB,
       caseOrderId, consumableOrderId, loanOrderId, loanReturnId, hospitalPriceId, productId,
+      distributorProductId,
     }
   }, 60_000)
 
@@ -301,6 +386,126 @@ describe('テーブル台帳の全表を Supabase REST で直接叩く総当た�
     const missing = MUST_BE_MEASURED.filter((t) => !measured.includes(t))
     expect(missing, '種まきが壊れて「見えてはいけない行」が用意できていない（空振り）').toEqual([])
   }, 60_000)
+
+  it('施設 B の利用者は、施設 A の行を 1 行も書き換えられず・消せない（台帳の施設スコープの全表）', async () => {
+    const changed: string[] = []
+    const triedUpdate: string[] = []
+    const triedDelete: string[] = []
+
+    for (const t of tables) {
+      // マスタ（施設に属さない）と、行を用意できない記録・裏方は対象外
+      if (t.band === '01' || t.table in NOT_MEASURED_HERE) continue
+      const forbidden = await FORBIDDEN_ROWS[t.table](seed)
+      if (forbidden.length === 0) continue
+      const key = keyOf(t.table)
+      const target = forbidden[0]
+
+      // 書き換え
+      const patch = FORBIDDEN_UPDATE[t.table]
+      if (patch) {
+        triedUpdate.push(t.table)
+        const before = await rowSnapshot(t.table, key, target)
+        await seed.userB.client.from(t.table).update(patch).eq(key, target)
+        const after = await rowSnapshot(t.table, key, target)
+        // RLS は拒否ではなく 0 行にするので、エラーの有無ではなく**行が変わったか**で判定する
+        if (before !== after) changed.push(`${t.id} ${t.table}: 施設 B の更新で行が変わった`)
+      }
+
+      // 削除
+      triedDelete.push(t.table)
+      await seed.userB.client.from(t.table).delete().eq(key, target)
+      const stillThere = await rowSnapshot(t.table, key, target)
+      if (stillThere === null) changed.push(`${t.id} ${t.table}: 施設 B の削除で行が消えた`)
+    }
+
+    expect(changed, '施設 B の利用者が施設 A の行を変えた・消した').toEqual([])
+
+    // fail-open 防止: 試した表が減ったら落とす（2026-09-09 実測: 更新 6 表 / 削除 11 表）
+    expect(triedUpdate.length, '更新を試した表が減っている').toBeGreaterThanOrEqual(6)
+    expect(triedDelete.length, '削除を試した表が減っている').toBeGreaterThanOrEqual(11)
+  }, 60_000)
+
+  it('施設 B の利用者は、施設 A の行を新しく作れない（対照: 自施設なら同じ中身で作れる）', async () => {
+    const created: string[] = []
+    const controlFailed: string[] = []
+
+    for (const t of tables) {
+      const build = FORBIDDEN_INSERT[t.table]
+      if (!build) continue
+
+      // 攻撃: 施設 A の行を作る。
+      // WHY(応答ではなく DB を見る、2026-09-09 実測): `insert().select()` の RETURNING は
+      //      SELECT ポリシーを通るので、**行が入っても応答は空**になる。
+      //      応答で判定すると、作れてしまっているのに「作れなかった」と読む（C-020）。
+      const before = await countWhere(t.table, 'facility_id', seed.facilityA.id)
+      await seed.userB.client.from(t.table).insert(build(seed, seed.facilityA.id))
+      const after = await countWhere(t.table, 'facility_id', seed.facilityA.id)
+      if (after > before) {
+        created.push(`${t.id} ${t.table}: 施設 B の利用者が施設 A の行を作れた（${before} → ${after}）`)
+      }
+
+      // 対照: 同じ中身を自施設（施設 B）へ作る。ここが通らないと上の「作れなかった」に意味が無い
+      const controlBefore = await countWhere(t.table, 'facility_id', seed.facilityB.id)
+      const control = await seed.userB.client.from(t.table).insert(build(seed, seed.facilityB.id))
+      const controlAfter = await countWhere(t.table, 'facility_id', seed.facilityB.id)
+      if (controlAfter === controlBefore) {
+        controlFailed.push(`${t.id} ${t.table}: 自施設にも作れない（${control.error?.message ?? '行が増えない'}）`)
+      }
+    }
+
+    expect(created, '施設 B の利用者が施設 A の行を作れた').toEqual([])
+    expect(controlFailed, '対照が通らないので「作れなかった」に意味が無い（C-021）').toEqual([])
+    // fail-open 防止（2026-09-09 実測: 6 表）
+    expect(Object.keys(FORBIDDEN_INSERT).length, '作成を試す表が減っている').toBeGreaterThanOrEqual(6)
+  }, 60_000)
+
+  it('作成を試さない表は、理由つきで名前が残っている（限界を隠さない）', () => {
+    for (const [table, reason] of Object.entries(INSERT_NOT_TRIED)) {
+      expect(reason.length, `${table} の理由が短すぎる`).toBeGreaterThan(20)
+    }
+    const scoped = tables
+      .filter((t) => t.band !== '01' && !(t.table in NOT_MEASURED_HERE))
+      .map((t) => t.table)
+    const decided = new Set([...Object.keys(FORBIDDEN_INSERT), ...Object.keys(INSERT_NOT_TRIED)])
+    expect(scoped.filter((t) => !decided.has(t)), '作成を試すかどうかを決めていない表がある').toEqual([])
+  })
+
+  it('対照: 施設 A の利用者は同じ操作ができる（「誰も書けないだけ」で通っていない）', async () => {
+    // WHY(対照を置く、C-021): 「変わらなかった」は、境界が効いている場合と
+    //      **そもそも誰も書けない場合**の両方で成り立つ。同じ操作が自施設で通ることを見て初めて、
+    //      上の検査の「変わらなかった」に意味が出る。
+    const before = await rowSnapshot('hospital_prices', 'id', seed.hospitalPriceId)
+    const { error: updateError } = await seed.userA.client
+      .from('hospital_prices')
+      .update({ purchase_price: 654321 })
+      .eq('id', seed.hospitalPriceId)
+    expect(updateError, '施設 A の利用者が自施設の価格を更新できない').toBeNull()
+    const after = await rowSnapshot('hospital_prices', 'id', seed.hospitalPriceId)
+    expect(after, '施設 A の利用者の更新が反映されていない').not.toBe(before)
+
+    // 削除も自施設なら通る（消して困らない捨て行を 1 件作って試す）
+    const { data: throwaway, error: insertError } = await service
+      .from('consumables')
+      .insert({ facility_id: seed.facilityA.id, name: `対照用消耗品-${randomUUID()}`, purpose: '対照' })
+      .select('id')
+      .single()
+    expect(insertError, '対照用の行を作れない').toBeNull()
+    const throwawayId = String((throwaway as { id: unknown }).id)
+    await seed.userA.client.from('consumables').delete().eq('id', throwawayId)
+    expect(await rowSnapshot('consumables', 'id', throwawayId), '施設 A の利用者が自施設の行を消せない').toBeNull()
+  }, 60_000)
+
+  it('更新を試さない表は、理由つきで名前が残っている（限界を隠さない）', () => {
+    for (const [table, reason] of Object.entries(UPDATE_NOT_TRIED)) {
+      expect(reason.length, `${table} の理由が短すぎる`).toBeGreaterThan(20)
+    }
+    // 施設スコープの表は「更新を試す」か「試さない理由がある」かのどちらかに必ず入る
+    const scoped = tables
+      .filter((t) => t.band !== '01' && !(t.table in NOT_MEASURED_HERE))
+      .map((t) => t.table)
+    const decided = new Set([...Object.keys(FORBIDDEN_UPDATE), ...Object.keys(UPDATE_NOT_TRIED)])
+    expect(scoped.filter((t) => !decided.has(t)), '更新を試すかどうかを決めていない表がある').toEqual([])
+  })
 
   it('この掃きで測れない表は、理由つきで名前が残っている（限界を隠さない）', () => {
     const unmeasurable = tables.map((t) => t.table).filter((t) => t in NOT_MEASURED_HERE)
