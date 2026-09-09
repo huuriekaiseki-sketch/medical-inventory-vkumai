@@ -20,6 +20,7 @@ import {
   seedOrderItemsRlsIdorFixtures,
   type SeedOrderItemsRlsIdorFixtures,
 } from './helpers/seed-rls-idor'
+import { describeDenial, isPermissionDenied } from './helpers/pg-error'
 
 // 約束カタログ（docs/agents/promise-catalog.md）: P-011 更新・削除・作成できない / P-013 明細は親経由で施設スコープ
 describe('明細テーブル（親経由で施設スコープ）RLS/IDOR [P-011 P-013]', () => {
@@ -119,7 +120,7 @@ describe('明細テーブル（親経由で施設スコープ）RLS/IDOR [P-011 
         expect(error, 'UPDATE の権限が剥がれている（宣言を直すこと）').toBeNull()
         expect(updated ?? []).toEqual([])
       } else {
-        expect(error?.code, 'UPDATE の権限が戻っている（20260909030000 で剥がしたはず）').toBe('42501')
+        expect(isPermissionDenied(error), `UPDATE の権限が戻っている（20260909030000 で剥がしたはず）: ${describeDenial(error)}`).toBe(true)
       }
 
       const { data: after } = await fixtures.userA.client
@@ -138,17 +139,17 @@ describe('明細テーブル（親経由で施設スコープ）RLS/IDOR [P-011 
         .update({ quantity: 999 })
         .eq('id', itemIdOf(fixtures))
         .select('id')
-      expect(error?.code, '自施設の writer に UPDATE が通った').toBe('42501')
+      expect(isPermissionDenied(error), `自施設の writer に UPDATE が通った: ${describeDenial(error)}`).toBe(true)
     })
 
     it('他施設のユーザーは削除できない（削除後も行が残る）', async () => {
       // WHY(2026-09-09): DELETE は 3 表とも権限ごと剥がした（20260909020000）。
       //      施設境界より手前で止まるので、他施設・自施設のどちらでも 42501 になる
       const { error: fromOther } = await fixtures.userB.client.from(table).delete().eq('id', itemIdOf(fixtures))
-      expect(fromOther?.code, 'DELETE の権限が戻っている').toBe('42501')
+      expect(isPermissionDenied(fromOther), `DELETE の権限が戻っている: ${describeDenial(fromOther)}`).toBe(true)
 
       const { error: fromOwn } = await fixtures.userA.client.from(table).delete().eq('id', itemIdOf(fixtures))
-      expect(fromOwn?.code, '自施設の writer に DELETE が通った').toBe('42501')
+      expect(isPermissionDenied(fromOwn), `自施設の writer に DELETE が通った: ${describeDenial(fromOwn)}`).toBe(true)
 
       const { data: after } = await fixtures.userA.client
         .from(table)

@@ -254,18 +254,19 @@ const FORBIDDEN_INSERT: Record<string, (s: Seed, facilityId: string) => Record<s
     distributor_product_id: s.distributorProductId, facility_id: f, purchase_price: 1, delivery_price: 1,
   }),
   consumables: (s, f) => ({ facility_id: f, name: `攻撃テスト用消耗品-${randomUUID()}`, purpose: '攻撃テスト' }),
-  case_orders: (s, f) => ({
-    facility_id: f, case_datetime: new Date().toISOString(), procedure_name: '攻撃テスト用術式',
-    patient_id: 'SWEEP-ATTACK-0000', patient_initials: '攻撃', gender: 'other', doctor_name: '攻撃テスト医師',
-  }),
-  consumable_orders: (s, f) => ({ facility_id: f }),
-  loan_orders: (s, f) => ({ facility_id: f, procedure_name: '攻撃テスト用術式', maker: '攻撃テスト用メーカー' }),
-  loan_returns: (s, f) => ({ facility_id: f, return_datetime: new Date().toISOString() }),
 }
 
 /** 作成を試さない表と、その理由 */
 const INSERT_NOT_TRIED: Record<string, string> = {
   user_facilities: '自分を施設 A の admin にする攻撃は permission-change-authz が測る。ここでは対照が置けない（staff はどこの施設にも所属を足せない設計なので、拒否が境界由来か権限由来か分けられない）',
+  // WHY(2026-09-09 に外した): 発注 3 種と返却は、クライアントから作る道そのものを無くした
+  //      （20260909040000 で INSERT の権限を剥がした）。誰が叩いても 42501 になるので、
+  //      **拒否が施設境界由来か権限由来か分けられない**（対照も置けない＝C-021）。
+  //      作成の境界は RPC 側へ移った（rpc-boundary-sweep が施設をまたいで測る）。
+  case_orders: '直接 INSERT の道が無い（2026-09-09 に権限ごと剥がした）。作成は create_case_order_atomic だけで、その境界は rpc-boundary-sweep が測る',
+  consumable_orders: '直接 INSERT の道が無い（同上）。作成は create_consumable_order_atomic だけで、その境界は rpc-boundary-sweep が測る',
+  loan_orders: '直接 INSERT の道が無い（同上）。作成は create_loan_order_atomic だけで、その境界は rpc-boundary-sweep が測る',
+  loan_returns: '直接 INSERT の道が無い（同上）。作成は create_loan_return_atomic だけで、その境界は rpc-boundary-sweep が測る',
   case_order_items: '明細は親の id を指定して作る。親が他施設なら EXISTS の中で親を読めず、結局は読み取り境界に依存する（order-items-rls-idor が親経由で測る）',
   consumable_order_items: '同じ理由で読み取り境界に依存する。order-items-rls-idor が親経由で測る',
   loan_order_items: '同じ理由で読み取り境界に依存する。order-items-rls-idor が親経由で測る',
@@ -455,8 +456,12 @@ describe('テーブル台帳の全表を Supabase REST で直接叩く総当た�
 
     expect(created, '施設 B の利用者が施設 A の行を作れた').toEqual([])
     expect(controlFailed, '対照が通らないので「作れなかった」に意味が無い（C-021）').toEqual([])
-    // fail-open 防止（2026-09-09 実測: 6 表）
-    expect(Object.keys(FORBIDDEN_INSERT).length, '作成を試す表が減っている').toBeGreaterThanOrEqual(6)
+    // fail-open 防止（2026-09-09 実測: 2 表）。
+    // WHY(6 → 2 に下げた): 発注 3 種・返却の直接 INSERT の道を無くしたので、
+    //      **クライアントが直接作れる施設スコープの表は 2 つだけ**になった。
+    //      数を減らしたぶんの穴埋めは下の「決めていない表がある」検査が受け持つ
+    //      （施設スコープの表は必ず「試す」か「試さない理由」のどちらかに入る）。
+    expect(Object.keys(FORBIDDEN_INSERT).length, '作成を試す表が減っている').toBeGreaterThanOrEqual(2)
   }, 60_000)
 
   it('作成を試さない表は、理由つきで名前が残っている（限界を隠さない）', () => {

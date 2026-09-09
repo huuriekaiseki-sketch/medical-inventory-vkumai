@@ -17,6 +17,7 @@ import {
   type SeedLoanReturnsRlsIdorFixtures,
   createServiceRoleClient,
 } from './helpers/seed-rls-idor'
+import { describeDenial, isPermissionDenied } from './helpers/pg-error'
 
 // 約束カタログ（docs/agents/promise-catalog.md）: P-010 他施設は読めない / P-012 RPC に他施設 id は forbidden / P-015 自施設は通る（対照）/ P-050 返却は 1 件まで
 // 不変条件カタログ（docs/agents/invariant-catalog.md）: I-030 短貸発注 1 件に返却は 1 件まで
@@ -112,7 +113,7 @@ describe('loan_returns RLS/IDOR [P-010 P-012 P-015 I-030]', () => {
       const id = await seedReturn(serviceClient)
 
       const { error } = await fixtures.userB.client.from('loan_returns').delete().eq('id', id).select('id')
-      expect(error?.code, '他施設の利用者に DELETE が通った').toBe('42501')
+      expect(isPermissionDenied(error), `他施設の利用者に DELETE が通った: ${describeDenial(error)}`).toBe(true)
 
       const { data: still } = await serviceClient.from('loan_returns').select('id').eq('id', id)
       expect(still, '他施設の利用者が返却を消せてしまった').toHaveLength(1)
@@ -125,7 +126,7 @@ describe('loan_returns RLS/IDOR [P-010 P-012 P-015 I-030]', () => {
       const id = await seedReturn(serviceClient)
 
       const { error } = await fixtures.userA.client.from('loan_returns').delete().eq('id', id).select('id')
-      expect(error?.code, '自施設の writer に DELETE が通った（剥がした権限が戻っている）').toBe('42501')
+      expect(isPermissionDenied(error), `自施設の writer に DELETE が通った（剥がした権限が戻っている）: ${describeDenial(error)}`).toBe(true)
 
       const { data: still } = await serviceClient.from('loan_returns').select('id').eq('id', id)
       expect(still, '自施設の writer が返却を消せてしまった').toHaveLength(1)
