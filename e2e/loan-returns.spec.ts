@@ -657,4 +657,114 @@ test.describe('未返却の通し（発注 → 未返却 → 対象を選んで�
 
     await context.close()
   })
+
+  // WHY(I-022、2026-09-09 の業務判断): 返却が記録された発注は取り消せない。
+  //      物が動いた事実がある発注を「無かったこと」にはできないので、**先に返却を取り消す**。
+  //      DB のトリガーが止めることは統合テストで測っているので、ここで測るのは
+  //      **利用者に何が見えるか**: 409 で止まり、画面に「先に返却を取り消してください」が出て、
+  //      そのとおりにすると取り消せる（通す向きまで通しで見る。C-024）。
+  test('返却がある短貸発注は取り消せず、返却を取り消してからなら取り消せる', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: CROSS_FACILITY_USER_A_AUTH_PATH })
+    const page = await context.newPage()
+    const facilityId = fixtures!.facilityAId
+    const suffix = uniqueSuffix()
+    const procedureName = `E2E返却済み取り消し術式-${suffix}`
+    const maker = `E2E返却済み取り消しメーカー-${suffix}`
+    const summary = `${procedureName}（${maker}）`
+    const itemName = `E2E返却済み取り消し品名-${suffix}`
+
+    // 1. 発注する（2 本）
+    await page.goto(`/facilities/${facilityId}/loan-orders/new`)
+    await page.waitForLoadState('networkidle')
+    await page.getByLabel('手技名').fill(procedureName)
+    await page.getByLabel('メーカー').fill(maker)
+    await page.getByPlaceholder('JAN').first().fill(fixtures!.productJan!)
+    await page.getByPlaceholder('品名').first().fill(itemName)
+    await page.getByRole('spinbutton').first().fill('2')
+    const [orderRes] = await Promise.all([
+      page.waitForResponse(
+        (res) => res.url().includes('/api/loan-orders') && res.request().method() === 'POST'
+      ),
+      page.getByRole('button', { name: '発注する' }).click(),
+    ])
+    expect(orderRes.status(), await orderRes.text()).toBe(201)
+
+    // 2. 全部返す
+    await page.goto(`/facilities/${facilityId}/loan-returns/new`)
+    await page.waitForLoadState('networkidle')
+    await page.getByLabel('対象の短貸発注').selectOption({ label: summary })
+    const qty = page.getByLabel(`${itemName} の返す数`)
+    await expect(qty).toBeVisible()
+    await qty.fill('2')
+    const when = uniqueReturnDatetime()
+    await page.getByLabel('返却日時').fill(when.input)
+    const [returnRes] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/api/loan-returns') && r.request().method() === 'POST'
+      ),
+      page.getByRole('button', { name: '返却する' }).click(),
+    ])
+    expect(returnRes.status(), await returnRes.text()).toBe(201)
+
+    // 3. 発注を取り消そうとすると 409 で止まり、やることが画面に出る
+    await page.goto(`/orders?facilityId=${facilityId}&kind=loan_order`)
+    await page.waitForLoadState('networkidle')
+    const row = page.getByRole('row', { name: new RegExp(procedureName) })
+    await expect(row).toBeVisible()
+    page.once('dialog', (d) => d.accept())
+    const [blocked] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/api/loan-orders/') && r.request().method() === 'PATCH'
+      ),
+      row.getByRole('button', { name: '取り消す' }).click(),
+    ])
+    expect(blocked.status(), '返却があるのに取り消せてしまった').toBe(409)
+    // WHY(role だけで絞らない): Next.js のルート告知（`__next-route-announcer__`）も
+    //      role="alert" を持つので、role だけだと 2 件に当たって落ちる（実測）
+    await expect(
+      page.getByRole('alert').filter({ hasText: '取り消せません' }),
+      '止まったのに、何をすれば直せるかが画面に出ていない'
+    ).toContainText('先に返却を取り消してください')
+
+    // 行はそのまま（取り消し済になっていない）
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+    await expect(
+      page.getByRole('row', { name: new RegExp(procedureName) }),
+      '止めたのに取り消し済になっている'
+    ).not.toContainText('取り消し済')
+
+    // 4. 先に返却を取り消す
+    await page.goto(`/facilities/${facilityId}/loan-returns`)
+    await page.waitForLoadState('networkidle')
+    const returnRow = page.getByRole('row', { name: new RegExp(when.jstDisplay) })
+    await expect(returnRow, '登録した返却が一覧に出ない').toBeVisible()
+    page.once('dialog', (d) => d.accept())
+    const [cancelReturnRes] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/api/loan-returns/') && r.request().method() === 'PATCH'
+      ),
+      returnRow.getByRole('button', { name: '取り消す' }).click(),
+    ])
+    expect(cancelReturnRes.status(), `返却の取り消しに失敗: ${await cancelReturnRes.text()}`).toBe(200)
+
+    // 5. 今度は発注を取り消せる（通す向き）
+    await page.goto(`/orders?facilityId=${facilityId}&kind=loan_order`)
+    await page.waitForLoadState('networkidle')
+    const rowAgain = page.getByRole('row', { name: new RegExp(procedureName) })
+    page.once('dialog', (d) => d.accept())
+    const [cancelOrderRes] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/api/loan-orders/') && r.request().method() === 'PATCH'
+      ),
+      rowAgain.getByRole('button', { name: '取り消す' }).click(),
+    ])
+    expect(cancelOrderRes.status(), `返却を取り消したのに発注を取り消せない: ${await cancelOrderRes.text()}`).toBe(200)
+
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByRole('row', { name: new RegExp(procedureName) })).toContainText('取り消し済')
+
+    await context.close()
+  })
 })

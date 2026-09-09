@@ -109,6 +109,14 @@
       "expect": "supabase/__tests__/integration/blast-radius.integration.test.ts",
       "promise": "P-033",
       "note": "同上。RM-005 は admin 判定を外す変異で、aal2 だけを外す形は測っていなかった。初回から倒せていた"
+    },
+    {
+      "id": "RM-015",
+      "breaks": "返却が残っている短貸発注を取り消せなくする番人（トリガー）を外す",
+      "sql": "DROP TRIGGER IF EXISTS loan_orders_block_cancel_with_returns ON loan_orders;",
+      "expect": "supabase/__tests__/integration/loan-order-cancel-boundary.integration.test.ts",
+      "promise": "P-050",
+      "note": "2026-09-09 に人が決めた業務規則（I-022）の本体。ポリシーではなくトリガーだが、**認可と同じで「壊して落ちるか」でしか効き目は測れない**ので同じ登録簿に置く。取り消しは終端で戻せないため、ここが緩むと「物が動いた事実がある発注を無かったことにする」が黙って通る"
     }
   ]
 }

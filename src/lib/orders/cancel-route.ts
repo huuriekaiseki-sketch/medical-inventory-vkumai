@@ -9,6 +9,7 @@ import { orderCancelSchema } from '@/lib/validation/schemas'
 import {
   cancelOrder,
   ORDER_ALREADY_CANCELLED_ERROR,
+  ORDER_HAS_RETURNS_ERROR,
   ORDER_NOT_FOUND_ERROR,
   type CancellableOrderTable,
 } from '@/lib/orders/cancel'
@@ -59,6 +60,8 @@ export async function handleOrderCancel(
     if (error instanceof ClientVisibleError) {
       if (error.message === ORDER_NOT_FOUND_ERROR) return apiError(error.message, 404)
       if (error.message === ORDER_ALREADY_CANCELLED_ERROR) return apiError(error.message, 409)
+      // 返却が残っている（I-022）。利用者が先にやることがあるので 409 で返す
+      if (error.message === ORDER_HAS_RETURNS_ERROR) return apiError(error.message, 409)
     }
     return repositoryError(error, '発注の取り消しに失敗しました')
   }

@@ -24,6 +24,25 @@ export type CancellableOrderTable = (typeof CANCELLABLE_ORDER_TABLES)[number]
 export const ORDER_NOT_FOUND_ERROR = '発注が見つかりません'
 /** すでに取り消し済み。route が 409 に写す */
 export const ORDER_ALREADY_CANCELLED_ERROR = 'この発注はすでに取り消されています'
+/** 返却が残っている短貸発注。route が 409 に写す（I-022） */
+export const ORDER_HAS_RETURNS_ERROR =
+  'この発注には返却の記録があるため取り消せません。先に返却を取り消してください'
+
+/**
+ * 「返却が残っているので取り消せない」を DB のエラーから見分ける。
+ *
+ * WHY(判定を持たずに文言だけ写す): 生きた返却の数え方は残数（`loan_outstanding_count`）と
+ *      揃っている必要があり、**同じ問いの答えを 2 か所に置くと必ず食い違う**（E-053）。
+ *      判定は DB のトリガー（`enforce_loan_order_cancellable`、20260909050000）に 1 つだけ置き、
+ *      ここは利用者に読める一文へ写すだけにする。
+ *
+ * WHY(コードではなく文言で見分ける): 23514 は業務不変条件すべてに共通で、
+ *      これだけでは「状態は戻せません」の汎用文になってしまい、
+ *      **何をすれば直せるか**が伝わらない（C-023 と同じ、合図が同じだと層を見分けられない形）。
+ */
+function isActiveReturnsViolation(error: { code?: string; message?: string } | null): boolean {
+  return error?.code === '23514' && /has active returns/.test(error.message ?? '')
+}
 
 export interface CancelledOrder {
   id: string
@@ -55,6 +74,7 @@ export async function cancelOrder(
     .eq('facility_id', facilityId)
     .select('id, status')
     .maybeSingle()
+  if (isActiveReturnsViolation(error)) throw new ClientVisibleError(ORDER_HAS_RETURNS_ERROR)
   if (error) throw toRepositoryError(error)
   // RLS で 0 行になった場合（読めるが書けない立場＝viewer）
   if (!data) throw new ClientVisibleError('発注を取り消す権限がありません')

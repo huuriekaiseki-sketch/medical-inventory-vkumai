@@ -61,7 +61,18 @@ export function OrderHistoryTable({ items, facilityId, onCancelled }: Props) {
   const handleCancel = async (item: OrderListItem) => {
     const endpoint = CANCEL_ENDPOINT[item.kind]
     if (!endpoint || !facilityId) return
-    if (!confirm('この発注を取り消しますか？（取り消すと元に戻せません）')) return
+    // WHY(過去の月に触れることを伝える・2026-09-09 の判断): 取り消しに**期限は設けない**と
+    //      決めたので、半年前の発注も取り消せる。発注金額の集計（/admin/reports）は
+    //      締め処理を持たず毎回数え直すため、**過去の月の数字がその場で変わる**。
+    //      期限で縛る代わりに、押す前にそれを伝える。
+    if (
+      !confirm(
+        'この発注を取り消しますか？\n\n' +
+          '・取り消すと元に戻せません\n' +
+          '・過去の月のぶんでも、発注金額の集計からその場で外れます'
+      )
+    )
+      return
     setCancellingId(item.id)
     setError(null)
     try {
