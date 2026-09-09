@@ -80,6 +80,7 @@
     "requestsPerMinute": 300,
     "invitesPerDay": 50,
     "authJudgmentTimeoutMs": 5000,
-    "localLogRowsWarnAt": 800
+    "localLogRowsWarnAt": 800,
+    "pitfallTypesMinRows": 10
   }
 }

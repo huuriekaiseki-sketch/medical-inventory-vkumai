@@ -20,7 +20,7 @@
     "bin/show-agent-status.sh": "ffc7f5007394835109a028488c71eb6d13f3b08f12d7581ac9b38c692e774d24",
     "evidence/vkumai-2026-09-05.md": "7962b68d469c89879f2efd4b162537b158c782ea6ea9f2d31996e22c624bbc4e",
     "hooks/hooks.json": "c8c3e5bcd1acae4c905810bd0f3871be9860aebe8872435fd9dd48dd0fc8a725",
-    "schema/aidd-config.schema.json": "6a8eb53fa3c14eb377a7e789ae5e43c66cefe2c52f0608880032392da34c04ff",
+    "schema/aidd-config.schema.json": "a0e30f67ea9788290e91918de8ba44151ade3f324a22fbac4eaab0fc42b42c0e",
     "scripts/check-access-review-staleness.sh": "4185028711c70e3d193ea43d1e54a07f22f90e1ef9e75da026814180e6dd72db",
     "scripts/check-access-review-staleness.test.sh": "faac9bde128828f0ca584417c4be45a9bbb4620f95bf3b6f2a63557628e858ae",
     "scripts/check-aidd-phase-stats-recorded.sh": "59783cc1b76f3d1a9992278f302be78c36027ff8380bd879370025da807802e1",
@@ -53,6 +53,7 @@
     "scripts/check-local-main-freshness.test.sh": "08192cea9d6a5a94b35b80ac10713607b3308d36972f90da0386ec634e3bda65",
     "scripts/check-otel-collector-status.sh": "63b47baf6f9d50e049dcebdc8f01b0bc0f683456486ec48477e657e91b722f9c",
     "scripts/check-otel-collector-status.test.sh": "ab37655dee405642965d81124dc62f8d55996fb54adcb28a568e07174c8f5d22",
+    "scripts/check-pitfall-rulebook.test.sh": "6064da035ca921a47498168bd8cfc502799162aef9bcd59021ea8c86098a9d63",
     "scripts/check-plugin-integrity.sh": "301e5363d54b110a2db82fde4be69c2c52b274ae4c515e7e0111f853231f36f4",
     "scripts/check-plugin-integrity.test.sh": "63b4fcd17aa4215d0a8c6cd7ebf627994b1c16072cedfbd954c330b96f84eccb",
     "scripts/check-recovery-queue.sh": "93b69da797d356fce416b9ede31cfeeb59c2cb4887e5ef96bc9efeb00439e3e8",
@@ -123,9 +124,10 @@
     "skills/feature-spec/SKILL.md": "f3140ca81e368dec0d21ec586d2f155458be5f8058290be0ae99e822b6bfa6bf",
     "skills/structured-review/SKILL.md": "be2f6cb9ab69dc2088e8cdfb09b22e6cd1729017541607fae8dbd2a700cc864c",
     "templates/consumer/.claude/workflows/aidd-phase1-router.js": "3b05c5b4ef092f3d6e23542a147fc66b619ada8d740f998ba19e7e60865a1d0b",
-    "templates/consumer/CLAUDE.md": "ad3f2581a7d65022badcc76ee7dd860422b51c0abf63056e33bd8c177f8fea8b",
+    "templates/consumer/CLAUDE.md": "6e4560313fe0020fef66a01d31296a5b8fe44be554e7ea0d71a5ff05bafb7b6a",
     "templates/consumer/README.md": "a1b9f3ce73f162b2690778818d18a717790f82cd68ec4305a932312ec5d0f4e2",
-    "templates/consumer/aidd.config.json": "6941c595bec5f04ec40618a0a67e3d91d3b8d47015b524480e1411a5a55c1ce7",
-    "templates/consumer/catalog-registry.json": "e76132c4a74c60d4e4e4ddf60243c6a22691cd82d102fdadc3b795c4bc7a8a7e"
+    "templates/consumer/aidd.config.json": "8a79d67a78bc2cdd442302de93b9c440d108e4374ab1ee314c0455f8ede8ecff",
+    "templates/consumer/catalog-registry.json": "37fff591c33c4eed46cc42b9fbba0dc4d966415e576ddb7917800731d1328f4b",
+    "templates/consumer/check-design-pitfalls.md": "6447d3afe7d0eb612eccccf096b5390206d3bb7aa947fb184193252810e581b2"
   }
 }
