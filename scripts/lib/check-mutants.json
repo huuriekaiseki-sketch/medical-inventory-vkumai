@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 31,
+  "minMutants": 33,
   "mutants": [
     {
       "id": "CM-001",
@@ -290,6 +290,24 @@
       "replace": "      if (false) stale.push(w)",
       "expect": "scripts/check-harness-map.test.sh",
       "guards": "C-025（合格・検査不能・古い結果を 1 つの真偽値に潰さない）"
+    },
+    {
+      "id": "CM-032",
+      "breaks": "精度指標から「測れなかった件数」を分母に残すのをやめる（18/18 に見せる元の姿）",
+      "file": "scripts/lib/precision-metrics.mjs",
+      "find": "      denominator = measured + un",
+      "replace": "      denominator = measured",
+      "expect": "scripts/check-precision-metrics.test.sh",
+      "guards": "実行不能を分母から黙って消さないこと（レビューの設計提案 3）"
+    },
+    {
+      "id": "CM-033",
+      "breaks": "精度指標から、同条件のばらつきの判定を外す（いつも安定に見える）",
+      "file": "scripts/lib/precision-metrics.mjs",
+      "find": "  return { runs: values.length, min, max, spread: max - min, flaky: values.length > 1 && min !== max }",
+      "replace": "  return { runs: values.length, min, max, spread: max - min, flaky: false }",
+      "expect": "scripts/check-precision-metrics.test.sh",
+      "guards": "1 回の実行を合否に使わないこと（モデルの揺れを仕組みの劣化と読み違えない）"
     }
   ]
 }

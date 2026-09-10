@@ -322,6 +322,7 @@
         "scripts/check-escape-ledger.test.sh",
         "scripts/check-eval-runs-freshness.test.sh",
         "scripts/lib/judge-sweep-recall.test.sh",
+        "scripts/check-precision-metrics.test.sh",
         "scripts/check-fault-injection-drill-staleness.test.sh",
         "scripts/check-find-av-precision-recorded.test.sh",
         "scripts/check-flaky-tests.test.sh",

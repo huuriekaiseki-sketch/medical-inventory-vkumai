@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# WHY(2026-09-10、レビューの設計提案 3): 精度指標のまとめ（scripts/show-precision-metrics.sh）の
+#      回帰テスト。この道具が壊れると、**測れなかったことが測れたことに見える**か、
+#      **振れている指標が安定して見える**——どちらも「数字はあるのに読めない」状態になる。
+#
+#      固定するのは 3 つ:
+#        (a) 測れなかった件数を**分母から消さない**（18/18 に見せない）
+#        (b) 同条件のばらつきを出す（1 回の実行を合否に使ってよいかの判断材料）
+#        (c) 一度も測っていない指標を、0% とも 100% とも言わない
+#
+# 実行: bash scripts/check-precision-metrics.test.sh
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENGINE="$SCRIPT_DIR/lib/precision-metrics.mjs"
+SHOW="$SCRIPT_DIR/show-precision-metrics.sh"
+
+fail=0
+ok() { echo "  OK: $1"; }
+ng() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }
+assert_contains() {
+  if printf '%s' "$1" | grep -qF -- "$2"; then ok "$3"; else
+    ng "$3" "期待: $2"; echo "      実際: $1"; fi
+}
+assert_not_contains() {
+  if printf '%s' "$1" | grep -qF -- "$2"; then ng "$3" "出てはいけない: $2"; else ok "$3"; fi
+}
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+mkdir -p "$WORK/root/logs" "$WORK/root/docs/agents"
+
+run_engine() { # $@ = 追加の引数
+  ENGINE_OUT="$(node "$ENGINE" "$WORK/registry.json" --root "$WORK/root" "$@" 2>&1)"
+  ENGINE_CODE=$?
+}
+
+echo "=== scenario 1: 実物の登録簿で出力が出る ==="
+OUT="$(bash "$SHOW" 2>&1)"
+CODE=$?
+if [ "$CODE" -eq 0 ]; then ok "exit 0"; else ng "exit ${CODE}" "$OUT"; fi
+assert_contains "$OUT" "変異撃破率" "役割別の見出しが出る"
+assert_contains "$OUT" "限界" "限界を必ず出す"
+
+echo "=== scenario 2: 測れなかった件数を分母から消さない ==="
+# WHY: 2026-09-10 まで RLS の変異計測は「倒した / (倒した+生き残り)」で数えており、
+#      **測れなかった分が分母からも消えて**「18/18」に見えていた
+cat > "$WORK/registry.json" <<'JSON'
+{
+  "metrics": [
+    { "id": "PM-001", "name": "変異", "kind": "変異撃破率", "role": "H-06",
+      "log": "logs/m.jsonl", "numerator": "killed", "denominator": "targeted", "unmeasured": "errors" }
+  ]
+}
+JSON
+printf '{"at":"2026-01-01T00:00:00Z","killed":15,"targeted":18,"errors":3}\n' > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "15 / 18" "分母は対象件数のまま（15/15 に見せない）"
+assert_contains "$ENGINE_OUT" "測れなかった 3 件を分母に残している" "測れなかった件数を名指しする"
+assert_not_contains "$ENGINE_OUT" "15 / 15" "測れなかった分を分母から消さない"
+
+echo "=== scenario 2b: 状態の語で数えるときも、測れなかったを分母から消さない ==="
+# WHY(2026-09-10): scenario 2 は「分子・分母・測れなかった」を数で持つ指標だけを通しており、
+#      **状態の語（pass / fail / unmeasured / skipped）で数える経路を一度も通っていなかった**。
+#      変異計測（CM-032）がその未通過の経路を見つけた——テストが緑でも守っていない典型。
+cat > "$WORK/registry.json" <<'JSON'
+{
+  "metrics": [
+    { "id": "PM-003", "name": "実行可能", "kind": "実行可能率", "role": "H-02",
+      "log": "logs/s.jsonl", "stateField": "dataGuardResult",
+      "measuredStates": ["pass", "fail"], "unmeasuredStates": ["unmeasured", "skipped"] }
+  ]
+}
+JSON
+{
+  printf '{"at":"2026-01-01T00:00:00Z","dataGuardResult":"pass"}\n'
+  printf '{"at":"2026-01-02T00:00:00Z","dataGuardResult":"skipped"}\n'
+  printf '{"at":"2026-01-03T00:00:00Z","dataGuardResult":"unmeasured"}\n'
+} > "$WORK/root/logs/s.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "1 / 3" "測れた 1 件・分母は 3 件（1/1 に見せない）"
+assert_contains "$ENGINE_OUT" "測れなかった 2 件を分母に残している" "測れなかった件数を名指しする"
+assert_not_contains "$ENGINE_OUT" "1 / 1" "測れなかった分を分母から消さない"
+
+# 対照: 測れなかったが 0 件なら、そう言う
+printf '{"at":"2026-01-01T00:00:00Z","dataGuardResult":"pass"}\n' > "$WORK/root/logs/s.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "測れなかった 0 件" "全部測れたときは 0 件と言う（対照）"
+
+echo "=== scenario 3: 同条件のばらつきを出す ==="
+cat > "$WORK/registry.json" <<'JSON'
+{
+  "metrics": [
+    { "id": "PM-001", "name": "変異", "kind": "変異撃破率", "role": "H-06",
+      "log": "logs/m.jsonl", "numerator": "killed", "denominator": "targeted", "unmeasured": "errors" }
+  ]
+}
+JSON
+# WHY: 1 回の実行を合否に使うと、モデルの揺れを仕組みの劣化と読み違える
+{
+  printf '{"at":"2026-01-01T00:00:00Z","killed":18,"targeted":18,"errors":0}\n'
+  printf '{"at":"2026-01-02T00:00:00Z","killed":9,"targeted":18,"errors":0}\n'
+} > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "振れている" "同じ条件で結果が違えば振れていると言う"
+assert_contains "$ENGINE_OUT" "50% 〜 100%" "幅を数字で出す"
+assert_contains "$ENGINE_OUT" "1 回の実行を合否に使えない" "何を意味するかを書く"
+
+{
+  printf '{"at":"2026-01-01T00:00:00Z","killed":18,"targeted":18,"errors":0}\n'
+  printf '{"at":"2026-01-02T00:00:00Z","killed":18,"targeted":18,"errors":0}\n'
+} > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "安定" "同じ結果が続けば安定と言う（対照）"
+# 総括行にも「振れている指標は無い」という文字列が出るので、**指標の行**だけを見る
+assert_not_contains "$ENGINE_OUT" '**振れている**）' "安定しているものを振れていると言わない"
+assert_contains "$ENGINE_OUT" "振れている指標は無い" "総括でも振れていないと言う"
+
+echo "=== scenario 4: 一度も測っていない指標は 0% とも 100% とも言わない ==="
+rm -f "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "一度も測っていない" "記録が無いことをそのまま出す"
+assert_not_contains "$ENGINE_OUT" "0 / 0" "測っていないものを数字にしない"
+
+echo "=== scenario 5: 1 回だけの記録では、ばらつきを判定しない ==="
+printf '{"at":"2026-01-01T00:00:00Z","killed":18,"targeted":18,"errors":0}\n' > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "ばらつきは 2 回以上でないと分からない" "判定できないことを安定と言わない"
+
+echo "=== scenario 6: 壊れた行があっても止まらない（読める行だけを使う） ==="
+{
+  printf 'これは JSON ではない\n'
+  printf '{"at":"2026-01-01T00:00:00Z","killed":18,"targeted":18,"errors":0}\n'
+} > "$WORK/root/logs/m.jsonl"
+run_engine
+if [ "$ENGINE_CODE" -eq 0 ]; then ok "壊れた行があっても exit 0"; else ng "壊れた行で落ちる" "$ENGINE_OUT"; fi
+assert_contains "$ENGINE_OUT" "18 / 18" "読める行から数字を出す"
+
+echo "=== scenario 7: 別の fixture セットを混ぜない ==="
+# WHY: 混ぜると「どの fixture が振れているか」が分からなくなる（C-031: 数える単位が違う）
+cat > "$WORK/registry.json" <<'JSON'
+{
+  "metrics": [
+    { "id": "PM-002", "name": "見逃し", "kind": "見逃し率", "role": "H-01",
+      "log": "docs/agents/eval-runs.jsonl",
+      "filter": { "field": "script", "value": "eval-sweep-recall" },
+      "groupBy": "fixtureSet", "numerator": "pass", "denominator": "total" }
+  ]
+}
+JSON
+{
+  printf '{"timestamp":"2026-01-01T00:00:00Z","script":"eval-sweep-recall","fixtureSet":"a","pass":2,"total":2}\n'
+  printf '{"timestamp":"2026-01-02T00:00:00Z","script":"eval-sweep-recall","fixtureSet":"b","pass":0,"total":2}\n'
+  printf '{"timestamp":"2026-01-03T00:00:00Z","script":"other","fixtureSet":"a","pass":0,"total":9}\n'
+} > "$WORK/root/docs/agents/eval-runs.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "[a]" "fixture セットごとに分ける"
+assert_contains "$ENGINE_OUT" "[b]" "もう一方も出す"
+assert_not_contains "$ENGINE_OUT" "0 / 9" "別の script の記録を混ぜない"
+
+echo "=== scenario 8: 登録簿に指標が 1 件も無ければ落ちる（fail-open 防止） ==="
+printf '{"metrics": []}' > "$WORK/registry.json"
+run_engine
+if [ "$ENGINE_CODE" -ne 0 ]; then ok "0 件なら落ちる"; else ng "0 件で静かに通る" "$ENGINE_OUT"; fi
+assert_contains "$ENGINE_OUT" "1 件も無い" "読めていない疑いだと言う"
+
+echo "=== scenario 9: 登録簿が無い導入先は黙って通る ==="
+OUT="$(PRECISION_METRICS_REGISTRY="$WORK/nope.json" bash "$SHOW" 2>&1)"
+CODE=$?
+if [ "$CODE" -eq 0 ]; then ok "登録簿が無ければ通る"; else ng "落ちる" "$OUT"; fi
+assert_contains "$OUT" "対象 0 件" "対象が無いと言う"
+
+if [ "$fail" -ne 0 ]; then
+  echo "FAILED"
+  exit 1
+fi
+echo "ALL PASSED"
