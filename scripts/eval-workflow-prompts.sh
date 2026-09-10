@@ -34,6 +34,7 @@ set -euo pipefail
 #                                         domain.md・既存migration一覧を読み込んで判断するため300秒では
 #                                         実測でタイムアウトすることがあった。issue #401）
 #   EVAL_WORKFLOW_PROMPTS_AGENT_CMD     - 実際の`claude -p`呼び出しの代わりに使うコマンド
+#   EVAL_WORKFLOW_PROMPTS_MODEL     - manifest のモデルを上書きする（同じ fixture を別モデルで測る）
 #   EVAL_WORKFLOW_PROMPTS_DEBUG_DIR     - 指定すると各caseの生出力を<case名>.raw.txtとして保存
 #                                         する（status不一致の原因調査用。issue #401）
 
@@ -60,7 +61,10 @@ fi
 AGENT_TYPE="$(jq -r '.agentType' "$MANIFEST_FILE")"
 PROMPT_MODULE="$(jq -r '.promptModule' "$MANIFEST_FILE")"
 PROMPT_FN="$(jq -r '.promptFn' "$MANIFEST_FILE")"
-MODEL="$(jq -r '.model' "$MANIFEST_FILE")"
+# モデルは manifest の値が既定。**実行時に差し替えられる**（2026-09-10）——
+# 「指示が悪いのか、モデルの容量が足りないのか」を分けて測るための口。
+# 差し替えた回は記録の `model` も変わるので、条件が違う回として扱われ混ざらない。
+MODEL="${EVAL_WORKFLOW_PROMPTS_MODEL:-$(jq -r '.model' "$MANIFEST_FILE")}"
 JSON_SCHEMA="$(jq -c '.jsonSchema' "$MANIFEST_FILE")"
 
 mkdir -p "$LOCK_DIR"

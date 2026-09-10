@@ -210,6 +210,7 @@
       "checks": [
         "scripts/check-dependency-change.test.sh",
         "scripts/check-direct-ddl-execution.test.sh",
+        "scripts/check-definer-authz-gaps.test.sh",
         "scripts/check-guard-regressions.test.sh",
         "scripts/check-lockfile-integrity.test.sh",
         "scripts/check-pii-leak.test.sh",

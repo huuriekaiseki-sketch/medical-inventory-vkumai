@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 45,
+  "minMutants": 48,
   "mutants": [
     {
       "id": "CM-001",
@@ -416,6 +416,33 @@
       "replace": "  fixtures_dirty=\"false\"",
       "expect": "scripts/check-agent-output.test.sh",
       "guards": "記録の木のハッシュが実際に測ったものを表すか（fixture は作業ツリーから読むので、未コミットだとずれる）"
+    },
+    {
+      "id": "CM-046",
+      "breaks": "SECURITY DEFINER の認可検査から違反の報告を外す（無防備な関数を通す）",
+      "file": "scripts/lib/scan-definer-authz-gaps.mjs",
+      "find": "    if (info.guards.length > 0) continue",
+      "replace": "    if (true) continue",
+      "expect": "scripts/check-definer-authz-gaps.test.sh",
+      "guards": "client から呼べる SECURITY DEFINER に呼び出し元の判定が要ること（2026-09-10 に LLM が 5 回見逃した欠陥）"
+    },
+    {
+      "id": "CM-047",
+      "breaks": "認可チェックの一覧に `user_facilities` を足す（「誰かが所属」を認可と読む）",
+      "file": "scripts/lib/scan-definer-authz-gaps.mjs",
+      "find": "  { name: 'auth.uid()', re: /\\bauth\\.uid\\s*\\(/i },",
+      "replace": "  { name: 'auth.uid()', re: /\\bauth\\.uid\\s*\\(|\\buser_facilities\\b/i },",
+      "expect": "scripts/check-definer-authz-gaps.test.sh",
+      "guards": "「**呼び出し元が**属するか」と「**誰かが**属するか」を混ぜないこと（held-out fixture の形）"
+    },
+    {
+      "id": "CM-048",
+      "breaks": "SECURITY DEFINER の認可検査から、走査の空振り防止を外す",
+      "file": "scripts/lib/scan-definer-authz-gaps.mjs",
+      "find": "  if (latest.size === 0) {\n    console.error('scan-definer-authz-gaps: 関数を 1 つも見つけられなかった（走査が壊れている）')",
+      "replace": "  if (false) {\n    console.error('scan-definer-authz-gaps: 関数を 1 つも見つけられなかった（走査が壊れている）')",
+      "expect": "scripts/check-definer-authz-gaps.test.sh",
+      "guards": "C-021（走査が壊れたら違反 0 件で合格に見える）"
     }
   ]
 }

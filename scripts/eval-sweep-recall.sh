@@ -26,6 +26,7 @@ set -euo pipefail
 #   EVAL_SWEEP_RECALL_TIMEOUT_SECONDS - 1caseあたりのタイムアウト秒数（省略時は900。sweep-dataは
 #     全リポジトリのAPIルート・data層を走査するため実測で数分〜30分近くかかることがある）
 #   EVAL_SWEEP_RECALL_AGENT_CMD     - 実際の`claude -p`呼び出しの代わりに使うコマンド
+#   EVAL_SWEEP_RECALL_MODEL     - manifest のモデルを上書きする（同じ fixture を別モデルで測る）
 #   EVAL_SWEEP_RECALL_DEBUG_DIR     - 指定すると各caseの生出力(JSON)を<case名>.jsonとして保存する
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,7 +50,10 @@ if [ ! -f "$MANIFEST_FILE" ]; then
 fi
 
 AGENT_TYPE="$(jq -r '.agentType' "$MANIFEST_FILE")"
-MODEL="$(jq -r '.model' "$MANIFEST_FILE")"
+# モデルは manifest の値が既定。**実行時に差し替えられる**（2026-09-10）——
+# 「指示が悪いのか、モデルの容量が足りないのか」を分けて測るための口。
+# 差し替えた回は記録の `model` も変わるので、条件が違う回として扱われ混ざらない。
+MODEL="${EVAL_SWEEP_RECALL_MODEL:-$(jq -r '.model' "$MANIFEST_FILE")}"
 
 # docs/agents/agent-result-schema.md参照。aidd-phase1.jsのAGENT_RESULT_SCHEMAと同一。
 JSON_SCHEMA='{"type":"object","properties":{"status":{"type":"string","enum":["pass","blocked"]},"detail":{"type":"string"}},"required":["status","detail"]}'

@@ -51,7 +51,10 @@ const IMPLIES = {
 }
 
 /** 関数の定義そのもの（本文の外にある宣言も拾う）。fail-open 防止の突合に使う */
-const DEFINITION_RE = /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?[a-z_][a-z0-9_]*\s*\(/gi
+// WHY(パーサを外へ出す、2026-09-10): migration の関数定義を読む正規表現は、
+//      scripts/lib/scan-definer-authz-gaps.mjs も同じものを要る。
+//      別々に持つと**同じ問いに 2 か所が別々に答える**（E-053）。ここを唯一の正本にする。
+export const DEFINITION_RE = /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?[a-z_][a-z0-9_]*\s*\(/gi
 /**
  * 定義 1 件ぶん（頭 + 本文）。
  *
@@ -64,10 +67,10 @@ const DEFINITION_RE = /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?[a-z
  *      気づけたのは下の「宣言の数と解析できた数を突き合わせる」空振り防止のほう。
  *      **確かめたつもりの grep より、数が合うかを見るほうが強い。**
  */
-const PARSE_RE =
+export const PARSE_RE =
   /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?([a-z_][a-z0-9_]*)\s*\(([\s\S]*?)\)\s*returns([\s\S]*?)\$([a-z_]*)\$([\s\S]*?)\$\4\$/gi
 
-const stripComments = (sql) => sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n]*/g, ' ')
+export const stripComments = (sql) => sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n]*/g, ' ')
 
 export function scan(migrationsDir = path.join(REPO_ROOT, 'supabase/migrations')) {
   /** 関数名 → 最後に定義した版 */
