@@ -153,7 +153,9 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
     continue
   fi
   TOTAL=$((TOTAL + 1))
-  EXPECTED_PATH="$(jq -r '.expectedFilePathContains' "$expected_file")"
+  # WHY(配列をそのまま出さない、2026-09-10): expectedFilePathContains は文字列か配列。
+  #      `jq -r` に配列を渡すと JSON のまま複数行で出て、MISS の理由が読めなくなる（実測）
+  EXPECTED_PATH="$(jq -r '.expectedFilePathContains | if type == "array" then join(" / ") else . end' "$expected_file")"
 
   CLONE_DIR="$(mktemp -d)"
   CLONE_EXIT=0
