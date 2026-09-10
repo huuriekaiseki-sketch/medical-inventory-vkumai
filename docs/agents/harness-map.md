@@ -33,7 +33,7 @@
 
 | 役割 | 何を守るか | 起動 | 入口 | 検査 |
 | --- | --- | --- | --- | --- |
-| ワークフロー（H-01） | 決めた順番（調査 → 仕様 → 実装 → 統合 → 検証）を飛ばさない。飛ばしたら気づく | **人**（フローの起動は人。**記録漏れの検知だけ**が Stop hook で機械化されている） | `.claude/workflows/aidd-phase1-router.js`<br>`.claude/workflows/aidd-phase2.js` | 29 本 |
+| ワークフロー（H-01） | 決めた順番（調査 → 仕様 → 実装 → 統合 → 検証）を飛ばさない。飛ばしたら気づく | **人**（フローの起動は人。**記録漏れの検知だけ**が Stop hook で機械化されている） | `.claude/workflows/aidd-phase1-router.js`<br>`.claude/workflows/aidd-phase2.js` | 30 本 |
 | データ（H-02） | テストのデータが互いを壊さない。消しすぎない・消し残さない | **機械**（統合テスト・E2E を回すたびに走行の前後で実測する（走らせるのは人だが、走れば必ず測る）） | `scripts/run-integration-tests.sh`<br>`scripts/run-e2e-tests.sh` | 4 本 |
 | 契約（H-03） | 決めたことと動くものが食い違わない（操作の契約・層の突合・入口の検証） | **機械**（npm test と hooks-test が毎回回す） | `npm test`<br>`bash scripts/check-operation-contracts.test.sh` | 29 本 |
 | 実装（H-04） | 書いたものが型として通り、単体で動き、ビルドできる | **機械**（npm test / npm run typecheck / npm run lint / next build） | `npm test`<br>`npm run typecheck`<br>`npm run lint` | 8 本 |
@@ -63,10 +63,10 @@
 | `input-validation-baseline.json`#pending.length | 本文を検証せずに読む route（H-03） | route | **0** |
 | `query-validation-baseline.json`#pending.length | クエリを検証せずに読む route（H-03） | route | **0** |
 | `write-path-registry.json`#maxGaps | DB は書けるのにアプリに道が無い組み合わせ（H-05） | 組み合わせ | **0** |
-| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **58** |
+| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **63** |
 | `rls-mutants.json`#mutants.length | RLS・RPC の壊し方（H-06） | 件 | **18** |
 
-（ハーネス 8 件・検査 129 本・台帳 6 件。**検査はこの表で全数**——どこにも属さない検査があれば生成そのものが落ちる）
+（ハーネス 8 件・検査 130 本・台帳 6 件。**検査はこの表で全数**——どこにも属さない検査があれば生成そのものが落ちる）
 
 <!-- generated:harness-map end -->
 
@@ -130,6 +130,14 @@ ratchet を持つ仕組みはそれぞれ**別の台帳**を持っている。**
 - **実測の記録を持たない役割がある。** H-01（ワークフロー）・H-03（契約）・H-04（実装）・
   H-07（監視）・H-08（リリース）は「最後に回した結果」を持たない。理由は上の契約の表に書いてある。
   持たない理由が「CI が毎回回すから」の場合、**CI が止まっていれば誰も気づかない**
+- **逆向きの ratchet が数えるのは `scripts/*.test.sh` と `scripts/lib/*.test.sh` だけ。**
+  `npm test`（vitest）側の検査を足しても「どこにも属さない検査」としては落ちない。
+  登録簿に**書けば**実在は確かめられるが、**書き忘れは検知されない**。
+  2026-09-10 にこの限界が実際に現れた——攻撃表の ratchet を vitest へ移したとき、
+  登録簿の合計は 130 になったが hook 回帰が回すのは 129 本で、
+  **差の 1 本（`src/__tests__/api-attack-matrix-ratchet.test.ts`）は手で登録したから表に載っている**。
+  vitest のテストは 242 ファイルあるので全部を登録簿に載せるのは現実的でなく、
+  いまは「役割を持たせたい検査だけ手で足す」運用になっている
 - 役割の切り方はこのリポジトリの都合で、一般的な分類ではない
 
 ## 更新の引き金

@@ -72,6 +72,35 @@ else:
   return 0
 }
 
+# WHY(走らせる前に言う、2026-09-10・レビュー指摘 R11 の後段):
+#   未コミットの有無は `record_eval_run` が記録に残していたが、**実行時には何も出していなかった**。
+#   ところがこの 2 つは、走らせている本人がその場で知らないと意味がない:
+#
+#     - `.claude/workflows` が未コミット → eval は **clone(HEAD)** からプロンプトを読むので、
+#       **直したつもりの版は測られていない**。「直したのに数字が変わらない」と悩むことになる
+#     - `scripts/eval-fixtures` が未コミット → fixture は**作業ツリー**から読むので測ってはいるが、
+#       記録に残る `fixturesTree`（HEAD の木）は**実際に測ったものを表さない**
+#
+#   ずれ方が逆なので、混ぜずに別々の文で言う。**記録と同じ判定を使う**（E-053: 2 か所で別々に答えない）。
+#   $1=リポジトリのパス
+warn_if_dirty() {
+  local repo_dir="${1:-.}"
+  local dirty
+  dirty="$(git -C "$repo_dir" status --porcelain -- ".claude/workflows" 2>/dev/null || true)"
+  if [ -n "$dirty" ]; then
+    echo "[eval] 注意: .claude/workflows に未コミットの変更があります。**eval は clone(HEAD) からプロンプトを読むので、その変更は測られません。** 測りたいならコミットしてから回してください。" >&2
+  fi
+  dirty="$(git -C "$repo_dir" status --porcelain -- ".claude/agents" 2>/dev/null || true)"
+  if [ -n "$dirty" ]; then
+    echo "[eval] 注意: .claude/agents に未コミットの変更があります。**探索手順の変更は測られません**（プロンプトと同じく clone から読みます）。" >&2
+  fi
+  dirty="$(git -C "$repo_dir" status --porcelain -- "scripts/eval-fixtures" 2>/dev/null || true)"
+  if [ -n "$dirty" ]; then
+    echo "[eval] 注意: scripts/eval-fixtures に未コミットの変更があります。fixture は作業ツリーから読むので**測ってはいます**が、記録に残る fixturesTree は HEAD の木なので、この回の条件を正しく表しません。" >&2
+  fi
+  return 0
+}
+
 # WHY(記録が本題を壊さない、2026-09-10): 呼び出し元の eval スクリプトは `set -euo pipefail` で動く。
 #      最初の版はリポジトリを解決できないときに `cd` が失敗し、**呼び出し元ごと異常終了させて**
 #      その回の不一致の報告が出力されなくなった（テストが掴んだ）。
@@ -137,7 +166,8 @@ record_eval_run() {
     "${EVAL_COST_USD:-0}" "${EVAL_INPUT_TOKENS:-0}" "${EVAL_OUTPUT_TOKENS:-0}" \
     "${EVAL_USAGE_SAMPLES:-0}" "${EVAL_USAGE_MISSING:-0}" "${EVAL_CACHE_READ_TOKENS:-0}" \
     "$workflows_dirty" "$fixtures_dirty" "$agents_tree" "$agents_dirty" "$judge_blob" \
-    "${EVAL_FINDINGS_REPORTED:--1}" "${EVAL_FINDINGS_SAMPLES:-0}" "${EVAL_FINDINGS_UNREADABLE:-0}" <<'PY' || return 0
+    "${EVAL_FINDINGS_REPORTED:--1}" "${EVAL_FINDINGS_SAMPLES:-0}" "${EVAL_FINDINGS_UNREADABLE:-0}" \
+    "${EVAL_LOOSE_PASS:--1}" "${EVAL_DETAILS_DIR:-}" <<'PY' || return 0
 import json, sys
 from datetime import datetime, timezone
 
@@ -146,7 +176,8 @@ from datetime import datetime, timezone
  cost_usd, input_tokens, output_tokens, usage_samples, usage_missing,
  cache_read_tokens, workflows_dirty, fixtures_dirty,
  agents_tree, agents_dirty, judge_blob,
- findings_reported, findings_samples, findings_unreadable) = sys.argv[1:26]
+ findings_reported, findings_samples, findings_unreadable,
+ loose_pass, details_dir) = sys.argv[1:28]
 row = {
     "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "script": script,
@@ -189,6 +220,19 @@ if int(findings_samples) > 0:
     row["findingsSamples"] = int(findings_samples)
 if int(findings_unreadable) > 0:
     row["findingsUnreadable"] = int(findings_unreadable)
+# 従来の判定（本文全体で「パスがある AND キーワードがある」）での合格数。
+# 2026-09-10 に判定を「**同じ指摘の中で**そろっているか」へ変えた（R11 の後段）。
+# **切り替えの影響を後から測れるように両方を残す**——差が出た回は、
+# 「パスとキーワードが別々の指摘に分散していた」＝ 前の判定が甘かった回である。
+# -1 は「その eval では測っていない」（0 と混ぜない）
+if int(loose_pass) >= 0:
+    row["loosePass"] = int(loose_pass)
+# 判定に使った回答本文の置き場。**採点器を直したときに過去の回を測り直すために要る**。
+# 2026-09-10 まで detail は判定後に捨てていたので、R11 を直しても
+# **それ以前の回は永久に測り直せない**（今日の数字は前の判定のまま）。
+# logs/ は git 管理外（機械ローカル）なので、ここにはパスだけを残す
+if details_dir:
+    row["detailsDir"] = details_dir
 if int(usage_missing) > 0:
     # 使用量を取れなかった回。混ぜずに件数で残す
     row["usageMissing"] = int(usage_missing)

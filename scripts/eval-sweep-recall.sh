@@ -132,6 +132,12 @@ run_agent_with_timeout() {
 # **ループより前に読み込む**——accumulate_usage をループの中で呼ぶため
 # shellcheck source=lib/record-eval-run.sh
 source "$SCRIPT_DIR/lib/record-eval-run.sh"
+# 回答本文の保存先を決めるため（worktree をまたいで共有される logs/）
+# shellcheck source=lib/resolve-log-dir.sh
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+
+# 未コミットの変更があると「測ったつもり」がずれる。**走らせる前に言う**（判定は記録と共有）
+warn_if_dirty "$REPO_DIR"
 
 # 所要時間を測る起点（設計提案 3「再現性と費用」のうち時間の側）
 RUN_STARTED_AT="$(date +%s)"
@@ -141,7 +147,18 @@ FINDINGS_SAMPLES=0
 FINDINGS_UNREADABLE=0
 TOTAL=0
 HIT_COUNT=0
+# 従来の判定（本文全体）での合格数。**判定を切り替えた影響を測るためだけに数える**（R11 の後段）
+LOOSE_HIT_COUNT=0
 MISS_LINES=""
+
+# 判定に使った回答本文の保存先。**採点器を直したとき、過去の回を測り直すために要る**。
+# 2026-09-10 まで判定後に捨てていたので、それ以前の回は永久に測り直せない。
+# logs/ は git 管理外（機械ローカル）。書けなくても本題は止めない
+DETAILS_DIR=""
+if _details_root="$(resolve_log_dir 2>/dev/null)"; then
+  DETAILS_DIR="$_details_root/eval-details/$(date -u +%Y%m%dT%H%M%SZ)-${LAYER}"
+  mkdir -p "$DETAILS_DIR" 2>/dev/null || DETAILS_DIR=""
+fi
 
 for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
   [ -d "$case_dir" ] || continue
@@ -209,6 +226,15 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
     echo "[$case_name] 注意: エージェント出力が JSON ではないため生出力全体を判定対象にしました" >&2
   fi
   IS_HIT="$(EXPECTED_FILE="$expected_file" DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py")"
+  # 従来の判定（本文全体で見る）も併せて取る。2026-09-10 に判定を「**同じ指摘の中で**
+  # そろっているか」へ変えたので、**切り替えの影響を測れるように両方を残す**（R11 の後段）
+  IS_HIT_LOOSE="$(EXPECTED_FILE="$expected_file" DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py" --loose 2>/dev/null || echo "$IS_HIT")"
+  [ "$IS_HIT_LOOSE" = "true" ] && LOOSE_HIT_COUNT=$((LOOSE_HIT_COUNT + 1))
+  # 判定に使った本文を残す。**採点器を直したときに過去の回を測り直すために要る**——
+  # 2026-09-10 まで捨てていたので、それ以前の回は測り直せない
+  if [ -n "$DETAILS_DIR" ]; then
+    cp "$DETAIL_FILE" "$DETAILS_DIR/${case_name}.txt" 2>/dev/null || true
+  fi
   # 実コードへの指摘の多さを追う（2026-09-10）。**本物か誤りかは分けない**——
   # 分けるのは人の仕事で、ここで測れるのは「増えた／減った」だけ。
   # 読めなかった回（-1）は 0 と混ぜず、別に数える。
@@ -248,6 +274,12 @@ fi
 echo ""
 echo "=== eval-sweep-recall: $LAYER ==="
 echo "recall: $HIT_COUNT / $TOTAL"
+# 判定を切り替えた影響をその場でも見せる（2026-09-10・R11 の後段）。
+# 差があるということは、パスとキーワードが**別々の指摘に分散**していた回があったということ
+if [ "$LOOSE_HIT_COUNT" -ne "$HIT_COUNT" ]; then
+  echo "（従来の判定＝本文全体で見ると ${LOOSE_HIT_COUNT} / ${TOTAL}。差の分は、期待パスと期待キーワードが別々の指摘に分かれていた）"
+fi
+[ -n "$DETAILS_DIR" ] && echo "回答本文: $DETAILS_DIR"
 
 # 条件（木のハッシュ・モデル）・所要時間・費用も一緒に残す
 # ——**同じ条件の回どうしでしかばらつきは比べられない**（設計提案 3）
@@ -255,6 +287,8 @@ EVAL_RUNS_REPO_DIR="$REPO_DIR" \
 EVAL_FINDINGS_REPORTED="$FINDINGS_REPORTED" \
 EVAL_FINDINGS_SAMPLES="$FINDINGS_SAMPLES" \
 EVAL_FINDINGS_UNREADABLE="$FINDINGS_UNREADABLE" \
+EVAL_LOOSE_PASS="$LOOSE_HIT_COUNT" \
+EVAL_DETAILS_DIR="$DETAILS_DIR" \
 record_eval_run \
   "eval-sweep-recall" "$LAYER" "$HIT_COUNT" "$TOTAL" "$RUN_STARTED_AT" "$MODEL"
 

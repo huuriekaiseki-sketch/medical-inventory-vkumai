@@ -165,6 +165,9 @@ run_agent_with_timeout() {
 # shellcheck source=lib/record-eval-run.sh
 source "$SCRIPT_DIR/lib/record-eval-run.sh"
 
+# 未コミットの変更があると「測ったつもり」がずれる。**走らせる前に言う**（判定は記録と共有）
+warn_if_dirty "$REPO_DIR"
+
 # 所要時間を測る起点（設計提案 3「再現性と費用」のうち時間の側）
 RUN_STARTED_AT="$(date +%s)"
 TOTAL=0

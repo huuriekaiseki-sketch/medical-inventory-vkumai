@@ -1,0 +1,15 @@
+{
+  "heldOut": true,
+  "expectedFilePathContains": [
+    "eval-fixture-holdout-notes.ts",
+    "eval_fixture_holdout_notes.sql"
+  ],
+  "expectedKeywords": [
+    "null",
+    "NULL",
+    "nullable",
+    "NOT NULL",
+    "省略可能",
+    "任意"
+  ]
+}

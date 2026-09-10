@@ -1,0 +1,12 @@
+{
+  "heldOut": true,
+  "expectedFilePathContains": "eval-fixture-holdout-rows/route.ts",
+  "expectedKeywords": [
+    "ページネーション",
+    "上限",
+    "limit",
+    "range",
+    "全件",
+    "件数制限"
+  ]
+}

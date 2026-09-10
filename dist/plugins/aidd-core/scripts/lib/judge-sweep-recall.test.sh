@@ -114,6 +114,82 @@ echo "=== scenario 6: 全角コロン・大文字小文字の揺れを吸収す�
 assert_judge "$WORK/expected.json" 'findings：0
 route.ts の認可は問題ありません' "false" "findings：0 も 0 件として読む"
 
+echo "=== scenario 7: パスとキーワードが別々の指摘に分かれていたら HIT にしない（R11 の後段） ==="
+# WHY(2026-09-10): Sweep はリポジトリ全体を掃くので、**この fixture とは無関係な指摘**が
+#      何件も並ぶのが普通。本文全体で「パスがある AND キーワードがある」を見ていたので、
+#      2 つの別々の指摘にまたがっていても HIT になっていた（＝欠陥を外していても満点）。
+SPLIT_FINDINGS='FINDINGS: 2
+1. app/api/eval-fixture-recall/[id]/route.ts のレスポンス型が統一されていません
+2. src/lib/other/service.ts で requireAuth の呼び出し順序が読みにくいです'
+assert_judge "$WORK/expected.json" "$SPLIT_FINDINGS" "false" "別々の指摘に分散していたら MISS"
+
+SAME_FINDING='FINDINGS: 2
+1. src/lib/other/service.ts のログ出力が冗長です
+2. app/api/eval-fixture-recall/[id]/route.ts で requireAuth を呼んでいません'
+assert_judge "$WORK/expected.json" "$SAME_FINDING" "true" "同じ指摘の中でそろっていれば HIT（対照）"
+
+# 1 つの指摘が入れ子の箇条書きで続く形（実際の sweep 出力でいちばん多い）。
+# ここを切ってしまうと 1 件が分断されて、実際より recall が低く出る
+NESTED='FINDINGS: 1
+1. **認可チェックの欠落**
+   - ファイル: app/api/eval-fixture-recall/[id]/route.ts
+   - 問題: requireAuth を呼んでいないため、未認証でも取得できます'
+assert_judge "$WORK/expected.json" "$NESTED" "true" "入れ子の箇条書きは 1 つの指摘として扱う（分断しない）"
+
+# 見出しで区切る書き方も、別の指摘として切る
+HEADINGS='FINDINGS: 2
+## app/api/eval-fixture-recall/[id]/route.ts
+レスポンスの形が他と揃っていません。
+
+## src/lib/other/service.ts
+requireAuth の呼び出しが読みにくいです。'
+assert_judge "$WORK/expected.json" "$HEADINGS" "false" "見出しで分かれた別の指摘も分散として扱う"
+
+echo "=== scenario 7b: 陰性対照も同じ切り方で見る（他ファイルへの指摘で落ちない） ==="
+assert_judge "$WORK/expected-negative.json" "$SPLIT_FINDINGS" "true" "分散した指摘は陰性対照を落とさない"
+assert_judge "$WORK/expected-negative.json" "$SAME_FINDING" "false" "その fixture を名指しした指摘は陰性対照で MISS"
+
+echo "=== scenario 7c: --loose は従来どおり本文全体で見る（切り替えの影響を測る記録用） ==="
+judge_loose() {
+  printf '%s' "$2" > "$WORK/detail-loose.txt"
+  EXPECTED_FILE="$1" DETAIL_FILE="$WORK/detail-loose.txt" python3 "$JUDGE" --loose
+}
+got_loose="$(judge_loose "$WORK/expected.json" "$SPLIT_FINDINGS")"
+if [ "$got_loose" = "true" ]; then
+  echo "  OK: 従来の判定では分散していても HIT になる（この差が R11 そのもの）"
+else
+  echo "  NG: --loose が従来の挙動を再現していない（実際 ${got_loose}）"
+  fail=1
+fi
+got_loose2="$(judge_loose "$WORK/expected.json" "$NEGATIVE")"
+if [ "$got_loose2" = "false" ]; then
+  echo "  OK: --loose でも「指摘なし」は HIT にしない（そこは前に直した）"
+else
+  echo "  NG: --loose が「指摘なし」を HIT にした（実際 ${got_loose2}）"
+  fail=1
+fi
+
+echo "=== scenario 7d: 期待語を並べただけでファイルを名指ししなければ MISS ==="
+# WHY(2026-09-10・R11 の追加テスト): 「認証・認可の扱いに注意が必要」のような**総括**は、
+#      指摘としては何も特定していない。同じ指摘の中で見る判定なら自然に落ちるが、
+#      **落ちることを固定する**（判定を戻したときに気づけるように）
+KEYWORDS_ONLY='FINDINGS: 1
+1. 全体として requireAuth と認可の扱いに注意が必要です'
+assert_judge "$WORK/expected.json" "$KEYWORDS_ONLY" "false" "語だけ並べた総括は HIT にしない"
+
+echo "=== scenario 7e: 同じ型の欠陥を別ファイルで指摘していたら MISS（囮） ==="
+# WHY: fixture には囮（同じ型の欠陥を持つ別ファイル）を置いた case がある
+#      （sweep-ui/case-2-late-suspense-after-decoy）。囮だけを指摘して本命を外した回を
+#      HIT と読むと、**囮に引っかかったことが recall に現れない**
+DECOY_ONLY='FINDINGS: 1
+1. app/api/other-feature/[id]/route.ts で requireAuth を呼んでおらず、認可チェックが抜けています'
+assert_judge "$WORK/expected.json" "$DECOY_ONLY" "false" "囮だけの指摘は HIT にしない"
+
+DECOY_AND_REAL='FINDINGS: 2
+1. app/api/other-feature/[id]/route.ts で requireAuth を呼んでいません
+2. app/api/eval-fixture-recall/[id]/route.ts でも requireAuth を呼んでいません'
+assert_judge "$WORK/expected.json" "$DECOY_AND_REAL" "true" "囮と本命の両方を挙げていれば HIT（対照）"
+
 echo "=== 指摘の件数を返す（--count。実コードへの指摘の多さを追うため） ==="
 # WHY(2026-09-10): 陰性対照は「その fixture への指摘」しか数えないので、
 #      **実在ファイルへの誤指摘が 0 件として素通り**していた。

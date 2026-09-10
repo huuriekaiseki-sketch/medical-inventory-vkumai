@@ -45,6 +45,7 @@
         "scripts/codex-skip-marker-deny.test.sh",
         "scripts/create-worktree.test.sh",
         "scripts/derive-test-selection.test.sh",
+        "scripts/check-holdout-isolation.test.sh",
         "scripts/eval-sweep-recall.test.sh",
         "scripts/eval-workflow-prompts.test.sh",
         "scripts/log-subagent-hook-skeleton.test.sh",

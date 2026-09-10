@@ -109,6 +109,73 @@ fi
 LINES="$(wc -l < "$DUMMY_REPO/docs/agents/eval-runs.jsonl" | tr -d ' ')"
 [ "$LINES" -eq 5 ] && ok "5 回の実行で 5 行" || ng "行数が ${LINES}（期待 5）"
 
+echo "=== scenario 6: 期待パスとキーワードが別々の指摘に分かれていたら MISS（R11 の後段） ==="
+# WHY(2026-09-10): Sweep はリポジトリ全体を掃くので、この fixture と無関係な指摘が並ぶのが普通。
+#      本文全体で「パスがある AND キーワードがある」を見ていたため、
+#      **2 つの別々の指摘にまたがっていても HIT** になっていた（＝欠陥を外していても満点）。
+cat > "$MOCK_RESPONSE_FILE" <<'RESP'
+{"status":"pass","detail":"FINDINGS: 2\n1. src/lib/probe/repository.ts のレスポンス型が統一されていません\n2. src/lib/other/service.ts に internalNote の型不一致があります"}
+RESP
+run_eval
+assert_contains "$OUT" "MISS" "分散した指摘は MISS"
+assert_contains "$OUT" "従来の判定" "従来の判定との差をその場で出す"
+assert_contains "$OUT" "1 / 1" "従来の判定なら HIT だったことを数字で出す"
+[ "$EXIT_CODE" -ne 0 ] && ok "MISS なので exit 0 でない" || ng "分散した指摘で exit 0 になった"
+
+RUNS6="$(tail -n 1 "$DUMMY_REPO/docs/agents/eval-runs.jsonl")"
+assert_contains "$RUNS6" '"pass": 0' "新しい判定での結果を記録"
+assert_contains "$RUNS6" '"loosePass": 1' "従来の判定での結果も記録（切り替えの影響を後から測れる）"
+assert_contains "$RUNS6" '"detailsDir"' "回答本文の置き場を記録（採点器を直したとき測り直せる）"
+
+echo "=== scenario 7: 同じ指摘の中でそろっていれば HIT（対照。厳しくしすぎていない） ==="
+cat > "$MOCK_RESPONSE_FILE" <<'RESP'
+{"status":"pass","detail":"FINDINGS: 2\n1. src/lib/other/service.ts のログが冗長です\n2. src/lib/probe/repository.ts に internalNote の型不一致があります"}
+RESP
+run_eval
+assert_contains "$OUT" "recall: 1 / 1" "同じ指摘の中でそろっていれば HIT"
+[ "$EXIT_CODE" -eq 0 ] && ok "exit 0" || ng "HIT なのに exit 0 でない" "$OUT"
+if printf '%s' "$OUT" | grep -q "従来の判定"; then
+  ng "差が無いのに従来の判定を出した"
+else
+  ok "差が無いときは余計な行を出さない"
+fi
+
+echo "=== scenario 8b: プロンプトが未コミットなら、走らせる前に警告する ==="
+# WHY(2026-09-10・R11 の後段): eval は **clone(HEAD)** からプロンプトを読むので、
+#      手元で直しただけの版は測られない。記録には workflowsDirty として残っていたが、
+#      **走らせている本人には何も出ていなかった**（「直したのに数字が変わらない」の原因になる）。
+# まず綺麗な木で出ないことを確かめる（対照。常に出す実装でも緑にならないように）
+if printf '%s' "$OUT" | grep -q "未コミットの変更があります"; then
+  ng "綺麗な木なのに警告が出た" "$OUT"
+else
+  ok "未コミットが無ければ黙っている（対照）"
+fi
+echo "// uncommitted change" >> "$DUMMY_REPO/.claude/workflows/lib/prompts/sweep.js"
+run_eval
+assert_contains "$OUT" ".claude/workflows に未コミットの変更があります" "未コミットのプロンプトを名指しする"
+assert_contains "$OUT" "測られません" "その変更は評価に入らないと言う"
+(cd "$DUMMY_REPO" && git checkout -- .claude/workflows/lib/prompts/sweep.js)
+run_eval
+if printf '%s' "$OUT" | grep -q "未コミットの変更があります"; then
+  ng "戻したのに警告が残る" "$OUT"
+else
+  ok "コミット済みに戻せば黙る"
+fi
+
+echo "=== scenario 8: 判定に使った回答本文が実際に保存されている ==="
+DETAILS_LINE="$(printf '%s' "$OUT" | grep -e "回答本文:" | head -1)"
+DETAILS_PATH="${DETAILS_LINE#回答本文: }"
+if [ -n "$DETAILS_PATH" ] && [ -f "$DETAILS_PATH/case-1.txt" ]; then
+  ok "case ごとに本文を残す"
+  if grep -q "internalNote" "$DETAILS_PATH/case-1.txt"; then
+    ok "判定に使った本文そのものが入っている"
+  else
+    ng "保存された本文が判定対象と違う" "$(cat "$DETAILS_PATH/case-1.txt")"
+  fi
+else
+  ng "回答本文が保存されていない" "$DETAILS_LINE"
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

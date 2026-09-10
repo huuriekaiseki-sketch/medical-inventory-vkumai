@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 58,
+  "minMutants": 63,
   "mutants": [
     {
       "id": "CM-001",
@@ -533,6 +533,51 @@
       "replace": "  if (false) {",
       "expect": "scripts/check-skip-scope.test.sh",
       "guards": "C-040（0 件は「無い」と「探せていない」の両方で出る）"
+    },
+    {
+      "id": "CM-059",
+      "breaks": "採点を本文全体で見る（別々の指摘に分散していても HIT にする元の姿）",
+      "file": "scripts/lib/judge-sweep-recall.py",
+      "find": "    reported_about_fixture = has_finding and matched_in_same_finding(detail, paths_lower, keywords_lower)",
+      "replace": "    reported_about_fixture = has_finding and any(p in detail for p in paths_lower) and any(k in detail for k in keywords_lower)",
+      "expect": "scripts/lib/judge-sweep-recall.test.sh",
+      "guards": "レビュー指摘 R11 の後段。**欠陥を外していても満点**が付く形（Sweep は全体を掃くので無関係な指摘が並ぶ）"
+    },
+    {
+      "id": "CM-060",
+      "breaks": "指摘の区切りを見ない（報告全体を 1 つの指摘として扱う）",
+      "file": "scripts/lib/judge-sweep-recall.py",
+      "find": "        if current and NEW_FINDING_RE.match(line):",
+      "replace": "        if False:",
+      "expect": "scripts/lib/judge-sweep-recall.test.sh",
+      "guards": "切らなければ分散も 1 つの指摘に見える（CM-059 と同じ穴への別の道）"
+    },
+    {
+      "id": "CM-061",
+      "breaks": "eval の鮮度を「ファイルに差分があるか」だけで見る（古い記録を 1 行足せば通る元の姿）",
+      "file": "scripts/check-eval-runs-freshness.sh",
+      "find": "  if [ \"${FRESH_COUNT:-0}\" -gt 0 ]; then",
+      "replace": "  if true; then",
+      "expect": "scripts/check-eval-runs-freshness.test.sh",
+      "guards": "C-010。ここでの「印」は**ファイルが変わったという事実**で、実態（いまの木で測ったか）と突き合わせていなかった"
+    },
+    {
+      "id": "CM-062",
+      "breaks": "held-out の名前がプロンプト側に出ていても見逃す",
+      "file": "scripts/lib/scan-holdout-isolation.mjs",
+      "find": "      if (text.includes(name)) {",
+      "replace": "      if (false) {",
+      "expect": "scripts/check-holdout-isolation.test.sh",
+      "guards": "C-010。`heldOut: true` の印を読むコードが 1 つも無かった（印だけがあった）"
+    },
+    {
+      "id": "CM-063",
+      "breaks": "*-holdout の印の付け忘れを見逃す",
+      "file": "scripts/lib/scan-holdout-isolation.mjs",
+      "find": "        if (!marked) {",
+      "replace": "        if (false) {",
+      "expect": "scripts/check-holdout-isolation.test.sh",
+      "guards": "印と実態の突合（付け忘れた case は普通のセットと区別が付かなくなる）"
     }
   ]
 }
