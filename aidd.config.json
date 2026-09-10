@@ -68,6 +68,10 @@
     "domain": "docs/agents/domain.md",
     "decisions": "docs/agents/decisions.md"
   },
+  "errorResponse": {
+    "translatedErrorTypes": ["ClientVisibleError"],
+    "scanDirs": ["src/app/api"]
+  },
   "limits": {
     "decidedOn": "2026-09-07",
     "decidedBy": "Masanori（AskUserQuestion で確認）",

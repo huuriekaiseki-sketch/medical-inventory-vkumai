@@ -216,6 +216,7 @@
         "scripts/check-guard-regressions.test.sh",
         "scripts/check-lockfile-integrity.test.sh",
         "scripts/check-pii-leak.test.sh",
+        "scripts/check-raw-error-response.test.sh",
         "scripts/check-rls-grant-gaps.test.sh",
         "scripts/check-secret-leak.test.sh",
         "scripts/check-secret-leak-history.test.sh",

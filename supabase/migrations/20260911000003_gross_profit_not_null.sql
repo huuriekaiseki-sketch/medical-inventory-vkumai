@@ -1,5 +1,12 @@
 -- supabase/migrations/20260911000003_gross_profit_not_null.sql
--- release-order: db-first
+-- release-order: app-first
+-- contract: 縮めるのは `hospital_prices.gross_profit` の nullable。
+--   **アプリは以前から null を書き込んでいない**（生成列なので INSERT / UPDATE できない）し、
+--   読み取り側も `asNumber()` で非 null として扱っていた
+--   （src/lib/hospital-prices/repository.ts:30、`grossProfit: number`）。
+--   つまり「どの PR 以降のアプリが参照しなくなったか」ではなく、**最初から参照していない**。
+--   生成型が `number | null` → `number` に変わるので、型の再生成を同じコミットに含める。
+--   規約どおり app-first として扱うが、アプリ側の先行リリースは不要。
 -- lock: hospital_prices を全行スキャンして NOT NULL を検証する間、この表への書き込みが止まる。
 --   列の NOT NULL には NOT VALID のような逃がし方が無いので、避ける書き方が存在しない。
 --   **本番の行数は未計測**（当てる前に数えること）。施設ごとの仕入価格なので

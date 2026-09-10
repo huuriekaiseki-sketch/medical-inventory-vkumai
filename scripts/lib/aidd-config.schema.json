@@ -71,6 +71,23 @@
         }
       }
     },
+    "errorResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "入口（route）が catch したエラーの message をそのまま応答へ入れてよい条件（scripts/check-raw-error-response.test.sh）。**翻訳済みだと分かっている型だけを通す**ホワイトリスト方式を前提にする。この節が無い導入先では検査は対象 0 件で黙って通る。",
+      "properties": {
+        "translatedErrorTypes": {
+          "type": "array",
+          "description": "message をそのまま返してよい型の名前（例: ClientVisibleError）。**危ない語を弾くブラックリストは書かない**——列挙から漏れたものが全部そのまま出るため。",
+          "items": { "type": "string" }
+        },
+        "scanDirs": {
+          "type": "array",
+          "description": "走査するディレクトリ（例: src/app/api）。この配下の route ファイルだけを見る。",
+          "items": { "type": "string" }
+        }
+      }
+    },
     "limits": {
       "type": "object",
       "additionalProperties": false,
