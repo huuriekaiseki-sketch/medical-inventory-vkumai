@@ -1,27 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { parseQuery } from '@/lib/validation/parse-query'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { requireFacilityAccess } from '@/lib/security/facility-access'
-import { apiError } from '@/lib/api-error'
+import { requireAuth } from '@/lib/supabase/require-auth'
+import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
+import { authGuardError, apiError } from '@/lib/api-error'
 
-/**
- * 施設の申し送りメモを一覧で返す。
- * 施設の所属は requireFacilityAccess が確かめる。
- */
+const shiftNotesQuerySchema = z.object({
+  facilityId: z.string().max(200, { error: 'facilityId が長すぎます' }).optional(),
+})
+
 export async function GET(request: NextRequest) {
-  const facilityId = request.nextUrl.searchParams.get('facilityId')
-  if (!facilityId) return apiError('facilityId が必要です', 400)
+  try {
+    const db = await createServerSupabase()
+    let user
+    try {
+      user = await requireAuth(db)
+    } catch (e) {
+      return authGuardError(e)
+    }
 
-  const access = await requireFacilityAccess(facilityId)
-  if (!access.ok) return apiError(access.message, access.status)
+    const parsed = parseQuery(request, shiftNotesQuerySchema)
+    if (!parsed.ok) return parsed.response
 
-  const db = await createServerSupabase()
-  const { data, error } = await db
-    .from('facility_shift_notes')
-    .select('id, title, body, author_name, created_at')
-    .eq('facility_id', facilityId)
-    .order('created_at', { ascending: false })
+    let grantedFacilityId: string | null
+    try {
+      ;({ facilityId: grantedFacilityId } = await requireFacilityAccess(
+        db,
+        user,
+        parsed.data.facilityId ?? null
+      ))
+    } catch (e) {
+      if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') {
+        return apiError('facilityId は必須です', 400)
+      }
+      return apiError('アクセス権限がありません', 403)
+    }
 
-  if (error) return apiError('取得に失敗しました', 500)
+    const { data, error } = await db
+      .from('facility_shift_notes')
+      .select('id, title, body, author_name, created_at')
+      .eq('facility_id', grantedFacilityId)
+      .order('created_at', { ascending: false })
 
-  return NextResponse.json({ items: data ?? [] })
+    if (error) return apiError('取得に失敗しました', 500)
+
+    return NextResponse.json({ items: data ?? [] })
+  } catch {
+    return apiError('取得に失敗しました', 500)
+  }
 }

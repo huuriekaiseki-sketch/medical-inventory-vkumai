@@ -157,6 +157,59 @@ else
 fi
 rm -rf "$PATHWORK"
 
+echo "=== scenario 2d: fixture の import が実在する（E-073） ==="
+# WHY(2026-09-10): fixture は clone の上に**上書き配置**され、Sweep は実コードの一部として読む。
+#      `sweep-data-holdout` が存在しない `@/lib/security/facility-access` を import していたため、
+#      Sweep は「そのモジュールは無い」と**正しく**指摘し、**仕込んだ欠陥は挙げなかった**。
+#      壊れた import はそれ自体が目立つ欠陥なので、注意をそこへ吸い寄せる。
+IMPORT_SCAN="$SCRIPT_DIR/lib/scan-fixture-imports.mjs"
+# WHY(if で直接判定する、2026-09-10): このテストは `set -euo pipefail` で動く。
+#      走査は違反があると非ゼロで返すので、素の `VAR="$(...)"` は代入ごと `set -e` に引っかかり、
+#      **テストが途中で止まって残りの scenario が 1 つも走らない**（同じ罠を今日 3 回踏んだ）。
+#      `if` の条件は `set -e` の免除対象なので、ここで判定してしまう
+#      （`|| true` を足すと今度は終了コードが常に 0 になって判定が死ぬ）。
+if IMPORT_OUT="$(FIXTURE_IMPORTS_ROOT="$FIXTURES_ROOT" FIXTURE_IMPORTS_SRC="$SCRIPT_DIR/../src" node "$IMPORT_SCAN" 2>&1)"; then
+  ok "fixture の @/ import はすべて実在する"
+else
+  ng "fixture が存在しないモジュールを import している（仕込んだ欠陥を測れなくなる）" "$IMPORT_OUT"
+fi
+if printf '%s' "$IMPORT_OUT" | grep -q "imports=[1-9]"; then
+  ok "import を実際に数えている（空振りでない）"
+else
+  ng "import が 0 件（走査が壊れている疑い）" "$IMPORT_OUT"
+fi
+
+echo "=== scenario 2e: 実在しない import は落ちる（RED 方向。E-073 の再現） ==="
+IMPWORK="$(mktemp -d)"
+mkdir -p "$IMPWORK/fx/sweep-x/case-1/files/src/app/api/thing" "$IMPWORK/src/lib/supabase"
+printf 'export const requireAuth = () => {}\n' > "$IMPWORK/src/lib/supabase/require-auth.ts"
+printf "import { requireAuth } from '@/lib/supabase/require-auth'\nexport const a = requireAuth\n" \
+  > "$IMPWORK/fx/sweep-x/case-1/files/src/app/api/thing/route.ts"
+if FIXTURE_IMPORTS_ROOT="$IMPWORK/fx" FIXTURE_IMPORTS_SRC="$IMPWORK/src" node "$IMPORT_SCAN" >/dev/null 2>&1; then
+  ok "実在する import は通る（対照）"
+else
+  ng "実在する import を誤検知した"
+fi
+printf "import { x } from '@/lib/security/facility-access'\nexport const a = x\n" \
+  > "$IMPWORK/fx/sweep-x/case-1/files/src/app/api/thing/route.ts"
+RED_IMPORT="$(FIXTURE_IMPORTS_ROOT="$IMPWORK/fx" FIXTURE_IMPORTS_SRC="$IMPWORK/src" node "$IMPORT_SCAN" 2>&1 || true)"
+if printf '%s' "$RED_IMPORT" | grep -q "missing-import"; then
+  ok "存在しないモジュールへの import を名指しする"
+else
+  ng "壊れた import を見逃す（E-073 が再発する）" "$RED_IMPORT"
+fi
+# fixture 自身が置くモジュールは実在とみなす（過検知しない対照）
+mkdir -p "$IMPWORK/fx/sweep-x/case-1/files/src/lib/shift-notes"
+printf 'export const x = 1\n' > "$IMPWORK/fx/sweep-x/case-1/files/src/lib/shift-notes/helper.ts"
+printf "import { x } from '@/lib/shift-notes/helper'\nexport const a = x\n" \
+  > "$IMPWORK/fx/sweep-x/case-1/files/src/app/api/thing/route.ts"
+if FIXTURE_IMPORTS_ROOT="$IMPWORK/fx" FIXTURE_IMPORTS_SRC="$IMPWORK/src" node "$IMPORT_SCAN" >/dev/null 2>&1; then
+  ok "fixture が自分で置いたモジュールは実在とみなす"
+else
+  ng "fixture 自身のモジュールを誤検知した"
+fi
+rm -rf "$IMPWORK"
+
 echo "=== scenario 3: 自己申告コメントを仕込むと検知する（RED 方向の自己検証） ==="
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
