@@ -96,7 +96,7 @@
     {
       "id": "PM-050",
       "name": "実コードへの指摘の多さ（Sweep）",
-      "kind": "指摘の正確さ",
+      "kind": "実コードへの指摘の多さ",
       "role": "H-01",
       "log": "docs/agents/eval-runs.jsonl",
       "filter": {
@@ -114,7 +114,8 @@
         "fixturesTree",
         "model",
         "judgeBlob"
-      ]
+      ],
+      "count": true
     }
   ],
   "_conditions": "conditionFields は「何を同じ条件とみなすか」。**ここが違う回どうしを同じばらつきに入れない**（2026-09-10、設計提案 3）。混ぜると、モデルの揺れと『その間にコードが変わっただけ』を区別できなくなる。条件の欄を持たない古い記録は比較から外し、外した件数を出す。"

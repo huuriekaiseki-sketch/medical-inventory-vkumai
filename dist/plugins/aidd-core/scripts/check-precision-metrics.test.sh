@@ -234,6 +234,40 @@ run_engine
 assert_contains "$ENGINE_OUT" "1 回分" "取れた回数を出す"
 assert_contains "$ENGINE_OUT" "取れなかった 4 回は含まない" "取れなかった回があることを隠さない"
 
+echo "=== scenario 3g: 件数の指標を割合として扱わない（C-031） ==="
+# WHY(2026-09-10、自分で作った間違い): 「実コードへの指摘の多さ」を分子/分母の枠へ載せたため
+#      **件数を割合として**出していた。「1 件 / 1 回 = 100%」「0 件 / 1 回 = 0%」は
+#      指摘の多さを表さず、「0% 〜 100%（振れている）」という**意味のない警告**が出た。
+cat > "$WORK/registry.json" <<'JSON'
+{
+  "metrics": [
+    { "id": "PM-900", "name": "指摘の多さ", "kind": "件数", "role": "H-01",
+      "log": "logs/c.jsonl", "count": true,
+      "numerator": "findingsReported", "denominator": "findingsSamples",
+      "unmeasured": "findingsUnreadable", "conditionFields": ["srcTree"] }
+  ]
+}
+JSON
+# 追記専用ログなので**最終行が最新**（readRecords はファイル末尾から読む）
+{
+  printf '{"at":"2026-01-01T00:00:00Z","srcTree":"A","findingsReported":1,"findingsSamples":1}\n'
+  printf '{"at":"2026-01-02T00:00:00Z","srcTree":"A","findingsReported":3,"findingsSamples":1}\n'
+} > "$WORK/root/logs/c.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "3 件" "件数をそのまま出す"
+assert_not_contains "$ENGINE_OUT" "300%" "件数を割合にしない"
+assert_contains "$ENGINE_OUT" "1件 〜 3件" "ばらつきも件数で出す"
+assert_contains "$ENGINE_OUT" "幅 2 件" "幅の単位も件"
+assert_not_contains "$ENGINE_OUT" "ポイント" "件数の指標にポイントと書かない"
+
+echo "=== scenario 3h: その条件に記録が無ければ数字にしない ==="
+# WHY: 分子の欄を持たない記録に対して `null%` と出していた。
+#      「測っていないものを数字にしない」という、この道具自身の原則に反する
+printf '{"at":"2026-01-03T00:00:00Z","srcTree":"A"}\n' > "$WORK/root/logs/c.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "この条件では記録に無い" "記録が無いことをそのまま言う"
+assert_not_contains "$ENGINE_OUT" "null" "null を数字として出さない"
+
 echo "=== scenario 4: 一度も測っていない指標は 0% とも 100% とも言わない ==="
 cat > "$WORK/registry.json" <<'JSON'
 {

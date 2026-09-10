@@ -130,6 +130,14 @@ export function computeMetric({ metric, root, runs, read = readRecords }) {
           return null
         })
         .filter((v) => v !== null)
+    } else if (metric.count === true) {
+      // WHY(件数を割合にしない、2026-09-10): 「1 件 / 1 回 = 100%」は指摘の多さを表さない。
+      //      無理に率へ載せると**意味のないばらつき警告**が出る（実際に出た。C-031）。
+      //      値は件数そのもの、分母は「何回分から数えたか」。ばらつきも件数の幅で見る。
+      value = num(latest[metric.numerator])
+      denominator = num(latest[metric.denominator])
+      unmeasured = metric.unmeasured ? num(latest[metric.unmeasured]) : null
+      rates = recent.map((r) => num(r[metric.numerator])).filter((v) => v !== null)
     } else {
       value = num(latest[metric.numerator])
       denominator = num(latest[metric.denominator])
@@ -145,6 +153,7 @@ export function computeMetric({ metric, root, runs, read = readRecords }) {
 
     out.push({
       key,
+      count: metric.count === true,
       value,
       denominator,
       unmeasured,
@@ -250,7 +259,14 @@ export function render({ registry, root, runs }) {
       for (const g of r.groups) {
         const label = g.key === '全体' ? '' : ` [${g.key}]`
         let body
-        if (g.denominator === null) {
+        if (g.value === null) {
+          // WHY(測っていないものを数字にしない): 記録にその欄が無い群へ `null%` と出していた
+          body = 'この条件では記録に無い（測っていない）'
+        } else if (g.count) {
+          body = `${g.value} 件`
+          if (g.denominator !== null) body += `（${g.denominator} 回分から数えた）`
+          if (g.unmeasured) body += `（件数を読めなかった ${g.unmeasured} 回は含まない）`
+        } else if (g.denominator === null) {
           body = `${g.value}%`
         } else {
           body = `${g.value} / ${g.denominator}`
@@ -270,7 +286,11 @@ export function render({ registry, root, runs }) {
         if (v.runs > 1) {
           const flag = v.flaky ? '**振れている**' : '安定'
           if (v.flaky) flakyCount++
-          lines.push(`      同じ条件の直近 ${v.runs} 回: ${v.min}% 〜 ${v.max}%（幅 ${v.spread} ポイント。${flag}）`)
+          const unit = g.count ? '件' : '%'
+          const span = g.count ? `幅 ${v.spread} 件` : `幅 ${v.spread} ポイント`
+          lines.push(
+            `      同じ条件の直近 ${v.runs} 回: ${v.min}${unit} 〜 ${v.max}${unit}（${span}。${flag}）`,
+          )
         } else {
           lines.push(`      同じ条件の回が ${v.runs} 回（ばらつきは 2 回以上でないと分からない）`)
         }
