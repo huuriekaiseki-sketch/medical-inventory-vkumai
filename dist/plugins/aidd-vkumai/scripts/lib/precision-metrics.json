@@ -12,7 +12,10 @@
       "numerator": "killed",
       "denominator": "targeted",
       "unmeasured": "errors",
-      "note": "未変異の対照が緑であることを確かめてから測った件数だけを撃破に数える（2026-09-10 に対照を必須化）"
+      "note": "未変異の対照が緑であることを確かめてから測った件数だけを撃破に数える（2026-09-10 に対照を必須化）",
+      "conditionFields": [
+        "supabaseTree"
+      ]
     },
     {
       "id": "PM-011",
@@ -21,7 +24,11 @@
       "role": "H-06",
       "log": "logs/mutation-runs.jsonl",
       "percent": "score",
-      "note": "対象は認可の判断が書かれた 13 ファイルだけ。**対象を減らせばスコアは上がる**ので、鮮度 hook が測る対象の一覧も見張る"
+      "note": "対象は認可の判断が書かれた 13 ファイルだけ。**対象を減らせばスコアは上がる**ので、鮮度 hook が測る対象の一覧も見張る",
+      "conditionFields": [
+        "srcTree",
+        "strykerTree"
+      ]
     },
     {
       "id": "PM-020",
@@ -30,9 +37,18 @@
       "role": "H-02",
       "log": "logs/integration-runs.jsonl",
       "stateField": "dataGuardResult",
-      "measuredStates": ["pass", "fail"],
-      "unmeasuredStates": ["unmeasured", "skipped"],
-      "note": "「測れなかった」を合格にも不合格にも数えない。skipped はテストが赤で後片付けを判定していない回"
+      "measuredStates": [
+        "pass",
+        "fail"
+      ],
+      "unmeasuredStates": [
+        "unmeasured",
+        "skipped"
+      ],
+      "note": "「測れなかった」を合格にも不合格にも数えない。skipped はテストが赤で後片付けを判定していない回",
+      "conditionFields": [
+        "supabaseTree"
+      ]
     },
     {
       "id": "PM-030",
@@ -40,11 +56,19 @@
       "kind": "見逃し率",
       "role": "H-01",
       "log": "docs/agents/eval-runs.jsonl",
-      "filter": { "field": "script", "value": "eval-sweep-recall" },
+      "filter": {
+        "field": "script",
+        "value": "eval-sweep-recall"
+      },
       "groupBy": "fixtureSet",
       "numerator": "pass",
       "denominator": "total",
-      "note": "人が仕込んだ既知欠陥のうち何件を見つけたか。陰性対照（欠陥の無い fixture）は逆向きに採点され、同じ分母に入る"
+      "note": "人が仕込んだ既知欠陥のうち何件を見つけたか。陰性対照（欠陥の無い fixture）は逆向きに採点され、同じ分母に入る",
+      "conditionFields": [
+        "workflowsTree",
+        "fixturesTree",
+        "model"
+      ]
     },
     {
       "id": "PM-040",
@@ -52,11 +76,20 @@
       "kind": "指摘の正確さ",
       "role": "H-01",
       "log": "docs/agents/eval-runs.jsonl",
-      "filter": { "field": "script", "value": "eval-workflow-prompts" },
+      "filter": {
+        "field": "script",
+        "value": "eval-workflow-prompts"
+      },
       "groupBy": "fixtureSet",
       "numerator": "pass",
       "denominator": "total",
-      "note": "期待した status（pass / blocked）を返したか。エージェントの実行が失敗した回も分母に残る（実行不能を黙って消さない）"
+      "note": "期待した status（pass / blocked）を返したか。エージェントの実行が失敗した回も分母に残る（実行不能を黙って消さない）",
+      "conditionFields": [
+        "workflowsTree",
+        "fixturesTree",
+        "model"
+      ]
     }
-  ]
+  ],
+  "_conditions": "conditionFields は「何を同じ条件とみなすか」。**ここが違う回どうしを同じばらつきに入れない**（2026-09-10、設計提案 3）。混ぜると、モデルの揺れと『その間にコードが変わっただけ』を区別できなくなる。条件の欄を持たない古い記録は比較から外し、外した件数を出す。"
 }

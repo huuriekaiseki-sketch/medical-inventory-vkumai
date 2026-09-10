@@ -93,7 +93,19 @@ assert_contains "$OUT" "recall: 0 / 1" "配列のどれにも一致しなけれ�
 
 echo "=== scenario 5: 実行痕跡が REPO_DIR の docs/agents/eval-runs.jsonl に追記される ==="
 RUNS="$(cat "$DUMMY_REPO/docs/agents/eval-runs.jsonl")"
-assert_contains "$RUNS" '"fixtureSet":"sweep-x"' "fixtureSet を記録"
+assert_contains "$RUNS" '"fixtureSet": "sweep-x"' "fixtureSet を記録"
+# 条件（設計提案 3）: **同じ条件の回どうしでしかばらつきは比べられない**ので、
+# 何を測った木か・どのモデルかを一緒に残す。所要時間も（費用は取れる経路がまだ無い）
+assert_contains "$RUNS" '"workflowsTree"' "プロンプトの木を記録（条件）"
+assert_contains "$RUNS" '"fixturesTree"' "fixture の木を記録（条件）"
+assert_contains "$RUNS" '"model": "haiku"' "どのモデルで測ったかを記録（条件）"
+assert_contains "$RUNS" '"elapsedSeconds"' "所要時間を記録"
+# 条件の欄が壊れると比較が永久に一致しなくなる。改行を含む値が入っていないこと
+if printf '%s' "$RUNS" | grep -q 'HEAD:'; then
+  echo "  NG: 条件の欄に git rev-parse の未解決な引数が入っている"; fail=1
+else
+  echo "  OK: 条件の欄が壊れていない（未解決の引数が混ざらない）"
+fi
 LINES="$(wc -l < "$DUMMY_REPO/docs/agents/eval-runs.jsonl" | tr -d ' ')"
 [ "$LINES" -eq 5 ] && ok "5 回の実行で 5 行" || ng "行数が ${LINES}（期待 5）"
 

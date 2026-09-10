@@ -117,7 +117,64 @@ assert_contains "$ENGINE_OUT" "安定" "同じ結果が続けば安定と言う�
 assert_not_contains "$ENGINE_OUT" '**振れている**）' "安定しているものを振れていると言わない"
 assert_contains "$ENGINE_OUT" "振れている指標は無い" "総括でも振れていないと言う"
 
+echo "=== scenario 3b: 条件が違う回を同じばらつきに混ぜない（設計提案 3「再現性」） ==="
+# WHY(2026-09-10): 条件を確かめずにばらつきを出すと、**モデルの揺れ**と
+#      **その間にコードが変わっただけ**を区別できない。区別できない数字は判断に使えない。
+#      実際、この道具を作った直後は日をまたいだ記録を並べて「4 件が振れている」と出していたが、
+#      条件を見るようにしたら比べられる回が 1 回ずつしか無かった（=根拠として不十分だった）。
+cat > "$WORK/registry.json" <<'JSON'
+{
+  "metrics": [
+    { "id": "PM-004", "name": "変異", "kind": "変異撃破率", "role": "H-06",
+      "log": "logs/m.jsonl", "numerator": "killed", "denominator": "targeted", "unmeasured": "errors",
+      "conditionFields": ["srcTree"] }
+  ]
+}
+JSON
+# いちばん新しい回と**同じ木**の回だけを比べる。古い木の回は外す
+{
+  printf '{"at":"2026-01-01T00:00:00Z","killed":9,"targeted":18,"errors":0,"srcTree":"OLD"}\n'
+  printf '{"at":"2026-01-02T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW"}\n'
+  printf '{"at":"2026-01-03T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW"}\n'
+} > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "同じ条件の直近 2 回" "同じ木の回だけを数える"
+assert_contains "$ENGINE_OUT" "条件が違う（または条件が記録に無い）1 回は比較から外した" "外した回数を隠さない"
+assert_not_contains "$ENGINE_OUT" '**振れている**）' "古い木の 50% を混ぜて振れていると言わない"
+
+# 同じ木の中で結果が違えば、それは本当に振れている
+{
+  printf '{"at":"2026-01-02T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW"}\n'
+  printf '{"at":"2026-01-03T00:00:00Z","killed":9,"targeted":18,"errors":0,"srcTree":"NEW"}\n'
+} > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" '**振れている**）' "同じ木の中で違えば振れていると言う（対照）"
+
+# 条件の欄を持たない古い記録しか無ければ、比べずに 1 回として扱う
+{
+  printf '{"at":"2026-01-01T00:00:00Z","killed":9,"targeted":18,"errors":0}\n'
+  printf '{"at":"2026-01-02T00:00:00Z","killed":18,"targeted":18,"errors":0}\n'
+} > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "同じ条件の回が 1 回" "条件が分からない回どうしは比べない"
+assert_not_contains "$ENGINE_OUT" '**振れている**）' "条件が分からないものを振れていると言わない"
+
+echo "=== scenario 3c: 所要時間とモデルを出す（設計提案 3「再現性と費用」の時間の側） ==="
+printf '{"at":"2026-01-02T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW","elapsedSeconds":42,"model":"haiku"}\n' > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "42 秒" "所要時間を出す"
+assert_contains "$ENGINE_OUT" "モデル haiku" "どのモデルで測ったかを出す"
+assert_contains "$ENGINE_OUT" "費用（トークン数）は記録していない" "取れていないものを取れているように見せない"
+
 echo "=== scenario 4: 一度も測っていない指標は 0% とも 100% とも言わない ==="
+cat > "$WORK/registry.json" <<'JSON'
+{
+  "metrics": [
+    { "id": "PM-001", "name": "変異", "kind": "変異撃破率", "role": "H-06",
+      "log": "logs/m.jsonl", "numerator": "killed", "denominator": "targeted", "unmeasured": "errors" }
+  ]
+}
+JSON
 rm -f "$WORK/root/logs/m.jsonl"
 run_engine
 assert_contains "$ENGINE_OUT" "一度も測っていない" "記録が無いことをそのまま出す"

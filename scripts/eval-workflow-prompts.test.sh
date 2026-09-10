@@ -296,9 +296,12 @@ echo '{ "status": "pass" }' > "$MOCK_RESPONSE_FILE"
 run_eval
 assert_eq "$EXIT_CODE" "0" "全fixture合格でexit 0(前提の再確認)"
 EVAL_RUNS_LINE="$(tail -n 1 "$DUMMY_REPO/docs/agents/eval-runs.jsonl" 2>/dev/null || echo "")"
-assert_contains "$EVAL_RUNS_LINE" '"script":"eval-workflow-prompts"' "eval-runs.jsonlにscript名が記録される"
-assert_contains "$EVAL_RUNS_LINE" '"fixtureSet":"sample"' "eval-runs.jsonlにfixtureSet名が記録される"
-assert_contains "$EVAL_RUNS_LINE" '"pass":2,"total":2' "eval-runs.jsonlに合否件数が記録される"
+assert_contains "$EVAL_RUNS_LINE" '"script": "eval-workflow-prompts"' "eval-runs.jsonlにscript名が記録される"
+assert_contains "$EVAL_RUNS_LINE" '"fixtureSet": "sample"' "eval-runs.jsonlにfixtureSet名が記録される"
+# 条件（設計提案 3）: 同じ条件の回どうしでしかばらつきは比べられない
+assert_contains "$EVAL_RUNS_LINE" '"workflowsTree"' "プロンプトの木を記録（条件）"
+assert_contains "$EVAL_RUNS_LINE" '"elapsedSeconds"' "所要時間を記録"
+assert_contains "$EVAL_RUNS_LINE" '"pass": 2, "total": 2' "eval-runs.jsonlに合否件数が記録される"
 
 echo "=== scenario 11: 1件失敗(NG)でも実行完了時にeval-runs.jsonlへ追記される(pass/fail問わず記録) ==="
 rm -f "$MOCK_CALL_LOG"
@@ -308,7 +311,7 @@ echo '{ "status": "pass" }' > "$MOCK_RESPONSE_FILE"
 run_eval
 assert_eq "$EXIT_CODE" "1" "1件不一致でexit 1(前提の再確認)"
 EVAL_RUNS_LINE="$(tail -n 1 "$DUMMY_REPO/docs/agents/eval-runs.jsonl" 2>/dev/null || echo "")"
-assert_contains "$EVAL_RUNS_LINE" '"pass":1,"total":2' "失敗ケースを含んでいてもeval-runs.jsonlへ追記される"
+assert_contains "$EVAL_RUNS_LINE" '"pass": 1, "total": 2' "失敗ケースを含んでいてもeval-runs.jsonlへ追記される"
 echo '{ "status": "pass" }' > "$FIXTURES_DIR/sample/case-b/expected.json"
 
 if [ "$fail" -ne 0 ]; then

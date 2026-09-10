@@ -44,15 +44,32 @@ export function readRecords(file, limit = Infinity, readFile = (p) => readFileSy
  *
  * 返すのは { runs, min, max, spread, flaky }。**flaky は「同じ条件なのに結果が違う」**という
  * 意味であって、良し悪しではない。1 回の実行を合否に使ってよいかの判断材料。
- *
- * 限界: 「同じ条件」を記録から確かめられない指標がある（eval-runs.jsonl は木のハッシュを
- * 持たないので、その間にコードが変わった可能性を否定できない）。
  */
 export function spread(values) {
   if (values.length === 0) return { runs: 0, min: null, max: null, spread: null, flaky: false }
   const min = Math.min(...values)
   const max = Math.max(...values)
   return { runs: values.length, min, max, spread: max - min, flaky: values.length > 1 && min !== max }
+}
+
+/**
+ * 「同じ条件」の回だけを残す（2026-09-10、設計提案 3「再現性」）。
+ *
+ * WHY: 条件を確かめずにばらつきを出すと、**モデルの揺れ**と**その間にコードが変わっただけ**を
+ *      区別できない。区別できない数字は判断に使えない。
+ *      `conditionFields` に挙げた欄が**いちばん新しい回と同じ**回だけを比べる。
+ *
+ * 欄を 1 つも持たない古い記録は「条件が分からない」ので比較から外す
+ * （黙って混ぜない。外した件数は呼び出し側が出す）。
+ */
+export function sameCondition(records, conditionFields) {
+  if (!conditionFields || conditionFields.length === 0) return { kept: records, dropped: 0 }
+  const latest = records[0]
+  if (!latest) return { kept: [], dropped: 0 }
+  const known = conditionFields.filter((f) => latest[f] !== undefined)
+  if (known.length === 0) return { kept: [latest], dropped: records.length - 1 }
+  const kept = records.filter((r) => known.every((f) => r[f] !== undefined && r[f] === latest[f]))
+  return { kept, dropped: records.length - kept.length }
 }
 
 const num = (v) => (typeof v === 'number' ? v : null)
@@ -80,7 +97,11 @@ export function computeMetric({ metric, root, runs, read = readRecords }) {
 
   const out = []
   for (const [key, rows] of groups) {
-    const recent = rows.slice(0, runs)
+    // **同じ条件の回だけ**をばらつきの比較に使う（設計提案 3）。
+    // 条件が違う回・条件が分からない古い記録は外し、外した件数を出す
+    const { kept, dropped } = sameCondition(rows.slice(0, runs * 3), metric.conditionFields)
+    const recent = kept.slice(0, runs)
+    const droppedForCondition = dropped
     const latest = recent[0]
     let value = null
     let denominator = null
@@ -117,6 +138,9 @@ export function computeMetric({ metric, root, runs, read = readRecords }) {
       denominator,
       unmeasured,
       at: latest.at ?? latest.timestamp ?? null,
+      elapsedSeconds: latest.elapsedSeconds ?? null,
+      model: latest.model ?? null,
+      droppedForCondition,
       variance: spread(rates),
     })
   }
@@ -162,14 +186,26 @@ export function render({ registry, root, runs }) {
           if (g.unmeasured) body += `（測れなかった ${g.unmeasured} 件を分母に残している）`
           else body += '（測れなかった 0 件）'
         }
-        lines.push(`  ${r.id} ${r.name}${label}（${r.role}）: ${body}${g.at ? ` — ${g.at}` : ''}`)
+        const extra = [
+          g.model ? `モデル ${g.model}` : null,
+          g.elapsedSeconds !== null ? `${g.elapsedSeconds} 秒` : null,
+        ].filter(Boolean)
+        lines.push(
+          `  ${r.id} ${r.name}${label}（${r.role}）: ${body}${g.at ? ` — ${g.at}` : ''}` +
+            (extra.length > 0 ? `（${extra.join('・')}）` : ''),
+        )
         const v = g.variance
         if (v.runs > 1) {
           const flag = v.flaky ? '**振れている**' : '安定'
           if (v.flaky) flakyCount++
-          lines.push(`      直近 ${v.runs} 回: ${v.min}% 〜 ${v.max}%（幅 ${v.spread} ポイント。${flag}）`)
+          lines.push(`      同じ条件の直近 ${v.runs} 回: ${v.min}% 〜 ${v.max}%（幅 ${v.spread} ポイント。${flag}）`)
         } else {
-          lines.push(`      直近 ${v.runs} 回（ばらつきは 2 回以上でないと分からない）`)
+          lines.push(`      同じ条件の回が ${v.runs} 回（ばらつきは 2 回以上でないと分からない）`)
+        }
+        if (g.droppedForCondition > 0) {
+          // **黙って混ぜない。** 条件が違う回を同じばらつきに入れると、
+          // モデルの揺れとコードの変更を区別できなくなる
+          lines.push(`      条件が違う（または条件が記録に無い）${g.droppedForCondition} 回は比較から外した`)
         }
       }
       if (r.note) lines.push(`      ${r.note}`)
@@ -181,8 +217,8 @@ export function render({ registry, root, runs }) {
       ? `**${flakyCount} 件が同条件で振れている。** その指標は 1 回の実行を合否に使えない（モデルの揺れを仕組みの劣化と読み違える）`
       : '同条件で振れている指標は無い（ただし記録が 1 回だけのものは判定できない）',
   )
-  lines.push('限界: 記録に残っている数字しか出せない。費用・所要時間は記録していない。')
-  lines.push('　　　eval の記録は木のハッシュを持たないので、**ばらつきの間にコードが変わったかは分からない**。')
+  lines.push('限界: 記録に残っている数字しか出せない。**費用（トークン数）は記録していない**（取れる経路がまだ無い）。')
+  lines.push('　　　ばらつきは**同じ条件の回だけ**で比べる。条件を記録していない古い回は比較から外れる。')
   return lines.join('\n')
 }
 

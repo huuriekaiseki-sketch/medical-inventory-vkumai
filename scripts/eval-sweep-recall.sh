@@ -121,6 +121,8 @@ run_agent_with_timeout() {
   return "$status"
 }
 
+# 所要時間を測る起点（設計提案 3「再現性と費用」のうち時間の側）
+RUN_STARTED_AT="$(date +%s)"
 TOTAL=0
 HIT_COUNT=0
 MISS_LINES=""
@@ -213,10 +215,12 @@ echo ""
 echo "=== eval-sweep-recall: $LAYER ==="
 echo "recall: $HIT_COUNT / $TOTAL"
 
-EVAL_RUNS_FILE="$REPO_DIR/docs/agents/eval-runs.jsonl"
-mkdir -p "$(dirname "$EVAL_RUNS_FILE")"
-printf '{"timestamp":"%s","script":"eval-sweep-recall","fixtureSet":"%s","pass":%d,"total":%d}\n' \
-  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$LAYER" "$HIT_COUNT" "$TOTAL" >> "$EVAL_RUNS_FILE"
+# 記録の作り方は共通（scripts/lib/record-eval-run.sh）。条件（木のハッシュ・モデル）と
+# 所要時間も一緒に残す——**同じ条件の回どうしでしかばらつきは比べられない**（設計提案 3）
+# shellcheck source=lib/record-eval-run.sh
+source "$SCRIPT_DIR/lib/record-eval-run.sh"
+EVAL_RUNS_REPO_DIR="$REPO_DIR" record_eval_run \
+  "eval-sweep-recall" "$LAYER" "$HIT_COUNT" "$TOTAL" "$RUN_STARTED_AT" "$MODEL"
 
 if [ -n "$MISS_LINES" ]; then
   echo "$MISS_LINES"

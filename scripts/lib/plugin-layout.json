@@ -151,6 +151,10 @@
       "aidd-core",
       "aidd-vkumai"
     ],
+    "lib/record-eval-run.sh": [
+      "aidd-core",
+      "aidd-vkumai"
+    ],
     "lib/aidd-config.sh": [
       "aidd-core",
       "aidd-vkumai"
