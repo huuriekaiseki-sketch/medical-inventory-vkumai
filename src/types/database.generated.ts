@@ -977,6 +977,15 @@ export type Database = {
       }
     }
     Functions: {
+      assert_facility_owns: {
+        Args: {
+          p_facility_id: string
+          p_ids: string[]
+          p_kind: string
+          p_parent_id?: string
+        }
+        Returns: undefined
+      }
       check_business_invariants: {
         Args: never
         Returns: {
