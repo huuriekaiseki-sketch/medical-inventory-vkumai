@@ -62,6 +62,32 @@ const walk = (dir) => {
 }
 walk(apiDir)
 
+// WHY(数える単位をメソッドにする・2026-09-10、レビューの設計提案 2「複数メソッド」):
+//      それまではファイル単位で数えていた。**1 つの route に POST と PUT があり、
+//      POST だけ parseBody を通っていれば、PUT が生読みでもファイルとしては通る**
+//      （2026-09-10 に fixture で実測。素通りした）。
+//      穴が開く単位は route ファイルではなく **route × メソッド**なので、そこで数える
+//      （C-031: 数える単位が、実際に壊れる単位と違う）。
+//      借金の一覧（baseline）の鍵も `api/x/route.ts#PUT` の形にする——
+//      ファイル単位の鍵だと、1 メソッドを免除するつもりでファイル全体が免除される。
+//
+//      いま実際に穴を止めているのは eslint の deny-by-default（R10）で、生の `.json()` は
+//      lint が落とす。ここが数えるのは**借金の量**なので、単位が違うと量を読み違える。
+/** export された HTTP メソッドごとに本体を切り出す */
+const methodBodies = (code) => {
+  const out = []
+  const re = /^export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s*\(/gm
+  let m
+  while ((m = re.exec(code)) !== null) {
+    const start = m.index
+    const nextRe = /^export\s+(?:async\s+)?function\s+/gm
+    nextRe.lastIndex = start + m[0].length
+    const n = nextRe.exec(code)
+    out.push({ method: m[1], body: code.slice(start, n ? n.index : code.length) })
+  }
+  return out
+}
+
 const seen = new Set()
 for (const file of routes) {
   const src = fs.readFileSync(file, "utf8")
@@ -75,22 +101,25 @@ for (const file of routes) {
   //      応答を作る NextResponse.json / Response.json だけを先に取り除き、
   //      **残った .json() はすべて本文読みとみなす**（知らない名前は対象に入る）。
   const code = src.replace(/\/\/[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ")
-  const withoutResponses = code.replace(/\b(?:NextResponse|Response)\s*\.\s*json\s*\(/g, " ")
-  const readsBody =
-    /parseBody\s*\(/.test(code) || /[A-Za-z_$][\w$]*\s*\.\s*json\s*\(/.test(withoutResponses)
-  if (!readsBody) continue
-  const rel = "api/" + path.relative(apiDir, file).split(path.sep).join("/")
-  seen.add(rel)
-  // WHY: import の有無ではなく parseBody を実際に呼んでいるかで見る。
-  //      読み込んだうえで使わない route を捕まえるため
-  const usesParseBody = /parseBody\s*\(/.test(code)
-  const hasDisable = src.includes("eslint-disable-next-line no-restricted-syntax")
-  if (usesParseBody && pending.has(rel)) console.log("stale-used " + rel)
-  if (!usesParseBody && !pending.has(rel)) console.log("new " + rel)
-  // 印を付けて逃げていないか（一覧に無いのに disable だけある）
-  if (hasDisable && !pending.has(rel)) console.log("undeclared-disable " + rel)
-  // 移行が済んだのに印が残っていないか
-  if (usesParseBody && hasDisable) console.log("leftover-disable " + rel)
+  const relFile = "api/" + path.relative(apiDir, file).split(path.sep).join("/")
+  for (const { method, body } of methodBodies(code)) {
+    const withoutResponses = body.replace(/\b(?:NextResponse|Response)\s*\.\s*json\s*\(/g, " ")
+    const usesParseBody = /parseBody\s*\(/.test(body)
+    const readsBody = usesParseBody || /[A-Za-z_$][\w$]*\s*\.\s*json\s*\(/.test(withoutResponses)
+    if (!readsBody) continue
+    const rel = relFile + "#" + method
+    seen.add(rel)
+    // 印はメソッドの本体の中だけを見る（ファイルのどこかに 1 つあれば通る、にしない）
+    const rawBody = src.slice(src.indexOf("function " + method), src.length)
+    const hasDisable = body.includes("eslint-disable-next-line no-restricted-syntax") ||
+      rawBody.slice(0, body.length).includes("eslint-disable-next-line no-restricted-syntax")
+    if (usesParseBody && pending.has(rel)) console.log("stale-used " + rel)
+    if (!usesParseBody && !pending.has(rel)) console.log("new " + rel)
+    // 印を付けて逃げていないか（一覧に無いのに disable だけある）
+    if (hasDisable && !pending.has(rel)) console.log("undeclared-disable " + rel)
+    // 移行が済んだのに印が残っていないか
+    if (usesParseBody && hasDisable) console.log("leftover-disable " + rel)
+  }
 }
 for (const rel of pending) {
   if (!seen.has(rel)) console.log("stale-missing " + rel)
@@ -193,21 +222,43 @@ mkdir -p "$WORK/api/renamed-arg"
 cat > "$WORK/api/renamed-arg/route.ts" <<'EOF'
 export async function POST(httpRequest) { const b = await httpRequest.json(); return b }
 EOF
+# レビューの設計提案 2「複数メソッド」。1 つの route で POST は検証、PUT は生読み。
+# **ファイル単位で数えていた頃はここが素通りだった**（2026-09-10 に fixture で実測）
+mkdir -p "$WORK/api/mixed-methods"
+cat > "$WORK/api/mixed-methods/route.ts" <<'EOF'
+import { parseBody } from '@/lib/validation/parse-body'
+import { x } from '@/lib/validation/schemas'
+export async function POST(request) { return parseBody(request, x) }
+export async function PUT(request) { const b = await request.json(); return b }
+EOF
+# 借金の鍵は route × メソッド。ファイル単位の鍵だと 1 メソッドの免除でファイル全体が免除される
 cat > "$WORK/baseline.json" <<'EOF'
 { "pending": [
-  { "route": "api/old-thing/route.ts", "why": "借金" },
-  { "route": "api/moved/route.ts", "why": "移行済みなのに残っている" },
-  { "route": "api/gone/route.ts", "why": "もう無い" }
+  { "route": "api/old-thing/route.ts#POST", "why": "借金" },
+  { "route": "api/moved/route.ts#POST", "why": "移行済みなのに残っている" },
+  { "route": "api/gone/route.ts#POST", "why": "もう無い" }
 ] }
 EOF
 FOUT="$(scan "$WORK/api" "$WORK/baseline.json")"
-if printf '%s' "$FOUT" | grep -q '^new api/new-thing/route.ts$'; then assert_ok "新しい未検証 route を検知"; else assert_fail "新しい route を検知できない" "$FOUT"; fi
-if printf '%s' "$FOUT" | grep -q '^stale-used api/moved/route.ts$'; then assert_ok "移行済みの消し忘れを検知"; else assert_fail "消し忘れを検知できない" "$FOUT"; fi
-if printf '%s' "$FOUT" | grep -q '^stale-missing api/gone/route.ts$'; then assert_ok "存在しない行を検知"; else assert_fail "存在しない行を検知できない" "$FOUT"; fi
+if printf '%s' "$FOUT" | grep -q '^new api/new-thing/route.ts#POST$'; then assert_ok "新しい未検証 route を検知"; else assert_fail "新しい route を検知できない" "$FOUT"; fi
+if printf '%s' "$FOUT" | grep -q '^stale-used api/moved/route.ts#POST$'; then assert_ok "移行済みの消し忘れを検知"; else assert_fail "消し忘れを検知できない" "$FOUT"; fi
+
+# 混在メソッド: POST は通っていて PUT だけが穴。**PUT だけ**が出ること
+if printf '%s' "$FOUT" | grep -q '^new api/mixed-methods/route.ts#PUT$'; then
+  assert_ok "同じ route の中で、検証していないメソッドだけを検知（複数メソッド）"
+else
+  assert_fail "検証していないメソッドを検知できない（ファイル単位のままの疑い）" "$FOUT"
+fi
+if printf '%s' "$FOUT" | grep -q '^new api/mixed-methods/route.ts#POST$'; then
+  assert_fail "検証済みのメソッドまで違反にした" "$FOUT"
+else
+  assert_ok "検証済みのメソッドは違反にしない（対照）"
+fi
+if printf '%s' "$FOUT" | grep -q '^stale-missing api/gone/route.ts#POST$'; then assert_ok "存在しない行を検知"; else assert_fail "存在しない行を検知できない" "$FOUT"; fi
 if printf '%s' "$FOUT" | grep -q 'api/old-thing'; then assert_fail "一覧にある借金を違反にした" "$FOUT"; else assert_ok "一覧にある借金は誤検知しない"; fi
 if printf '%s' "$FOUT" | grep -q 'api/read-only'; then assert_fail "応答を作るだけの route を違反にした（NextResponse.json は本文読みではない）" "$FOUT"; else assert_ok "本文を読まない route は対象外"; fi
-if printf '%s' "$FOUT" | grep -q '^new api/renamed-arg/route.ts$'; then assert_ok "引数名を変えても本文読みとして検知（R10）"; else assert_fail "引数名を変えると検査から外れる" "$FOUT"; fi
-if printf '%s' "$FOUT" | grep -q '^undeclared-disable api/sneaky/route.ts$'; then assert_ok "印だけ付けて逃げる route を検知"; else assert_fail "印で逃げる route を検知できない" "$FOUT"; fi
+if printf '%s' "$FOUT" | grep -q '^new api/renamed-arg/route.ts#POST$'; then assert_ok "引数名を変えても本文読みとして検知（R10）"; else assert_fail "引数名を変えると検査から外れる" "$FOUT"; fi
+if printf '%s' "$FOUT" | grep -q '^undeclared-disable api/sneaky/route.ts#POST$'; then assert_ok "印だけ付けて逃げる route を検知"; else assert_fail "印で逃げる route を検知できない" "$FOUT"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
