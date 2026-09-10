@@ -66,8 +66,10 @@
       "note": "人が仕込んだ既知欠陥のうち何件を見つけたか。陰性対照（欠陥の無い fixture）は逆向きに採点され、同じ分母に入る",
       "conditionFields": [
         "workflowsTree",
+        "agentsTree",
         "fixturesTree",
-        "model"
+        "model",
+        "judgeBlob"
       ]
     },
     {
@@ -86,6 +88,7 @@
       "note": "期待した status（pass / blocked）を返したか。エージェントの実行が失敗した回も分母に残る（実行不能を黙って消さない）",
       "conditionFields": [
         "workflowsTree",
+        "agentsTree",
         "fixturesTree",
         "model"
       ]

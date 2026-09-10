@@ -110,6 +110,9 @@ git -C "$FX" commit -qm base
 RUNS="$FX/docs/agents/eval-runs.jsonl"
 EVAL_RUNS_REPO_DIR="$FX" EVAL_RUNS_FILE="$RUNS" record_eval_run "t" "set" 1 1 "$(date +%s)" "m"
 CLEAN_ROW="$(tail -n 1 "$RUNS")"
+assert_contains "$CLEAN_ROW" '"agentsTree"' "エージェントの定義も条件に残す（手順を変えた前後を混ぜない）"
+assert_contains "$CLEAN_ROW" '"judgeBlob"' "採点器も条件に残す（合否の意味が変われば比べない）"
+assert_contains "$CLEAN_ROW" '"agentsDirty": false' "エージェント定義の未コミットも見る"
 assert_contains "$CLEAN_ROW" '"fixturesDirty": false' "きれいなら false"
 assert_contains "$CLEAN_ROW" '"workflowsDirty": false' "きれいなら false（プロンプト側）"
 

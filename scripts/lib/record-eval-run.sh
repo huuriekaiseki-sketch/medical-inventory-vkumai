@@ -96,9 +96,16 @@ record_eval_run() {
   #      2 行の値が記録に入る（テストの fixture リポジトリで実際に起きた）。
   #      条件の欄が壊れると、ばらつきの比較が**永久に一致しなくなる**ので黙って壊れてはいけない。
   local workflows_tree fixtures_tree commit branch elapsed workflows_dirty fixtures_dirty
+  local agents_tree agents_dirty judge_blob
   tree_of() { git -C "$repo_dir" rev-parse --verify --quiet "HEAD:$1" 2>/dev/null || echo unknown; }
   workflows_tree="$(tree_of ".claude/workflows")"
   fixtures_tree="$(tree_of "scripts/eval-fixtures")"
+  # WHY(エージェントの定義も条件に入れる、2026-09-10): Sweep の実体は
+  #      `.claude/agents/<型>.md` の探索手順で、eval もそこから組み立てている。
+  #      条件に入れないと**手順を変える前後の回が混ざり**、改善の効果を測れない。
+  agents_tree="$(tree_of ".claude/agents")"
+  # 採点器。合否の意味が変わったら比べてはいけない。ファイル 1 個なので blob で足りる
+  judge_blob="$(tree_of "scripts/lib/judge-sweep-recall.py")"
 
   # WHY(未コミットかどうかを別に残す、2026-09-10・レビュー R11「どの変更を評価したかまで照合する」):
   #      木のハッシュは **HEAD** のもの。ところが 2 つの入力は出どころが違う。
@@ -117,6 +124,8 @@ record_eval_run() {
   }
   workflows_dirty="$(dirty_of ".claude/workflows")"
   fixtures_dirty="$(dirty_of "scripts/eval-fixtures")"
+  # エージェントの定義は clone（HEAD）から読むので、未コミットの変更は**評価に入っていない**
+  agents_dirty="$(dirty_of ".claude/agents")"
   commit="$(git -C "$repo_dir" rev-parse --short --verify --quiet HEAD 2>/dev/null || echo unknown)"
   branch="$(git -C "$repo_dir" branch --show-current 2>/dev/null || echo unknown)"
   [ -n "$branch" ] || branch=unknown
@@ -127,14 +136,15 @@ record_eval_run() {
     "$workflows_tree" "$fixtures_tree" "$commit" "$branch" "$elapsed" "$model" \
     "${EVAL_COST_USD:-0}" "${EVAL_INPUT_TOKENS:-0}" "${EVAL_OUTPUT_TOKENS:-0}" \
     "${EVAL_USAGE_SAMPLES:-0}" "${EVAL_USAGE_MISSING:-0}" "${EVAL_CACHE_READ_TOKENS:-0}" \
-    "$workflows_dirty" "$fixtures_dirty" <<'PY' || return 0
+    "$workflows_dirty" "$fixtures_dirty" "$agents_tree" "$agents_dirty" "$judge_blob" <<'PY' || return 0
 import json, sys
 from datetime import datetime, timezone
 
 (file, script, fixture_set, passed, total,
  workflows_tree, fixtures_tree, commit, branch, elapsed, model,
  cost_usd, input_tokens, output_tokens, usage_samples, usage_missing,
- cache_read_tokens, workflows_dirty, fixtures_dirty) = sys.argv[1:20]
+ cache_read_tokens, workflows_dirty, fixtures_dirty,
+ agents_tree, agents_dirty, judge_blob) = sys.argv[1:23]
 row = {
     "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "script": script,
@@ -144,11 +154,15 @@ row = {
     # 条件。**同じ条件の回どうしでしかばらつきを比べてはいけない**
     "workflowsTree": workflows_tree,
     "fixturesTree": fixtures_tree,
+    # エージェントの定義（探索手順の実体）と採点器も条件のうち
+    "agentsTree": agents_tree,
+    "judgeBlob": judge_blob,
     # 未コミットの有無。**ずれ方が逆なので混ぜない**——
     #   fixturesDirty=true  → 記録の fixturesTree は実際に測ったものを表さない（fixture は作業ツリーから読む）
     #   workflowsDirty=true → 手元のプロンプトの変更は評価に入っていない（プロンプトは clone=HEAD から読む）
     "fixturesDirty": fixtures_dirty == "true",
     "workflowsDirty": workflows_dirty == "true",
+    "agentsDirty": agents_dirty == "true",
     "commit": commit,
     "branch": branch,
     # 時間（秒）

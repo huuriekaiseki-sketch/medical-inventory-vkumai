@@ -1,0 +1,11 @@
+{
+  "heldOut": true,
+  "expectedFilePathContains": "eval_fixture_holdout.sql",
+  "expectedKeywords": [
+    "SECURITY DEFINER",
+    "認可",
+    "auth.uid",
+    "is_facility_member",
+    "呼び出し元"
+  ]
+}
