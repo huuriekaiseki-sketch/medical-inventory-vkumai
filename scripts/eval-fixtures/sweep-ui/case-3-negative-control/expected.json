@@ -1,0 +1,11 @@
+{
+  "expectNoFinding": true,
+  "expectedFilePathContains": [
+    "eval-fixture-clean/page.tsx",
+    "eval-fixture-clean/filter.tsx"
+  ],
+  "expectedKeywords": [
+    "Suspense",
+    "useSearchParams"
+  ]
+}

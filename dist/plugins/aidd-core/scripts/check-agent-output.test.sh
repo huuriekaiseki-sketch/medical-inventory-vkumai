@@ -92,6 +92,41 @@ accumulate_usage '{"costUsd":0.1,"inputTokens":6,"outputTokens":465,"cacheReadTo
 assert_eq "$EVAL_INPUT_TOKENS" "6" "入力トークンにキャッシュ分を足さない"
 assert_eq "$EVAL_CACHE_READ_TOKENS" "17547" "キャッシュ分は別に積む"
 
+echo "=== scenario 9: 記録に「未コミットかどうか」を残す（どの版を測ったかを言えるように） ==="
+# WHY(2026-09-10、レビュー R11): 木のハッシュは HEAD のもの。ところが入力の出どころが違う。
+#   - fixture は**作業ツリー**から読む → 未コミットだと記録の fixturesTree が実態とずれる
+#   - プロンプトは**clone（HEAD）**から読む → 未コミットの変更は評価に入っていない
+#   ずれ方が逆なので、1 つの真偽値に潰さず両方を残す。
+FX="$(mktemp -d)"
+git -C "$FX" init -q
+git -C "$FX" config user.email test@example.test
+git -C "$FX" config user.name t
+mkdir -p "$FX/.claude/workflows" "$FX/scripts/eval-fixtures" "$FX/docs/agents"
+printf 'x\n' > "$FX/.claude/workflows/a.js"
+printf 'y\n' > "$FX/scripts/eval-fixtures/b.json"
+git -C "$FX" add -A
+git -C "$FX" commit -qm base
+
+RUNS="$FX/docs/agents/eval-runs.jsonl"
+EVAL_RUNS_REPO_DIR="$FX" EVAL_RUNS_FILE="$RUNS" record_eval_run "t" "set" 1 1 "$(date +%s)" "m"
+CLEAN_ROW="$(tail -n 1 "$RUNS")"
+assert_contains "$CLEAN_ROW" '"fixturesDirty": false' "きれいなら false"
+assert_contains "$CLEAN_ROW" '"workflowsDirty": false' "きれいなら false（プロンプト側）"
+
+# fixture だけを未コミットで書き換える
+printf 'y2\n' > "$FX/scripts/eval-fixtures/b.json"
+EVAL_RUNS_REPO_DIR="$FX" EVAL_RUNS_FILE="$RUNS" record_eval_run "t" "set" 1 1 "$(date +%s)" "m"
+DIRTY_ROW="$(tail -n 1 "$RUNS")"
+assert_contains "$DIRTY_ROW" '"fixturesDirty": true' "fixture が未コミットなら true"
+assert_contains "$DIRTY_ROW" '"workflowsDirty": false' "触っていない側は false のまま（混ぜない）"
+
+# プロンプト側も未コミットにする
+printf 'x2\n' > "$FX/.claude/workflows/a.js"
+EVAL_RUNS_REPO_DIR="$FX" EVAL_RUNS_FILE="$RUNS" record_eval_run "t" "set" 1 1 "$(date +%s)" "m"
+BOTH_ROW="$(tail -n 1 "$RUNS")"
+assert_contains "$BOTH_ROW" '"workflowsDirty": true' "プロンプトが未コミットなら true"
+rm -rf "$FX"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

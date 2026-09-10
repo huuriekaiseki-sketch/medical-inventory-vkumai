@@ -95,10 +95,28 @@ record_eval_run() {
   #      `2>/dev/null || echo unknown` だけだと `HEAD:scripts/eval-fixtures\nunknown` という
   #      2 行の値が記録に入る（テストの fixture リポジトリで実際に起きた）。
   #      条件の欄が壊れると、ばらつきの比較が**永久に一致しなくなる**ので黙って壊れてはいけない。
-  local workflows_tree fixtures_tree commit branch elapsed
+  local workflows_tree fixtures_tree commit branch elapsed workflows_dirty fixtures_dirty
   tree_of() { git -C "$repo_dir" rev-parse --verify --quiet "HEAD:$1" 2>/dev/null || echo unknown; }
   workflows_tree="$(tree_of ".claude/workflows")"
   fixtures_tree="$(tree_of "scripts/eval-fixtures")"
+
+  # WHY(未コミットかどうかを別に残す、2026-09-10・レビュー R11「どの変更を評価したかまで照合する」):
+  #      木のハッシュは **HEAD** のもの。ところが 2 つの入力は出どころが違う。
+  #        - fixture は**作業ツリー**から読む（eval スクリプトが $REPO_DIR/scripts/eval-fixtures を見る）
+  #          → 未コミットの変更があると、**記録の fixturesTree は実際に測ったものを表さない**
+  #        - プロンプトは**clone（HEAD）**から読む
+  #          → 未コミットの変更は**評価に入っていない**（直したつもりの版を測っていない）
+  #      どちらも「記録と実態がずれている」だが**ずれ方が逆**なので、混ぜずに両方残す。
+  #      2026-09-10 に、実行中に fixture を足して自分で踏みかけた。
+  dirty_of() {
+    if [ -n "$(git -C "$repo_dir" status --porcelain -- "$1" 2>/dev/null)" ]; then
+      echo true
+    else
+      echo false
+    fi
+  }
+  workflows_dirty="$(dirty_of ".claude/workflows")"
+  fixtures_dirty="$(dirty_of "scripts/eval-fixtures")"
   commit="$(git -C "$repo_dir" rev-parse --short --verify --quiet HEAD 2>/dev/null || echo unknown)"
   branch="$(git -C "$repo_dir" branch --show-current 2>/dev/null || echo unknown)"
   [ -n "$branch" ] || branch=unknown
@@ -108,14 +126,15 @@ record_eval_run() {
   python3 - "$file" "$script" "$fixture_set" "$pass" "$total" \
     "$workflows_tree" "$fixtures_tree" "$commit" "$branch" "$elapsed" "$model" \
     "${EVAL_COST_USD:-0}" "${EVAL_INPUT_TOKENS:-0}" "${EVAL_OUTPUT_TOKENS:-0}" \
-    "${EVAL_USAGE_SAMPLES:-0}" "${EVAL_USAGE_MISSING:-0}" "${EVAL_CACHE_READ_TOKENS:-0}" <<'PY' || return 0
+    "${EVAL_USAGE_SAMPLES:-0}" "${EVAL_USAGE_MISSING:-0}" "${EVAL_CACHE_READ_TOKENS:-0}" \
+    "$workflows_dirty" "$fixtures_dirty" <<'PY' || return 0
 import json, sys
 from datetime import datetime, timezone
 
 (file, script, fixture_set, passed, total,
  workflows_tree, fixtures_tree, commit, branch, elapsed, model,
  cost_usd, input_tokens, output_tokens, usage_samples, usage_missing,
- cache_read_tokens) = sys.argv[1:18]
+ cache_read_tokens, workflows_dirty, fixtures_dirty) = sys.argv[1:20]
 row = {
     "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "script": script,
@@ -125,6 +144,11 @@ row = {
     # 条件。**同じ条件の回どうしでしかばらつきを比べてはいけない**
     "workflowsTree": workflows_tree,
     "fixturesTree": fixtures_tree,
+    # 未コミットの有無。**ずれ方が逆なので混ぜない**——
+    #   fixturesDirty=true  → 記録の fixturesTree は実際に測ったものを表さない（fixture は作業ツリーから読む）
+    #   workflowsDirty=true → 手元のプロンプトの変更は評価に入っていない（プロンプトは clone=HEAD から読む）
+    "fixturesDirty": fixtures_dirty == "true",
+    "workflowsDirty": workflows_dirty == "true",
     "commit": commit,
     "branch": branch,
     # 時間（秒）

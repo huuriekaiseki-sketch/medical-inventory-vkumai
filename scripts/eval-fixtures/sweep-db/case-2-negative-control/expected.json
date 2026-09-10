@@ -1,0 +1,9 @@
+{
+  "expectNoFinding": true,
+  "expectedFilePathContains": "eval_fixture_clean.sql",
+  "expectedKeywords": [
+    "SECURITY DEFINER",
+    "認可",
+    "is_facility_member"
+  ]
+}
