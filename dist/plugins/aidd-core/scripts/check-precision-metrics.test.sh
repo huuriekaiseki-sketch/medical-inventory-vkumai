@@ -185,6 +185,22 @@ run_engine
 assert_contains "$ENGINE_OUT" "うちキャッシュ読み 17547" "キャッシュから読んだ入力を出す"
 assert_not_contains "$ENGINE_OUT" "入力 17553" "キャッシュ分を入力に足さない（価格が違う）"
 
+echo "=== scenario 3d-3: 費用にも幅を出す（1 回の金額を予算に使わない） ==="
+# WHY(2026-09-10): 実物を同じ条件で 2 回回したら、合否は 1/1 のまま費用が
+#      $0.1604 → $0.0519（約 3 倍）に振れた（キャッシュから読めた量の差）。
+#      最新 1 回の金額だけ出すと、この道具自身の「1 回の実行を合否に使わない」原則と食い違う。
+{
+  printf '{"at":"2026-01-04T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW","costUsd":0.0519,"inputTokens":6,"outputTokens":664,"usageSamples":1}\n'
+  printf '{"at":"2026-01-03T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW","costUsd":0.1604,"inputTokens":6,"outputTokens":465,"usageSamples":1}\n'
+} > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "同条件 2 回で \$0.0519 〜 \$0.1604" "同じ条件の回の費用の幅を出す"
+
+# 対照: 同じ条件の費用が 1 回しか無ければ幅を出さない（1 回を幅と言わない）
+printf '{"at":"2026-01-03T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW","costUsd":0.1604,"inputTokens":6,"outputTokens":465,"usageSamples":1}\n' > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_not_contains "$ENGINE_OUT" "同条件 1 回で" "1 回しか無いものを幅と言わない（対照）"
+
 echo "=== scenario 3e: 取れなかった回を 0 円と言わない（対照） ==="
 printf '{"at":"2026-01-03T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW","usageMissing":3}\n' > "$WORK/root/logs/m.jsonl"
 run_engine

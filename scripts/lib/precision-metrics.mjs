@@ -148,6 +148,9 @@ export function computeMetric({ metric, root, runs, read = readRecords }) {
       cacheReadTokens: typeof latest.cacheReadTokens === 'number' ? latest.cacheReadTokens : null,
       usageSamples: typeof latest.usageSamples === 'number' ? latest.usageSamples : null,
       usageMissing: typeof latest.usageMissing === 'number' ? latest.usageMissing : null,
+      // 費用の幅（同じ条件の回だけ）。**1 回の費用を予算に使わない**——
+      // 合否が安定していても費用は振れる（実測: 同条件・同結果で $0.0519 と $0.1604）
+      costRange: costRangeOf(recent),
       droppedForCondition,
       variance: spread(rates),
     })
@@ -169,6 +172,21 @@ export function logDirOf(root, run = execFileSync) {
 }
 
 /**
+ * 同じ条件の回に費用が 2 回以上あれば、その幅を返す。
+ *
+ * WHY(合否とは別に費用の幅を出す): この道具は「1 回の実行を合否に使わない」と決めている。
+ *      費用も同じで、**1 回の金額を予算に使えない**——実測で、同じ条件・同じ合否のまま
+ *      $0.0519 と $0.1604（約 3 倍）に振れた（キャッシュから読めた量の差）。
+ */
+export function costRangeOf(records) {
+  const costs = records
+    .map((r) => (typeof r.costUsd === 'number' ? r.costUsd : null))
+    .filter((v) => v !== null)
+  if (costs.length < 2) return null
+  return { runs: costs.length, min: Math.min(...costs), max: Math.max(...costs) }
+}
+
+/**
  * 費用の 1 行分の文言（2026-09-10、設計提案 3「再現性と費用」）。
  *
  * WHY(取れなかったことを黙って 0 円にしない): eval はモックでも回る。
@@ -187,6 +205,11 @@ export function costLabel(g) {
       parts.push(`入力 ${g.inputTokens ?? '?'}${cached} / 出力 ${g.outputTokens ?? '?'} トークン`)
     }
     parts.push(`${g.usageSamples} 回分`)
+    if (g.costRange) {
+      parts.push(
+        `同条件 ${g.costRange.runs} 回で $${g.costRange.min.toFixed(4)} 〜 $${g.costRange.max.toFixed(4)}`,
+      )
+    }
     if (g.usageMissing) parts.push(`取れなかった ${g.usageMissing} 回は含まない`)
     return parts.join('・')
   }
