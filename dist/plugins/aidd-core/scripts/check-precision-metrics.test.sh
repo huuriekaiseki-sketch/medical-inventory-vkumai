@@ -176,6 +176,15 @@ assert_contains "$ENGINE_OUT" "\$0.0755" "費用を金額で出す"
 assert_contains "$ENGINE_OUT" "入力 40 / 出力 292 トークン" "トークン数を出す"
 assert_contains "$ENGINE_OUT" "2 回分" "何回分の合計かを言う"
 
+echo "=== scenario 3d-2: キャッシュから読んだ入力を並べて出す ==="
+# WHY(2026-09-10): `usage.input_tokens` はキャッシュから読んだ分を含まない。実物の 1 回は
+#      入力 6 / キャッシュ読み 17,547 だった。入力だけ出すと**プロンプトが 6 トークンだったように読める**。
+#      価格が違うので合算はしない（足すと別の嘘になる）。
+printf '{"at":"2026-01-03T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW","costUsd":0.1604,"inputTokens":6,"outputTokens":465,"cacheReadTokens":17547,"usageSamples":1}\n' > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "うちキャッシュ読み 17547" "キャッシュから読んだ入力を出す"
+assert_not_contains "$ENGINE_OUT" "入力 17553" "キャッシュ分を入力に足さない（価格が違う）"
+
 echo "=== scenario 3e: 取れなかった回を 0 円と言わない（対照） ==="
 printf '{"at":"2026-01-03T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW","usageMissing":3}\n' > "$WORK/root/logs/m.jsonl"
 run_engine

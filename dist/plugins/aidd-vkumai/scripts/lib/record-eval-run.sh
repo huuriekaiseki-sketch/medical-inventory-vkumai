@@ -26,6 +26,12 @@
 EVAL_COST_USD=0
 EVAL_INPUT_TOKENS=0
 EVAL_OUTPUT_TOKENS=0
+# WHY(キャッシュ読み込み分を別に積む、2026-09-10): `usage.input_tokens` は
+#      **キャッシュから読んだ分を含まない**。実測で input_tokens=6 に対し
+#      cache_read_input_tokens=17,547 という回があり、`入力 6 トークン` とだけ出すと
+#      **プロンプトが 6 トークンだったように読める**。合算もしない——
+#      価格が違うので足すと別の嘘になる。別の欄で並べる。
+EVAL_CACHE_READ_TOKENS=0
 EVAL_USAGE_SAMPLES=0
 EVAL_USAGE_MISSING=0
 
@@ -46,13 +52,14 @@ except Exception:
 cost = d.get('costUsd')
 i = d.get('inputTokens')
 o = d.get('outputTokens')
-if cost is None and i is None and o is None:
-    print('missing 0 0 0')
+c = d.get('cacheReadTokens')
+if cost is None and i is None and o is None and c is None:
+    print('missing 0 0 0 0')
 else:
-    print(f\"ok {cost or 0} {i or 0} {o or 0}\")
-" 2>/dev/null || echo "missing 0 0 0")"
-  local kind cost inp outp
-  read -r kind cost inp outp <<< "$parsed"
+    print(f\"ok {cost or 0} {i or 0} {o or 0} {c or 0}\")
+" 2>/dev/null || echo "missing 0 0 0 0")"
+  local kind cost inp outp cached
+  read -r kind cost inp outp cached <<< "$parsed"
   if [ "$kind" = "missing" ]; then
     EVAL_USAGE_MISSING=$((EVAL_USAGE_MISSING + 1))
     return 0
@@ -61,6 +68,7 @@ else:
   EVAL_COST_USD="$(python3 -c "print(round(${EVAL_COST_USD} + ${cost}, 6))" 2>/dev/null || echo "$EVAL_COST_USD")"
   EVAL_INPUT_TOKENS=$((EVAL_INPUT_TOKENS + inp))
   EVAL_OUTPUT_TOKENS=$((EVAL_OUTPUT_TOKENS + outp))
+  EVAL_CACHE_READ_TOKENS=$((EVAL_CACHE_READ_TOKENS + cached))
   return 0
 }
 
@@ -100,13 +108,14 @@ record_eval_run() {
   python3 - "$file" "$script" "$fixture_set" "$pass" "$total" \
     "$workflows_tree" "$fixtures_tree" "$commit" "$branch" "$elapsed" "$model" \
     "${EVAL_COST_USD:-0}" "${EVAL_INPUT_TOKENS:-0}" "${EVAL_OUTPUT_TOKENS:-0}" \
-    "${EVAL_USAGE_SAMPLES:-0}" "${EVAL_USAGE_MISSING:-0}" <<'PY' || return 0
+    "${EVAL_USAGE_SAMPLES:-0}" "${EVAL_USAGE_MISSING:-0}" "${EVAL_CACHE_READ_TOKENS:-0}" <<'PY' || return 0
 import json, sys
 from datetime import datetime, timezone
 
 (file, script, fixture_set, passed, total,
  workflows_tree, fixtures_tree, commit, branch, elapsed, model,
- cost_usd, input_tokens, output_tokens, usage_samples, usage_missing) = sys.argv[1:17]
+ cost_usd, input_tokens, output_tokens, usage_samples, usage_missing,
+ cache_read_tokens) = sys.argv[1:18]
 row = {
     "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "script": script,
@@ -129,6 +138,8 @@ if int(usage_samples) > 0:
     row["costUsd"] = float(cost_usd)
     row["inputTokens"] = int(input_tokens)
     row["outputTokens"] = int(output_tokens)
+    # キャッシュから読んだ入力。**inputTokens に足さない**（価格が違う）
+    row["cacheReadTokens"] = int(cache_read_tokens)
     row["usageSamples"] = int(usage_samples)
 if int(usage_missing) > 0:
     # 使用量を取れなかった回。混ぜずに件数で残す

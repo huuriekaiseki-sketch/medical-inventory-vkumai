@@ -63,7 +63,7 @@
 | `input-validation-baseline.json`#pending.length | 本文を検証せずに読む route（H-03） | route | **0** |
 | `query-validation-baseline.json`#pending.length | クエリを検証せずに読む route（H-03） | route | **0** |
 | `write-path-registry.json`#maxGaps | DB は書けるのにアプリに道が無い組み合わせ（H-05） | 組み合わせ | **0** |
-| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **38** |
+| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **40** |
 | `rls-mutants.json`#mutants.length | RLS・RPC の壊し方（H-06） | 件 | **18** |
 
 （ハーネス 8 件・検査 125 本・台帳 6 件。**検査はこの表で全数**——どこにも属さない検査があれば生成そのものが落ちる）

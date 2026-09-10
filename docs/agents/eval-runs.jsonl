@@ -24,3 +24,4 @@
 {"timestamp":"2026-09-09T23:59:48Z","script":"eval-sweep-recall","fixtureSet":"sweep-data","pass":1,"total":2}
 {"timestamp":"2026-09-10T04:52:32Z","script":"eval-sweep-recall","fixtureSet":"sweep-data","pass":2,"total":2}
 {"timestamp":"2026-09-10T04:59:56Z","script":"eval-sweep-recall","fixtureSet":"sweep-data","pass":1,"total":2}
+{"timestamp": "2026-09-10T07:37:36Z", "script": "eval-workflow-prompts", "fixtureSet": "spec-check", "pass": 1, "total": 1, "workflowsTree": "9b1dd2533e04df530d3892db2a8a78e1a6890c12", "fixturesTree": "fceade51d0b5aa5ada577334f7530336f9b39d60", "commit": "b7441832", "branch": "main", "elapsedSeconds": 16, "model": "sonnet", "costUsd": 0.160379, "inputTokens": 6, "outputTokens": 465, "usageSamples": 1}

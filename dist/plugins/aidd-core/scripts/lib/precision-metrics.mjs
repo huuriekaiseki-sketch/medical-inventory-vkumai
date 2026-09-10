@@ -145,6 +145,7 @@ export function computeMetric({ metric, root, runs, read = readRecords }) {
       costUsd: typeof latest.costUsd === 'number' ? latest.costUsd : null,
       inputTokens: typeof latest.inputTokens === 'number' ? latest.inputTokens : null,
       outputTokens: typeof latest.outputTokens === 'number' ? latest.outputTokens : null,
+      cacheReadTokens: typeof latest.cacheReadTokens === 'number' ? latest.cacheReadTokens : null,
       usageSamples: typeof latest.usageSamples === 'number' ? latest.usageSamples : null,
       usageMissing: typeof latest.usageMissing === 'number' ? latest.usageMissing : null,
       droppedForCondition,
@@ -179,7 +180,11 @@ export function costLabel(g) {
   if (has) {
     const parts = [`$${g.costUsd === null ? '?' : g.costUsd.toFixed(4)}`]
     if (g.inputTokens !== null || g.outputTokens !== null) {
-      parts.push(`入力 ${g.inputTokens ?? '?'} / 出力 ${g.outputTokens ?? '?'} トークン`)
+      // WHY(キャッシュ分を別に出す): `input_tokens` はキャッシュから読んだ分を含まない。
+      //      並べないと「入力 6 トークン」がプロンプト全体の大きさに読める（実測で
+      //      入力 6 に対しキャッシュ読み 17,547 という回があった）。価格が違うので合算しない
+      const cached = g.cacheReadTokens ? `（うちキャッシュ読み ${g.cacheReadTokens}）` : ''
+      parts.push(`入力 ${g.inputTokens ?? '?'}${cached} / 出力 ${g.outputTokens ?? '?'} トークン`)
     }
     parts.push(`${g.usageSamples} 回分`)
     if (g.usageMissing) parts.push(`取れなかった ${g.usageMissing} 回は含まない`)

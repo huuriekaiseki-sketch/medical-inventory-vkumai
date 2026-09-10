@@ -43,6 +43,9 @@ U="$(usage "$WRAPPED")"
 assert_contains "$U" '"costUsd":0.0377527' "費用を取り出す"
 assert_contains "$U" '"inputTokens":20' "入力トークンを取り出す"
 assert_contains "$U" '"outputTokens":146' "出力トークンを取り出す"
+# WHY(キャッシュ読み込み分を取りこぼさない): `input_tokens` は**キャッシュから読んだ分を含まない**。
+#      実測の 1 回は入力 20 に対しキャッシュ読み 17,547 で、入力だけ出すと 3 桁小さく見える
+assert_contains "$U" '"cacheReadTokens":17547' "キャッシュから読んだ入力も取り出す"
 
 echo "=== scenario 3: 包みが無い出力はそのまま通す（モックが通る道） ==="
 # WHY: eval のテストはモックに差し替える。包みを前提にすると**テストが実物と違うものを測る**
@@ -79,6 +82,15 @@ assert_eq "$EVAL_USAGE_SAMPLES" "2" "取れた回だけを数える"
 assert_eq "$EVAL_USAGE_MISSING" "1" "取れなかった回を別に数える"
 assert_eq "$EVAL_COST_USD" "0.75" "取れた分だけを足す"
 assert_eq "$EVAL_INPUT_TOKENS" "15" "入力トークンを足す"
+
+echo "=== scenario 8: キャッシュから読んだ入力を、入力トークンに混ぜず別に積む ==="
+# WHY: 価格が違うので足すと別の嘘になる。**並べて出す**ために別々に持つ
+EVAL_INPUT_TOKENS=0
+EVAL_CACHE_READ_TOKENS=0
+EVAL_USAGE_SAMPLES=0
+accumulate_usage '{"costUsd":0.1,"inputTokens":6,"outputTokens":465,"cacheReadTokens":17547}'
+assert_eq "$EVAL_INPUT_TOKENS" "6" "入力トークンにキャッシュ分を足さない"
+assert_eq "$EVAL_CACHE_READ_TOKENS" "17547" "キャッシュ分は別に積む"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
