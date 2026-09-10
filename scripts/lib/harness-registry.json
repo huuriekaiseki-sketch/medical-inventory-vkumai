@@ -1,7 +1,7 @@
 {
   "_comment": "ハーネス（守る仕組み）の登録簿。docs/agents/harness-map.md の表はここから生成する（bash scripts/render-harness-map.sh）。手で書いた表は必ず古くなる——実際に 2026-09-09 に台帳の数字を 2 回取り違えた。数字は台帳の実物から読む。エンジンは共通側（aidd-core）、この登録簿は導入先（aidd-vkumai）。",
-  "_design": "1 ハーネス = 1 行。決めるのは 5 つ: 何を守るか / **どうやって起動するか**（機械か人か外部待ちか）/ 入口のコマンド / **その役割を守る検査の全件** / 台帳（数字の在り処）/ 限界を書いた文書。**起動の欄がいちばん大事**で、ここが『人』のものは誰かが忘れれば止まる。",
-  "_limits": "『あり』の判定は「機械で起動するか」と「宣言したファイルが実在するか」だけを見る。中身が十分かは見ない。台帳を持たないハーネスの進み具合は数字にならない。",
+  "_design": "1 ハーネス = 1 行。決めるのは 2 組。【何をどう動かすか】何を守るか / **どうやって起動するか**（機械か人か外部待ちか）/ 入口のコマンド / **その役割を守る検査の全件** / 台帳（数字の在り処）/ 限界を書いた文書。【契約（2026-09-10 に追加。レビューの設計提案 1）】守る対象の ID（台帳に実在すること）/ 前提 / 実測の記録の在り処（または持たない理由）/ 反証（壊して落ちることを確かめている場所）。**起動の欄がいちばん大事**で、ここが『人』のものは誰かが忘れれば止まる。",
+  "_limits": "宣言の実在（ID が台帳にある・記録の在り処が実在する・入口と検査と限界の文書が実在する）は機械で確かめるが、**中身が十分かは見ない**（それは変異計測 H-06 の担当）。台帳を持たないハーネスの進み具合は数字にならない。『いま緑か』はここには書かない——実測の記録から `bash scripts/show-harness-evidence.sh` が出す（記録は機械ローカルなので、コミットする文書へ焼き込むと環境ごとに生成物が割れる）。",
   "generatedMarker": "harness-map",
   "output": "docs/agents/harness-map.md",
   "triggers": {
@@ -53,7 +53,12 @@
       ],
       "ledgers": [],
       "limitsDoc": "docs/agents/observability-internals.md",
-      "state": "一部"
+      "guardIds": [],
+      "guardIdsReason": "守る対象は業務の条件ではなく手順そのもの。台帳の ID では表せない",
+      "preconditions": "人（またはエージェント）が AIDD フローを起動していること",
+      "evidence": [],
+      "unmeasuredReason": "フローの実行そのものは人が起動するので「最後に回した結果」を持たない。記録漏れの検知だけが Stop hook で機械化されている",
+      "falsification": "scripts/check-rule-guard-effective.test.sh（hook を no-op にすると検査が落ちるか）"
     },
     {
       "id": "H-02",
@@ -80,7 +85,22 @@
         }
       ],
       "limitsDoc": "docs/agents/check-design-pitfalls.md",
-      "state": "あり"
+      "guardIds": [
+        "C-030",
+        "C-041",
+        "E-065"
+      ],
+      "preconditions": "ローカル Supabase が起動していること。統合テスト・E2E を全件で回すこと（部分実行では判定しない）",
+      "evidence": [
+        {
+          "name": "統合テストの全件実行（後片付けの漏れを含む）",
+          "log": "logs/integration-runs.jsonl",
+          "watch": [
+            "supabase"
+          ]
+        }
+      ],
+      "falsification": "変異 CM-011 / CM-018 / CM-024（scripts/lib/check-mutants.json）"
     },
     {
       "id": "H-03",
@@ -138,7 +158,15 @@
         }
       ],
       "limitsDoc": "docs/agents/operation-contracts.md",
-      "state": "あり"
+      "guardIds": [
+        "C-010",
+        "C-011",
+        "C-032"
+      ],
+      "preconditions": "なし（静的な突合だけ。実 DB は要らない）",
+      "evidence": [],
+      "unmeasuredReason": "毎回の npm test と hooks-test で回るので「最後に回した記録」を別に持たない（回っていなければ CI が赤になる）",
+      "falsification": "変異 CM-001〜CM-010 / CM-019〜CM-021 / CM-025 / CM-026（scripts/lib/check-mutants.json）"
     },
     {
       "id": "H-04",
@@ -161,7 +189,12 @@
       ],
       "ledgers": [],
       "limitsDoc": "docs/agents/known-failure-patterns.md",
-      "state": "あり"
+      "guardIds": [],
+      "guardIdsReason": "型・単体・ビルドは特定の条件ではなく全体に掛かる。台帳の ID では表せない",
+      "preconditions": "なし",
+      "evidence": [],
+      "unmeasuredReason": "毎回の CI で回るので「最後に回した記録」を別に持たない（回っていなければ CI が赤になる）",
+      "falsification": "scripts/check-fail-open.test.sh（材料が取れないときに拒否側へ倒れるか）"
     },
     {
       "id": "H-05",
@@ -195,7 +228,23 @@
         }
       ],
       "limitsDoc": "docs/agents/threat-model.md",
-      "state": "一部"
+      "guardIds": [
+        "T-037",
+        "C-023",
+        "C-032"
+      ],
+      "preconditions": "ローカル Supabase が起動していること。E2E は dev サーバーも要る",
+      "evidence": [
+        {
+          "name": "E2E の全件実行（画面と入口の総当たり）",
+          "log": "logs/e2e-runs.jsonl",
+          "watch": [
+            "e2e",
+            "src"
+          ]
+        }
+      ],
+      "falsification": "scripts/check-guard-regressions.test.sh（後から足した守りを落としたら落ちるか）"
     },
     {
       "id": "H-06",
@@ -230,7 +279,27 @@
         }
       ],
       "limitsDoc": "docs/agents/mutation-testing.md",
-      "state": "一部"
+      "guardIds": [
+        "C-022"
+      ],
+      "preconditions": "RLS 変異はローカル Supabase が起動していること。Stryker は実 DB を要らない",
+      "evidence": [
+        {
+          "name": "認可ポリシーの変異計測（RLS）",
+          "log": "logs/rls-mutation-runs.jsonl",
+          "watch": [
+            "supabase"
+          ]
+        },
+        {
+          "name": "製品コードの変異計測（Stryker）",
+          "log": "logs/mutation-runs.jsonl",
+          "watch": [
+            "src"
+          ]
+        }
+      ],
+      "falsification": "この役割自体が反証の仕組み。自分を壊しては測れないので、scripts/check-detectors-effective.test.sh の scenario 2〜9 が fixture で自己検証する"
     },
     {
       "id": "H-07",
@@ -281,7 +350,14 @@
       ],
       "ledgers": [],
       "limitsDoc": "docs/agents/observability-internals.md",
-      "state": "一部"
+      "guardIds": [
+        "C-041",
+        "E-030"
+      ],
+      "preconditions": "なし（記録が無いこと自体を警告するので、記録が無くても動く）",
+      "evidence": [],
+      "unmeasuredReason": "この役割は「他の役割が測ったか」を見る側で、自分の実測の記録は持たない。鮮度 hook が黙る事故は各 *-freshness.test.sh が測る",
+      "falsification": "scripts/check-rule-guard-effective.test.sh（鮮度 hook を no-op にすると落ちるか）"
     },
     {
       "id": "H-08",
@@ -300,8 +376,15 @@
       ],
       "ledgers": [],
       "limitsDoc": "docs/agents/release-safety-runbook.md",
-      "state": "一部"
+      "guardIds": [
+        "M-010"
+      ],
+      "preconditions": "なし（migration の SQL と git の状態だけを見る）",
+      "evidence": [],
+      "unmeasuredReason": "リリースの実行そのものが人の操作で、実測の記録を残す入口をまだ作っていない（#757-8 の外部監視と同じ待ち）",
+      "falsification": "scripts/check-migration-release-safety.test.sh の RED 方向 fixture"
     }
   ],
-  "_checks": "`checks` は代表例ではなく**全件**。`scripts/*.test.sh` と `scripts/lib/*.test.sh` の全部がどれか 1 つのハーネスに属していなければ生成が落ちる（2026-09-10 に入れた逆向きの ratchet）。割り当ての規則は**「この検査を外したら、何が分からなくなるか」**——AIDD フロー自体が劣化する→H-01 / テストのデータが互いを壊す→H-02 / 宣言と実態の食い違いに気づけない→H-03 / 製品コードの正しさが崩れる→H-04 / 施設の境界・秘密・依存が守れない→H-05 / 検査の効き目が測れない→H-06 / 起きたことに気づけない→H-07 / 出す順番を間違えても気づけない→H-08。**この割り当ては宣言であって、正しさを機械が判定するわけではない**（他のルールブックと同じ）。"
+  "_checks": "`checks` は代表例ではなく**全件**。`scripts/*.test.sh` と `scripts/lib/*.test.sh` の全部がどれか 1 つのハーネスに属していなければ生成が落ちる（2026-09-10 に入れた逆向きの ratchet）。割り当ての規則は**「この検査を外したら、何が分からなくなるか」**——AIDD フロー自体が劣化する→H-01 / テストのデータが互いを壊す→H-02 / 宣言と実態の食い違いに気づけない→H-03 / 製品コードの正しさが崩れる→H-04 / 施設の境界・秘密・依存が守れない→H-05 / 検査の効き目が測れない→H-06 / 起きたことに気づけない→H-07 / 出す順番を間違えても気づけない→H-08。**この割り当ては宣言であって、正しさを機械が判定するわけではない**（他のルールブックと同じ）。",
+  "_stateRemoved": "2026-09-10 に手書きの state（あり / 一部 / 外部待ち）を廃止した。この登録簿自身が『あり は中身の十分性を保証しない』と書いており、**確かめようのない 1 語**が地図でいちばん目立つ場所に載っていた（E-053: 同じ問いの答えが 2 か所）。外部待ちの含みは trigger の語彙に残っている。"
 }

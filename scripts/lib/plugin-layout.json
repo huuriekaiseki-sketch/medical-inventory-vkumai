@@ -289,6 +289,7 @@
     "check-rls-mutation.test.sh": "aidd-vkumai",
     "check-test-entrypoints.test.sh": "aidd-vkumai",
     "check-shell-locale-safety.test.sh": "aidd-core",
+    "show-harness-evidence.sh": "aidd-core",
     "lib/judge-sweep-recall.test.sh": "aidd-core",
     "check-mutation-freshness.test.sh": "aidd-vkumai",
     "run-mutation-tests.sh": "aidd-vkumai",

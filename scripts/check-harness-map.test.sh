@@ -61,7 +61,11 @@ GOOD='{
   "entrypoints": ["scripts/entry.sh", "run-the-suite"],
   "checks": ["scripts/check-thing.test.sh"],
   "ledgers": [{ "name": "借金", "unit": "件", "file": "scripts/lib/ledger.json", "path": "pending.length" }],
-  "limitsDoc": "docs/limits.md", "state": "あり"
+  "limitsDoc": "docs/limits.md",
+  "guardIds": [], "guardIdsReason": "この fixture では台帳を持たない",
+  "preconditions": "なし",
+  "evidence": [{ "name": "全件実行", "log": "logs/thing-runs.jsonl", "watch": ["scripts"] }],
+  "falsification": "scripts/check-thing.test.sh"
 }'
 
 write_doc() {
@@ -95,16 +99,108 @@ assert_eq "$ENGINE_CODE" "1" "台帳の数字が変わったら古いと言う"
 assert_contains "$ENGINE_OUT" "作り直す" "作り直し方を案内する"
 printf '{"pending": [1, 2, 3]}' > "$WORK/root/scripts/lib/ledger.json"
 
-echo "=== scenario 2: 起動・状態の語彙から外れたら落ちる ==="
+echo "=== scenario 2: 起動の語彙から外れたら落ちる ==="
 write_registry "$(printf '%s' "$GOOD" | sed 's/"trigger": "機械"/"trigger": "たぶん人"/')"
 run_engine --check
 assert_eq "$ENGINE_CODE" "1" "知らない起動の語で落ちる"
 assert_contains "$ENGINE_OUT" "unknown-trigger" "起動の語を名指しする"
 
-write_registry "$(printf '%s' "$GOOD" | sed 's/"state": "あり"/"state": "だいたい"/')"
+echo "=== scenario 13: 契約の欄が空なら落ちる（レビューの設計提案 1） ==="
+# WHY(2026-09-10): 状態の欄は手書きの「あり / 一部」だった。登録簿自身が
+#      「『あり』は中身の十分性を保証しない」と書いており、**確かめようのない 1 語**が
+#      いちばん目立つ場所に載っていた。その 1 語を消し、代わりに
+#      **機械で実在を確かめられる宣言**（守る対象・前提・実測の記録・反証）を必須にした。
+#      理由を書けば空でよいが、**黙って空にはできない**のが肝。
+write_registry "$(printf '%s' "$GOOD" | sed 's/"guardIdsReason": "この fixture では台帳を持たない"/"guardIdsReason": ""/')"
 run_engine --check
-assert_eq "$ENGINE_CODE" "1" "知らない状態の語で落ちる"
-assert_contains "$ENGINE_OUT" "unknown-state" "状態の語を名指しする"
+assert_eq "$ENGINE_CODE" "1" "守る対象が空で理由も無ければ落ちる"
+assert_contains "$ENGINE_OUT" "missing-guard-ids" "守る対象の欠落を名指しする"
+
+write_registry "$(printf '%s' "$GOOD" | sed 's/"preconditions": "なし"/"preconditions": ""/')"
+run_engine --check
+assert_eq "$ENGINE_CODE" "1" "前提が空なら落ちる"
+assert_contains "$ENGINE_OUT" "missing-preconditions" "前提の欠落を名指しする"
+
+write_registry "$(printf '%s' "$GOOD" | sed 's#"falsification": "scripts/check-thing.test.sh"#"falsification": ""#')"
+run_engine --check
+assert_eq "$ENGINE_CODE" "1" "反証の宣言が無ければ落ちる"
+assert_contains "$ENGINE_OUT" "missing-falsification" "反証の欠落を名指しする"
+
+# 実測の記録を持たないのは構わない。ただし**なぜ持たないか**は書かせる
+write_registry "$(printf '%s' "$GOOD" | sed 's#"evidence": \[{ "name": "全件実行", "log": "logs/thing-runs.jsonl", "watch": \["scripts"\] }\]#"evidence": []#')"
+run_engine --check
+assert_eq "$ENGINE_CODE" "1" "記録が無く理由も無ければ落ちる"
+assert_contains "$ENGINE_OUT" "missing-evidence" "記録の欠落を名指しする"
+
+# 見張る木が無いと「最新かどうか」を永久に判定できない（測っただけで終わる）
+write_registry "$(printf '%s' "$GOOD" | sed 's#"watch": \["scripts"\]#"watch": []#')"
+run_engine --check
+assert_eq "$ENGINE_CODE" "1" "見張る木が無ければ落ちる"
+assert_contains "$ENGINE_OUT" "evidence-without-watch" "どの木に対する結果か分からないと言う"
+
+write_registry "$(printf '%s' "$GOOD" | sed 's#"watch": \["scripts"\]#"watch": ["nope"]#')"
+run_engine --check
+assert_eq "$ENGINE_CODE" "1" "見張る木が実在しなければ落ちる"
+assert_contains "$ENGINE_OUT" "missing-watch-path" "無い木を名指しする"
+
+echo "=== scenario 14: 守る対象の ID が台帳に実在するかを見る ==="
+# WHY: 「何を守るか」が文章だけだと機械で追えない。台帳の ID で宣言させ、実在を突き合わせる。
+#      台帳を持たない導入先では確かめようが無いので、**その場合は黙って通す**（誤検知を作らない）
+mkdir -p "$WORK/root/scripts/lib" "$WORK/root/docs"
+cat > "$WORK/root/scripts/lib/catalog-registry.json" <<'JSON'
+{ "catalogs": [ { "id": "x", "file": "docs/x-catalog.md", "idPrefix": "X" } ] }
+JSON
+printf '| ID | 何か |\n| --- | --- |\n| X-010 | ある |\n' > "$WORK/root/docs/x-catalog.md"
+
+write_registry "$(printf '%s' "$GOOD" | sed 's/"guardIds": \[\]/"guardIds": ["X-010"]/')"
+write_doc
+run_engine
+assert_eq "$ENGINE_CODE" "0" "台帳に実在する ID なら通る（対照）"
+
+write_registry "$(printf '%s' "$GOOD" | sed 's/"guardIds": \[\]/"guardIds": ["X-999"]/')"
+run_engine --check
+assert_eq "$ENGINE_CODE" "1" "台帳に無い ID なら落ちる"
+assert_contains "$ENGINE_OUT" "unknown-guard-id" "無い ID を名指しする"
+assert_contains "$ENGINE_OUT" "X-999" "どの ID かを出す"
+rm -f "$WORK/root/scripts/lib/catalog-registry.json" "$WORK/root/docs/x-catalog.md"
+
+echo "=== scenario 15: 証拠の状態を実測の記録から出す（レビューの設計提案 4） ==="
+# WHY: 測定 / 合格 / 最新 を**潰さずに**別々に出す（C-025）。
+#      記録は機械ローカルなので、コミットする文書へは焼き込まない（環境ごとに生成物が割れるため）
+write_registry "$GOOD"
+write_doc
+run_engine
+mkdir -p "$WORK/root/logs"
+
+# (a) 記録が 1 行も無い → 測定 ❌
+rm -f "$WORK/root/logs/thing-runs.jsonl"
+run_engine --evidence
+assert_eq "$ENGINE_CODE" "0" "記録が無くても出力そのものは通る"
+assert_contains "$ENGINE_OUT" "測定 ❌" "一度も回していないことを出す"
+assert_contains "$ENGINE_OUT" "一度も回していない" "理由を出す"
+
+# (b) 直近が赤 → 合格 ❌
+SCRIPTS_TREE="$(cd "$WORK/root" && git rev-parse "HEAD:scripts" 2>/dev/null || echo unknown)"
+printf '{"at":"2026-01-01T00:00:00Z","result":"fail","scriptsTree":"%s"}\n' "$SCRIPTS_TREE" > "$WORK/root/logs/thing-runs.jsonl"
+run_engine --evidence
+assert_contains "$ENGINE_OUT" "合格 ❌" "赤のまま放置を出す"
+
+# (c) 木が変わっている → 最新 ❌（合格とは別の欄で出る）
+printf '{"at":"2026-01-01T00:00:00Z","result":"pass","scriptsTree":"0000000000000000000000000000000000000000"}\n' > "$WORK/root/logs/thing-runs.jsonl"
+run_engine --evidence
+assert_contains "$ENGINE_OUT" "合格 ✅" "合格は合格のまま"
+assert_contains "$ENGINE_OUT" "最新 ❌" "木が変わったことを別の欄で出す"
+
+# (d) 記録に木のハッシュが無い → 最新は「？」（緑にも赤にもしない）
+printf '{"at":"2026-01-01T00:00:00Z","result":"pass"}\n' > "$WORK/root/logs/thing-runs.jsonl"
+run_engine --evidence
+assert_contains "$ENGINE_OUT" "最新 ？" "判定できないことを緑にも赤にもしない"
+
+# (e) 記録を持たない役割は、持たない理由を出す
+write_registry "$(printf '%s' "$GOOD" | sed 's#"evidence": \[{ "name": "全件実行", "log": "logs/thing-runs.jsonl", "watch": \["scripts"\] }\]#"evidence": [], "unmeasuredReason": "毎回の CI で回るので記録を持たない"#')"
+run_engine --evidence
+assert_contains "$ENGINE_OUT" "毎回の CI で回るので記録を持たない" "持たない理由を出す"
+write_registry "$GOOD"
 
 echo "=== scenario 3: 宣言したものが実在しないと落ちる ==="
 write_registry "$(printf '%s' "$GOOD" | sed 's#scripts/entry.sh#scripts/nope.sh#')"
@@ -168,15 +264,16 @@ rm -f "$WORK/root/scripts/lib/check-lib-orphan.test.sh"
 
 echo "=== scenario 11: 同じ検査を 2 つのハーネスに置けない ==="
 # WHY: 2 か所に置けると「どの役割が守っているのか」が決まらない。数え上げも二重になる
+MINIMAL_CONTRACT='"guardIds": [], "guardIdsReason": "なし", "preconditions": "なし", "evidence": [], "unmeasuredReason": "なし", "falsification": "scripts/check-thing.test.sh"'
 TWO='{
   "id": "H-01", "role": "あ", "guards": "a", "trigger": "機械", "triggerDetail": "b",
   "entrypoints": ["scripts/entry.sh"], "checks": ["scripts/check-thing.test.sh"],
-  "ledgers": [], "limitsDoc": "docs/limits.md", "state": "あり"
+  "ledgers": [], "limitsDoc": "docs/limits.md", '"$MINIMAL_CONTRACT"'
 },
 {
   "id": "H-02", "role": "い", "guards": "a", "trigger": "機械", "triggerDetail": "b",
   "entrypoints": ["scripts/entry.sh"], "checks": ["scripts/check-thing.test.sh"],
-  "ledgers": [], "limitsDoc": "docs/limits.md", "state": "あり"
+  "ledgers": [], "limitsDoc": "docs/limits.md", '"$MINIMAL_CONTRACT"'
 }'
 write_registry "$TWO"
 run_engine --check

@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 28,
+  "minMutants": 31,
   "mutants": [
     {
       "id": "CM-001",
@@ -263,6 +263,33 @@
       "replace": "  --tree \"src=$SRC_TREE\" \\",
       "expect": "scripts/check-mutation-freshness.test.sh",
       "guards": "C-041（手元で認可の判断を書き換えたまま「前に測ったから大丈夫」と読まない）"
+    },
+    {
+      "id": "CM-029",
+      "breaks": "ハーネスの契約から、「守る対象の ID が台帳に実在するか」の突合を外す",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "        if (!catalogIds.has(gid)) violations.push(",
+      "replace": "        if (false) violations.push(",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "「何を守るか」を文章だけにしないこと（機械で追える宣言を要求する）"
+    },
+    {
+      "id": "CM-030",
+      "breaks": "ハーネスの契約から、「実測の記録も理由も無い」の検知を外す（黙って空欄にできる元の姿）",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "      if (!h.unmeasuredReason) {",
+      "replace": "      if (false) {",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "測っていないことを、測ったことと同じ見た目にしない"
+    },
+    {
+      "id": "CM-031",
+      "breaks": "証拠の状態から「最新かどうか」の判定を外し、合格だけを見る",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "      if (recorded !== tree(root, w)) stale.push(w)",
+      "replace": "      if (false) stale.push(w)",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "C-025（合格・検査不能・古い結果を 1 つの真偽値に潰さない）"
     }
   ]
 }

@@ -5,11 +5,20 @@
 [`file-index.md`](./file-index.md) は**ファイル**の索引、[`rulebooks.md`](./rulebooks.md) は
 **ルールブック**の索引で、こちらは**役割ごとの地図**（どの層の何を守っているか）。
 
-状態は 3 語だけ:
+**「状態」の欄は 2026-09-10 に廃止した。** それまでは手書きの「あり / 一部 / 外部待ち」で、
+登録簿自身が「『あり』は中身の十分性を保証しない」と書いていた——
+**確かめようのない 1 語**が、事故のとき最初に開く 1 枚でいちばん目立つ場所に載っていたことになる。
+同じ問いに 2 か所（この地図と実測の記録）が別々に答える形（E-053）でもあった。
 
-- **あり** … 機械で回っている（CI・hook・npm test のどれかが起動する）
-- **一部** … 動いているが、書いてある限界のぶんだけ空いている
-- **外部待ち** … 設計は決まっているが、GitHub / Supabase cloud など**外部への到達が要る**ので今は着手できない
+いまは宣言と実測を分けている:
+
+- **この文書（コミットする）** … 機械で実在を確かめられる宣言だけ。
+  守る対象の ID・前提・実測の記録の在り処・反証。宣言が実物と食い違えば**生成そのものが落ちる**
+- **いま測れているか** … `bash scripts/show-harness-evidence.sh` が実測の記録から出す。
+  **測定 / 合格 / 最新 を潰さずに別々に**出す（一度も回していない・赤のまま・木が変わっている、は別の話）。
+  記録は機械ローカル（`logs/` は git 管理外）なので、この文書へは焼き込まない
+
+起動の欄（**機械 / 人 / 外部待ち**）は残っている。ここが「人」のものは、誰かが忘れれば止まる。
 
 ## 地図
 
@@ -22,16 +31,29 @@
 
 <!-- generated:harness-map start -->
 
-| 役割 | 何を守るか | 起動 | 入口 | 検査 | 状態 |
-| --- | --- | --- | --- | --- | --- |
-| ワークフロー（H-01） | 決めた順番（調査 → 仕様 → 実装 → 統合 → 検証）を飛ばさない。飛ばしたら気づく | **人**（フローの起動は人。**記録漏れの検知だけ**が Stop hook で機械化されている） | `.claude/workflows/aidd-phase1-router.js`<br>`.claude/workflows/aidd-phase2.js` | 29 本 | 一部 |
-| データ（H-02） | テストのデータが互いを壊さない。消しすぎない・消し残さない | **機械**（統合テスト・E2E を回すたびに走行の前後で実測する（走らせるのは人だが、走れば必ず測る）） | `scripts/run-integration-tests.sh`<br>`scripts/run-e2e-tests.sh` | 4 本 | あり |
-| 契約（H-03） | 決めたことと動くものが食い違わない（操作の契約・層の突合・入口の検証） | **機械**（npm test と hooks-test が毎回回す） | `npm test`<br>`bash scripts/check-operation-contracts.test.sh` | 29 本 | あり |
-| 実装（H-04） | 書いたものが型として通り、単体で動き、ビルドできる | **機械**（npm test / npm run typecheck / npm run lint / next build） | `npm test`<br>`npm run typecheck`<br>`npm run lint` | 6 本 | あり |
-| セキュリティ・回帰（H-05） | 施設の境界を越えられない。4 つの入口すべてを総当たりする | **機械**（静的な検査は hooks-test。**実 DB を叩く総当たりは人が起動する**（統合テスト）） | `scripts/run-integration-tests.sh`<br>`bash scripts/check-guard-regressions.test.sh` | 11 本 | 一部 |
-| ミューテーション（H-06） | 検査が本当に効いている（壊したら落ちる） | **機械**（判定エンジンの変異（CM）と hook の no-op 化は hooks-test。RLS 変異と Stryker は人が打つが、**打ち忘れは SessionStart hook が拾う**（2026-09-10。木のハッシュで「変わったのに測っていない」を見る。Stryker 側は測る対象の一覧も見張る——対象を減らせばスコアは上がるので）） | `bash scripts/check-detectors-effective.test.sh`<br>`bash scripts/check-rls-mutation.sh`<br>`bash scripts/run-mutation-tests.sh` | 5 本 | 一部 |
-| 監視・観測（H-07） | 起きたことに気づける（夜間検査・鮮度・記録漏れ） | **機械**（夜間検査は pg_cron、鮮度は SessionStart / Stop hook。**本番の監視は外部待ち**（#757-8）） | `scripts/check-integration-freshness.sh`<br>`scripts/check-e2e-freshness.sh`<br>`scripts/maintenance-digest.sh` | 34 本 | 一部 |
-| リリース（H-08） | 出す順番を間違えても壊れない（順序・巻き戻し・ロック） | **機械**（hooks-test が migration の注記を毎回検査する） | `bash scripts/check-migration-release-safety.test.sh`<br>`bash scripts/rehearse-merge.sh` | 3 本 | 一部 |
+| 役割 | 何を守るか | 起動 | 入口 | 検査 |
+| --- | --- | --- | --- | --- |
+| ワークフロー（H-01） | 決めた順番（調査 → 仕様 → 実装 → 統合 → 検証）を飛ばさない。飛ばしたら気づく | **人**（フローの起動は人。**記録漏れの検知だけ**が Stop hook で機械化されている） | `.claude/workflows/aidd-phase1-router.js`<br>`.claude/workflows/aidd-phase2.js` | 29 本 |
+| データ（H-02） | テストのデータが互いを壊さない。消しすぎない・消し残さない | **機械**（統合テスト・E2E を回すたびに走行の前後で実測する（走らせるのは人だが、走れば必ず測る）） | `scripts/run-integration-tests.sh`<br>`scripts/run-e2e-tests.sh` | 4 本 |
+| 契約（H-03） | 決めたことと動くものが食い違わない（操作の契約・層の突合・入口の検証） | **機械**（npm test と hooks-test が毎回回す） | `npm test`<br>`bash scripts/check-operation-contracts.test.sh` | 29 本 |
+| 実装（H-04） | 書いたものが型として通り、単体で動き、ビルドできる | **機械**（npm test / npm run typecheck / npm run lint / next build） | `npm test`<br>`npm run typecheck`<br>`npm run lint` | 6 本 |
+| セキュリティ・回帰（H-05） | 施設の境界を越えられない。4 つの入口すべてを総当たりする | **機械**（静的な検査は hooks-test。**実 DB を叩く総当たりは人が起動する**（統合テスト）） | `scripts/run-integration-tests.sh`<br>`bash scripts/check-guard-regressions.test.sh` | 11 本 |
+| ミューテーション（H-06） | 検査が本当に効いている（壊したら落ちる） | **機械**（判定エンジンの変異（CM）と hook の no-op 化は hooks-test。RLS 変異と Stryker は人が打つが、**打ち忘れは SessionStart hook が拾う**（2026-09-10。木のハッシュで「変わったのに測っていない」を見る。Stryker 側は測る対象の一覧も見張る——対象を減らせばスコアは上がるので）） | `bash scripts/check-detectors-effective.test.sh`<br>`bash scripts/check-rls-mutation.sh`<br>`bash scripts/run-mutation-tests.sh` | 5 本 |
+| 監視・観測（H-07） | 起きたことに気づける（夜間検査・鮮度・記録漏れ） | **機械**（夜間検査は pg_cron、鮮度は SessionStart / Stop hook。**本番の監視は外部待ち**（#757-8）） | `scripts/check-integration-freshness.sh`<br>`scripts/check-e2e-freshness.sh`<br>`scripts/maintenance-digest.sh` | 34 本 |
+| リリース（H-08） | 出す順番を間違えても壊れない（順序・巻き戻し・ロック） | **機械**（hooks-test が migration の注記を毎回検査する） | `bash scripts/check-migration-release-safety.test.sh`<br>`bash scripts/rehearse-merge.sh` | 3 本 |
+
+**契約（守る対象・前提・実測の記録・反証）**
+
+| 役割 | 守る対象 | 前提 | 実測の記録 | 反証（壊して落ちることの確認） |
+| --- | --- | --- | --- | --- |
+| ワークフロー（H-01） | —（守る対象は業務の条件ではなく手順そのもの。台帳の ID では表せない） | 人（またはエージェント）が AIDD フローを起動していること | —（フローの実行そのものは人が起動するので「最後に回した結果」を持たない。記録漏れの検知だけが Stop hook で機械化されている） | scripts/check-rule-guard-effective.test.sh（hook を no-op にすると検査が落ちるか） |
+| データ（H-02） | `C-030` `C-041` `E-065` | ローカル Supabase が起動していること。統合テスト・E2E を全件で回すこと（部分実行では判定しない） | 統合テストの全件実行（後片付けの漏れを含む）<br>`logs/integration-runs.jsonl` | 変異 CM-011 / CM-018 / CM-024（scripts/lib/check-mutants.json） |
+| 契約（H-03） | `C-010` `C-011` `C-032` | なし（静的な突合だけ。実 DB は要らない） | —（毎回の npm test と hooks-test で回るので「最後に回した記録」を別に持たない（回っていなければ CI が赤になる）） | 変異 CM-001〜CM-010 / CM-019〜CM-021 / CM-025 / CM-026（scripts/lib/check-mutants.json） |
+| 実装（H-04） | —（型・単体・ビルドは特定の条件ではなく全体に掛かる。台帳の ID では表せない） | なし | —（毎回の CI で回るので「最後に回した記録」を別に持たない（回っていなければ CI が赤になる）） | scripts/check-fail-open.test.sh（材料が取れないときに拒否側へ倒れるか） |
+| セキュリティ・回帰（H-05） | `T-037` `C-023` `C-032` | ローカル Supabase が起動していること。E2E は dev サーバーも要る | E2E の全件実行（画面と入口の総当たり）<br>`logs/e2e-runs.jsonl` | scripts/check-guard-regressions.test.sh（後から足した守りを落としたら落ちるか） |
+| ミューテーション（H-06） | `C-022` | RLS 変異はローカル Supabase が起動していること。Stryker は実 DB を要らない | 認可ポリシーの変異計測（RLS）<br>`logs/rls-mutation-runs.jsonl`<br><br>製品コードの変異計測（Stryker）<br>`logs/mutation-runs.jsonl` | この役割自体が反証の仕組み。自分を壊しては測れないので、scripts/check-detectors-effective.test.sh の scenario 2〜9 が fixture で自己検証する |
+| 監視・観測（H-07） | `C-041` `E-030` | なし（記録が無いこと自体を警告するので、記録が無くても動く） | —（この役割は「他の役割が測ったか」を見る側で、自分の実測の記録は持たない。鮮度 hook が黙る事故は各 *-freshness.test.sh が測る） | scripts/check-rule-guard-effective.test.sh（鮮度 hook を no-op にすると落ちるか） |
+| リリース（H-08） | `M-010` | なし（migration の SQL と git の状態だけを見る） | —（リリースの実行そのものが人の操作で、実測の記録を残す入口をまだ作っていない（#757-8 の外部監視と同じ待ち）） | scripts/check-migration-release-safety.test.sh の RED 方向 fixture |
 
 **台帳（数字はここから読む。足し算しない）**
 
@@ -41,7 +63,7 @@
 | `input-validation-baseline.json`#pending.length | 本文を検証せずに読む route（H-03） | route | **0** |
 | `query-validation-baseline.json`#pending.length | クエリを検証せずに読む route（H-03） | route | **0** |
 | `write-path-registry.json`#maxGaps | DB は書けるのにアプリに道が無い組み合わせ（H-05） | 組み合わせ | **0** |
-| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **28** |
+| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **31** |
 | `rls-mutants.json`#mutants.length | RLS・RPC の壊し方（H-06） | 件 | **18** |
 
 （ハーネス 8 件・検査 121 本・台帳 6 件。**検査はこの表で全数**——どこにも属さない検査があれば生成そのものが落ちる）
@@ -88,8 +110,11 @@ ratchet を持つ仕組みはそれぞれ**別の台帳**を持っている。**
 
 ## 読み方
 
-- **「あり」でも守っているのは書いてある範囲だけ。** 各ハーネスの限界はそれぞれのファイルの
+- **宣言があっても守っているのは書いてある範囲だけ。** 各ハーネスの限界はそれぞれのファイルの
   「限界」節にある。ここには書かない（2 か所に書くと必ず片方が古くなる）
+- **「いま緑か」はこの文書からは分からない。** `bash scripts/show-harness-evidence.sh` を打つ。
+  この文書が答えるのは「何を守ると宣言しているか」までで、
+  「その宣言どおりに最後に測れたのはいつか」は実測の記録が答える
 - **役割が重なっているものがある。** 例えば「入口の検証」と「層の突合」はどちらも zod を見るが、
   前者は**入口を 1 つにする**こと、後者は**DB と値が一致する**ことを見ている
 - **新しく作りたくなったら、まず上の表のどの行かを決める。** 行が無ければ新しい役割で、
@@ -97,9 +122,14 @@ ratchet を持つ仕組みはそれぞれ**別の台帳**を持っている。**
 
 ## 限界
 
-- **この地図は状態を手で書いている。** 機械が数えているわけではないので、実物が変わっても
-  自動では追随しない。各ハーネスを触ったときに一緒に直す
-- **「あり」の判定は「機械で起動するか」だけ**を見ている。中身が十分かは見ていない
+- **宣言の実在は見るが、中身の十分性は見ない。** 守る対象の ID が台帳にあること・記録の在り処が
+  実在することは機械で確かめるが、その検査が本当に守れているかは見ない（それは変異計測 H-06 の担当）
+- **証拠の状態は HEAD の木のハッシュだけを見る。** 未コミットの書き換えは見ない
+  （そちらは Stop hook の `scripts/check-full-run-before-finish.sh` の担当。
+  同じ問いに 2 か所が別々に答えないようにしている）
+- **実測の記録を持たない役割がある。** H-01（ワークフロー）・H-03（契約）・H-04（実装）・
+  H-07（監視）・H-08（リリース）は「最後に回した結果」を持たない。理由は上の契約の表に書いてある。
+  持たない理由が「CI が毎回回すから」の場合、**CI が止まっていれば誰も気づかない**
 - 役割の切り方はこのリポジトリの都合で、一般的な分類ではない
 
 ## 更新の引き金
