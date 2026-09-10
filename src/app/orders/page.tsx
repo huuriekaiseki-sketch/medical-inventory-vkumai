@@ -26,6 +26,17 @@ function parseKind(value: string | null): OrderKind | null {
   return VALID_KINDS.includes(value as OrderKind) ? (value as OrderKind) : null
 }
 
+// WHY(2026-09-11): `Number(...)` をそのまま使うと `?offset=abc` で NaN になり、
+//      API へ "NaN" を送って 400（「offset は 0〜… の整数で指定してください」）になる。
+//      **サーバーは弾くので漏れはしない**（`api-pagination.ts` が `Number.isInteger` を見る）が、
+//      壊れたリンクやブックマークを踏んだ利用者には一覧が出ないだけの画面になる。
+//      入口で 0 に倒す。負数・小数も同じ扱い（どれも API では弾かれる値）。
+//      見つけたのは 2026-09-11、held-out の eval で Sweep が実コードを掃いたとき。
+function parseOffset(value: string | null): number {
+  const n = Number(value ?? '0')
+  return Number.isInteger(n) && n >= 0 ? n : 0
+}
+
 function OrdersPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -34,7 +45,7 @@ function OrdersPageInner() {
   const dateFrom = searchParams.get('dateFrom') ?? ''
   const dateTo = searchParams.get('dateTo') ?? ''
   const keyword = searchParams.get('keyword') ?? ''
-  const offset = Number(searchParams.get('offset') ?? '0')
+  const offset = parseOffset(searchParams.get('offset'))
 
   // WHY: /orders はグローバルナビからアクセスする横断ページで、/facilities/[id]/... のように
   // URLパスに施設IDを含まない。/api/facilities から取得した一覧から対象施設を選ぶ

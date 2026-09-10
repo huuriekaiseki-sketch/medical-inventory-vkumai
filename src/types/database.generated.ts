@@ -444,7 +444,7 @@ export type Database = {
           delivery_rate: number | null
           distributor_product_id: string
           facility_id: string
-          gross_profit: number | null
+          gross_profit: number
           id: string
           purchase_price: number
           purchase_rate: number | null
@@ -456,7 +456,7 @@ export type Database = {
           delivery_rate?: number | null
           distributor_product_id: string
           facility_id: string
-          gross_profit?: number | null
+          gross_profit?: number
           id?: string
           purchase_price: number
           purchase_rate?: number | null
@@ -468,7 +468,7 @@ export type Database = {
           delivery_rate?: number | null
           distributor_product_id?: string
           facility_id?: string
-          gross_profit?: number | null
+          gross_profit?: number
           id?: string
           purchase_price?: number
           purchase_rate?: number | null
@@ -1122,7 +1122,11 @@ export type Database = {
         Returns: number
       }
       rate_limit_bucket_key: {
-        Args: { p_bucket: string; p_window_start: string }
+        Args: {
+          p_bucket: string
+          p_window_seconds: number
+          p_window_start: string
+        }
         Returns: string
       }
       rate_limit_window_start: {
