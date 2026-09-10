@@ -19,7 +19,6 @@
 import { test, expect, request as playwrightRequest, type APIRequestContext } from '@playwright/test'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'crypto'
-import * as fs from 'fs'
 import * as path from 'path'
 import {
   readCrossFacilityFixtures,
@@ -35,36 +34,22 @@ import {
   DISTRIBUTOR_PRODUCT_A,
   RANDOM_UUID,
   type AttackCase,
-  type Method,
   type PathId,
 } from './api-attack-matrix'
+// WHY(2026-09-10): route の列挙と攻撃表との突合は `api-route-registry.ts` にしか置かない。
+//      突合の合否は **`npm test`（vitest）が毎回**判定する
+//      （`src/__tests__/api-attack-matrix-ratchet.test.ts`）。
+//      ここに合否を置くと、E2E が節目実行であることと、下の `test.skip`
+//      （フィクスチャ / SUPABASE_SERVICE_ROLE_KEY）に巻き込まれて、
+//      **ファイルを読むだけで済む検査が Supabase の有無で黙ってスキップされる**（実際そうなっていた）。
+import { discoverRoutes } from './api-route-registry'
 
-const METHODS: Method[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 const FACILITY_SCOPED_TABLES = ['loan_orders', 'case_orders', 'consumable_orders', 'loan_returns', 'consumables', 'hospital_prices', 'user_facilities']
 // WHY(マスタも「変わらない」に入れる、2026-09-09): 攻撃が実在するマスタの行を狙うようになり、
 //      PUT / DELETE が通ってしまえば施設の外側（全施設が使う商品・カテゴリ・互換）が壊れる。
 //      施設で絞れないので表ごと全行を比べる。攻撃 spec は隔離プロジェクトで単独実行なので、
 //      この間に他の spec がマスタへ書き込むことはない（e2e/project-isolation.ts）
 const MASTER_TABLES = ['products', 'categories', 'distributor_products', 'product_compatibilities', 'price_histories']
-
-// src/app 配下の route.ts を列挙し、'/api/loan-orders' や '/api/hospital-prices/[id]' の形にする
-function discoverRoutes(): { route: string; methods: Method[] }[] {
-  const appDir = path.join(process.cwd(), 'src', 'app')
-  const found: { route: string; methods: Method[] }[] = []
-  const walk = (dir: string) => {
-    for (const name of fs.readdirSync(dir)) {
-      const p = path.join(dir, name)
-      if (fs.statSync(p).isDirectory()) { walk(p); continue }
-      if (name !== 'route.ts') continue
-      const rel = path.relative(appDir, path.dirname(p)).split(path.sep).join('/')
-      const src = fs.readFileSync(p, 'utf-8')
-      const methods = METHODS.filter(m => new RegExp(`export\\s+async\\s+function\\s+${m}\\b`).test(src))
-      found.push({ route: `/${rel}`, methods })
-    }
-  }
-  walk(appDir)
-  return found.sort((a, b) => a.route.localeCompare(b.route))
-}
 
 interface Fx {
   facilityAId: string
@@ -141,29 +126,12 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
   test.skip(!fixtures || !fixtures.loanOrderId, 'cross-facility フィクスチャ（loanOrderId 込み）が無い')
   test.skip(!process.env.SUPABASE_SERVICE_ROLE_KEY, 'SUPABASE_SERVICE_ROLE_KEY が未設定（snapshot に必要）')
 
-  const routes = discoverRoutes()
+  const routes = discoverRoutes(path.join(process.cwd(), 'src', 'app'))
 
-  test('攻撃表は実在する route × メソッドと過不足なく対応する（ratchet）', () => {
-    const missing: string[] = []
-    for (const { route, methods } of routes) {
-      const entry = ATTACK_MATRIX[route]
-      if (!entry) { missing.push(`${route}（表に無い）`); continue }
-      for (const m of methods) {
-        if (m === 'GET') continue // GET は既定の攻撃（query に施設 A）でよい
-        if (!entry[m]) missing.push(`${route} ${m}（書き込み系は有効な body を表に書く）`)
-      }
-    }
-    const stale: string[] = []
-    for (const route of Object.keys(ATTACK_MATRIX)) {
-      const r = routes.find(x => x.route === route)
-      if (!r) { stale.push(`${route}（route.ts が無い）`); continue }
-      for (const m of Object.keys(ATTACK_MATRIX[route]) as Method[]) {
-        if (!r.methods.includes(m)) stale.push(`${route} ${m}（export されていない）`)
-      }
-    }
-    expect(missing, '新しい route / メソッドを api-attack-matrix.ts に足す').toEqual([])
-    expect(stale, '消えた route / メソッドを api-attack-matrix.ts から消す').toEqual([])
-  })
+  // NOTE(2026-09-10): 「攻撃表と実在 route が過不足なく対応する」ratchet は
+  //      `src/__tests__/api-attack-matrix-ratchet.test.ts` へ移した（`npm test` で毎回回る）。
+  //      ここに置いていた間は、上の `test.skip` に巻き込まれて
+  //      **Supabase を止めている間ずっとスキップされていた**。
 
   test('全 route × 全メソッドを施設 B のユーザーで叩いても、施設 A のデータは漏れず・変わらない', async ({ baseURL }) => {
     const fx: Fx = {

@@ -37,8 +37,8 @@
 | データ（H-02） | テストのデータが互いを壊さない。消しすぎない・消し残さない | **機械**（統合テスト・E2E を回すたびに走行の前後で実測する（走らせるのは人だが、走れば必ず測る）） | `scripts/run-integration-tests.sh`<br>`scripts/run-e2e-tests.sh` | 4 本 |
 | 契約（H-03） | 決めたことと動くものが食い違わない（操作の契約・層の突合・入口の検証） | **機械**（npm test と hooks-test が毎回回す） | `npm test`<br>`bash scripts/check-operation-contracts.test.sh` | 29 本 |
 | 実装（H-04） | 書いたものが型として通り、単体で動き、ビルドできる | **機械**（npm test / npm run typecheck / npm run lint / next build） | `npm test`<br>`npm run typecheck`<br>`npm run lint` | 8 本 |
-| セキュリティ・回帰（H-05） | 施設の境界を越えられない。4 つの入口すべてを総当たりする | **機械**（静的な検査は hooks-test。**実 DB を叩く総当たりは人が起動する**（統合テスト）） | `scripts/run-integration-tests.sh`<br>`bash scripts/check-guard-regressions.test.sh` | 12 本 |
-| ミューテーション（H-06） | 検査が本当に効いている（壊したら落ちる） | **機械**（判定エンジンの変異（CM）と hook の no-op 化は hooks-test。RLS 変異と Stryker は人が打つが、**打ち忘れは SessionStart hook が拾う**（2026-09-10。木のハッシュで「変わったのに測っていない」を見る。Stryker 側は測る対象の一覧も見張る——対象を減らせばスコアは上がるので）） | `bash scripts/check-detectors-effective.test.sh`<br>`bash scripts/check-rls-mutation.sh`<br>`bash scripts/run-mutation-tests.sh` | 5 本 |
+| セキュリティ・回帰（H-05） | 施設の境界を越えられない。4 つの入口すべてを総当たりする | **機械**（静的な検査は hooks-test。**実 DB を叩く総当たりは人が起動する**（統合テスト）。攻撃表と実在 route の突合は npm test で毎回（2026-09-10 に E2E から移した。E2E 側に置いていた間は `test.skip` に巻き込まれて Supabase を止めている間ずっとスキップされていた）） | `scripts/run-integration-tests.sh`<br>`bash scripts/check-guard-regressions.test.sh` | 13 本 |
+| ミューテーション（H-06） | 検査が本当に効いている（壊したら落ちる）。**その前に、そもそも実行されている**（前提に巻き込まれて黙っていない） | **機械**（判定エンジンの変異（CM）と hook の no-op 化は hooks-test。RLS 変異と Stryker は人が打つが、**打ち忘れは SessionStart hook が拾う**（2026-09-10。木のハッシュで「変わったのに測っていない」を見る。Stryker 側は測る対象の一覧も見張る——対象を減らせばスコアは上がるので）） | `bash scripts/check-detectors-effective.test.sh`<br>`bash scripts/check-rls-mutation.sh`<br>`bash scripts/run-mutation-tests.sh` | 6 本 |
 | 監視・観測（H-07） | 起きたことに気づける（夜間検査・鮮度・記録漏れ） | **機械**（夜間検査は pg_cron、鮮度は SessionStart / Stop hook。**本番の監視は外部待ち**（#757-8）） | `scripts/check-integration-freshness.sh`<br>`scripts/check-e2e-freshness.sh`<br>`scripts/maintenance-digest.sh` | 37 本 |
 | リリース（H-08） | 出す順番を間違えても壊れない（順序・巻き戻し・ロック） | **機械**（hooks-test が migration の注記を毎回検査する。**マージ予行は人が打つ**（bash scripts/rehearse-merge.sh --base main）） | `bash scripts/check-migration-release-safety.test.sh`<br>`bash scripts/rehearse-merge.sh` | 3 本 |
 
@@ -50,8 +50,8 @@
 | データ（H-02） | `C-030` `C-041` `E-065` | ローカル Supabase が起動していること。統合テスト・E2E を全件で回すこと（部分実行では判定しない） | 統合テストの全件実行（後片付けの漏れを含む）<br>`logs/integration-runs.jsonl` | 変異 CM-011 / CM-018 / CM-024（scripts/lib/check-mutants.json） |
 | 契約（H-03） | `C-010` `C-011` `C-032` | なし（静的な突合だけ。実 DB は要らない） | —（毎回の npm test と hooks-test で回るので「最後に回した記録」を別に持たない（回っていなければ CI が赤になる）） | 変異 CM-001〜CM-010 / CM-019〜CM-021 / CM-025 / CM-026（scripts/lib/check-mutants.json） |
 | 実装（H-04） | —（型・単体・ビルドは特定の条件ではなく全体に掛かる。台帳の ID では表せない） | なし | —（毎回の CI で回るので「最後に回した記録」を別に持たない（回っていなければ CI が赤になる）） | scripts/check-fail-open.test.sh（材料が取れないときに拒否側へ倒れるか） |
-| セキュリティ・回帰（H-05） | `T-037` `C-023` `C-032` | ローカル Supabase が起動していること。E2E は dev サーバーも要る | E2E の全件実行（画面と入口の総当たり）<br>`logs/e2e-runs.jsonl` | scripts/check-guard-regressions.test.sh（後から足した守りを落としたら落ちるか） |
-| ミューテーション（H-06） | `C-022` | RLS 変異はローカル Supabase が起動していること。Stryker は実 DB を要らない | 認可ポリシーの変異計測（RLS）<br>`logs/rls-mutation-runs.jsonl`<br><br>製品コードの変異計測（Stryker）<br>`logs/mutation-runs.jsonl` | この役割自体が反証の仕組み。自分を壊しては測れないので、scripts/check-detectors-effective.test.sh の scenario 2〜9 が fixture で自己検証する |
+| セキュリティ・回帰（H-05） | `T-037` `C-023` `C-032` `P-017` | ローカル Supabase が起動していること。E2E は dev サーバーも要る。**ただし『実在する route が攻撃表に載っているか』の突合だけは前提なし**（ファイルを読むだけなので npm test で毎回回る） | E2E の全件実行（画面と入口の総当たり）<br>`logs/e2e-runs.jsonl` | scripts/check-guard-regressions.test.sh（後から足した守りを落としたら落ちるか） |
+| ミューテーション（H-06） | `C-022` `C-033` | RLS 変異はローカル Supabase が起動していること。Stryker は実 DB を要らない | 認可ポリシーの変異計測（RLS）<br>`logs/rls-mutation-runs.jsonl`<br><br>製品コードの変異計測（Stryker）<br>`logs/mutation-runs.jsonl` | この役割自体が反証の仕組み。自分を壊しては測れないので、scripts/check-detectors-effective.test.sh の scenario 2〜9 が fixture で自己検証する |
 | 監視・観測（H-07） | `C-041` `E-030` | なし（記録が無いこと自体を警告するので、記録が無くても動く） | —（この役割は「他の役割が測ったか」を見る側で、自分の実測の記録は持たない。鮮度 hook が黙る事故は各 *-freshness.test.sh が測る） | scripts/check-rule-guard-effective.test.sh（鮮度 hook を no-op にすると落ちるか） |
 | リリース（H-08） | `M-010` | なし（migration の SQL と git の状態だけを見る） | マージ予行（この順で main へ入れたら衝突するか）<br>`logs/release-rehearsal-runs.jsonl` | scripts/check-migration-release-safety.test.sh の RED 方向 fixture |
 
@@ -63,10 +63,10 @@
 | `input-validation-baseline.json`#pending.length | 本文を検証せずに読む route（H-03） | route | **0** |
 | `query-validation-baseline.json`#pending.length | クエリを検証せずに読む route（H-03） | route | **0** |
 | `write-path-registry.json`#maxGaps | DB は書けるのにアプリに道が無い組み合わせ（H-05） | 組み合わせ | **0** |
-| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **55** |
+| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **58** |
 | `rls-mutants.json`#mutants.length | RLS・RPC の壊し方（H-06） | 件 | **18** |
 
-（ハーネス 8 件・検査 127 本・台帳 6 件。**検査はこの表で全数**——どこにも属さない検査があれば生成そのものが落ちる）
+（ハーネス 8 件・検査 129 本・台帳 6 件。**検査はこの表で全数**——どこにも属さない検査があれば生成そのものが落ちる）
 
 <!-- generated:harness-map end -->
 

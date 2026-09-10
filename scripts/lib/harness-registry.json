@@ -203,7 +203,7 @@
       "role": "セキュリティ・回帰",
       "guards": "施設の境界を越えられない。4 つの入口すべてを総当たりする",
       "trigger": "機械",
-      "triggerDetail": "静的な検査は hooks-test。**実 DB を叩く総当たりは人が起動する**（統合テスト）",
+      "triggerDetail": "静的な検査は hooks-test。**実 DB を叩く総当たりは人が起動する**（統合テスト）。攻撃表と実在 route の突合は npm test で毎回（2026-09-10 に E2E から移した。E2E 側に置いていた間は `test.skip` に巻き込まれて Supabase を止めている間ずっとスキップされていた）",
       "entrypoints": [
         "scripts/run-integration-tests.sh",
         "bash scripts/check-guard-regressions.test.sh"
@@ -220,7 +220,8 @@
         "scripts/check-secret-leak-history.test.sh",
         "scripts/check-write-path-gaps.test.sh",
         "scripts/schema-drift-reconcile.test.sh",
-        "scripts/supply-chain-drill.test.sh"
+        "scripts/supply-chain-drill.test.sh",
+        "src/__tests__/api-attack-matrix-ratchet.test.ts"
       ],
       "ledgers": [
         {
@@ -234,9 +235,10 @@
       "guardIds": [
         "T-037",
         "C-023",
-        "C-032"
+        "C-032",
+        "P-017"
       ],
-      "preconditions": "ローカル Supabase が起動していること。E2E は dev サーバーも要る",
+      "preconditions": "ローカル Supabase が起動していること。E2E は dev サーバーも要る。**ただし『実在する route が攻撃表に載っているか』の突合だけは前提なし**（ファイルを読むだけなので npm test で毎回回る）",
       "evidence": [
         {
           "name": "E2E の全件実行（画面と入口の総当たり）",
@@ -252,7 +254,7 @@
     {
       "id": "H-06",
       "role": "ミューテーション",
-      "guards": "検査が本当に効いている（壊したら落ちる）",
+      "guards": "検査が本当に効いている（壊したら落ちる）。**その前に、そもそも実行されている**（前提に巻き込まれて黙っていない）",
       "trigger": "機械",
       "triggerDetail": "判定エンジンの変異（CM）と hook の no-op 化は hooks-test。RLS 変異と Stryker は人が打つが、**打ち忘れは SessionStart hook が拾う**（2026-09-10。木のハッシュで「変わったのに測っていない」を見る。Stryker 側は測る対象の一覧も見張る——対象を減らせばスコアは上がるので）",
       "entrypoints": [
@@ -265,7 +267,8 @@
         "scripts/check-mutation-freshness.test.sh",
         "scripts/check-rls-mutation-freshness.test.sh",
         "scripts/check-rls-mutation.test.sh",
-        "scripts/check-rule-guard-effective.test.sh"
+        "scripts/check-rule-guard-effective.test.sh",
+        "scripts/check-skip-scope.test.sh"
       ],
       "ledgers": [
         {
@@ -283,7 +286,8 @@
       ],
       "limitsDoc": "docs/agents/mutation-testing.md",
       "guardIds": [
-        "C-022"
+        "C-022",
+        "C-033"
       ],
       "preconditions": "RLS 変異はローカル Supabase が起動していること。Stryker は実 DB を要らない",
       "evidence": [
