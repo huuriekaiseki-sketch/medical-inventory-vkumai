@@ -86,11 +86,14 @@ run_agent() {
   local agent_md="$PWD/.claude/agents/${AGENT_TYPE}.md"
   local agents_json
   agents_json="$(node "$SCRIPT_DIR/lib/build-eval-agent-json.mjs" "$agent_md" "$AGENT_TYPE")"
+  # --output-format json: 使用量（トークン数・費用）を返させる（2026-09-10、設計提案 3「費用」）。
+  # --json-schema と併用できることは実測済み。包みは scripts/lib/agent-output.mjs が剥がす
   printf '%s' "$prompt" | claude -p --agent "$AGENT_TYPE" --model "$MODEL" \
     --json-schema "$JSON_SCHEMA" \
     --agents "$agents_json" \
     --setting-sources "" \
     --permission-mode bypassPermissions \
+    --output-format json \
     --no-session-persistence
 }
 
@@ -120,6 +123,11 @@ run_agent_with_timeout() {
   rm -f "$out_file" "${out_file}.exit"
   return "$status"
 }
+
+# 記録と使用量の足し上げは共通（scripts/lib/record-eval-run.sh）。
+# **ループより前に読み込む**——accumulate_usage をループの中で呼ぶため
+# shellcheck source=lib/record-eval-run.sh
+source "$SCRIPT_DIR/lib/record-eval-run.sh"
 
 # 所要時間を測る起点（設計提案 3「再現性と費用」のうち時間の側）
 RUN_STARTED_AT="$(date +%s)"
@@ -180,8 +188,14 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
   #      いても MISS になっていた（2026-09-05 実測: 生出力に期待パスとキーワードの両方があるのに 0/1）。
   #      JSON として読めなければ生出力全体を判定対象にする（判定は部分文字列一致なので過検出は
   #      増えない。status の取得は諦める）
-  if ! printf '%s' "$AGENT_OUTPUT" | jq -r '.detail // ""' > "$DETAIL_FILE" 2>/dev/null; then
-    printf '%s' "$AGENT_OUTPUT" > "$DETAIL_FILE"
+  # `claude -p --output-format json` の包みを剥がす。**包みが無い（モック）出力もそのまま通る**
+  AGENT_PAYLOAD="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --payload 2>/dev/null || printf '%s' "$AGENT_OUTPUT")"
+  # 使用量を足し上げる（設計提案 3「費用」）
+  USAGE_JSON="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --usage 2>/dev/null || echo '{}')"
+  accumulate_usage "$USAGE_JSON"
+
+  if ! printf '%s' "$AGENT_PAYLOAD" | jq -r '.detail // ""' > "$DETAIL_FILE" 2>/dev/null; then
+    printf '%s' "$AGENT_PAYLOAD" > "$DETAIL_FILE"
     echo "[$case_name] 注意: エージェント出力が JSON ではないため生出力全体を判定対象にしました" >&2
   fi
   IS_HIT="$(EXPECTED_FILE="$expected_file" DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py")"
@@ -215,10 +229,8 @@ echo ""
 echo "=== eval-sweep-recall: $LAYER ==="
 echo "recall: $HIT_COUNT / $TOTAL"
 
-# 記録の作り方は共通（scripts/lib/record-eval-run.sh）。条件（木のハッシュ・モデル）と
-# 所要時間も一緒に残す——**同じ条件の回どうしでしかばらつきは比べられない**（設計提案 3）
-# shellcheck source=lib/record-eval-run.sh
-source "$SCRIPT_DIR/lib/record-eval-run.sh"
+# 条件（木のハッシュ・モデル）・所要時間・費用も一緒に残す
+# ——**同じ条件の回どうしでしかばらつきは比べられない**（設計提案 3）
 EVAL_RUNS_REPO_DIR="$REPO_DIR" record_eval_run \
   "eval-sweep-recall" "$LAYER" "$HIT_COUNT" "$TOTAL" "$RUN_STARTED_AT" "$MODEL"
 

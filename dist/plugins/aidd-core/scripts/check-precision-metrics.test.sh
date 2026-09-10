@@ -164,7 +164,30 @@ printf '{"at":"2026-01-02T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTr
 run_engine
 assert_contains "$ENGINE_OUT" "42 秒" "所要時間を出す"
 assert_contains "$ENGINE_OUT" "モデル haiku" "どのモデルで測ったかを出す"
-assert_contains "$ENGINE_OUT" "費用（トークン数）は記録していない" "取れていないものを取れているように見せない"
+assert_not_contains "$ENGINE_OUT" "\$0.0000" "費用の記録が無い回を 0 円と言わない"
+
+echo "=== scenario 3d: 費用を出す（設計提案 3「再現性と費用」の費用の側） ==="
+# WHY(2026-09-10): 費用は `claude -p --output-format json` の `total_cost_usd` から取る。
+#      取れた回と取れなかった回を**別々に**出さないと、モックで回した回を 0 円として混ぜてしまい
+#      費用が実際より安く見える（C-025: 別々の状態を 1 つに潰す）。
+printf '{"at":"2026-01-03T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW","costUsd":0.0755,"inputTokens":40,"outputTokens":292,"usageSamples":2}\n' > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "\$0.0755" "費用を金額で出す"
+assert_contains "$ENGINE_OUT" "入力 40 / 出力 292 トークン" "トークン数を出す"
+assert_contains "$ENGINE_OUT" "2 回分" "何回分の合計かを言う"
+
+echo "=== scenario 3e: 取れなかった回を 0 円と言わない（対照） ==="
+printf '{"at":"2026-01-03T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW","usageMissing":3}\n' > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "費用は取れなかった（3 回" "取れなかったことをそのまま言う"
+assert_not_contains "$ENGINE_OUT" "\$0.0000" "取れなかった回を 0 円に潰さない"
+
+echo "=== scenario 3f: 取れた回と取れなかった回が混ざったら、両方を出す ==="
+# WHY: 「$0.05・1 回分」だけ出すと、**残り 4 回ぶんの費用が無かったように見える**
+printf '{"at":"2026-01-03T00:00:00Z","killed":18,"targeted":18,"errors":0,"srcTree":"NEW","costUsd":0.05,"inputTokens":10,"outputTokens":20,"usageSamples":1,"usageMissing":4}\n' > "$WORK/root/logs/m.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "1 回分" "取れた回数を出す"
+assert_contains "$ENGINE_OUT" "取れなかった 4 回は含まない" "取れなかった回があることを隠さない"
 
 echo "=== scenario 4: 一度も測っていない指標は 0% とも 100% とも言わない ==="
 cat > "$WORK/registry.json" <<'JSON'

@@ -181,6 +181,7 @@
       ],
       "checks": [
         "scripts/check-fail-open.test.sh",
+        "scripts/check-shell-expansion-safety.test.sh",
         "scripts/check-shell-locale-safety.test.sh",
         "scripts/check-foreign-key-indexes.test.sh",
         "scripts/check-rate-limit-coverage.test.sh",
@@ -323,6 +324,7 @@
         "scripts/check-eval-runs-freshness.test.sh",
         "scripts/lib/judge-sweep-recall.test.sh",
         "scripts/check-precision-metrics.test.sh",
+        "scripts/check-agent-output.test.sh",
         "scripts/check-observability-chain.test.sh",
         "scripts/check-fault-injection-drill-staleness.test.sh",
         "scripts/check-find-av-precision-recorded.test.sh",

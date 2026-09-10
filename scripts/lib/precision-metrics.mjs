@@ -140,6 +140,13 @@ export function computeMetric({ metric, root, runs, read = readRecords }) {
       at: latest.at ?? latest.timestamp ?? null,
       elapsedSeconds: latest.elapsedSeconds ?? null,
       model: latest.model ?? null,
+      // 費用（2026-09-10）。**取れた回が無ければ欄そのものが無い**——
+      // 0 円だったのか取れなかったのかを混ぜないため、undefined と 0 を区別する
+      costUsd: typeof latest.costUsd === 'number' ? latest.costUsd : null,
+      inputTokens: typeof latest.inputTokens === 'number' ? latest.inputTokens : null,
+      outputTokens: typeof latest.outputTokens === 'number' ? latest.outputTokens : null,
+      usageSamples: typeof latest.usageSamples === 'number' ? latest.usageSamples : null,
+      usageMissing: typeof latest.usageMissing === 'number' ? latest.usageMissing : null,
       droppedForCondition,
       variance: spread(rates),
     })
@@ -158,6 +165,31 @@ export function logDirOf(root, run = execFileSync) {
     /* git が無ければ下へ */
   }
   return path.join(root, 'logs')
+}
+
+/**
+ * 費用の 1 行分の文言（2026-09-10、設計提案 3「再現性と費用」）。
+ *
+ * WHY(取れなかったことを黙って 0 円にしない): eval はモックでも回る。
+ *      モックの回は使用量を返さないので、そこを 0 円として混ぜると
+ *      **費用が実際より安く見える**。取れた回数と取れなかった回数を別々に出す。
+ */
+export function costLabel(g) {
+  const has = g.usageSamples !== null && g.usageSamples > 0
+  if (has) {
+    const parts = [`$${g.costUsd === null ? '?' : g.costUsd.toFixed(4)}`]
+    if (g.inputTokens !== null || g.outputTokens !== null) {
+      parts.push(`入力 ${g.inputTokens ?? '?'} / 出力 ${g.outputTokens ?? '?'} トークン`)
+    }
+    parts.push(`${g.usageSamples} 回分`)
+    if (g.usageMissing) parts.push(`取れなかった ${g.usageMissing} 回は含まない`)
+    return parts.join('・')
+  }
+  if (g.usageMissing !== null && g.usageMissing > 0) {
+    // 0 円ではなく「取れなかった」。混ぜない
+    return `費用は取れなかった（${g.usageMissing} 回。モック実行か古い形式）`
+  }
+  return null
 }
 
 export function render({ registry, root, runs }) {
@@ -189,6 +221,7 @@ export function render({ registry, root, runs }) {
         const extra = [
           g.model ? `モデル ${g.model}` : null,
           g.elapsedSeconds !== null ? `${g.elapsedSeconds} 秒` : null,
+          costLabel(g),
         ].filter(Boolean)
         lines.push(
           `  ${r.id} ${r.name}${label}（${r.role}）: ${body}${g.at ? ` — ${g.at}` : ''}` +
@@ -217,7 +250,11 @@ export function render({ registry, root, runs }) {
       ? `**${flakyCount} 件が同条件で振れている。** その指標は 1 回の実行を合否に使えない（モデルの揺れを仕組みの劣化と読み違える）`
       : '同条件で振れている指標は無い（ただし記録が 1 回だけのものは判定できない）',
   )
-  lines.push('限界: 記録に残っている数字しか出せない。**費用（トークン数）は記録していない**（取れる経路がまだ無い）。')
+  lines.push(
+    '限界: 記録に残っている数字しか出せない。費用は `claude -p --output-format json` の ' +
+      '`total_cost_usd`（表示価格ベース）で、**実際の請求とは一致しないことがある**。',
+  )
+  lines.push('　　　モックで回した eval からは費用が取れない。取れなかった回は 0 円として足さず、件数で出す。')
   lines.push('　　　ばらつきは**同じ条件の回だけ**で比べる。条件を記録していない古い回は比較から外れる。')
   return lines.join('\n')
 }

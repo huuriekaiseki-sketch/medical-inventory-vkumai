@@ -8,14 +8,61 @@
 #      **その間にコードが変わっただけ**なのか区別できない。
 #      区別できない数字は判断に使えないので、条件（何を測った木か・どのモデルか）を一緒に残す。
 #
-#      あわせて**所要時間**も残す（提案 3 の「再現性と費用」のうち時間の側）。
-#      費用はトークン数を取れる経路がまだ無いので残していない（限界として明記する）。
+#      あわせて**所要時間**と**費用（トークン数）**も残す（提案 3 の「再現性と費用」）。
+#      費用は 2026-09-10 に取れる経路を実測で見つけた——`claude -p --output-format json` が
+#      `total_cost_usd` と `usage` を返し、`--json-schema` とも併用できる。
+#      限界: `total_cost_usd` は表示価格ベースで、実際の請求と一致するとは限らない。
+#      モックを使う eval（テスト）では取れないので、**取れた回だけを数える**（下記）。
 #
 # WHY(記録の作り方を 1 か所に寄せる): 同じ形の printf が 2 つの eval スクリプトにあった。
 #      欄を足すときに片方だけ直すと、**同じ問いに 2 か所が別々に答える**（E-053）。
 #
 # 使い方: source してから
 #   record_eval_run <script名> <fixtureセット> <pass> <total> <開始時刻(epoch)> [モデル]
+
+# 使用量の足し上げ（設計提案 3「費用」）。1 回の eval は複数の case を回すので、
+# case ごとの費用・トークンをここへ積む。**取れなかった回は 0 として積まない**——
+# 取れないことと 0 だったことを混ぜると、費用が過少に見える。
+EVAL_COST_USD=0
+EVAL_INPUT_TOKENS=0
+EVAL_OUTPUT_TOKENS=0
+EVAL_USAGE_SAMPLES=0
+EVAL_USAGE_MISSING=0
+
+# $1 = agent-output.mjs --usage の出力（JSON 1 行）
+accumulate_usage() {
+  # WHY(既定値に {} と書かない、2026-09-10): `${1:-{}}` は bash が `${1:-{` までを展開と読み、
+  #      末尾の `}` を**素の文字として後ろに足す**。渡された JSON が `...}}` になって壊れ、
+  #      **実測できた回まで「取れなかった」に落ちていた**（check-agent-output.test.sh の
+  #      シナリオ 7 が掴んだ）。空なら空のまま渡し、JSON として読めない＝取れなかった、で揃える。
+  local usage="${1:-}"
+  local parsed
+  parsed="$(printf '%s' "$usage" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    d = {}
+cost = d.get('costUsd')
+i = d.get('inputTokens')
+o = d.get('outputTokens')
+if cost is None and i is None and o is None:
+    print('missing 0 0 0')
+else:
+    print(f\"ok {cost or 0} {i or 0} {o or 0}\")
+" 2>/dev/null || echo "missing 0 0 0")"
+  local kind cost inp outp
+  read -r kind cost inp outp <<< "$parsed"
+  if [ "$kind" = "missing" ]; then
+    EVAL_USAGE_MISSING=$((EVAL_USAGE_MISSING + 1))
+    return 0
+  fi
+  EVAL_USAGE_SAMPLES=$((EVAL_USAGE_SAMPLES + 1))
+  EVAL_COST_USD="$(python3 -c "print(round(${EVAL_COST_USD} + ${cost}, 6))" 2>/dev/null || echo "$EVAL_COST_USD")"
+  EVAL_INPUT_TOKENS=$((EVAL_INPUT_TOKENS + inp))
+  EVAL_OUTPUT_TOKENS=$((EVAL_OUTPUT_TOKENS + outp))
+  return 0
+}
 
 # WHY(記録が本題を壊さない、2026-09-10): 呼び出し元の eval スクリプトは `set -euo pipefail` で動く。
 #      最初の版はリポジトリを解決できないときに `cd` が失敗し、**呼び出し元ごと異常終了させて**
@@ -51,12 +98,15 @@ record_eval_run() {
 
   # 記録に失敗しても本題を止めない（|| return 0）
   python3 - "$file" "$script" "$fixture_set" "$pass" "$total" \
-    "$workflows_tree" "$fixtures_tree" "$commit" "$branch" "$elapsed" "$model" <<'PY' || return 0
+    "$workflows_tree" "$fixtures_tree" "$commit" "$branch" "$elapsed" "$model" \
+    "${EVAL_COST_USD:-0}" "${EVAL_INPUT_TOKENS:-0}" "${EVAL_OUTPUT_TOKENS:-0}" \
+    "${EVAL_USAGE_SAMPLES:-0}" "${EVAL_USAGE_MISSING:-0}" <<'PY' || return 0
 import json, sys
 from datetime import datetime, timezone
 
 (file, script, fixture_set, passed, total,
- workflows_tree, fixtures_tree, commit, branch, elapsed, model) = sys.argv[1:12]
+ workflows_tree, fixtures_tree, commit, branch, elapsed, model,
+ cost_usd, input_tokens, output_tokens, usage_samples, usage_missing) = sys.argv[1:17]
 row = {
     "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "script": script,
@@ -68,11 +118,21 @@ row = {
     "fixturesTree": fixtures_tree,
     "commit": commit,
     "branch": branch,
-    # 時間（秒）。費用はトークン数を取れる経路がまだ無いので残していない
+    # 時間（秒）
     "elapsedSeconds": int(elapsed),
 }
 if model:
     row["model"] = model
+# 費用とトークン（2026-09-10。`claude -p --output-format json` から取れることを実測した）。
+# **取れた回が 1 回も無ければ欄そのものを書かない**——0 円だったのか取れなかったのかを混ぜない
+if int(usage_samples) > 0:
+    row["costUsd"] = float(cost_usd)
+    row["inputTokens"] = int(input_tokens)
+    row["outputTokens"] = int(output_tokens)
+    row["usageSamples"] = int(usage_samples)
+if int(usage_missing) > 0:
+    # 使用量を取れなかった回。混ぜずに件数で残す
+    row["usageMissing"] = int(usage_missing)
 with open(file, "a", encoding="utf-8") as f:
     f.write(json.dumps(row, ensure_ascii=False) + "\n")
 PY

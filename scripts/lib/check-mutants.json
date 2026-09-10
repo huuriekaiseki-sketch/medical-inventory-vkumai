@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 34,
+  "minMutants": 38,
   "mutants": [
     {
       "id": "CM-001",
@@ -317,6 +317,42 @@
       "replace": "  const kept = records",
       "expect": "scripts/check-precision-metrics.test.sh",
       "guards": "モデルの揺れと『その間にコードが変わっただけ』を区別できる形を保つこと（設計提案 3）"
+    },
+    {
+      "id": "CM-035",
+      "breaks": "精度指標から「費用は取れなかった」の報告を外す（黙って何も出さない）",
+      "file": "scripts/lib/precision-metrics.mjs",
+      "find": "  if (g.usageMissing !== null && g.usageMissing > 0) {",
+      "replace": "  if (false) {",
+      "expect": "scripts/check-precision-metrics.test.sh",
+      "guards": "C-025（取れなかったことと 0 円だったことを 1 つに潰さない）"
+    },
+    {
+      "id": "CM-036",
+      "breaks": "使用量の足し上げから「取れなかった回」の分岐を外す（0 円として積む）",
+      "file": "scripts/lib/record-eval-run.sh",
+      "find": "  if [ \"$kind\" = \"missing\" ]; then",
+      "replace": "  if false; then",
+      "expect": "scripts/check-agent-output.test.sh",
+      "guards": "取れなかった回を 0 円として足さないこと（費用が実際より安く見える）"
+    },
+    {
+      "id": "CM-037",
+      "breaks": "包み判定から `type === 'result'` を外す（包みが無いモックの出力まで剥がしにかかる）",
+      "file": "scripts/lib/agent-output.mjs",
+      "find": "  const isWrapped = top && typeof top === 'object' && top.type === 'result'",
+      "replace": "  const isWrapped = top && typeof top === 'object'",
+      "expect": "scripts/check-agent-output.test.sh",
+      "guards": "C-023（測る道が実利用と同じであること。モックの素の出力が通らなくなると eval が全件 MISS になる）"
+    },
+    {
+      "id": "CM-038",
+      "breaks": "費用の欄が無いときに null ではなく 0 を返す（取れなかったのを 0 円と言う）",
+      "file": "scripts/lib/agent-output.mjs",
+      "find": "      costUsd: typeof top.total_cost_usd === 'number' ? top.total_cost_usd : null,",
+      "replace": "      costUsd: typeof top.total_cost_usd === 'number' ? top.total_cost_usd : 0,",
+      "expect": "scripts/check-agent-output.test.sh",
+      "guards": "C-025（取れなかったことと 0 だったことを 1 つに潰さない）"
     }
   ]
 }
