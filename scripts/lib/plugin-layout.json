@@ -295,6 +295,7 @@
     "show-precision-metrics.sh": "aidd-core",
     "lib/precision-metrics.mjs": "aidd-core",
     "check-precision-metrics.test.sh": "aidd-core",
+    "check-observability-chain.test.sh": "aidd-vkumai",
     "lib/precision-metrics.json": "aidd-vkumai",
     "lib/judge-sweep-recall.test.sh": "aidd-core",
     "check-mutation-freshness.test.sh": "aidd-vkumai",

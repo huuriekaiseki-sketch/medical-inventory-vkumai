@@ -40,6 +40,7 @@
     "scripts/check-mutation-freshness.sh": "e0fee3f45c6a989ffa6ae95f147c7212b0f5dfdeae5308adef9a9b328bc051aa",
     "scripts/check-mutation-freshness.test.sh": "bd339274a0872294df6b97f436c4562d8959fc90d25041cda821aa04add95be0",
     "scripts/check-no-registry-fetch.test.sh": "ac59f76fc18e939cbdb736691b726deb32b1dcc3ea8524376751b238b340b5ff",
+    "scripts/check-observability-chain.test.sh": "2c566cd0d5c57edd42cb86ea315447b014567061b52345bfb1a74b5a472ea899",
     "scripts/check-operation-contracts.test.sh": "abf81514999e530c8a66412768ef96e1639903c31f649d078f2c9f9fea0500ac",
     "scripts/check-query-validation-coverage.test.sh": "1c2844bec26cf8a98fde6911e914a97e6c3a632ef3bd6660341a8e328c182c32",
     "scripts/check-rate-limit-coverage.test.sh": "27382550133892b0002f92ad02e9f7eee49836e3dabb601752fa49c1d62c2afa",
