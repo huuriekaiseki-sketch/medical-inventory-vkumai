@@ -135,6 +135,10 @@ source "$SCRIPT_DIR/lib/record-eval-run.sh"
 
 # 所要時間を測る起点（設計提案 3「再現性と費用」のうち時間の側）
 RUN_STARTED_AT="$(date +%s)"
+# 実コードへの指摘の多さ（2026-09-10）。読めなかった回は 0 と混ぜず別に数える
+FINDINGS_REPORTED=0
+FINDINGS_SAMPLES=0
+FINDINGS_UNREADABLE=0
 TOTAL=0
 HIT_COUNT=0
 MISS_LINES=""
@@ -203,6 +207,16 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
     echo "[$case_name] 注意: エージェント出力が JSON ではないため生出力全体を判定対象にしました" >&2
   fi
   IS_HIT="$(EXPECTED_FILE="$expected_file" DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py")"
+  # 実コードへの指摘の多さを追う（2026-09-10）。**本物か誤りかは分けない**——
+  # 分けるのは人の仕事で、ここで測れるのは「増えた／減った」だけ。
+  # 読めなかった回（-1）は 0 と混ぜず、別に数える。
+  CASE_FINDINGS="$(DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py" --count 2>/dev/null || echo -1)"
+  if [ "$CASE_FINDINGS" -ge 0 ] 2>/dev/null; then
+    FINDINGS_REPORTED=$((FINDINGS_REPORTED + CASE_FINDINGS))
+    FINDINGS_SAMPLES=$((FINDINGS_SAMPLES + 1))
+  else
+    FINDINGS_UNREADABLE=$((FINDINGS_UNREADABLE + 1))
+  fi
   rm -f "$DETAIL_FILE"
 
   # 陰性対照（欠陥の無い fixture）は逆向きに採点する。HIT/MISS の文言もそれに合わせる
@@ -235,7 +249,11 @@ echo "recall: $HIT_COUNT / $TOTAL"
 
 # 条件（木のハッシュ・モデル）・所要時間・費用も一緒に残す
 # ——**同じ条件の回どうしでしかばらつきは比べられない**（設計提案 3）
-EVAL_RUNS_REPO_DIR="$REPO_DIR" record_eval_run \
+EVAL_RUNS_REPO_DIR="$REPO_DIR" \
+EVAL_FINDINGS_REPORTED="$FINDINGS_REPORTED" \
+EVAL_FINDINGS_SAMPLES="$FINDINGS_SAMPLES" \
+EVAL_FINDINGS_UNREADABLE="$FINDINGS_UNREADABLE" \
+record_eval_run \
   "eval-sweep-recall" "$LAYER" "$HIT_COUNT" "$TOTAL" "$RUN_STARTED_AT" "$MODEL"
 
 if [ -n "$MISS_LINES" ]; then

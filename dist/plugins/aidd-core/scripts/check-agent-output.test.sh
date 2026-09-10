@@ -123,6 +123,26 @@ DIRTY_ROW="$(tail -n 1 "$RUNS")"
 assert_contains "$DIRTY_ROW" '"fixturesDirty": true' "fixture が未コミットなら true"
 assert_contains "$DIRTY_ROW" '"workflowsDirty": false' "触っていない側は false のまま（混ぜない）"
 
+echo "=== scenario 10: 実コードへの指摘の件数を記録する（0 と「読めなかった」を混ぜない） ==="
+# WHY(2026-09-10): 陰性対照は fixture のパスに結びついた指摘しか過検出に数えないので、
+#      実在ファイルへの誤指摘が 0 件として素通りしていた。件数を残して増減を追う。
+EVAL_FINDINGS_REPORTED=5 EVAL_FINDINGS_SAMPLES=2 EVAL_RUNS_REPO_DIR="$FX" EVAL_RUNS_FILE="$RUNS" \
+  record_eval_run "t" "set" 1 1 "$(date +%s)" "m"
+CNT_ROW="$(tail -n 1 "$RUNS")"
+assert_contains "$CNT_ROW" '"findingsReported": 5' "指摘の件数を残す"
+assert_contains "$CNT_ROW" '"findingsSamples": 2' "何件分から数えたかも残す"
+
+# 読めなかった回は件数の欄を作らず、別に数える
+EVAL_FINDINGS_REPORTED=0 EVAL_FINDINGS_SAMPLES=0 EVAL_FINDINGS_UNREADABLE=2 \
+  EVAL_RUNS_REPO_DIR="$FX" EVAL_RUNS_FILE="$RUNS" record_eval_run "t" "set" 1 1 "$(date +%s)" "m"
+UNREAD_ROW="$(tail -n 1 "$RUNS")"
+assert_contains "$UNREAD_ROW" '"findingsUnreadable": 2' "読めなかった回を別に数える"
+if printf '%s' "$UNREAD_ROW" | grep -qF '"findingsReported"'; then
+  ng "読めなかっただけなのに 0 件と記録した"
+else
+  ok "読めなかった回を「0 件」と言わない"
+fi
+
 # プロンプト側も未コミットにする
 printf 'x2\n' > "$FX/.claude/workflows/a.js"
 EVAL_RUNS_REPO_DIR="$FX" EVAL_RUNS_FILE="$RUNS" record_eval_run "t" "set" 1 1 "$(date +%s)" "m"

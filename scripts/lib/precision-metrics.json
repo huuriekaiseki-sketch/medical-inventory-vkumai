@@ -92,6 +92,29 @@
         "fixturesTree",
         "model"
       ]
+    },
+    {
+      "id": "PM-050",
+      "name": "実コードへの指摘の多さ（Sweep）",
+      "kind": "指摘の正確さ",
+      "role": "H-01",
+      "log": "docs/agents/eval-runs.jsonl",
+      "filter": {
+        "field": "script",
+        "value": "eval-sweep-recall"
+      },
+      "groupBy": "fixtureSet",
+      "numerator": "findingsReported",
+      "denominator": "findingsSamples",
+      "unmeasured": "findingsUnreadable",
+      "note": "Sweep は毎回リポジトリ全体を掃くので、仕込みを見逃した回の指摘は実コードへの指摘。**本物か誤りかは分けない**——分けるのは人の仕事で、ここで測れるのは増減だけ。陰性対照は「その fixture への指摘」しか過検出に数えないため、この欄が無いと実在ファイルへの誤指摘が 0 件として素通りする（2026-09-10 に実際に素通りしていた）",
+      "conditionFields": [
+        "workflowsTree",
+        "agentsTree",
+        "fixturesTree",
+        "model",
+        "judgeBlob"
+      ]
     }
   ],
   "_conditions": "conditionFields は「何を同じ条件とみなすか」。**ここが違う回どうしを同じばらつきに入れない**（2026-09-10、設計提案 3）。混ぜると、モデルの揺れと『その間にコードが変わっただけ』を区別できなくなる。条件の欄を持たない古い記録は比較から外し、外した件数を出す。"

@@ -80,7 +80,34 @@ def reported_findings(detail: str) -> bool:
     return True
 
 
+def findings_count(detail: str) -> int:
+    """報告された指摘の件数。読めなければ -1（0 と区別する）。
+
+    WHY(2026-09-10): 陰性対照は「その fixture への指摘」しか数えないので、
+        **実コードへの誤指摘が 0 件として素通り**していた。
+        Sweep は毎回リポジトリ全体を掃くので、この件数を残せば
+        「素の木にどれだけ指摘を出すか」を追える。
+        **本物か誤りかは分けない**（それは人が見る）。0 と「読めなかった」は混ぜない。
+    """
+    m = FINDINGS_RE.search(detail)
+    if m:
+        return int(m.group(1))
+    lines = [line for line in detail.split("\n") if line.strip() != ""]
+    if not lines:
+        return -1
+    summary = _squash(lines[-1])
+    if any(_squash(p) in summary for p in NO_FINDING_PHRASES):
+        return 0
+    return -1
+
+
 def main() -> int:
+    # --count: 判定ではなく**報告された指摘の件数**を返す（読めなければ -1）
+    if "--count" in sys.argv:
+        with open(os.environ["DETAIL_FILE"]) as f:
+            print(findings_count(f.read()))
+        return 0
+
     expected_path = os.environ["EXPECTED_FILE"]
     detail_path = os.environ["DETAIL_FILE"]
 

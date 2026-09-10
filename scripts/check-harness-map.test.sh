@@ -143,6 +143,73 @@ run_engine --check
 assert_eq "$ENGINE_CODE" "1" "見張る木が実在しなければ落ちる"
 assert_contains "$ENGINE_OUT" "missing-watch-path" "無い木を名指しする"
 
+echo "=== scenario 16: 木で表せない結果は、コミットで鮮度を見る（watchCommit） ==="
+# WHY(2026-09-10): H-08（リリース）のマージ予行は「いま main に何が入っているか」に依存し、
+#      どれか 1 つのディレクトリの木では表せない。無理に木へ載せると
+#      「変わっていないのに最新」と言ってしまう（C-010）。コミットで見る道を足した。
+#      **どちらも無い証拠は登録させない**——最新かを永久に判定できなくなる。
+WC="$WORK/wc"
+mkdir -p "$WC/logs" "$WC/docs" "$WC/scripts"
+git -C "$WC" init -q
+git -C "$WC" config user.email test@example.test
+git -C "$WC" config user.name test
+printf '#!/usr/bin/env bash\n' > "$WC/scripts/entry.sh"
+printf '# doc\n' > "$WC/docs/limits.md"
+printf '#!/usr/bin/env bash\n' > "$WC/scripts/check-thing.test.sh"
+git -C "$WC" add -A
+git -C "$WC" commit -qm base
+WC_HEAD="$(git -C "$WC" rev-parse --short HEAD)"
+
+wc_registry() { # $1 = evidence の JSON
+  cat > "$WORK/wc-registry.json" <<JSON
+{
+  "generatedMarker": "m",
+  "output": "docs/map.md",
+  "triggers": { "機械": "a" },
+  "harnesses": [
+    {
+      "id": "H-01", "role": "リリース", "guards": "順番",
+      "trigger": "機械", "triggerDetail": "毎回",
+      "entrypoints": ["scripts/entry.sh"],
+      "checks": ["scripts/check-thing.test.sh"],
+      "ledgers": [],
+      "limitsDoc": "docs/limits.md",
+      "guardIds": [], "guardIdsReason": "手順そのもの",
+      "preconditions": "なし",
+      "evidence": [ $1 ],
+      "falsification": "どこか"
+    }
+  ]
+}
+JSON
+}
+
+wc_registry '{ "name": "予行", "log": "logs/r.jsonl", "watchCommit": true }'
+
+# 同じコミットの記録 → 最新
+printf '{"at":"2026-01-01T00:00:00Z","result":"pass","commit":"%s"}\n' "$WC_HEAD" > "$WC/logs/r.jsonl"
+ENGINE_OUT="$(node "$ENGINE" "$WORK/wc-registry.json" --root "$WC" --evidence 2>&1)"
+assert_contains "$ENGINE_OUT" "最新 ✅" "同じコミットの記録は最新"
+
+# コミットが進んだら古い
+printf 'y\n' >> "$WC/scripts/entry.sh"
+git -C "$WC" commit -qam next
+ENGINE_OUT="$(node "$ENGINE" "$WORK/wc-registry.json" --root "$WC" --evidence 2>&1)"
+assert_contains "$ENGINE_OUT" "最新 ❌" "コミットが進んだら最新でないと言う"
+assert_contains "$ENGINE_OUT" "HEAD のコミット" "何が変わったかを名指しする"
+
+# 記録にコミットが無ければ「判定できない」（緑にも赤にもしない）
+printf '{"at":"2026-01-01T00:00:00Z","result":"pass"}\n' > "$WC/logs/r.jsonl"
+ENGINE_OUT="$(node "$ENGINE" "$WORK/wc-registry.json" --root "$WC" --evidence 2>&1)"
+assert_contains "$ENGINE_OUT" "最新 ？" "コミットが無ければ判定できないと言う"
+
+# watch も watchCommit も無い証拠は登録できない
+wc_registry '{ "name": "予行", "log": "logs/r.jsonl" }'
+ENGINE_OUT="$(node "$ENGINE" "$WORK/wc-registry.json" --root "$WC" --check 2>&1)"
+ENGINE_CODE=$?
+assert_eq "$ENGINE_CODE" "1" "見張る先が無い証拠は登録させない"
+assert_contains "$ENGINE_OUT" "evidence-without-watch" "見張る先が無いことを名指しする"
+
 echo "=== scenario 14: 守る対象の ID が台帳に実在するかを見る ==="
 # WHY: 「何を守るか」が文章だけだと機械で追えない。台帳の ID で宣言させ、実在を突き合わせる。
 #      台帳を持たない導入先では確かめようが無いので、**その場合は黙って通す**（誤検知を作らない）

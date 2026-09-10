@@ -114,6 +114,30 @@ echo "=== scenario 6: 全角コロン・大文字小文字の揺れを吸収す�
 assert_judge "$WORK/expected.json" 'findings：0
 route.ts の認可は問題ありません' "false" "findings：0 も 0 件として読む"
 
+echo "=== 指摘の件数を返す（--count。実コードへの指摘の多さを追うため） ==="
+# WHY(2026-09-10): 陰性対照は「その fixture への指摘」しか数えないので、
+#      **実在ファイルへの誤指摘が 0 件として素通り**していた。
+#      Sweep は毎回リポジトリ全体を掃くので、件数を残せば増減を追える。
+#      **本物か誤りかは分けない**（人が見る）。0 と「読めなかった」を混ぜない。
+count_of() {
+  printf '%s' "$1" > "$WORK/count-detail.txt"
+  DETAIL_FILE="$WORK/count-detail.txt" python3 "$JUDGE" --count
+}
+assert_eq() {
+  if [ "$1" = "$2" ]; then echo "  OK: $3"; else echo "  NG: $3（期待 $2 / 実際 $1）"; fail=1; fi
+}
+assert_eq "$(count_of 'FINDINGS: 3
+- a
+- b
+- c')" "3" "契約どおりの件数を返す"
+assert_eq "$(count_of 'FINDINGS: 0
+指摘なし')" "0" "0 件は 0 と返す"
+assert_eq "$(count_of 'いろいろ調べました
+指摘なし。')" "0" "契約が無くても、締めが「指摘なし」なら 0"
+assert_eq "$(count_of '調べました
+- src/x.ts: 何か問題')" "-1" "件数が読めなければ -1（0 と混ぜない）"
+assert_eq "$(count_of '')" "-1" "空も -1"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

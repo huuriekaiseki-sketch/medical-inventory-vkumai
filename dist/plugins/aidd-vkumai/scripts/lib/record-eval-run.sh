@@ -136,7 +136,8 @@ record_eval_run() {
     "$workflows_tree" "$fixtures_tree" "$commit" "$branch" "$elapsed" "$model" \
     "${EVAL_COST_USD:-0}" "${EVAL_INPUT_TOKENS:-0}" "${EVAL_OUTPUT_TOKENS:-0}" \
     "${EVAL_USAGE_SAMPLES:-0}" "${EVAL_USAGE_MISSING:-0}" "${EVAL_CACHE_READ_TOKENS:-0}" \
-    "$workflows_dirty" "$fixtures_dirty" "$agents_tree" "$agents_dirty" "$judge_blob" <<'PY' || return 0
+    "$workflows_dirty" "$fixtures_dirty" "$agents_tree" "$agents_dirty" "$judge_blob" \
+    "${EVAL_FINDINGS_REPORTED:--1}" "${EVAL_FINDINGS_SAMPLES:-0}" "${EVAL_FINDINGS_UNREADABLE:-0}" <<'PY' || return 0
 import json, sys
 from datetime import datetime, timezone
 
@@ -144,7 +145,8 @@ from datetime import datetime, timezone
  workflows_tree, fixtures_tree, commit, branch, elapsed, model,
  cost_usd, input_tokens, output_tokens, usage_samples, usage_missing,
  cache_read_tokens, workflows_dirty, fixtures_dirty,
- agents_tree, agents_dirty, judge_blob) = sys.argv[1:23]
+ agents_tree, agents_dirty, judge_blob,
+ findings_reported, findings_samples, findings_unreadable) = sys.argv[1:26]
 row = {
     "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "script": script,
@@ -179,6 +181,14 @@ if int(usage_samples) > 0:
     # キャッシュから読んだ入力。**inputTokens に足さない**（価格が違う）
     row["cacheReadTokens"] = int(cache_read_tokens)
     row["usageSamples"] = int(usage_samples)
+# 実コードへの指摘の多さ（2026-09-10）。**本物か誤りかは分けない**——分けるのは人の仕事。
+# 陰性対照は「その fixture への指摘」しか数えないので、実在ファイルへの誤指摘が素通りしていた。
+# 読めなかった回は 0 と混ぜない（欄を分ける）
+if int(findings_samples) > 0:
+    row["findingsReported"] = int(findings_reported)
+    row["findingsSamples"] = int(findings_samples)
+if int(findings_unreadable) > 0:
+    row["findingsUnreadable"] = int(findings_unreadable)
 if int(usage_missing) > 0:
     # 使用量を取れなかった回。混ぜずに件数で残す
     row["usageMissing"] = int(usage_missing)

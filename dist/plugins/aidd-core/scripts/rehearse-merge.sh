@@ -29,7 +29,69 @@ for a in "$@"; do
   if [ "$a" = "--branches" ] || [ "$a" = "--queue" ]; then has_branches=1; fi
 done
 
+# WHY(記録を残す、2026-09-10): ハーネスの地図で H-08（リリース）だけが実測の記録を持たず、
+#      「入口をまだ作っていない」という**実態とずれた理由**が書かれていた。入口はここにある。
+#      記録が無かっただけなので残す。**exec をやめて終了コードを受け取る**必要があるため、
+#      実行して結果を見てから終わる形にする。
+#      記録に失敗しても本題（予行の結果の表示）は止めない。
+# shellcheck source=lib/resolve-log-dir.sh
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+
 if [ "$has_branches" -eq 1 ]; then
-  exec node "$SCRIPT_DIR/lib/rehearse-merge.mjs" --repo "$REPO_ROOT" "$@"
+  node "$SCRIPT_DIR/lib/rehearse-merge.mjs" --repo "$REPO_ROOT" "$@"
+else
+  node "$SCRIPT_DIR/lib/rehearse-merge.mjs" --repo "$REPO_ROOT" --queue "$QUEUE" "$@"
 fi
-exec node "$SCRIPT_DIR/lib/rehearse-merge.mjs" --repo "$REPO_ROOT" --queue "$QUEUE" "$@"
+REHEARSE_EXIT=$?
+
+record_rehearsal() {
+  local log_dir
+  log_dir="$(resolve_log_dir)" || return 0
+  mkdir -p "$log_dir" 2>/dev/null || return 0
+  local log_file="$log_dir/release-rehearsal-runs.jsonl"
+
+  # 3 値。衝突なし / 衝突あり / 判定できない を 1 つに潰さない（C-025）
+  local result
+  case "$REHEARSE_EXIT" in
+    0) result="pass" ;;
+    1) result="fail" ;;
+    *) result="unmeasured" ;;
+  esac
+
+  local commit branch base
+  commit="$(git -C "$REPO_ROOT" rev-parse --short --verify --quiet HEAD 2>/dev/null || echo unknown)"
+  branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo unknown)"
+  [ -n "$branch" ] || branch=unknown
+  # 起点。--base を明示していればそれ、無ければ既定
+  base="origin/main"
+  local prev=""
+  for a in "$@"; do
+    if [ "$prev" = "--base" ]; then base="$a"; fi
+    prev="$a"
+  done
+
+  python3 - "$log_file" "$result" "$REHEARSE_EXIT" "$commit" "$branch" "$base" <<'PY' || return 0
+import json, sys
+from datetime import datetime, timezone
+
+log_file, result, exit_code, commit, branch, base = sys.argv[1:7]
+row = {
+    "at": datetime.now(timezone.utc).isoformat(),
+    # pass=衝突なし / fail=衝突あり / unmeasured=判定できない（起点が遅れている・順番が空など）
+    "result": result,
+    "exitCode": int(exit_code),
+    # 鮮度は**コミット**で見る。マージ予行の結果は「いま main に何が入っているか」に依存し、
+    # どれか 1 つのディレクトリの木では表せない
+    "commit": commit,
+    "branch": branch,
+    "base": base,
+}
+with open(log_file, "a", encoding="utf-8") as f:
+    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+print(f"[rehearse-merge] {result} を記録しました: {log_file}", file=sys.stderr)
+PY
+  return 0
+}
+
+record_rehearsal "$@"
+exit "$REHEARSE_EXIT"

@@ -151,9 +151,16 @@ export function checkRegistry({
     }
     for (const e of evidence) {
       if (!e.log) violations.push(`evidence-without-log: ${at} → ${e.name ?? '(名前なし)'}`)
-      if ((e.watch ?? []).length === 0) {
-        // 見張る木が無いと「最新かどうか」を永久に判定できない（測っただけで終わる）
-        violations.push(`evidence-without-watch: ${at} → ${e.name ?? '(名前なし)'}（どの木に対する結果かが分からない）`)
+      // WHY(コミットで見張る道、2026-09-10): 木のハッシュで表せない結果がある。
+      //      マージ予行（H-08）は「いま main に何が入っているか」に依存し、
+      //      どれか 1 つのディレクトリの木では表せない。
+      //      無理に木へ載せると「変わっていないのに最新」と言ってしまう（C-010）。
+      //      **どちらか一方は必ず要る**——両方無ければ最新かを永久に判定できない。
+      if ((e.watch ?? []).length === 0 && e.watchCommit !== true) {
+        violations.push(
+          `evidence-without-watch: ${at} → ${e.name ?? '(名前なし)'}（どの木に対する結果かが分からない。` +
+            '木で表せないなら watchCommit: true）'
+        )
       }
       for (const w of e.watch ?? []) {
         if (!exists(path.join(root, w))) violations.push(`missing-watch-path: ${at} → ${w}`)
@@ -275,6 +282,16 @@ function headTree(root, target, run = execFileSync) {
  *       そちらは Stop hook（check-full-run-before-finish.sh）の担当で、
  *       ここで見ると同じことを 2 か所が別々に答えることになる。
  */
+/** いまの HEAD の短いコミット ID。取れなければ null（「判定できない」に倒すため） */
+export function headCommit(root, run = execFileSync) {
+  try {
+    const out = String(run('git', ['-C', root, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' })).trim()
+    return out || null
+  } catch {
+    return null
+  }
+}
+
 export function evidenceState({ root, harness, logDir, read = lastRecord, tree = headTree }) {
   const rows = []
   for (const e of harness.evidence ?? []) {
@@ -297,10 +314,17 @@ export function evidenceState({ root, harness, logDir, read = lastRecord, tree =
       }
       if (recorded !== tree(root, w)) stale.push(w)
     }
+    // コミットで見張る（木で表せない結果のため）。記録の commit と いまの HEAD を比べる
+    if (e.watchCommit === true) {
+      const recorded = record.commit
+      const now = headCommit(root)
+      if (recorded === undefined || now === null) unknownTree = true
+      else if (recorded !== now) stale.push('HEAD のコミット')
+    }
     const fresh = unknownTree ? null : stale.length === 0
     let reason = ''
     if (!passed) reason = `直近が ${JSON.stringify(record[passField])}（赤のまま）`
-    else if (fresh === null) reason = '記録に木のハッシュが無く、最新かどうか判定できない'
+    else if (fresh === null) reason = '記録に木のハッシュ（またはコミット）が無く、最新かどうか判定できない'
     else if (!fresh) reason = `${stale.join('・')} が記録時から変わっている`
     rows.push({ name: e.name, measured: true, passed, fresh, reason, at: record.at ?? record.timestamp })
   }
