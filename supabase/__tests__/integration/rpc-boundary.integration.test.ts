@@ -139,10 +139,13 @@ describe('クライアントから呼べる RPC の境界（他施設・非 admi
       expect(ids(other)).toContain(fx.masterHistory.id)
       expect(ids(other)).not.toContain(fx.facilityScopedHistory.id)
 
-      // anon は GRANT されている（マスタの履歴は公開情報）。施設スコープの行は出ない
+      // WHY(2026-09-11 に変えた): ここは長く「anon は GRANT されている（マスタの履歴は公開情報）」
+      //      として、**呼べること自体を許していた**。実際にはログインせずに全代理店商品の
+      //      仕切値の変更履歴が読めており、公開範囲を人に聞いたうえで締めた（20260911000000）。
+      //      EXECUTE ごと外したので、いまは関数に届く前に拒否される
       const { data: anon, error: anonError } = await call(createAnonClient())
-      expect(anonError).toBeNull()
-      expect(ids(anon)).not.toContain(fx.facilityScopedHistory.id)
+      expect(anonError?.code).toBe(PERMISSION_DENIED)
+      expect(ids(anon)).toEqual([])
 
       const { data: own } = await call(fx.userA.client)
       expect(ids(own)).toContain(fx.facilityScopedHistory.id)

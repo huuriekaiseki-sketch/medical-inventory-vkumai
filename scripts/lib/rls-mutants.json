@@ -141,6 +141,22 @@
       "expect": "supabase/__tests__/integration/rpc-reference-boundary.integration.test.ts",
       "promise": "P-013",
       "note": "2026-09-09 に共有関数（20260909080000）を入れたときに足した。**変異が 1 本で済むのが共有化の効き目**で、RPC が増えてもこの変異は増えない。逆に「RPC が呼び忘れた」は捕まえられない（それは RM-016 / RM-017 の担当）"
+    },
+    {
+      "id": "RM-019",
+      "breaks": "価格履歴の RPC を未ログイン（anon）へ開き直す",
+      "sql": "-- WHY(前提を先に確かめる): すでに開いていたら「壊したつもり」で通ってしまう。\nDO $chk$\nBEGIN\n  IF has_function_privilege('anon', 'public.get_distributor_product_price_history(uuid)', 'EXECUTE') THEN\n    RAISE EXCEPTION 'RM-019 の前提が崩れている（すでに anon が呼べる）';\n  END IF;\nEND $chk$;\n\nGRANT EXECUTE ON FUNCTION public.get_distributor_product_price_history(UUID) TO anon;",
+      "expect": "supabase/__tests__/integration/rpc-boundary-sweep.integration.test.ts",
+      "promise": "P-019",
+      "note": "2026-09-11（E-013）。**未ログインで全代理店商品の仕切値の変更履歴が読めていた**のを締めた（20260911000000）。締めたことを守るのは「未ログインで通る RPC は宣言と一致する」の突合なので、開き直したら落ちなければならない。掃きの元の判定（施設 A の目印が出ないか）はマスタに対しては何も言わないので、**この変異は前の判定では倒せない**"
+    },
+    {
+      "id": "RM-020",
+      "breaks": "発注 RPC の EXECUTE を PUBLIC へ戻す（GRANT ... TO authenticated だけを書いた状態の再現）",
+      "sql": "-- WHY(前提を先に確かめる): 同上。\nDO $chk$\nBEGIN\n  IF has_function_privilege('anon', 'public.create_case_order_atomic(uuid,timestamptz,text,text,text,text,text,jsonb,uuid)', 'EXECUTE') THEN\n    RAISE EXCEPTION 'RM-020 の前提が崩れている（すでに anon が呼べる）';\n  END IF;\nEND $chk$;\n\nGRANT EXECUTE ON FUNCTION public.create_case_order_atomic(UUID, TIMESTAMPTZ, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, UUID) TO PUBLIC;",
+      "expect": "supabase/__tests__/integration/rpc-boundary-sweep.integration.test.ts",
+      "promise": "P-019",
+      "note": "2026-09-11（E-013）。**`GRANT ... TO authenticated` と書いてあっても、CREATE FUNCTION の既定で PUBLIC に EXECUTE が付いたまま**だった。止めていたのは関数の中の is_facility_writer() 1 行だけで、そこが崩れれば認証すら不要の入口になる。20260911000001 で PUBLIC ごと外したので、戻したら落ちること（＝権限の層が本当に効いていること）を測る"
     }
   ]
 }

@@ -157,14 +157,42 @@ describe('枠の払い戻し（refund_rate_limit） [M-021][Q-020]', () => {
 
   it('窓の秒数が違えば別の行を見る（消費した窓だけを戻す）', async () => {
     // WHY: アプリ側が消費と払い戻しで違う窓を渡すと、**減らすつもりのない行**を減らす。
-    //      DB 側でも「別の窓は別の行」であることを固定する
+    //      DB 側でも「別の窓は別の行」であることを固定する。
+    //
+    // WHY(2026-09-11 に書き直した): 前は「60 秒窓で消費し 3600 秒窓で払い戻すと refunded=false」
+    //      という形で、**時刻に依存する検査**だった。窓の開始は幅で切り捨てた時刻なので、
+    //      **毎時 0 分台の 1 分間だけ両方が「0 分 0 秒」に落ちて一致する**。
+    //      2026-09-11 06:59 にたまたま回して落ち、鍵に窓幅が入っていないことが分かった
+    //      （20260911000002 で修正）。2026-09-08 からあった検査だが、その 1 分に当たらない限り
+    //      緑だった——**落ちるまで、時刻に依存していること自体が見えていなかった**。
+    //      いまは鍵そのものを見る。幅が違えば必ず別の行になるので、いつ回しても同じ結果になる。
     const bucket = `test:${randomUUID()}`
     await service.rpc('consume_rate_limit', { p_bucket: bucket, p_limit: 5, p_window_seconds: 60 })
-    const { data: otherWindow } = await service.rpc('refund_rate_limit', {
+    await service.rpc('consume_rate_limit', { p_bucket: bucket, p_limit: 5, p_window_seconds: 3600 })
+
+    const { data: rows, error } = await service
+      .from('rate_limit_counters')
+      .select('bucket, hits')
+      .like('bucket', `${bucket}@%`)
+    expect(error).toBeNull()
+    expect(rows, '幅の違う 2 つの窓が同じ行を共有している').toHaveLength(2)
+    expect(
+      (rows ?? []).every((r) => r.hits === 1),
+      '別の行のはずなのに回数が混ざっている'
+    ).toBe(true)
+
+    // 対照: 払い戻しは**消費した窓だけ**を戻す（片方を戻しても、もう片方は減らない）
+    const { data: refunded } = await service.rpc('refund_rate_limit', {
       p_bucket: bucket,
       p_window_seconds: 3600,
     })
-    expect(otherWindow![0].refunded).toBe(false)
+    expect(refunded![0]).toMatchObject({ refunded: true, hit_count: 0 })
+
+    const { data: after } = await service
+      .from('rate_limit_counters')
+      .select('hits')
+      .like('bucket', `${bucket}@60@%`)
+    expect(after![0].hits, '60 秒窓の消費が 3600 秒窓の払い戻しで減った').toBe(1)
   })
 
   it('client ロールは払い戻しを呼べない（自分の枠を戻し放題にできない）', async () => {

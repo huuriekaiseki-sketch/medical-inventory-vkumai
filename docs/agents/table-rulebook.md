@@ -114,3 +114,11 @@
   RLS の有効化と `DISABLE` の不在は `rls_enabled_all_tables.test.ts` が見ている。
 - **列は見ない。** どんな列があるか、長さの上限があるかはこの表の外
   （`check-text-column-limits.test.sh` と不変条件カタログ）。
+- **「読み手」は表への直接アクセスだけ。同じ中身を返す RPC の公開範囲は見ていない**（2026-09-11）。
+  `SECURITY DEFINER` の関数は RLS も表の GRANT も通らないので、
+  **表を締めても関数が開いていれば同じデータが出る**。実際 TB-040（`price_histories`）は
+  読み手を `authenticated / service_role` と宣言しており表としてはそのとおりだったが、
+  `get_distributor_product_price_history` が未ログインに開いていて、
+  **同じ履歴がログイン無しで読めていた**（E-013）。
+  RPC の側は `rpc-boundary-sweep.integration.test.ts` の `ANON_CALLABLE` が実測で見る。
+  表とRPCで**別々の場所に宣言がある**ので、片方だけ見て安心しないこと。

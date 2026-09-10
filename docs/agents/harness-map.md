@@ -65,7 +65,7 @@
 | `write-path-registry.json`#maxGaps | DB は書けるのにアプリに道が無い組み合わせ（H-05） | 組み合わせ | **0** |
 | `exemption-budget.json`#max.eslint-disable | 検査の逃がし口（上限。eslint-disable）（H-06） | 件 | **14** |
 | `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **66** |
-| `rls-mutants.json`#mutants.length | RLS・RPC の壊し方（H-06） | 件 | **18** |
+| `rls-mutants.json`#mutants.length | RLS・RPC の壊し方（H-06） | 件 | **20** |
 
 （ハーネス 8 件・検査 131 本・台帳 7 件。**検査はこの表で全数**——どこにも属さない検査があれば生成そのものが落ちる）
 

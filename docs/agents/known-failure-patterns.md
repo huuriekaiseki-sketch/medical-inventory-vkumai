@@ -73,6 +73,23 @@ migration を適用順に畳み込み、GRANT の無い関数を「PUBLIC 既定
 呼べるのに境界テストで `.rpc()` されていない関数が増えると落ちる。`bash scripts/check-constraint-coverage.sh`
 で現状の一覧を怪しい順に見られる。
 
+**2026-09-11、同じ型がもう一度出た（E-074）。今度は「GRANT を書いた」側。**
+発注の 4 本（`create_case_order_atomic` ほか）は `GRANT EXECUTE ... TO authenticated` と
+**書いてある**ので、上の機械検知（GRANT の**無い**関数を拾う）には出ない。それでも (1) の
+PUBLIC 既定が残っていたため**未ログインでも呼べた**。
+**「`TO authenticated` と書いたから authenticated だけ」という読みは成り立たない。**
+GRANT は足すだけで、既定の PUBLIC を消さない。
+同じ日に、価格履歴の RPC（`get_distributor_product_price_history`）を締めようとして
+先に `REVOKE ... FROM anon` だけを書いたら、(1) が残って統合テストが赤のままだった。
+**(1) と (2) は片方ずつ外しても効かない。両方外してから要るロールへ配り直す。**
+
+**機械検知（2026-09-11 に足した）:** `rpc-boundary-sweep.integration.test.ts` の `ANON_CALLABLE`。
+公開 RPC を**実際に未ログインで呼び**、通ったものを宣言と**両方向**で突き合わせる
+（通るのに宣言が無い／宣言にあるのに通らない、のどちらでも落ちる）。
+GRANT の書き方ではなく**通るかどうか**を見るので、上の 2 層のどちらが原因でも拾える。
+宣言に載せた RPC には未ログインでも `assert` を当てるので、
+「呼べてよい」と決めたものが**何を返すか**まで毎回実測される。
+
 ### 後付けFK列のカーディナリティを宣言しないまま放置する（issue #675）
 
 **チェック内容:** 既存テーブルへ `ALTER TABLE ... ADD COLUMN ... REFERENCES` で

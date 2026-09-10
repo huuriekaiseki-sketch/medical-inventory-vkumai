@@ -80,6 +80,15 @@ interface Seed {
   categoryId: string
 }
 
+/**
+ * **未ログインからの読み取りを「測れていない」表**（2026-09-11 実測）。
+ *
+ * この掃きが種をまかない表は、走行時に 1 行も無いので「読めなかった」と
+ * 「餌が無かった」の区別がつかない（C-021）。区別がつかないものをここに並べ、
+ * **増減したら落とす**。減らすには、その表に service role で 1 行まいてから測る。
+ */
+const ANON_UNMEASURED_TABLES: string[] = []
+
 let seed: Seed
 let service: SupabaseClient
 let anon: SupabaseClient
@@ -363,13 +372,36 @@ describe('テーブル台帳の全表を Supabase REST で直接叩く総当た�
   })
 
   it('未ログイン（anon）は、台帳が anon を読み手にしていない全表から 1 行も読めない', async () => {
+    // WHY(2026-09-11・E-074): ここは長いあいだ「0 行返った＝読めない」と読んでいた。
+    //      だが**表が空なら、締まっていても開いていても 0 行**である（C-021）。
+    //      この掃きが種をまくのは一部の表だけなので、残りは毎回「餌の無い実行」だった。
+    //      権限で弾かれた（error あり）なら確実に締まっているが、エラー無しの 0 行は
+    //      **測れていない**——その区別を残す。「測れていない表」は下の ratchet で固定し、
+    //      増えたら落とす（緑のまま範囲が痩せていくのを止める）。
     const leaked: string[] = []
+    const unmeasured: string[] = []
     for (const t of tables) {
       if (t.readers.includes('anon')) continue
       const { data, error } = await anon.from(t.table).select('*').limit(1)
-      if (!error && (data ?? []).length > 0) leaked.push(`${t.id} ${t.table}: ${(data ?? []).length} 行読めた`)
+      if (!error && (data ?? []).length > 0) {
+        leaked.push(`${t.id} ${t.table}: ${(data ?? []).length} 行読めた`)
+        continue
+      }
+      if (error) continue // 権限で弾かれた＝確実に締まっている
+      const { count, error: countError } = await service
+        .from(t.table)
+        .select('*', { count: 'exact', head: true })
+      if (countError) {
+        unmeasured.push(t.table)
+        continue
+      }
+      if ((count ?? 0) === 0) unmeasured.push(t.table)
     }
     expect(leaked, '未ログインで読めた表がある').toEqual([])
+    expect(
+      unmeasured.sort(),
+      '未ログインからの読み取りを測れていない表が変わった（増えたなら種まきを足す。減ったなら一覧から消す）'
+    ).toEqual([...ANON_UNMEASURED_TABLES].sort())
   })
 
   it('施設 B の利用者は、施設 A に属する行を 1 行も読めない（台帳の全表）', async () => {

@@ -151,6 +151,30 @@ const ATTACKS: Record<string, RpcAttack> = {
   },
 }
 
+/**
+ * **未ログイン（anon）でも呼べてよい RPC と、その理由。**
+ *
+ * WHY(2026-09-11・E-074): 上の掃きは未ログインでも全 RPC を叩くが、見ているのは
+ *      「施設 A の目印が出ないか」だけで、**呼べること自体は許していた**。
+ *      そのため `get_distributor_product_price_history` が未ログインで呼べ、
+ *      施設に属さないマスタ（全代理店商品の仕切値の変更履歴）を返していたのに緑のままだった。
+ *      施設の目印が出ないのは当たり前で、**マスタは施設に属さない**からである。
+ *      「誰にも見せない」ではなく「**未ログインには見せない**」を測る列がここに要る。
+ *
+ * 判定は実測（権限で弾かれたか）で、宣言との突合は**両方向**。
+ * 呼べるのに宣言が無ければ落ち、宣言にあるのに呼べなければ（＝締めたのに行が残っていれば）落ちる。
+ */
+const ANON_CALLABLE: Record<string, string> = {
+  // 認可述語の 4 本。**どれも「あなたは誰か」を返すだけで、施設の中身は返さない**。
+  // 未ログインでは false が返ることを下の掃きが毎回実測する（宣言に載せた RPC は
+  // 未ログインでも assert を当てる）。RLS ポリシーの中から呼ばれるので、
+  // anon から EXECUTE を外すとポリシーの評価が壊れうる——実害が無い側を残す判断。
+  is_facility_member: '施設の会員かを返すだけ。未ログインでは false（実測）',
+  is_facility_writer: '施設の書き手かを返すだけ。未ログインでは false（実測）',
+  is_admin: 'admin かを返すだけ。未ログインでは false（実測）',
+  has_aal2: '自分のセッションが aal2 かを返すだけ。他人の状態は返らない',
+}
+
 /** 施設 A の行が変わっていないことを見る対象 */
 const SCOPED_TABLES = ['case_orders', 'consumable_orders', 'loan_orders', 'loan_returns', 'consumables', 'hospital_prices']
 
@@ -262,6 +286,7 @@ describe('クライアントから呼べる RPC の総当たり（他施設・�
     const before = await snapshotFacilityA()
     const leaks: string[] = []
     const unreached: string[] = []
+    const anonCallable: string[] = []
 
     for (const [name, attack] of Object.entries(ATTACKS)) {
       for (const [who, client] of [['施設 B', seed.userB.client], ['未ログイン', anon]] as const) {
@@ -273,12 +298,31 @@ describe('クライアントから呼べる RPC の総当たり（他施設・�
           continue
         }
 
+        // WHY(2026-09-11・E-074): 未ログインで**通ってしまったかどうか**を集める。
+        //      42501 は 2 通りある——関数の EXECUTE が無い場合と、関数の中で読む表の権限が
+        //      無い場合（`get_news_feed` は SECURITY INVOKER なので後者になる）。
+        //      **どちらも未ログインでは使えない**ので、ここでは区別せず「使えない」に倒す。
+        //      逆に、関数の中で認可の判定に引っかかって例外になった場合（P0001 等）は
+        //      **通っている**——止めているのは権限ではなく関数の中の 1 行だけなので、
+        //      呼べた側に数えて宣言させる。
+        if (who === '未ログイン') {
+          const denied =
+            (error as { code?: string } | null)?.code === '42501' ||
+            /permission denied/i.test(error?.message ?? '')
+          if (!denied) anonCallable.push(name)
+        }
+
         const body = JSON.stringify(data ?? null)
         const hit = markers.filter((m) => body.includes(m))
         if (hit.length > 0) leaks.push(`${name}（${who}）: 施設 A の目印が応答に出た（${hit.join(', ')}）`)
 
-        // 他施設の利用者としての期待。未ログインは権限で落ちるのが普通なので、目印だけを見る
-        if (who === '施設 B' && attack.assert) {
+        // 他施設の利用者としての期待。
+        // WHY(2026-09-11): **未ログインでも呼べると宣言した RPC には、未ログインでも当てる**。
+        //      「呼べてよい」と決めたなら、呼べたときに何が返るかまで測らないと
+        //      宣言が「開けっ放しの言い訳」になる（ANON_CALLABLE の理由が実測に裏打ちされる）。
+        //      それ以外の RPC は権限で落ちるのが普通なので、目印だけを見る
+        const appliesAssert = who === '施設 B' || name in ANON_CALLABLE
+        if (appliesAssert && attack.assert) {
           const message = attack.assert(data, error)
           if (message) leaks.push(`${name}（${who}）: ${message}`)
         }
@@ -291,6 +335,15 @@ describe('クライアントから呼べる RPC の総当たり（他施設・�
     expect(unreached, '引数の形が合わず一度も届いていない RPC がある（見かけだけの攻撃）').toEqual([])
     expect(leaks, 'RPC 経由で施設 A の中身が出た').toEqual([])
     expect(changed, 'RPC 経由で施設 A の行が変わった').toEqual([])
+
+    // 未ログインで呼べる RPC は宣言と一致していること（両方向）
+    const undeclared = anonCallable.filter((n) => !(n in ANON_CALLABLE))
+    expect(
+      undeclared,
+      '未ログインで呼べる RPC が ANON_CALLABLE に無い（開けてよいなら理由を書く。よくないなら REVOKE する）'
+    ).toEqual([])
+    const stale = Object.keys(ANON_CALLABLE).filter((n) => !anonCallable.includes(n))
+    expect(stale, 'ANON_CALLABLE にあるが実際は未ログインで呼べない（宣言が実態より広い）').toEqual([])
   }, 60_000)
 
   it('対照: 施設 A の利用者が同じ RPC を呼ぶと、自施設の値が返る（拒否が「全部拒否」ではない）', async () => {
