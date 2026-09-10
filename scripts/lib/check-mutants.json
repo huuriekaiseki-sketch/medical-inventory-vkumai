@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 51,
+  "minMutants": 53,
   "mutants": [
     {
       "id": "CM-001",
@@ -470,6 +470,24 @@
       "replace": "    if any(_squash(p) in summary for p in NO_FINDING_PHRASES):\n        return 0\n    return 0",
       "expect": "scripts/lib/judge-sweep-recall.test.sh",
       "guards": "C-025（「指摘 0 件」と「件数が読めなかった」を混ぜない）"
+    },
+    {
+      "id": "CM-052",
+      "breaks": "Suspense の検査から違反の報告を外す（包まれていない useSearchParams を通す）",
+      "file": "scripts/lib/scan-suspense-gaps.mjs",
+      "find": "    if (SUSPENSE_OPEN_RE.test(src)) continue",
+      "replace": "    if (true) continue",
+      "expect": "scripts/check-suspense-gaps.test.sh",
+      "guards": "LLM もフレームワークも外した欠陥（2026-09-10 実測: next build は落ちなかった）"
+    },
+    {
+      "id": "CM-053",
+      "breaks": "「import 元に Suspense があるか」だけで通す（内側で使っているかを見ない）",
+      "file": "scripts/lib/scan-suspense-gaps.mjs",
+      "find": "      if (names.some((n) => usedInsideSuspense(otherSrc, n))) {",
+      "replace": "      if (true) {",
+      "expect": "scripts/check-suspense-gaps.test.sh",
+      "guards": "別の場所の Suspense で通してしまわないこと（C-011: パスの実在しか見ない型）"
     }
   ]
 }

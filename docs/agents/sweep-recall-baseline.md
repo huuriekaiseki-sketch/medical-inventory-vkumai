@@ -53,3 +53,27 @@
   0 件と混ぜず `findingsUnreadable` に分けてある
 - モデルは haiku 固定（`sweep-db-holdout` の 1 回だけ sonnet）。
   他の層で sonnet がどうかは測っていない
+
+## 追記（同日）: sweep-ui が外した欠陥に、実は誰も気づけなかった
+
+`sweep-ui` の MISS（`useSearchParams()` が `<Suspense>` の外）について、
+「Next.js のビルドが落とすはずだから実害は無い」と考えて確かめた。**違った。**
+
+Next.js の公式文書（`node_modules/next/dist/docs/01-app/03-api-reference/04-functions/use-search-params.md`）:
+
+> During production builds, a **static page** that calls `useSearchParams` from a Client Component
+> must be wrapped in a `Suspense` boundary, otherwise the build fails
+
+**実測（壊して確かめた）**: Suspense 無しのページを `src/app/` に置いて `npm run build` を回したら
+**成功した（終了コード 0）**。理由は出力に出ている——このアプリは全ルートが
+`ƒ (Dynamic) server-rendered on demand` で、**静的ページが 1 つも無い**。
+公式の防御は「静的ページのとき」しか効かないので、**この構成では最初から適用されない**。
+
+つまりこの欠陥は、
+**LLM（Sweep）も、フレームワーク（next build）も、lint も捕まえない**状態だった。
+
+→ `scripts/check-suspense-gaps.test.sh` を作った。実コードは違反 0（ratchet を 0 で張れた）。
+eval の fixture 2 件をそのまま入力に使い、**検査と eval が同じ欠陥を見ていること**を固定してある。
+
+**教訓**: 「フレームワークが落としてくれるはず」は、**その構成で本当に落ちるか**を
+壊して確かめるまで信じない。今回は 1 回のビルド（数分）で分かった。

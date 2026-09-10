@@ -181,10 +181,11 @@
       ],
       "checks": [
         "scripts/check-fail-open.test.sh",
-        "scripts/check-shell-expansion-safety.test.sh",
-        "scripts/check-shell-locale-safety.test.sh",
         "scripts/check-foreign-key-indexes.test.sh",
         "scripts/check-rate-limit-coverage.test.sh",
+        "scripts/check-shell-expansion-safety.test.sh",
+        "scripts/check-shell-locale-safety.test.sh",
+        "scripts/check-suspense-gaps.test.sh",
         "scripts/check-text-column-limits.test.sh",
         "scripts/check-text-contrast.test.sh"
       ],

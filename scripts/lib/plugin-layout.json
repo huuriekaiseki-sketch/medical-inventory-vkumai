@@ -227,7 +227,8 @@
     "lib/table-duplicates-registry.json": "aidd-vkumai",
     "check-verify-claims-fail-open-streak.sh": "aidd-core",
     "lib/check-roadmap-staleness.mjs": "aidd-core",
-    "lib/roadmap-registry.json": "aidd-vkumai"
+    "lib/roadmap-registry.json": "aidd-vkumai",
+    "lib/scan-suspense-gaps.mjs": "aidd-vkumai"
   },
   "workflowLib": {
     "_comment": ".claude/workflows/lib/ の純粋関数のうち bin/ のスクリプトが node で呼ぶもの。scripts/workflow-lib/ に置く（workflows/ 配下に置くと Workflow として走査されるため）",
@@ -325,7 +326,8 @@
     "check-pitfall-rulebook.test.sh": "aidd-core",
     "check-rule-guard-coverage.test.sh": "aidd-core",
     "check-table-row-duplicates.test.sh": "aidd-core",
-    "check-roadmap-staleness.test.sh": "aidd-core"
+    "check-roadmap-staleness.test.sh": "aidd-core",
+    "check-suspense-gaps.test.sh": "aidd-vkumai"
   },
   "checksNotDistributed": {
     "_comment": "配らない検査と、その理由。導入先に存在しないもの（このリポジトリの docs・カタログ・スキーマ）を検査していて、配ると必ず落ちるものだけをここに書く。「面倒だから」で足さない。",
