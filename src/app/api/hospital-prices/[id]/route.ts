@@ -9,6 +9,7 @@ import {
   HOSPITAL_PRICE_CONFLICT_MESSAGE,
 } from '@/lib/hospital-prices/repository'
 import { authGuardError, apiError } from '@/lib/api-error'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import type { RouteContext } from '@/types/route'
 import { parseBody } from '@/lib/validation/parse-body'
 import { hospitalPriceInputSchema } from '@/lib/validation/schemas'
@@ -59,7 +60,15 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const price = await updateHospitalPrice(db, id, input)
     return NextResponse.json({ price })
   } catch (error) {
-    if (error instanceof Error) {
+    // WHY(2026-09-11): `Error` ではなく `ClientVisibleError` を見る。
+    //      ここは分岐の先で **error.message をそのまま利用者へ返す**ので、`Error` で受けると
+    //      DB の生エラーが偶然この文言を含んだときに素通りする道が残る。
+    //      翻訳済みだと分かっているもの（`client-visible-error.ts` のマーカー）だけを通す。
+    //      現実に起きる確率は低い（PostgreSQL のエラーは英語）が、**構造で閉じる**ほうを採る。
+    //      見つけたのは held-out の eval で Sweep がこの route を挙げたとき。
+    //      指摘そのもの（「生の message を返している」）は**この形では誤り**だったが、
+    //      判定が `instanceof Error` だったのは事実なので、そこだけ締めた。
+    if (error instanceof ClientVisibleError) {
       if (error.message.includes('病院別価格ID')) {
         return NextResponse.json({ error: '価格情報が見つかりません' }, { status: 404 })
       }

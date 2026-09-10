@@ -7,6 +7,7 @@ import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listDistributorProducts, createDistributorProduct } from '@/lib/distributor-products/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import { keywordQueryShape } from '@/lib/api-keyword-query'
 import { parseBody } from '@/lib/validation/parse-body'
 import { distributorProductInputSchema } from '@/lib/validation/schemas'
@@ -71,7 +72,9 @@ export async function POST(request: NextRequest) {
     const item = await createDistributorProduct(db, input)
     return NextResponse.json({ item }, { status: 201 })
   } catch (error) {
-    if (error instanceof Error && error.message.includes('存在しません')) {
+    // WHY(2026-09-11): `Error` ではなく `ClientVisibleError` を見る（理由は
+    //      hospital-prices/route.ts と同じ。ここも error.message をそのまま返すため）。
+    if (error instanceof ClientVisibleError && error.message.includes('存在しません')) {
       return apiError(error.message, 404)
     }
     return apiError(toClientErrorMessage(error, 'ディーラー商品の作成に失敗しました'))

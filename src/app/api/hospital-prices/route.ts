@@ -10,6 +10,7 @@ import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listHospitalPrices, createHospitalPrice } from '@/lib/hospital-prices/repository'
 import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import { parseBody } from '@/lib/validation/parse-body'
 import { hospitalPriceInputSchema } from '@/lib/validation/schemas'
 
@@ -60,7 +61,12 @@ export async function POST(request: NextRequest) {
     const price = await createHospitalPrice(db, input)
     return NextResponse.json({ price }, { status: 201 })
   } catch (error) {
-    if (error instanceof Error) {
+    // WHY(2026-09-11): `Error` ではなく `ClientVisibleError` を見る。
+    //      分岐の先で **error.message をそのまま返す**ので、`Error` で受けると
+    //      DB の生エラーが偶然この文言を含んだときに素通りする道が残る
+    //      （`client-visible-error.ts` は、まさにその漏洩対策のマーカー）。
+    //      ここを外れたものは下の `toClientErrorMessage` がサニタイズする。
+    if (error instanceof ClientVisibleError) {
       if (error.message.includes('既に登録されています')) {
         return apiError(error.message, 409)
       }

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import { GET, PUT, DELETE } from '../route'
 
 const mockGetUser = vi.fn()
@@ -127,7 +128,11 @@ describe('PUT /api/hospital-prices/[id]', () => {
   it('楽観ロックの競合（他の利用者が先に更新）は 409 と区別できるメッセージを返す [P-052]', async () => {
     authenticated()
     mockGetHospitalPrice.mockResolvedValue({ id: 'hp1', ...validInput })
-    mockUpdateHospitalPrice.mockRejectedValue(new Error(CONFLICT_MESSAGE))
+    // WHY(2026-09-11): 実物（repository.ts:104）は `ClientVisibleError` を投げるのに、
+    //      ここだけ素の `Error` でモックしていた。**モックが実物より緩い**状態で、
+    //      route を `instanceof ClientVisibleError` に締めたときに初めて露見した。
+    //      モックは実物と同じ型を投げる（緩いモックは、締めた守りを素通りさせる）。
+    mockUpdateHospitalPrice.mockRejectedValue(new ClientVisibleError(CONFLICT_MESSAGE))
     const staleInput = { ...validInput, expectedUpdatedAt: '2026-09-06T00:00:00.000000+00:00' }
     const req = new Request('http://localhost', { method: 'PUT', body: JSON.stringify(staleInput) })
     const res = await PUT(req as never, context)
@@ -135,6 +140,19 @@ describe('PUT /api/hospital-prices/[id]', () => {
     expect((await res.json()).error).toBe(CONFLICT_MESSAGE)
     // expectedUpdatedAt はそのままリポジトリへ渡る（ここで落とすと楽観ロックが黙って無効になる）
     expect(mockUpdateHospitalPrice).toHaveBeenCalledWith(expect.anything(), 'hp1', expect.objectContaining({ expectedUpdatedAt: staleInput.expectedUpdatedAt }))
+  })
+
+  // WHY(C-022): 上のテストは `ClientVisibleError` を投げているので、**締めても締めなくても通る**。
+  //      締めたことに意味があるかは、**翻訳済みでないエラーで同じ文言を投げて**初めて分かる。
+  //      素の `Error` は分岐に入らず throw され、生の message が利用者へ出ない
+  //      （Next.js 側で 500 になる。`toClientErrorMessage` を通る route ならそこでサニタイズされる）。
+  it('翻訳済みでないエラー（素の Error）は、同じ文言でも生のまま返さない [C-022]', async () => {
+    authenticated()
+    mockGetHospitalPrice.mockResolvedValue({ id: 'hp1', ...validInput })
+    mockUpdateHospitalPrice.mockRejectedValue(new Error('既に登録されています'))
+    const req = new Request('http://localhost', { method: 'PUT', body: JSON.stringify(validInput) })
+
+    await expect(PUT(req as never, context)).rejects.toThrow('既に登録されています')
   })
 
   it('認証済み・アクセス権ありで正常に更新できる（facilityId変更なし）', async () => {
