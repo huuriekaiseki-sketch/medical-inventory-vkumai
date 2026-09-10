@@ -53,7 +53,7 @@
 | セキュリティ・回帰（H-05） | `T-037` `C-023` `C-032` | ローカル Supabase が起動していること。E2E は dev サーバーも要る | E2E の全件実行（画面と入口の総当たり）<br>`logs/e2e-runs.jsonl` | scripts/check-guard-regressions.test.sh（後から足した守りを落としたら落ちるか） |
 | ミューテーション（H-06） | `C-022` | RLS 変異はローカル Supabase が起動していること。Stryker は実 DB を要らない | 認可ポリシーの変異計測（RLS）<br>`logs/rls-mutation-runs.jsonl`<br><br>製品コードの変異計測（Stryker）<br>`logs/mutation-runs.jsonl` | この役割自体が反証の仕組み。自分を壊しては測れないので、scripts/check-detectors-effective.test.sh の scenario 2〜9 が fixture で自己検証する |
 | 監視・観測（H-07） | `C-041` `E-030` | なし（記録が無いこと自体を警告するので、記録が無くても動く） | —（この役割は「他の役割が測ったか」を見る側で、自分の実測の記録は持たない。鮮度 hook が黙る事故は各 *-freshness.test.sh が測る） | scripts/check-rule-guard-effective.test.sh（鮮度 hook を no-op にすると落ちるか） |
-| リリース（H-08） | `M-010` | なし（migration の SQL と git の状態だけを見る） | —（リリースの実行そのものが人の操作で、実測の記録を残す入口をまだ作っていない（#757-8 の外部監視と同じ待ち）） | scripts/check-migration-release-safety.test.sh の RED 方向 fixture |
+| リリース（H-08） | `M-010` | なし（migration の SQL と git の状態だけを見る） | —（**外部への到達待ちではない**（2026-09-10 に訂正）。入口の `scripts/rehearse-merge.sh` はローカルで動き、いま 37 本の待ち行列を実測できる。記録を残していないのは、**マージ予行の結果が main と 37 本のブランチ先端に依存し、木のハッシュ 1 つでは鮮度を表せない**ため。いまの証拠の仕組みは `<パス>Tree` の一致でしか最新かを見ないので、無理に載せると「変わっていないのに最新」と言ってしまう（C-010）。リリースの実行そのもの（本番へ出した記録）は #757-8 の外部監視待ちで、こちらとは別の話） | scripts/check-migration-release-safety.test.sh の RED 方向 fixture |
 
 **台帳（数字はここから読む。足し算しない）**
 
@@ -63,7 +63,7 @@
 | `input-validation-baseline.json`#pending.length | 本文を検証せずに読む route（H-03） | route | **0** |
 | `query-validation-baseline.json`#pending.length | クエリを検証せずに読む route（H-03） | route | **0** |
 | `write-path-registry.json`#maxGaps | DB は書けるのにアプリに道が無い組み合わせ（H-05） | 組み合わせ | **0** |
-| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **41** |
+| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **44** |
 | `rls-mutants.json`#mutants.length | RLS・RPC の壊し方（H-06） | 件 | **18** |
 
 （ハーネス 8 件・検査 125 本・台帳 6 件。**検査はこの表で全数**——どこにも属さない検査があれば生成そのものが落ちる）

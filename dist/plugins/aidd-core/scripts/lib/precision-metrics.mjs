@@ -118,7 +118,18 @@ export function computeMetric({ metric, root, runs, read = readRecords }) {
       value = measured
       denominator = measured + un
       unmeasured = un
-      rates = denominator > 0 ? [Math.round((measured / denominator) * 1000) / 10] : []
+      // WHY(回ごとに 1 点を取る、2026-09-10): ここは以前、窓全体を**1 つの割合**に潰していた。
+      //      そのため回が何回あってもばらつきの標本が 1 個になり、
+      //      記録が 2 回あるのに「同じ条件の回が 1 回」と**回数を言い間違えて**いた（実測で発覚）。
+      //      この指標が問うのは「毎回ちゃんと測れているか」なので、
+      //      1 回ごとに 測れた=100 / 測れなかった=0 を置く。どちらでもない語の回は標本にしない。
+      rates = recent
+        .map((r) => {
+          if ((metric.measuredStates ?? []).includes(r[metric.stateField])) return 100
+          if ((metric.unmeasuredStates ?? []).includes(r[metric.stateField])) return 0
+          return null
+        })
+        .filter((v) => v !== null)
     } else {
       value = num(latest[metric.numerator])
       denominator = num(latest[metric.denominator])

@@ -88,6 +88,26 @@ printf '{"at":"2026-01-01T00:00:00Z","dataGuardResult":"pass"}\n' > "$WORK/root/
 run_engine
 assert_contains "$ENGINE_OUT" "測れなかった 0 件" "全部測れたときは 0 件と言う（対照）"
 
+echo "=== scenario 2c: 状態の語で数えるときも、回数を数え間違えない ==="
+# WHY(2026-09-10): ここは窓全体を 1 つの割合に潰しており、記録が 2 回あっても
+#      「同じ条件の回が 1 回（ばらつきは分からない）」と**回数を言い間違えて**いた。
+#      実物の統合テストを 2 回回して初めて気づいた。1 回ごとに 1 点を取る。
+{
+  printf '{"at":"2026-01-02T00:00:00Z","dataGuardResult":"pass"}\n'
+  printf '{"at":"2026-01-01T00:00:00Z","dataGuardResult":"pass"}\n'
+} > "$WORK/root/logs/s.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" "同じ条件の直近 2 回" "2 回あれば 2 回と言う"
+assert_not_contains "$ENGINE_OUT" "同じ条件の回が 1 回" "2 回を 1 回と言わない"
+
+# 対照: 測れた回と測れなかった回が混ざれば、それは振れている
+{
+  printf '{"at":"2026-01-02T00:00:00Z","dataGuardResult":"skipped"}\n'
+  printf '{"at":"2026-01-01T00:00:00Z","dataGuardResult":"pass"}\n'
+} > "$WORK/root/logs/s.jsonl"
+run_engine
+assert_contains "$ENGINE_OUT" '**振れている**）' "測れたり測れなかったりを振れていると言う（対照）"
+
 echo "=== scenario 3: 同条件のばらつきを出す ==="
 cat > "$WORK/registry.json" <<'JSON'
 {

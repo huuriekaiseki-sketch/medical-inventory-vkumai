@@ -7,7 +7,10 @@
 #   bash scripts/rehearse-merge.sh --branches feat/a,feat/b         # その場で順番を指定
 #   bash scripts/rehearse-merge.sh --base origin/main --json        # 機械可読
 #
-# 終了コード: 衝突が 1 件でもあれば 1
+#   bash scripts/rehearse-merge.sh --base main                      # 実際に積む先を指定
+#
+# 終了コード: 0 = 衝突なし / 1 = 衝突あり / 2 = 使い方が違う /
+#             3 = **起点が遅れていて判定できない**（既定の origin/main が凍っている等）
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

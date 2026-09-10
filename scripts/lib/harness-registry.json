@@ -385,7 +385,7 @@
       ],
       "preconditions": "なし（migration の SQL と git の状態だけを見る）",
       "evidence": [],
-      "unmeasuredReason": "リリースの実行そのものが人の操作で、実測の記録を残す入口をまだ作っていない（#757-8 の外部監視と同じ待ち）",
+      "unmeasuredReason": "**外部への到達待ちではない**（2026-09-10 に訂正）。入口の `scripts/rehearse-merge.sh` はローカルで動き、いま 37 本の待ち行列を実測できる。記録を残していないのは、**マージ予行の結果が main と 37 本のブランチ先端に依存し、木のハッシュ 1 つでは鮮度を表せない**ため。いまの証拠の仕組みは `<パス>Tree` の一致でしか最新かを見ないので、無理に載せると「変わっていないのに最新」と言ってしまう（C-010）。リリースの実行そのもの（本番へ出した記録）は #757-8 の外部監視待ちで、こちらとは別の話",
       "falsification": "scripts/check-migration-release-safety.test.sh の RED 方向 fixture"
     }
   ],

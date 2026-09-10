@@ -16,7 +16,16 @@
 //
 // 出力: 各ブランチの OK / 衝突 / 済み と、衝突したファイルの一覧。
 //       衝突したブランチは積まずに次へ進む（後続の判定を実態に近づけるため）。
-// 終了コード: 衝突が 1 件でもあれば 1（CI で使えるように）。
+// 終了コード: 0 = 衝突なし / 1 = 衝突あり / 2 = 使い方が違う / 3 = **起点が遅れていて判定できない**
+//
+// WHY(起点の遅れを合否に混ぜない、2026-09-10): 既定の起点は `origin/main`。
+//      2026-09-06 の GitHub アカウント停止以降 `origin/main` は凍ったままで、
+//      実際に積む先（gitlab へ push している `main`）だけが進んでいた。
+//      その状態でこの道具を回すと **実在しない衝突 10 件** が出る（2026-09-10 実測。
+//      実際の main を起点にすると 37 本すべて「すでに積まれている」で衝突 0 件だった）。
+//      これは「衝突している」でも「衝突していない」でもなく、
+//      **誰も聞いていない問いに答えている**状態なので、合否に混ぜず 3 で止める（C-025）。
+//      遅れた起点で敢えて測りたいときは --allow-stale-base。
 
 import { execFileSync } from 'node:child_process'
 import { readFileSync, existsSync } from 'node:fs'
@@ -30,6 +39,7 @@ function parseArgs(argv) {
     else if (a === '--queue') o.queue = argv[++i]
     else if (a === '--repo') o.repo = argv[++i]
     else if (a === '--json') o.json = true
+    else if (a === '--allow-stale-base') o.allowStaleBase = true
   }
   return o
 }
@@ -56,7 +66,49 @@ if (o.queue) {
   process.exit(2)
 }
 
+// WHY(空を合格と読まない、2026-09-10): 順番が空でもそのまま進むと
+//      「衝突 0 件 / 0 本」で**終了コード 0**になる。測る対象が 1 本も無いことと
+//      「調べたら衝突が無かった」ことは別なので、分けて落とす（C-021: 走査の空振り）。
+if (queue.length === 0) {
+  console.error('rehearse-merge: 順番が空です（測る対象が 1 本も無い）。0 件を合格と読まないため落とします')
+  process.exit(2)
+}
+
 let base = git(['rev-parse', o.base])
+
+/**
+ * 起点が「実際に積む先」より遅れていないかを見る。
+ * 遅れていれば {ahead, baseShort, mainShort} を返し、そうでなければ null。
+ */
+export function staleBaseOf({ baseSha, mainSha, ahead }) {
+  if (!mainSha || mainSha === baseSha) return null
+  if (!(ahead > 0)) return null
+  return { ahead, base: baseSha.slice(0, 8), main: mainSha.slice(0, 8) }
+}
+
+const mainProbe = tryGit(['rev-parse', '--verify', '--quiet', 'main'])
+const mainSha = mainProbe.ok ? mainProbe.out.trim() : ''
+const aheadProbe = mainSha ? tryGit(['rev-list', '--count', `${base}..${mainSha}`]) : { ok: false, out: '' }
+const staleBase = staleBaseOf({
+  baseSha: base,
+  mainSha,
+  ahead: aheadProbe.ok ? Number.parseInt(aheadProbe.out.trim(), 10) : 0,
+})
+
+if (staleBase && !o.allowStaleBase) {
+  if (o.json) {
+    console.log(JSON.stringify({ base: o.base, measured: false, staleBase }, null, 2))
+  } else {
+    console.error('rehearse-merge: 起点が遅れています（判定できません）')
+    console.error(`  起点 ${o.base} = ${staleBase.base}`)
+    console.error(`  いまの main   = ${staleBase.main}（起点に無いコミット ${staleBase.ahead} 件）`)
+    console.error('  この起点で測ると、**実際には存在しない衝突**が出ます')
+    console.error('  実際に積む先を指定してください: bash scripts/rehearse-merge.sh --base main')
+    console.error('  遅れた起点で敢えて測るなら --allow-stale-base')
+  }
+  process.exit(3)
+}
+
 const results = []
 
 for (const { label, branch } of queue) {
