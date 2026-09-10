@@ -108,6 +108,8 @@ export function scan(fixturesRoot, claudeDir) {
 
   /** held-out の「名前」= セット名・case 名・fixture のファイル名 */
   const holdoutNames = new Set(holdoutSets)
+  /** held-out **以外**のセットに現れる名前。共通の名前を見張ると誤検知になる */
+  const sharedNames = new Set()
   let holdoutCases = 0
 
   for (const set of sets) {
@@ -127,19 +129,30 @@ export function scan(fixturesRoot, claudeDir) {
         }
         holdoutNames.add(caseName)
         for (const f of fixtureFileNames(caseDir)) holdoutNames.add(f)
-      } else if (marked) {
-        violations.push(
-          `holdout-misplaced: ${set}/${caseName} — heldOut: true だが *-holdout のセットに入っていない` +
-            '（普通のセットに置くと、プロンプト調整に使われる）'
-        )
+      } else {
+        if (marked) {
+          violations.push(
+            `holdout-misplaced: ${set}/${caseName} — heldOut: true だが *-holdout のセットに入っていない` +
+              '（普通のセットに置くと、プロンプト調整に使われる）'
+          )
+        }
+        // 普通のセットにも現れる名前は「held-out 固有」ではない
+        sharedNames.add(caseName)
+        for (const f of fixtureFileNames(caseDir)) sharedNames.add(f)
       }
     }
   }
 
   // 名前がプロンプト・エージェント定義へ漏れていないか
-  // WHY(短い名前は見ない): `case-1` のような汎用の名前は他のセットにもあるので、
-  //      一致しても意味がない。**そのセットだけを指す名前**に絞る
-  const distinctive = [...holdoutNames].filter((n) => n.length >= 12 && /holdout|eval[-_]fixture/i.test(n))
+  //
+  // WHY(「held-out にしか無い名前」で絞る、2026-09-10): 最初は
+  // `/holdout|eval[-_]fixture/` を含む名前だけを見張っていた。
+  // ところが E-070 で fixture の名前を**業務らしい名前**へ変えた（`sterilization_logs` 等）ので、
+  // その絞り込みでは **fixture のファイル名が 1 つも見張られなくなった**——
+  // 印の付いた名前しか見ない判定は、印を外した瞬間に空振りする（C-011 の型）。
+  // いまは「普通のセットにも現れる名前」を引いた**差集合**を見張る。
+  // 短すぎる名前（`route.ts` 等）は他所にも出るので、長さでも足切りする。
+  const distinctive = [...holdoutNames].filter((n) => n.length >= 12 && !sharedNames.has(n))
   const chunks = collectText(claudeDir)
   for (const name of distinctive) {
     for (const { file, text } of chunks) {

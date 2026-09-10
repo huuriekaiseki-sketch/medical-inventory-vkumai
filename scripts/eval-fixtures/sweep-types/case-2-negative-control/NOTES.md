@@ -4,13 +4,13 @@
 
 **欠陥が無いコードに指摘を出さないこと**（誤警報率）。
 
-case-1（`eval-fixture-recall`）は型定義に `internalNote` が無いのに mapper が返しており、
+case-1（`shift-handovers`）は型定義に `internalNote` が無いのに mapper が返しており、
 `@ts-expect-error` で潰していた。こちらは同じ形で、型・行・mapper が 1 対 1 に対応している。
 
 ## 判定
 
 `expectNoFinding: true`。この 2 ファイルのどちらかを名指しし、かつ `internalNote` /
-`internal_note` / `EvalFixtureCleanItem` に触れた**指摘**を出したら過検出。
+`internal_note` / `WardSupplyItem` に触れた**指摘**を出したら過検出。
 
 ## 限界
 

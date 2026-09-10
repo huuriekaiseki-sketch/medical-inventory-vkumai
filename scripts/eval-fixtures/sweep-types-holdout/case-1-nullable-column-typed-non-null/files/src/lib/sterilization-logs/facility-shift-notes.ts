@@ -1,4 +1,4 @@
-export type HoldoutNote = {
+export type ShiftNote = {
   id: string
   facilityId: string
   title: string
@@ -7,7 +7,7 @@ export type HoldoutNote = {
   createdAt: string
 }
 
-type HoldoutNoteRow = {
+type ShiftNoteRow = {
   id: string
   facility_id: string
   title: string
@@ -16,7 +16,7 @@ type HoldoutNoteRow = {
   created_at: string
 }
 
-export function toHoldoutNote(row: HoldoutNoteRow): HoldoutNote {
+export function toShiftNote(row: ShiftNoteRow): ShiftNote {
   return {
     id: row.id,
     facilityId: row.facility_id,
@@ -28,7 +28,7 @@ export function toHoldoutNote(row: HoldoutNoteRow): HoldoutNote {
 }
 
 /** 一覧の 1 行に出す要約。本文の先頭 40 文字を切り出す */
-export function summarizeHoldoutNote(note: HoldoutNote): string {
+export function summarizeShiftNote(note: ShiftNote): string {
   const head = note.body.slice(0, 40)
   return `${note.title}（${note.authorName}）: ${head}`
 }

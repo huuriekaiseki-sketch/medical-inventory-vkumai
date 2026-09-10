@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 
-export default function EvalFixtureRecallPage() {
+export default function ShiftHandoversPage() {
   const searchParams = useSearchParams()
   const filter = searchParams.get('filter') ?? 'all'
 

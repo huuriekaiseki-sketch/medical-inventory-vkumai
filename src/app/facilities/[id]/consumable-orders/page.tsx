@@ -55,7 +55,7 @@ export default function ConsumableOrdersPage({ params }: { params: Promise<{ id:
 
   useEffect(() => {
     return fetchConsumables()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchConsumables は useCallback で包んでいないので毎レンダーで別物になる。依存に入れると取得が止まらない。読み直すきっかけは施設 ID だけでよい
   }, [id])
 
   const handleRegistered = () => {

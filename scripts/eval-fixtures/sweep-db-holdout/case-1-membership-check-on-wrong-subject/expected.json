@@ -1,6 +1,6 @@
 {
   "heldOut": true,
-  "expectedFilePathContains": "eval_fixture_holdout.sql",
+  "expectedFilePathContains": "sterilization_logs.sql",
   "expectedKeywords": [
     "SECURITY DEFINER",
     "認可",

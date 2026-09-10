@@ -1,6 +1,6 @@
 {
   "expectNoFinding": true,
-  "expectedFilePathContains": "eval_fixture_clean.sql",
+  "expectedFilePathContains": "ward_supplies.sql",
   "expectedKeywords": [
     "SECURITY DEFINER",
     "認可",

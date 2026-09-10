@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   const db = await createServerSupabase()
   const { data, error } = await db
-    .from('eval_fixture_holdout_notes')
+    .from('facility_shift_notes')
     .select('id, title, body, author_name, created_at')
     .eq('facility_id', facilityId)
     .order('created_at', { ascending: false })

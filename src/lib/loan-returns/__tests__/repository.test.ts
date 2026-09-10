@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLoanReturn, listLoanReturns, LOAN_ORDER_NOT_FOUND_ERROR } from '@/lib/loan-returns/repository'
 import { ClientVisibleError } from '@/lib/client-visible-error'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase のクエリビルダはメソッドチェーンで、実物の型（PostgrestFilterBuilder）はジェネリクスが深く、テスト用のモックでは再現できない。このモック関数の戻り値に限って any を使う
 function makeChainableQuery(result: { data: unknown; error: unknown }): any {
   const builder: Record<string, unknown> = {
     select: vi.fn(() => builder),

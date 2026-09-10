@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 63,
+  "minMutants": 66,
   "mutants": [
     {
       "id": "CM-001",
@@ -578,6 +578,33 @@
       "replace": "        if (false) {",
       "expect": "scripts/check-holdout-isolation.test.sh",
       "guards": "印と実態の突合（付け忘れた case は普通のセットと区別が付かなくなる）"
+    },
+    {
+      "id": "CM-064",
+      "breaks": "逃がし口の上限を見ない（いくつでも増やせる元の姿）",
+      "file": "scripts/lib/scan-exemptions.mjs",
+      "find": "    if (counts[m.name] > limit) {",
+      "replace": "    if (false) {",
+      "expect": "scripts/check-exemptions.test.sh",
+      "guards": "逃がし口は 1 件ずつは正当でも、増えれば検査が形骸化する"
+    },
+    {
+      "id": "CM-065",
+      "breaks": "逃がし口に理由が無くても通す",
+      "file": "scripts/lib/scan-exemptions.mjs",
+      "find": "        if (m.withReason.test(lines[i])) continue",
+      "replace": "        continue",
+      "expect": "scripts/check-exemptions.test.sh",
+      "guards": "2026-09-10 実測で 9 件が理由なしだった（うち 8 件は本物）"
+    },
+    {
+      "id": "CM-066",
+      "breaks": "held-out の名前を「印の付いた名前」だけで絞る（改名した瞬間に空振りする元の姿）",
+      "file": "scripts/lib/scan-holdout-isolation.mjs",
+      "find": "  const distinctive = [...holdoutNames].filter((n) => n.length >= 12 && !sharedNames.has(n))",
+      "replace": "  const distinctive = [...holdoutNames].filter((n) => n.length >= 12 && /holdout/i.test(n))",
+      "expect": "scripts/check-holdout-isolation.test.sh",
+      "guards": "C-011。E-070 で fixture を業務らしい名前へ変えたとき、印で絞る判定は**何も見張らなくなった**"
     }
   ]
 }

@@ -269,9 +269,16 @@
         "scripts/check-rls-mutation-freshness.test.sh",
         "scripts/check-rls-mutation.test.sh",
         "scripts/check-rule-guard-effective.test.sh",
-        "scripts/check-skip-scope.test.sh"
+        "scripts/check-skip-scope.test.sh",
+        "scripts/check-exemptions.test.sh"
       ],
       "ledgers": [
+        {
+          "name": "検査の逃がし口（上限。eslint-disable）",
+          "unit": "件",
+          "file": "scripts/lib/exemption-budget.json",
+          "path": "max.eslint-disable"
+        },
         {
           "name": "判定エンジンの壊し方（下限）",
           "unit": "件",

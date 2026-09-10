@@ -32,7 +32,7 @@ AND EXISTS (SELECT 1 FROM user_facilities uf WHERE uf.facility_id = i.facility_i
 
 ## 判定
 
-陽性。`eval_fixture_holdout.sql` を名指しし、認可に関する語のいずれかに触れた指摘が要る。
+陽性。`sterilization_logs.sql` を名指しし、認可に関する語のいずれかに触れた指摘が要る。
 
 ## 限界
 

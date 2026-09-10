@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 
-export function EvalFixtureCleanFilter() {
+export function WardSupplyFilter() {
   const searchParams = useSearchParams()
   const filter = searchParams.get('filter') ?? 'all'
 

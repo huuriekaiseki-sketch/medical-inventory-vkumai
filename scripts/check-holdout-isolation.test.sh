@@ -55,8 +55,12 @@ mk_case() { # $1=fixtures root, $2=set, $3=case, $4=expected.json の中身, $5=
 
 GOOD="$WORK/good"
 mkdir -p "$WORK/claude-empty"
-mk_case "$GOOD" "sweep-x" "case-1" '{"expectedFilePathContains":"a.ts","expectedKeywords":["x"]}' "eval-fixture-normal-a.ts"
-mk_case "$GOOD" "sweep-x-holdout" "case-1-secret-shape" '{"heldOut":true,"expectedFilePathContains":"b.ts","expectedKeywords":["y"]}' "eval-fixture-holdout-b.ts"
+# WHY(fixture の名前も業務らしくする、2026-09-10・E-070): 以前は `eval-fixture-holdout-b.ts` と
+#      名付けていたが、それだと「名前に holdout が入っているから見張られる」だけになり、
+#      **実態（業務らしい名前に改名した本物の fixture）と違う道を通る**（C-023）。
+#      本物と同じく、名前からは評価用だと分からないものにする。
+mk_case "$GOOD" "sweep-x" "case-1" '{"expectedFilePathContains":"ward-supply-list.ts","expectedKeywords":["x"]}' "ward-supply-list.ts"
+mk_case "$GOOD" "sweep-x-holdout" "case-1-secret-shape" '{"heldOut":true,"expectedFilePathContains":"sterilization-record.ts","expectedKeywords":["y"]}' "sterilization-record.ts"
 
 echo "=== scenario 2: 正しい構成なら違反 0（対照） ==="
 ALLOW_ZERO= run_scan "$GOOD" "$WORK/claude-empty"
@@ -64,7 +68,7 @@ if [ "$SCAN_CODE" -eq 0 ]; then ok "正しい構成は通す"; else ng "正し�
 
 echo "=== scenario 3: *-holdout なのに印が無ければ落ちる（付け忘れ） ==="
 UNMARKED="$WORK/unmarked"
-mk_case "$UNMARKED" "sweep-x-holdout" "case-1-secret-shape" '{"expectedFilePathContains":"b.ts","expectedKeywords":["y"]}' "eval-fixture-holdout-b.ts"
+mk_case "$UNMARKED" "sweep-x-holdout" "case-1-secret-shape" '{"expectedFilePathContains":"sterilization-record.ts","expectedKeywords":["y"]}' "sterilization-record.ts"
 ALLOW_ZERO= run_scan "$UNMARKED" "$WORK/claude-empty"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "印の付け忘れで落ちる"; else ng "印が無くても通した" "$SCAN_OUT"; fi
 if printf '%s' "$SCAN_OUT" | grep -q "holdout-unmarked"; then
@@ -75,8 +79,8 @@ fi
 
 echo "=== scenario 4: 普通のセットに印があれば落ちる（付け間違い） ==="
 MISPLACED="$WORK/misplaced"
-mk_case "$MISPLACED" "sweep-x" "case-1" '{"heldOut":true,"expectedFilePathContains":"a.ts","expectedKeywords":["x"]}' "eval-fixture-normal-a.ts"
-mk_case "$MISPLACED" "sweep-x-holdout" "case-1-secret-shape" '{"heldOut":true,"expectedFilePathContains":"b.ts","expectedKeywords":["y"]}' "eval-fixture-holdout-b.ts"
+mk_case "$MISPLACED" "sweep-x" "case-1" '{"heldOut":true,"expectedFilePathContains":"ward-supply-list.ts","expectedKeywords":["x"]}' "ward-supply-list.ts"
+mk_case "$MISPLACED" "sweep-x-holdout" "case-1-secret-shape" '{"heldOut":true,"expectedFilePathContains":"sterilization-record.ts","expectedKeywords":["y"]}' "sterilization-record.ts"
 ALLOW_ZERO= run_scan "$MISPLACED" "$WORK/claude-empty"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "普通のセットの印で落ちる"; else ng "付け間違いを通した" "$SCAN_OUT"; fi
 if printf '%s' "$SCAN_OUT" | grep -q "holdout-misplaced"; then
@@ -92,7 +96,7 @@ cat > "$LEAKY_CLAUDE/agents/sweep-x.md" <<'MD'
 ---
 name: sweep-x
 ---
-探索手順: eval-fixture-holdout-b.ts のような形にも注意すること
+探索手順: sterilization-record.ts のような形にも注意すること
 MD
 ALLOW_ZERO= run_scan "$GOOD" "$LEAKY_CLAUDE"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "プロンプトへの漏れで落ちる"; else ng "漏れを通した" "$SCAN_OUT"; fi
@@ -109,7 +113,7 @@ cat > "$NORMAL_CLAUDE/agents/sweep-x.md" <<'MD'
 ---
 name: sweep-x
 ---
-探索手順: eval-fixture-normal-a.ts のような形にも注意すること
+探索手順: ward-supply-list.ts のような形にも注意すること
 MD
 ALLOW_ZERO= run_scan "$GOOD" "$NORMAL_CLAUDE"
 if [ "$SCAN_CODE" -eq 0 ]; then ok "held-out でない名前は見張らない"; else ng "普通のセットの名前で落ちた" "$SCAN_OUT"; fi
@@ -126,7 +130,7 @@ else
 fi
 
 NO_HOLDOUT="$WORK/no-holdout"
-mk_case "$NO_HOLDOUT" "sweep-x" "case-1" '{"expectedFilePathContains":"a.ts","expectedKeywords":["x"]}' "eval-fixture-normal-a.ts"
+mk_case "$NO_HOLDOUT" "sweep-x" "case-1" '{"expectedFilePathContains":"ward-supply-list.ts","expectedKeywords":["x"]}' "ward-supply-list.ts"
 ALLOW_ZERO= run_scan "$NO_HOLDOUT" "$WORK/claude-empty"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "held-out が消えたら落ちる（この検査が何も守らなくなる状態）"; else ng "held-out 0 件で通した" "$SCAN_OUT"; fi
 ALLOW_ZERO=1 run_scan "$NO_HOLDOUT" "$WORK/claude-empty"

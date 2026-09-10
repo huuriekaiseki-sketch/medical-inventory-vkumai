@@ -4,7 +4,7 @@
 
 **欠陥が無いコードに指摘を出さないこと**（誤警報率）。
 
-case-1（`eval_fixture_recall.sql`）と**同じ形**の `SECURITY DEFINER` 関数だが、
+case-1（`shift_handovers.sql`）と**同じ形**の `SECURITY DEFINER` 関数だが、
 こちらは正しく書いてある:
 
 - 呼び出し元の所属を `is_facility_member(p_facility_id)` で確かめる

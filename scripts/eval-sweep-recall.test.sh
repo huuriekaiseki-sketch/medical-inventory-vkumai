@@ -49,12 +49,17 @@ ok() { echo "  OK: $1"; }
 ng() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }
 assert_contains() { if printf '%s' "$1" | grep -qF -- "$2"; then ok "$3"; else ng "$3" "expected: $2 / actual: $1"; fi; }
 
+# WHY(AIDD_LOG_DIR を一時ディレクトリへ向ける、2026-09-10・C-030): 回答本文の保存を足したとき、
+#      テストの模擬実行が**実物の `logs/eval-details/` に書いていた**。
+#      回帰 1 回につき 9 個のディレクトリが増え、気づいたときには 70 個近くたまっていた。
+#      テストは自分の作ったものだけを触る——**後片付けの範囲ではなく、そもそも実物に触らない**。
 run_eval() {
   set +e
   OUT="$(
     EVAL_SWEEP_RECALL_REPO_DIR="$DUMMY_REPO" \
     EVAL_SWEEP_RECALL_FIXTURES_DIR="$FIXTURES_DIR" \
     EVAL_SWEEP_RECALL_LOCK_DIR="$WORKDIR/lock" \
+    AIDD_LOG_DIR="$WORKDIR/logs" \
     EVAL_SWEEP_RECALL_AGENT_CMD="MOCK_RESPONSE_FILE='$MOCK_RESPONSE_FILE' '$MOCK_AGENT'" \
     bash "$SCRIPT" sweep-x 2>&1
   )"
@@ -160,6 +165,44 @@ if printf '%s' "$OUT" | grep -q "未コミットの変更があります"; then
   ng "戻したのに警告が残る" "$OUT"
 else
   ok "コミット済みに戻せば黙る"
+fi
+
+echo "=== scenario 8c: テストの模擬実行が実物の logs/ を汚さない（C-030） ==="
+# WHY(2026-09-10): 回答本文の保存を足した直後、**このテスト自身が実物の
+#      `logs/eval-details/` に書いていた**。回帰 1 回につき 9 個増え、70 個近くたまっていた。
+#      「後片付けをする」ではなく「**そもそも実物に触らない**」で直す（AIDD_LOG_DIR）。
+# WHY(|| true が要る、2026-09-10): このテストは `set -euo pipefail` で動く。
+#      `resolve_log_dir` は git の情報から置き場を決めるので、**git リポジトリでない環境**
+#      （check-rule-guard-effective.test.sh が作る複製サンドボックス）では失敗し、
+#      代入ごと `set -e` に引っかかってテスト全体が落ちる。
+#      手元では git リポジトリなので通り、**サンドボックスでだけ落ちた**（C-042）。
+# WHY(数える処理を関数にして必ず 0 で返す、2026-09-10): このテストは `set -euo pipefail` で動く。
+#      `find` は存在しないディレクトリで非ゼロを返し、`pipefail` の下ではパイプ全体が失敗になる。
+#      最初は素の `$(find ... | wc -l)` と書いたので、**複製サンドボックス**
+#      （check-rule-guard-effective.test.sh が作る、logs/ の無い環境）でだけ
+#      テスト全体が落ちた。手元では通っていた（C-042: 測る環境が実利用と違う）。
+count_sweep_x_dirs() { # $1 = ログ置き場
+  find "$1/eval-details" -maxdepth 1 -type d -name '*-sweep-x' 2>/dev/null -exec echo x \; | wc -l | tr -d ' '
+  return 0
+}
+REAL_LOG_DIR="$(AIDD_LOG_DIR= bash -c "source '$SCRIPT_DIR/lib/resolve-log-dir.sh'; resolve_log_dir" 2>/dev/null || true)"
+if [ -n "$REAL_LOG_DIR" ]; then
+  BEFORE_DIRS="$(count_sweep_x_dirs "$REAL_LOG_DIR")"
+  run_eval
+  AFTER_DIRS="$(count_sweep_x_dirs "$REAL_LOG_DIR")"
+  if [ "$BEFORE_DIRS" = "$AFTER_DIRS" ]; then
+    ok "実物の logs/eval-details に何も足さない（${BEFORE_DIRS} のまま）"
+  else
+    ng "テストが実物の logs/ を汚した（${BEFORE_DIRS} → ${AFTER_DIRS}）" "AIDD_LOG_DIR を一時ディレクトリへ向ける"
+  fi
+  # 対照: 一時ディレクトリ側には実際に書かれている（無効化しただけではないこと）
+  if find "$WORKDIR/logs/eval-details" -maxdepth 1 -type d -name '*-sweep-x' 2>/dev/null | grep -q .; then
+    ok "一時ディレクトリ側には残っている（保存そのものは効いている）"
+  else
+    ng "一時ディレクトリにも残っていない（保存が働いていない）"
+  fi
+else
+  ok "ログの置き場を解決できないので飛ばす（この環境では判定しない）"
 fi
 
 echo "=== scenario 8: 判定に使った回答本文が実際に保存されている ==="

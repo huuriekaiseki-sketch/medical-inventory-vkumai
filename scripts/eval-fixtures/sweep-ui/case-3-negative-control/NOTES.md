@@ -4,7 +4,7 @@
 
 **欠陥が無いコードに指摘を出さないこと**（誤警報率）。
 
-case-1（`eval-fixture-recall/page.tsx`）は `useSearchParams` を `Suspense` の外で呼んでいた。
+case-1（`shift-handovers/page.tsx`）は `useSearchParams` を `Suspense` の外で呼んでいた。
 こちらは同じ話題で、正しく書いてある:
 
 - `useSearchParams` を使うのは client component（`filter.tsx`）だけ

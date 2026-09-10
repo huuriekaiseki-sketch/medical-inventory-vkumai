@@ -1,6 +1,6 @@
 {
   "heldOut": true,
-  "expectedFilePathContains": "eval-fixture-holdout-form.tsx",
+  "expectedFilePathContains": "consumable-register-form.tsx",
   "expectedKeywords": [
     "二重送信",
     "多重送信",

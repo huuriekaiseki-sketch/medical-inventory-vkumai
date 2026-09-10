@@ -1,8 +1,8 @@
 {
   "expectNoFinding": true,
   "expectedFilePathContains": [
-    "eval-fixture-clean/page.tsx",
-    "eval-fixture-clean/filter.tsx"
+    "ward-supplies/page.tsx",
+    "ward-supplies/filter.tsx"
   ],
   "expectedKeywords": [
     "Suspense",

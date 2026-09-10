@@ -1,4 +1,4 @@
 {
-  "expectedFilePathContains": ["eval-fixture-recall/repository.ts", "types/eval-fixture-recall.ts"],
-  "expectedKeywords": ["internalNote", "internal_note", "EvalFixtureRecallItem"]
+  "expectedFilePathContains": ["shift-handovers/repository.ts", "types/shift-handovers.ts"],
+  "expectedKeywords": ["internalNote", "internal_note", "ShiftHandoverItem"]
 }

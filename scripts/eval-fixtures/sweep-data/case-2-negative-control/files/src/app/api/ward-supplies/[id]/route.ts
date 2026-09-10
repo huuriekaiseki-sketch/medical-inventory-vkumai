@@ -15,7 +15,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     return authGuardError(e)
   }
   const { data, error } = await db
-    .from('eval_fixture_clean_items')
+    .from('ward_supply_items')
     .select('id, facility_id, name')
     .eq('id', id)
     .single()

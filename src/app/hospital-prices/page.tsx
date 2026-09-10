@@ -64,7 +64,7 @@ function HospitalPricesPageInner() {
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- この effect 自身が router.replace で facilityId を書き換えるため、urlFacilityId / router を依存に入れると再実行が連鎖する。読み直すのは初回と refreshKey の変化のときだけでよい
   }, [refreshKey])
 
   // 価格取得用: selectedFacilityId が変わるたびに（削除後の再取得も含め）価格一覧を取得する

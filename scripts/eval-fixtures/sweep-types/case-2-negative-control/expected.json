@@ -1,12 +1,12 @@
 {
   "expectNoFinding": true,
   "expectedFilePathContains": [
-    "eval-fixture-clean/repository.ts",
-    "types/eval-fixture-clean.ts"
+    "ward-supplies/repository.ts",
+    "types/ward-supplies.ts"
   ],
   "expectedKeywords": [
     "internalNote",
     "internal_note",
-    "EvalFixtureCleanItem"
+    "WardSupplyItem"
   ]
 }
