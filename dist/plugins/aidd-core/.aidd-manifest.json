@@ -93,7 +93,7 @@
     "scripts/lib/check-table-row-duplicates.mjs": "bf5ef3db06febf6eb440d1a0522b84693627b0349b1c96bda608d8cdc7af08f6",
     "scripts/lib/gate-effectiveness-summary.ts": "6d704753c32f573b7b52a19273b6f67c017a314aefd84accea66a3f73f56e692",
     "scripts/lib/harvest-journal-events.ts": "63fb76382f15c8051a4956e33f9255091b0077625a76cf5eaa9d429c9d8f8029",
-    "scripts/lib/judge-sweep-recall.test.sh": "f87a272468c74f1bbf3f5654b0cd0387d33e8d534c05ea265c56a2223dc5edd9",
+    "scripts/lib/judge-sweep-recall.test.sh": "0890fe7d20e6782e76c8346c7186d16e5c35e4b9a4b6350e4202d25825f84dd7",
     "scripts/lib/model-pricing.ts": "34ab4d65b17c14aa48ddb235b6a27ccc9f4a2205e41344c27d664b5d379a10f8",
     "scripts/lib/new-rulebook.mjs": "e6bac1ae57d474420857bd4f82c028f53c4d12f2a23972ba0f48894953e7e77a",
     "scripts/lib/pr-numbers-from-transcript.jq": "abbd2e884ebf9f930bd96caf10bf929df9079f5619b577724ba5cfbf986c5ab4",

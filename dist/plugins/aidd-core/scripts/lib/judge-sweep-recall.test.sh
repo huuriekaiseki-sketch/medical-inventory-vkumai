@@ -83,7 +83,28 @@ assert_judge "$WORK/expected.json" "$UNRELATED" "false" "パスもキーワー�
 
 echo "=== scenario 4: 陰性対照の fixture は逆向きに採点する ==="
 assert_judge "$WORK/expected-negative.json" "$NEGATIVE" "true" "欠陥の無い fixture で何も指摘しなければ HIT"
-assert_judge "$WORK/expected-negative.json" "$POSITIVE" "false" "欠陥の無い fixture で指摘を出したら MISS（過検出）"
+assert_judge "$WORK/expected-negative.json" "$POSITIVE" "false" "欠陥の無い fixture について指摘を出したら MISS（過検出）"
+
+echo "=== scenario 4b: 陰性対照は「他のファイルへの指摘」では落ちない ==="
+# WHY(2026-09-10 実測): sweep はコードベース全体を調べるので、無関係な実コードについて
+#      指摘を出すのが普通。「指摘 0 件」を条件にすると同じ fixture が実行のたびに
+#      HIT と MISS を行き来した（2/2 → 1/2 → 2/2）。**flaky な評価は無いより悪い。**
+OTHER_FINDING='FINDINGS: 3
+src/lib/orders/repository.ts で N+1 クエリが発生しています。
+src/components/orders/OrderHistoryTable.tsx の key が index です。
+db/migrations/20260101_x.sql に索引がありません。'
+assert_judge "$WORK/expected-negative.json" "$OTHER_FINDING" "true" "他のファイルへの指摘は過検出に数えない"
+assert_judge "$WORK/expected.json" "$OTHER_FINDING" "false" "陽性側でも、他のファイルへの指摘は HIT にしない（対称）"
+
+echo "=== scenario 4c: 層ごとの「指摘なし」を全体の 0 件と読まない ==="
+# WHY(2026-09-10 実測): sweep の報告は層ごとに並び、「A 層は指摘なし」と書きながら
+#      B 層の欠陥を挙げるのが普通の形。本文全体から語を探すと、1 件でも指摘している報告を
+#      0 件と読み違える（JSON が返らず生出力へ落ちた回に、陽性の case が実際に MISS した）。
+#      契約の件数の行が無いときは、総括が置かれる**最初か最後の非空行**だけを見る。
+MIXED='【データ取得層】指摘なし。
+【APIルート】app/api/eval-fixture-recall/[id]/route.ts で requireAuth を呼んでおらず、認可チェックが抜けています。'
+assert_judge "$WORK/expected.json" "$MIXED" "true" "本文の途中の「指摘なし」で 0 件と読まない"
+assert_judge "$WORK/expected-negative.json" "$MIXED" "false" "陰性対照では同じ報告を過検出として扱う（対称）"
 
 echo "=== scenario 5: 件数が読めず言い回しも契約外なら「指摘あり」側に倒す ==="
 # 判定できないことを理由に recall を下げると、採点器の壊れがモデルの劣化に見える

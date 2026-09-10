@@ -26,9 +26,19 @@
 #   どちらも読めない場合は「指摘あり」とみなす（判定できないことを理由に
 #   recall を下げると、判定の壊れがモデルの劣化に見えるため）。
 #
-# expected.json の expectNoFinding: true は**陰性対照**。欠陥の無い fixture に対して
-# エージェントが何も指摘しないことを成功とする（陽性だけを測ると「全部に指摘を出す」
+# expected.json の expectNoFinding: true は**陰性対照**。欠陥の無い fixture について
+# エージェントが指摘を出さないことを成功とする（陽性だけを測ると「全部に指摘を出す」
 # エージェントが満点を取れてしまう）。
+#
+# WHY(「指摘 0 件」では測れない、2026-09-10): 最初は「1 件も指摘していないこと」を成功にしたが、
+#   sweep は**コードベース全体**を調べるので、無関係な実コードについて指摘を出すのが普通で、
+#   同じ fixture が実行のたびに HIT と MISS を行き来した（実測: 2/2 → 1/2 → 2/2）。
+#   **flaky な評価は読まれなくなるので、無いより悪い。**
+#   判定を陽性と対称にする——「指摘を出していて、かつその指摘が**この fixture のパスとキーワード**に
+#   結びついている」ときだけ過検出とする。他のファイルへの指摘は数えない。
+#
+#   限界: パスとキーワードの両方を含みつつ「問題ありません」と述べる書き方は、
+#   過検出として数えてしまう（安全側）。逆に、パスを名指しせずに指摘した過検出は見逃す。
 import json
 import os
 import re
@@ -39,13 +49,33 @@ FINDINGS_RE = re.compile(r"^\s*findings\s*[:：]\s*(\d+)", re.IGNORECASE | re.MU
 NO_FINDING_PHRASES = ("指摘なし", "指摘は なし", "指摘 なし")
 
 
+def _squash(text: str) -> str:
+    return text.replace(" ", "").replace("　", "")
+
+
 def reported_findings(detail: str) -> bool:
-    """このdetailは「1件以上の指摘」を報告しているか。"""
+    """このdetailは「1件以上の指摘」を報告しているか。
+
+    WHY(「指摘なし」を本文全体から探さない、2026-09-10): 最初は本文のどこかに
+    「指摘なし」があれば 0 件と読んでいた。ところが sweep の報告は層ごとに並ぶことが多く、
+    **「A 層は指摘なし」と書きながら B 層の欠陥を挙げる**のが普通の形なので、
+    1 件でも指摘している報告を 0 件と読み違える（実測: JSON が返らず生出力へ落ちた回に
+    陽性の case が MISS した）。判定に使うのは、まず契約の `FINDINGS: <件数>` の行。
+    無い場合だけ、**最後の非空行**——総括が置かれる位置——に限って語を探す
+    （1 行だけの回答なら最初の行と同じなので、そちらも自然に拾える）。
+
+    限界: 指摘を挙げたあとに層ごとの「〜は指摘なし」で締める書き方は 0 件と読み違える。
+    契約の `FINDINGS: <件数>` の行があればこの経路には入らないので、
+    まずは**契約を守らせること**が防御の本体。
+    """
     m = FINDINGS_RE.search(detail)
     if m:
         return int(m.group(1)) > 0
-    normalized = detail.replace(" ", "").replace("　", "")
-    if any(p.replace(" ", "") in normalized for p in NO_FINDING_PHRASES):
+    lines = [line for line in detail.split("\n") if line.strip() != ""]
+    if not lines:
+        return False
+    summary = _squash(lines[-1])
+    if any(_squash(p) in summary for p in NO_FINDING_PHRASES):
         return False
     return True
 
@@ -62,19 +92,21 @@ def main() -> int:
 
     has_finding = reported_findings(raw)
 
-    # 陰性対照: 欠陥が無い fixture。何も指摘しないことが正解
-    if expected.get("expectNoFinding") is True:
-        print("true" if not has_finding else "false")
-        return 0
-
     paths = expected["expectedFilePathContains"]
     if isinstance(paths, str):
         paths = [paths]
 
     path_hit = any(p.lower() in detail for p in paths)
     keyword_hit = any(k.lower() in detail for k in expected["expectedKeywords"])
+    # 「この fixture について指摘した」= 指摘があり、その本文がパスとキーワードに結びついている
+    reported_about_fixture = has_finding and path_hit and keyword_hit
 
-    print("true" if (has_finding and path_hit and keyword_hit) else "false")
+    # 陰性対照: 欠陥が無い fixture。この fixture について指摘しないことが正解
+    if expected.get("expectNoFinding") is True:
+        print("false" if reported_about_fixture else "true")
+        return 0
+
+    print("true" if reported_about_fixture else "false")
     return 0
 
 
