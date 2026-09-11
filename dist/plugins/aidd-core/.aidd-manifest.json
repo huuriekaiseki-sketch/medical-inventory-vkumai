@@ -94,7 +94,7 @@
     "scripts/lib/aidd-config.sh": "602a4dbea32a067cf69ea486f41bfc354c380f5fe5dbb47e667eecb7417bc6c0",
     "scripts/lib/aidd-config.test.sh": "6b91cb5b02f30b8705c004fceca8413d2d004e3bcf59b78049a560ea9b857b58",
     "scripts/lib/aidd-doctor.mjs": "5b374c6bb22ca515e070bcee94332cbb4ae77d41053f956f9c5c151e293d9f07",
-    "scripts/lib/canonical-event.ts": "374f540d160b1f30a8e9586b481b991d782bbb265af4e18787d82868a799f0b5",
+    "scripts/lib/canonical-event.ts": "249b3128795e3d2c20137b0fcb69a967332145fec842782dcceeacda99ea845f",
     "scripts/lib/check-catalog.mjs": "f653862d9980068ac5e56e37c39cf913dad8dc0d9cf0c040cd62be5194e8c6e7",
     "scripts/lib/check-detectors-effective.mjs": "6b247d79b97611ae7b712a9f209429df2406842aff7cdd931a18ca18265798b2",
     "scripts/lib/check-roadmap-staleness.mjs": "7032d3c1bfbffd87317b92ed3f951be10a37b32f0cdb92557210dde45cc3815e",

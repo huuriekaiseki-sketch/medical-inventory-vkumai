@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildEventId, extractAgentType, KNOWN_AGENT_TYPES, subagentSkeletonAdapter, agentProgressAdapter, loopObservabilityAdapter, journalAdapter, loadAllEvents, correlateEvents } from './canonical-event'
+import { buildEventId, extractAgentType, resolveAgentTypes, KNOWN_AGENT_TYPES, subagentSkeletonAdapter, agentProgressAdapter, loopObservabilityAdapter, journalAdapter, loadAllEvents, correlateEvents } from './canonical-event'
 import type { CanonicalEvent } from './canonical-event'
 
 describe('KNOWN_AGENT_TYPES', () => {
@@ -10,6 +10,34 @@ describe('KNOWN_AGENT_TYPES', () => {
     expect(KNOWN_AGENT_TYPES).toHaveLength(12)
     expect(KNOWN_AGENT_TYPES).toContain('sweep-ui')
     expect(KNOWN_AGENT_TYPES).toContain('implementer')
+  })
+})
+
+// WHY(C-048): このモジュールは共通側(aidd-core)として配られる。agentType一覧を定数で
+//      焼き込むと、配った先では自分のagent名を復元できずnullになり**観測が静かに欠ける**。
+//      実体(.claude/agents/*.md)から導くことをRED方向(このリポジトリに無い名前)で固定する。
+describe('resolveAgentTypes', () => {
+  it('導入先の .claude/agents/*.md のファイル名から読む', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agent-types-'))
+    mkdirSync(join(dir, '.claude/agents'), { recursive: true })
+    writeFileSync(join(dir, '.claude/agents/auditor.md'), '---\nname: auditor\n---\n本文\n')
+    writeFileSync(join(dir, '.claude/agents/builder.md'), '---\nname: builder\n---\n本文\n')
+    writeFileSync(join(dir, '.claude/agents/README.txt'), 'md ではないので数えない')
+
+    const types = resolveAgentTypes(dir)
+    expect([...types].sort()).toEqual(['auditor', 'builder'])
+    expect(types).not.toContain('sweep-ui')
+  })
+
+  it('projectDirが無ければ既定へ落ちる', () => {
+    expect(resolveAgentTypes()).toBe(KNOWN_AGENT_TYPES)
+  })
+
+  it('.claude/agents/ が無い・空なら既定へ落ちる(agentが1体も無いので復元する記録も無い)', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'agent-types-empty-'))
+    expect(resolveAgentTypes(empty)).toBe(KNOWN_AGENT_TYPES)
+    mkdirSync(join(empty, '.claude/agents'), { recursive: true })
+    expect(resolveAgentTypes(empty)).toBe(KNOWN_AGENT_TYPES)
   })
 })
 
@@ -28,6 +56,12 @@ describe('extractAgentType', () => {
 
   it('sweep-uiとsweep-dataのように前方一致が紛らわしい場合でも正しく判定する', () => {
     expect(extractAgentType('sweep-data-something')).toBe('sweep-data')
+  })
+
+  it('渡された一覧を使う(導入先の名前を復元でき、このリポジトリの名前は復元しない)', () => {
+    const consumer = ['auditor', 'builder']
+    expect(extractAgentType('auditor-security', consumer)).toBe('auditor')
+    expect(extractAgentType('sweep-ui', consumer)).toBeNull()
   })
 })
 
@@ -241,6 +275,31 @@ describe('loadAllEvents', () => {
   it('パスを指定しなかったソースは含めない', () => {
     const events = loadAllEvents({})
     expect(events).toEqual([])
+  })
+
+  // WHY(C-048): 配った先で「自分のagent名を復元できずagentTypeがnullになる」ことを止める。
+  //      このリポジトリに存在しない名前(auditor)で、実体から導けていることを測る。
+  it('projectDirの .claude/agents/ にあるagent名を復元する（導入先の名前）', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'load-all-consumer-'))
+    mkdirSync(join(projectDir, '.claude/agents'), { recursive: true })
+    writeFileSync(join(projectDir, '.claude/agents/auditor.md'), '---\nname: auditor\n---\n本文\n', 'utf-8')
+    const agentProgressLogFile = join(projectDir, 'agent-progress.jsonl')
+    writeFileSync(agentProgressLogFile, line({ timestamp: '2026-07-27T00:00:00Z', agent: 'auditor-security', feature: 'f1', status: 'done', note: 'n' }) + '\n', 'utf-8')
+
+    const events = loadAllEvents({ agentProgressLogFile, projectDir })
+    expect(events).toHaveLength(1)
+    expect(events[0].agentType).toBe('auditor')
+  })
+
+  it('導入先に無い名前（このリポジトリのロール名）は復元しない', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'load-all-consumer-neg-'))
+    mkdirSync(join(projectDir, '.claude/agents'), { recursive: true })
+    writeFileSync(join(projectDir, '.claude/agents/auditor.md'), '---\nname: auditor\n---\n本文\n', 'utf-8')
+    const agentProgressLogFile = join(projectDir, 'agent-progress.jsonl')
+    writeFileSync(agentProgressLogFile, line({ timestamp: '2026-07-27T00:00:00Z', agent: 'sweep-ui', feature: 'f1', status: 'done', note: 'n' }) + '\n', 'utf-8')
+
+    const events = loadAllEvents({ agentProgressLogFile, projectDir })
+    expect(events[0].agentType).toBeNull()
   })
 })
 

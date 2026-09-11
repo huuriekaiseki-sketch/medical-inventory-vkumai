@@ -21,6 +21,13 @@ export interface CanonicalEvent {
 
 // docs/agents/common.md「サブエージェント進捗の可視化（issue #18）」に列挙されている
 // 進捗記録対象agentType一覧。verify-agent-progress-transcript.tsから本モジュールへ移設（issue #569）。
+//
+// WHY(これは**フォールバック**であって正本ではない。2026-09-11): このモジュールは共通側
+// （aidd-core）として配られるのに、ここに**このリポジトリのロール名**を焼き込んでいた。
+// 配った先では自分のagent名が一覧に無いためextractAgentTypeがnullを返し、**観測が静かに欠ける**
+// （落ちないので誰も気づかない。docs/agents/check-design-pitfalls.md の C-048）。
+// 正本は導入先の `.claude/agents/*.md` のファイル名で、resolveAgentTypes() がそこから読む。
+// この配列が使われるのは projectDir を渡さない呼び出し（単体テスト等）だけ。
 export const KNOWN_AGENT_TYPES = [
   'sweep-db',
   'sweep-ui',
@@ -36,11 +43,34 @@ export const KNOWN_AGENT_TYPES = [
   'contract-writer',
 ] as const
 
+/**
+ * 導入先のagentType一覧を `<projectDir>/.claude/agents/*.md` のファイル名から読む。
+ *
+ * WHY(2026-09-11、C-048): 一覧を定数で持つと、配った先では自分のagent名を復元できず
+ *      観測が静かに欠ける。名前を持たず**実体から導く**。
+ *      projectDirが無い・読めない・0件のときだけ KNOWN_AGENT_TYPES へ落ちる
+ *      （そのときは導入先にagentが1体も無いので、復元する記録も無い）。
+ */
+export function resolveAgentTypes(projectDir?: string): readonly string[] {
+  if (!projectDir) return KNOWN_AGENT_TYPES
+  try {
+    const names = readdirSync(join(projectDir, '.claude/agents'))
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => f.slice(0, -3))
+    return names.length > 0 ? names : KNOWN_AGENT_TYPES
+  } catch {
+    return KNOWN_AGENT_TYPES
+  }
+}
+
 // 自己申告jsonlの--agentは「reviewer-correctness」「implementer-groupA」のように
 // agentTypeへ役割サフィックスを付けた自由記述のため、既知agentType一覧との前方一致
 // （区切りは'-'または完全一致）で復元する。
-export function extractAgentType(selfAgentField: string): string | null {
-  const candidates = KNOWN_AGENT_TYPES.filter(
+export function extractAgentType(
+  selfAgentField: string,
+  knownTypes: readonly string[] = KNOWN_AGENT_TYPES,
+): string | null {
+  const candidates = knownTypes.filter(
     (type) => selfAgentField === type || selfAgentField.startsWith(`${type}-`),
   )
   if (candidates.length === 0) return null
@@ -153,12 +183,12 @@ export function loadAllAgentProgressRecords(logFile: string): AgentProgressLine[
     .map((raw) => JSON.parse(raw) as AgentProgressLine)
 }
 
-export function agentProgressAdapter(logFile: string): EventAdapter {
+export function agentProgressAdapter(logFile: string, knownTypes?: readonly string[]): EventAdapter {
   return {
     source: 'agent-progress',
     load(): CanonicalEvent[] {
       return loadAllAgentProgressRecords(logFile).map((record, lineIndex) => {
-        const agentType = extractAgentType(record.agent)
+        const agentType = extractAgentType(record.agent, knownTypes)
         return {
           eventId: buildEventId('agent-progress', agentType, record.timestamp, lineIndex),
           agentId: null,
@@ -200,12 +230,12 @@ export function loadAllLoopObservabilityRecords(logFile: string): LoopObservabil
     .map((raw) => JSON.parse(raw) as LoopObservabilityLine)
 }
 
-export function loopObservabilityAdapter(logFile: string): EventAdapter {
+export function loopObservabilityAdapter(logFile: string, knownTypes?: readonly string[]): EventAdapter {
   return {
     source: 'loop-observability',
     load(): CanonicalEvent[] {
       return loadAllLoopObservabilityRecords(logFile).map((record, lineIndex) => {
-        const agentType = extractAgentType(record.agent)
+        const agentType = extractAgentType(record.agent, knownTypes)
         return {
           eventId: buildEventId('loop-observability', agentType, record.timestamp, lineIndex),
           agentId: null,
@@ -308,9 +338,11 @@ export interface LoadAllEventsOptions {
 
 export function loadAllEvents(opts: LoadAllEventsOptions = {}): CanonicalEvent[] {
   const events: CanonicalEvent[] = []
+  // agentType の一覧は導入先の `.claude/agents/` から導く（C-048。定数を焼き込むと配った先で黙る）
+  const knownTypes = resolveAgentTypes(opts.projectDir)
   if (opts.subagentSkeletonLogFile) events.push(...subagentSkeletonAdapter(opts.subagentSkeletonLogFile).load())
-  if (opts.agentProgressLogFile) events.push(...agentProgressAdapter(opts.agentProgressLogFile).load())
-  if (opts.loopObservabilityLogFile) events.push(...loopObservabilityAdapter(opts.loopObservabilityLogFile).load())
+  if (opts.agentProgressLogFile) events.push(...agentProgressAdapter(opts.agentProgressLogFile, knownTypes).load())
+  if (opts.loopObservabilityLogFile) events.push(...loopObservabilityAdapter(opts.loopObservabilityLogFile, knownTypes).load())
   if (opts.projectDir) events.push(...journalAdapter(opts.projectDir).load())
   return events
 }
