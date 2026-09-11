@@ -48,6 +48,14 @@
       "policy"
     ]
   },
+  "faultInjectionDrill": {
+    "_comment": "fault injection 訓練（docs/agents/fault-injection-drill.md）が守る deny-by-default ゲートのプロンプトの在り処。scripts/lib/gate-prompt-hash.mjs が版を数え、check-fault-injection-drill-staleness.sh が『変わったのに訓練していない』を見る。ファイル全体ではなく門の文言だけを見るのは、aidd-phase2.js が別の理由でよく変わるため（2026-09-10 の 164 行の変更でもプロンプトは一字も動いていなかったと実測）。",
+    "promptSource": ".claude/workflows/aidd-phase2.js",
+    "gateMarkers": [
+      "他の場所に同じファイル名の別ファイルが見つかったとしても",
+      ".aidd/run-manifest.json を Read ツールで読んでください"
+    ]
+  },
   "readonlyAgentTypes": [
     "sweep-ui",
     "sweep-data",

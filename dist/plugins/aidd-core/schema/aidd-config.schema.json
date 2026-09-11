@@ -39,6 +39,23 @@
       "$ref": "#/$defs/stringList",
       "description": "PreToolUse で書き込み系 Bash を deny する読み取り専用ロール名（check-readonly-bash.sh）。hook は scripts/lib/aidd-config.sh 経由で読む"
     },
+    "faultInjectionDrill": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "fault injection 訓練が守る deny-by-default ゲートのプロンプトの在り処。書かなければ『この仕組みを持たない導入先』として鮮度判定を飛ばす",
+      "properties": {
+        "_comment": { "type": "string" },
+        "promptSource": {
+          "type": "string",
+          "description": "ゲートのプロンプトが書かれているファイル（リポジトリ相対）"
+        },
+        "gateMarkers": {
+          "$ref": "#/$defs/stringList",
+          "description": "各ゲートのプロンプトを一意に指す文字列。promptSource 内で 1 回だけ出ること（2 回以上出ると別の門を数えるので落ちる）"
+        }
+      },
+      "required": ["promptSource", "gateMarkers"]
+    },
     "commands": {
       "type": "object",
       "additionalProperties": false,

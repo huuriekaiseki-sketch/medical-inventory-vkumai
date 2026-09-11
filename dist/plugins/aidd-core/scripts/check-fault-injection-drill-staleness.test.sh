@@ -60,21 +60,29 @@ print((date.today() - timedelta(days=$1)).isoformat())
 echo "=== scenario 1: 次回実施予定日が未来 → 何も出力しない ==="
 FUTURE="$(future_iso 30)"
 cat > "$TMPDIR_TEST/drill-future.md" <<EOF
+## 訓練したゲートの版
+
+最後に訓練した版: \`abc123def456\`
+
 ## 次回実施予定日
 
 ${FUTURE}（四半期後の目安。手動で書き換える。リマインド機構は無い）
 EOF
-OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-future.md" bash "$SCRIPT")"
+OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-future.md" FAULT_INJECTION_GATE_VERSION=abc123def456 bash "$SCRIPT")"
 assert_empty "$OUT" "出力が空である"
 
 echo "=== scenario 2: 次回実施予定日が過去(期限切れ) → 警告する ==="
 PAST="$(past_iso 10)"
 cat > "$TMPDIR_TEST/drill-past.md" <<EOF
+## 訓練したゲートの版
+
+最後に訓練した版: \`abc123def456\`
+
 ## 次回実施予定日
 
 ${PAST}（四半期後の目安。手動で書き換える。リマインド機構は無い）
 EOF
-OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-past.md" bash "$SCRIPT")"
+OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-past.md" FAULT_INJECTION_GATE_VERSION=abc123def456 bash "$SCRIPT")"
 assert_contains "$OUT" "systemMessage" "systemMessageフィールドがある"
 assert_contains "$OUT" "$PAST" "期限日が含まれる"
 assert_contains "$OUT" "additionalContext" "additionalContextフィールドがある"
@@ -82,25 +90,114 @@ assert_contains "$OUT" "additionalContext" "additionalContextフィールドが�
 echo "=== scenario 3: 次回実施予定日が今日ちょうど → 警告する(期限当日も対象) ==="
 TODAY="$(past_iso 0)"
 cat > "$TMPDIR_TEST/drill-today.md" <<EOF
+## 訓練したゲートの版
+
+最後に訓練した版: \`abc123def456\`
+
 ## 次回実施予定日
 
 ${TODAY}（四半期後の目安。手動で書き換える。リマインド機構は無い）
 EOF
-OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-today.md" bash "$SCRIPT")"
+OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-today.md" FAULT_INJECTION_GATE_VERSION=abc123def456 bash "$SCRIPT")"
 assert_contains "$OUT" "systemMessage" "当日も警告対象になる"
 
 echo "=== scenario 4: 見出し自体が無い/日付を抽出できない → 警告する(書式崩れの検知) ==="
 cat > "$TMPDIR_TEST/drill-broken.md" <<EOF
+## 訓練したゲートの版
+
+最後に訓練した版: \`abc123def456\`
+
 ## 別の見出し
 
 本文のみで日付が無い
 EOF
-OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-broken.md" bash "$SCRIPT")"
+OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-broken.md" FAULT_INJECTION_GATE_VERSION=abc123def456 bash "$SCRIPT")"
 assert_contains "$OUT" "読み取れませんでした" "書式崩れの警告が出る"
 
 echo "=== scenario 5: ドキュメント自体が存在しない → 何も出力しない ==="
 OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/no-such-file.md" bash "$SCRIPT")"
 assert_empty "$OUT" "出力が空である"
+
+
+echo "=== scenario 6: 門の文言が変わったのに訓練していない → 警告する（2026-09-11 追加） ==="
+# WHY: それまでこの hook は**日付（四半期）しか見ていなかった**。ルール本体は
+#      「Spec Check / Manifest Check 関連のプロンプトを変更したとき」にも回せと言っているのに、
+#      そちらは誰も見ていなかった（undetectable-rules-inventory.md の第 3 層）。
+FUTURE="$(future_iso 30)"
+cat > "$TMPDIR_TEST/drill-gate-changed.md" <<EOF
+## 訓練したゲートの版
+
+最後に訓練した版: \`abc123def456\`
+
+## 次回実施予定日
+
+${FUTURE}（四半期後の目安）
+EOF
+OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-gate-changed.md" FAULT_INJECTION_GATE_VERSION=999999999999 bash "$SCRIPT")"
+assert_contains "$OUT" "門の文言が変わっています" "版が違えば警告する"
+assert_contains "$OUT" "abc123def456" "訓練した版を出す"
+assert_contains "$OUT" "999999999999" "いまの版も出す（どちらか一方では直せない）"
+
+echo "=== scenario 7: 期限切れと版の不一致が同時 → 両方出す（潰さない。C-025） ==="
+PAST="$(past_iso 10)"
+cat > "$TMPDIR_TEST/drill-both.md" <<EOF
+## 訓練したゲートの版
+
+最後に訓練した版: \`abc123def456\`
+
+## 次回実施予定日
+
+${PAST}（四半期後の目安）
+EOF
+OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-both.md" FAULT_INJECTION_GATE_VERSION=999999999999 bash "$SCRIPT")"
+assert_contains "$OUT" "$PAST" "期限切れも出る"
+assert_contains "$OUT" "門の文言が変わっています" "版の不一致も同時に出る"
+
+echo "=== scenario 8: 版の記録が無い → 「判定できない」と言う（黙って合格にしない） ==="
+cat > "$TMPDIR_TEST/drill-no-version.md" <<EOF
+## 次回実施予定日
+
+${FUTURE}（四半期後の目安）
+EOF
+OUT="$(FAULT_INJECTION_DRILL_DOC="$TMPDIR_TEST/drill-no-version.md" FAULT_INJECTION_GATE_VERSION=abc123def456 bash "$SCRIPT")"
+assert_contains "$OUT" "どの版に対する訓練だったか分からない" "版の記録が無いことを言う"
+
+echo "=== scenario 9: 実物の走査器が版を出せる（空振り防止） ==="
+# WHY(C-040): 上の scenario は注入した値で判定を測っている。**本物の走査器が動くこと**は別に測る。
+#      ここが空なら、実運用では版の判定が丸ごと効いていない。
+# WHY(C-048): この検査は共通側（aidd-core）として配られる。**走査器も設定も導入先には無い**のが
+#      普通なので、無いことを失敗にしない（配った先で必ず赤くなる検査を配らない）。
+HASHER="$SCRIPT_DIR/lib/gate-prompt-hash.mjs"
+if [ ! -f "$HASHER" ] || ! command -v node >/dev/null 2>&1; then
+  echo "  ➖ 対象外: 版の走査器（または node）が無い導入先"
+else
+  if REAL_VERSION="$(node "$HASHER" 2>/dev/null)"; then
+    HASHER_STATUS=0
+  else
+    HASHER_STATUS=$?
+  fi
+  if [ "$HASHER_STATUS" -eq 2 ]; then
+    echo "  ➖ 対象外: aidd.config.json に faultInjectionDrill を書いていない導入先"
+  elif printf '%s' "$REAL_VERSION" | grep -qE '^[0-9a-f]{12}$'; then
+    echo "  OK: 実物の門から版を数えられる（${REAL_VERSION}）"
+  else
+    echo "  NG: 設定はあるのに実物の門から版を数えられない（実運用では版の判定が効かない）"
+    echo "      exit=${HASHER_STATUS} actual=${REAL_VERSION}"
+    fail=1
+  fi
+fi
+
+echo "=== scenario 10: 実態でこの hook が何を言うか ==="
+# WHY: 片方だけ動いていても意味が無い。**鳴るべきときに鳴るのは scenario 6**、
+#      鳴らないべきときに鳴らないのがここ。ただし期限切れ・版の不一致は**本当の警告**なので、
+#      この検査を落とすのではなく内容を出す（doctor の scenario 1 と同じ扱い）。
+OUT="$(bash "$SCRIPT")"
+if [ -z "$OUT" ]; then
+  echo "  OK: 実態では無言（期限内かつ版が一致）"
+else
+  echo "  注意: 実態で警告が出ている（本当の警告なのでこの検査は落とさない）"
+  printf '%s\n' "$OUT" | sed -n 's/^/      /p' | head -5
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
