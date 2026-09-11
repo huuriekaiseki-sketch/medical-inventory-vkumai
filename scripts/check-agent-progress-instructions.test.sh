@@ -15,8 +15,10 @@
 #   (d) 逆向き: 指示を持つ agent が一覧に入っている（記録しても期待件数に入らない状態を作らない）
 #   (e) 書き込みツール（Edit / Write）を持たず Bash を持つ agent は
 #       `aidd.config.json` の `readonlyAgentTypes` に入っている（Bash の deny 対象になっている）
-#   (f) 一覧の**2 つの複製**（`agent-progress-expectation.js` と `aidd-phase2.js` のインライン）が一致する
-#       ——Workflow DSL は require できないので複製せざるを得ず、同期テストが無かった
+#   (f) 一覧の**3 つの複製**が一致する。`agent-progress-expectation.js`（正本）／
+#       `aidd-phase2.js`（Workflow DSL は require できないので手で写している）／
+#       `scripts/lib/canonical-event.ts` の `KNOWN_AGENT_TYPES`（観測の復元に使う TS 側）。
+#       **どれにも同期テストが無かった。**
 #   (g) 一覧が 1 件も読めなかったら落とす（走査の故障を「違反 0 件」と読まない。C-044）
 #   (h) fixture で (a)〜(g) を検知できる（RED 方向の自己検証。C-022）
 #
@@ -49,14 +51,16 @@ const root = process.argv[1]
 
 const EXPECT = path.join(root, ".claude/workflows/lib/agent-progress-expectation.js")
 const PHASE2 = path.join(root, ".claude/workflows/aidd-phase2.js")
+const CANONICAL = path.join(root, "scripts/lib/canonical-event.ts")
 const AGENTS = path.join(root, ".claude/agents")
 const CONFIG = path.join(root, "aidd.config.json")
 
-/** `PROGRESS_LOGGABLE_AGENT_TYPES = new Set([...])` の中の文字列を取り出す */
-function readList(file) {
+/** 一覧の中の文字列を取り出す（`= new Set([...])` / `= [...] as const` のどちらも） */
+function readList(file, varName) {
   if (!fs.existsSync(file)) return null
   const src = fs.readFileSync(file, "utf8")
-  const m = src.match(/PROGRESS_LOGGABLE_AGENT_TYPES\s*=\s*new Set\(\[([\s\S]*?)\]\)/)
+  const re = new RegExp(varName + "\\s*=\\s*(?:new Set\\()?\\[([\\s\\S]*?)\\]")
+  const m = src.match(re)
   if (!m) return null
   const names = [...m[1].matchAll(/[\x27"]([\w-]+)[\x27"]/g)].map((x) => x[1])
   return names.length > 0 ? names : null
@@ -68,20 +72,26 @@ function readList(file) {
 const hasList = fs.existsSync(EXPECT)
 let listed = null
 if (hasList) {
-  listed = readList(EXPECT)
+  listed = readList(EXPECT, "PROGRESS_LOGGABLE_AGENT_TYPES")
   // (g) 走査の故障を「違反 0 件」と読まない
   if (!listed) console.log("parse-failed: agent-progress-expectation.js から一覧を読めなかった")
 }
 
-// (f) 2 つの複製が一致する（Workflow DSL は require できないので複製せざるを得ない）
-if (listed && fs.existsSync(PHASE2)) {
-  const inline = readList(PHASE2)
-  if (!inline) {
-    console.log("parse-failed: aidd-phase2.js のインライン複製から一覧を読めなかった")
-  } else {
-    const a = [...listed].sort().join(",")
-    const b = [...inline].sort().join(",")
-    if (a !== b) console.log(`list-drift: 一覧の複製が食い違う（expectation=[${a}] phase2=[${b}]）`)
+// (f) 一覧の複製が一致する。**3 か所ある**——
+//     Workflow DSL は require できないので aidd-phase2.js が手で写し、
+//     観測の復元（canonical-event.ts）は TS 側なのでさらにもう 1 つ持っている
+const copies = [
+  [PHASE2, "PROGRESS_LOGGABLE_AGENT_TYPES", "phase2"],
+  [CANONICAL, "KNOWN_AGENT_TYPES", "canonical-event"],
+]
+if (listed) {
+  const a = [...listed].sort().join(",")
+  for (const [file, varName, label] of copies) {
+    if (!fs.existsSync(file)) continue
+    const copy = readList(file, varName)
+    if (!copy) { console.log(`parse-failed: ${label} の複製から一覧を読めなかった`); continue }
+    const b = [...copy].sort().join(",")
+    if (a !== b) console.log(`list-drift: 一覧の複製が食い違う（expectation=[${a}] ${label}=[${b}]）`)
   }
 }
 
@@ -214,25 +224,34 @@ else
   assert_ok "書き込みツールを持つ agent は deny 対象に入れない"
 fi
 
-echo "=== scenario 4: 一覧の 2 つの複製が食い違ったら落ちる ==="
-# WHY: Workflow DSL は require できないので aidd-phase2.js が同じ集合をインラインで持つ。
-#      複製は必ずずれるのに、同期テストが無かった
+echo "=== scenario 4: 一覧の 3 つの複製が食い違ったら落ちる ==="
+# WHY: Workflow DSL は require できないので aidd-phase2.js が同じ集合をインラインで持ち、
+#      観測の復元（canonical-event.ts）はさらにもう 1 つ持っている。
+#      複製は必ずずれるのに、どれにも同期テストが無かった
 WORK2="$WORK/fx2"
-mkdir -p "$WORK2/.claude/workflows/lib" "$WORK2/.claude/agents"
+mkdir -p "$WORK2/.claude/workflows/lib" "$WORK2/.claude/agents" "$WORK2/scripts/lib"
 cat > "$WORK2/.claude/workflows/lib/agent-progress-expectation.js" <<'EOF'
 const PROGRESS_LOGGABLE_AGENT_TYPES = new Set(['agent-ok', 'agent-extra'])
 EOF
 cat > "$WORK2/.claude/workflows/aidd-phase2.js" <<'EOF'
 const PROGRESS_LOGGABLE_AGENT_TYPES = new Set(['agent-ok'])
 EOF
+cat > "$WORK2/scripts/lib/canonical-event.ts" <<'EOF'
+export const KNOWN_AGENT_TYPES = ['agent-ok', 'agent-extra', 'agent-ghost'] as const
+EOF
 printf -- '---\nname: agent-ok\ntools: Read, Bash\n---\nscripts/log-agent-progress.sh を呼ぶ\n' > "$WORK2/.claude/agents/agent-ok.md"
 printf -- '---\nname: agent-extra\ntools: Read, Bash\n---\nscripts/log-agent-progress.sh を呼ぶ\n' > "$WORK2/.claude/agents/agent-extra.md"
 
 OUT2="$(find_mismatches "$WORK2")"
-if printf '%s\n' "$OUT2" | grep -q 'list-drift:'; then
-  assert_ok "複製のずれを検知"
+if printf '%s\n' "$OUT2" | grep -q 'list-drift: 一覧の複製が食い違う（expectation=\[agent-extra,agent-ok\] phase2='; then
+  assert_ok "Workflow 側の複製のずれを検知"
 else
-  assert_fail "複製のずれを検知できない" "$OUT2"
+  assert_fail "Workflow 側の複製のずれを検知できない" "$OUT2"
+fi
+if printf '%s\n' "$OUT2" | grep -q 'canonical-event=\[agent-extra,agent-ghost,agent-ok\]'; then
+  assert_ok "TS 側（canonical-event.ts）の複製のずれも検知"
+else
+  assert_fail "TS 側の複製のずれを検知できない" "$OUT2"
 fi
 
 echo "=== scenario 5: 一覧を読めなかったら落ちる（fail-open 防止） ==="

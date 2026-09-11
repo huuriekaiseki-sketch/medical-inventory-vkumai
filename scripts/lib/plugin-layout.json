@@ -166,6 +166,7 @@
       "aidd-vkumai"
     ],
     "harvest-journal-events.sh": "aidd-core",
+    "lib/generate-codex-agents.mjs": "aidd-core",
     "otel-debug-collector.mjs": "aidd-core",
     "lib/pr-numbers-from-transcript.jq": "aidd-core",
     "lib/summarize-instructions-loaded.jq": "aidd-core",

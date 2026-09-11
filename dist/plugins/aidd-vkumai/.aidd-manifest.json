@@ -19,7 +19,7 @@
     "hooks/hooks.json": "f3a9668d0a1bd7cfd42e9aee361d4854a133415a5dedab12966edf9a3f7a6086",
     "scripts/ai-check-suggest.sh": "de165fca7fac795f1d0c2e5814dd6923b6ee3a4fbc471e3c1dc437ac524a6207",
     "scripts/ai-check-suggest.test.sh": "9daa9cffcfa18c10059f38be1b5f93514ddff63d553b9bc7f37f6567304dc458",
-    "scripts/check-agent-progress-instructions.test.sh": "afe6c952b313bf5c5a852781416877b8d5c65125f3139a907e94bd49b2f4afab",
+    "scripts/check-agent-progress-instructions.test.sh": "bbc2f7357cd38058baf11aa153835055a09c966415fc1187363d19ea08282f58",
     "scripts/check-automode-config.sh": "fdd45e852da6ec777560a131221ee6c70a839caba96de38465c83f21b883e995",
     "scripts/check-automode-config.test.sh": "506ab858af1c7fc413af3bba308b76130d19ec8b6f53e9fb8e25f7a275ed1169",
     "scripts/check-definer-authz-gaps.test.sh": "e37b4e89d009f4c307b8f9e868b5659ac198db0aae26a7470a78ac875bc0f3e4",
