@@ -115,6 +115,56 @@ cat > "$FX/.claude/settings.json" <<'EOF'
 {"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/scripts/hook-a.sh","timeout":5},{"type":"command","command":"$CLAUDE_PROJECT_DIR/scripts/hook-b.sh","timeout":5}]}]}}
 EOF
 if node "$BUILD" --source "$FX" --layout "$FX/layout.json" --out "$WORK/fx-red3" >/dev/null 2>"$WORK/red3.err"; then ng "層の表に無い hook を検知できない"; else grep -q 'hookScripts に無い' "$WORK/red3.err" && ok "層の表に無い hook で失敗する" || ng "失敗理由が違う" "$(cat "$WORK/red3.err")"; fi
+cat > "$FX/.claude/settings.json" <<'EOF'
+{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/scripts/hook-a.sh","timeout":5}]}]}}
+EOF
+
+echo "=== scenario 6: 逃がし口（allowUnresolvedReferences）の衛生 ==="
+# WHY(2026-09-11): **死んだ免除は、同じ参照が将来また入ったときに黙って通す。** しかも理由は
+#      別の文脈で書かれたものなので、読んだ人は納得してしまう。実測すると 51 件中 15 件が
+#      一度も当たっていなかった。逃がし口は放っておくと腐るので、当たっているかと件数を見る。
+mk_layout() { # $1=allowUnresolvedReferences の中身 $2=max 行（空なら書かない）
+  {
+    printf '{\n'
+    printf '  "plugins": {"core": {"version": "0.0.1", "description": "d", "dependencies": [], "forbiddenWords": true}},\n'
+    printf '  "forbiddenWords": ["forbiddenword"],\n'
+    printf '  "agents": {"agent-a": "core"},\n'
+    printf '  "skills": {},\n'
+    printf '  "workflows": {"flow-a": "core"},\n'
+    printf '  "hookScripts": {"hook-a.sh": "core"},\n'
+    printf '  "supportScripts": {"lib/helper.sh": "core"},\n'
+    printf '  "bin": {},\n'
+    [ -n "${2:-}" ] && printf '  "allowUnresolvedReferencesMax": %s,\n' "$2"
+    printf '  "allowUnresolvedReferences": %s\n' "$1"
+    printf '}\n'
+  } > "$FX/layout2.json"
+}
+
+# 免除が 0 件なら上限を書かせない（対を置く。使っていない導入先で毎回赤くしない）
+mk_layout '{}' ''
+if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow0" >/dev/null 2>"$WORK/allow0.err"; then ok "逃がし口が 0 件なら上限は要らない"; else ng "逃がし口 0 件で落ちた" "$(cat "$WORK/allow0.err")"; fi
+
+# 一度も当たらない免除は落とす
+mk_layout '{"scripts/never-referenced.sh": "どこからも参照されていない"}' '5'
+if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow1" >/dev/null 2>"$WORK/allow1.err"; then ng "死んだ免除を検知できない"; else grep -q '一度も当たっていない' "$WORK/allow1.err" && ok "一度も当たらない免除を検知" || ng "失敗理由が違う" "$(cat "$WORK/allow1.err")"; fi
+
+# 実際に当たる免除は誤検知しない（対を置く。C-021）
+printf '#!/usr/bin/env bash\nsource "$SCRIPT_DIR/lib/missing.sh"\n' > "$FX/scripts/hook-a.sh"
+mk_layout '{"scripts/lib/missing.sh": "導入先が持つので同梱しない"}' '5'
+if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow2" >/dev/null 2>"$WORK/allow2.err"; then ok "当たっている免除は通る"; else ng "当たっている免除で落ちた" "$(cat "$WORK/allow2.err")"; fi
+
+# 理由が空の免除は落とす
+mk_layout '{"scripts/lib/missing.sh": "   "}' '5'
+if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow3" >/dev/null 2>"$WORK/allow3.err"; then ng "理由が空の免除を検知できない"; else grep -q '理由が空' "$WORK/allow3.err" && ok "理由が空の免除を検知" || ng "失敗理由が違う" "$(cat "$WORK/allow3.err")"; fi
+
+# 上限を書き忘れたら落とす（免除があるのに見張りが無い状態を許さない）
+mk_layout '{"scripts/lib/missing.sh": "導入先が持つので同梱しない"}' ''
+if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow4" >/dev/null 2>"$WORK/allow4.err"; then ng "上限の書き忘れを検知できない"; else grep -q 'allowUnresolvedReferencesMax が層の表に無い' "$WORK/allow4.err" && ok "上限の書き忘れを検知" || ng "失敗理由が違う" "$(cat "$WORK/allow4.err")"; fi
+
+# 上限を超えたら落とす
+mk_layout '{"scripts/lib/missing.sh": "導入先が持つので同梱しない"}' '0'
+if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow5" >/dev/null 2>"$WORK/allow5.err"; then ng "上限超過を検知できない"; else grep -q '上限 0 を超えた' "$WORK/allow5.err" && ok "上限超過を検知" || ng "失敗理由が違う" "$(cat "$WORK/allow5.err")"; fi
+printf '#!/usr/bin/env bash\nsource "$SCRIPT_DIR/lib/helper.sh"\necho ok\n' > "$FX/scripts/hook-a.sh"
 
 if [ "$fail" -ne 0 ]; then echo "FAILED"; exit 1; fi
 echo "ALL PASSED"

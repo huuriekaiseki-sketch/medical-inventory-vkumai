@@ -311,6 +311,11 @@ function build(outRoot) {
   // 2. 同梱閉包: 参照先が同じプラグイン内にあること（7 項目のファイル・ひな形は対象外。
   //    導入先の手順として中心リポジトリのパスを書くため）
   const allowed = layout.allowUnresolvedReferences ?? {}
+  // WHY(2026-09-11): **死んだ免除は、同じ参照が将来また入ったときに黙って通す。**
+  //      しかも理由は別の文脈で書かれたものなので、読んだ人は納得してしまう。
+  //      実測すると 51 件中 15 件が一度も当たっていなかった（逃がし口は放っておくと腐る）。
+  //      当たった鍵を数えて、当たらなかったものを落とす。
+  const allowedUsed = new Set()
   const closureSkip = layout.forbiddenWordsSkipPaths ?? []
   // bin/ はどのプラグインのものも Bash の PATH に足されるため、プラグインを跨いで参照してよい
   const allBin = new Set(Object.keys(layout.bin ?? {}).map(b => `bin/${b}`))
@@ -355,12 +360,32 @@ function build(outRoot) {
         const asScript = ref
         const asBin = `bin/${ref.replace(/^scripts\//, '')}`
         if (have.has(asScript) || have.has(asBin) || allBin.has(asBin)) continue
-        if (allowed[ref]) continue
+        if (allowed[ref]) { allowedUsed.add(ref); continue }
         // 同梱前の元パス表記（scripts/lib/x）で allow に書かれているものは、置き場所違いでも許容
-        if (allowed[`scripts/${ref.replace(/^scripts\/workflow-lib\//, 'lib/')}`]) continue
+        const legacyKey = `scripts/${ref.replace(/^scripts\/workflow-lib\//, 'lib/')}`
+        if (allowed[legacyKey]) { allowedUsed.add(legacyKey); continue }
         fail(`${plugin}/${r}: 参照先 ${ref} が同じプラグインに同梱されていない（層の表に足すか allowUnresolvedReferences に理由を書く）`)
       }
     }
+  }
+  // 2b. 逃がし口の衛生: 使われていない免除を残さない／理由を空にしない／件数の上限
+  for (const [key, reason] of Object.entries(allowed)) {
+    if (key.startsWith('_')) continue
+    if (!String(reason ?? '').trim()) {
+      fail(`allowUnresolvedReferences: ${key} の理由が空（なぜ同梱しなくてよいかを書く）`)
+    }
+    if (!allowedUsed.has(key)) {
+      fail(`allowUnresolvedReferences: ${key} は一度も当たっていない（消す。残すと同じ参照が戻ったとき別の文脈の理由で黙って通る）`)
+    }
+  }
+  // ratchet: 逃がし口は放っておくと増える。増やすときは人が上限を上げる（減らすのは自由）。
+  // 逃がし口が 1 つも無い導入先には上限を書かせない（0 件のままなら見張る対象が無い）
+  const allowMax = layout.allowUnresolvedReferencesMax
+  const allowCount = Object.keys(allowed).filter((k) => !k.startsWith('_')).length
+  if (allowCount > 0 && typeof allowMax !== 'number') {
+    fail('allowUnresolvedReferencesMax が層の表に無い（逃がし口が増えても気づけない）')
+  } else if (typeof allowMax === 'number' && allowCount > allowMax) {
+    fail(`allowUnresolvedReferences が ${allowCount} 件で上限 ${allowMax} を超えた（同梱するか、上限を上げる理由を書く）`)
   }
   // 3. 名前空間の付け忘れ（生成後の workflow に裸の agentType / workflow( が無い）
   for (const plugin of pluginNames) {
