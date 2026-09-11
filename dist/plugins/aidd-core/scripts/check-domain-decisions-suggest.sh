@@ -81,7 +81,10 @@ if [ -z "$MATCHED" ]; then
   silent
 fi
 
-FILE_LIST="$(printf '%s' "$MATCHED" | sort -u | head -10 | tr '\n' ' ')"
+# WHY(パイプの先頭に printf を置かない。C-050): `head -10` は 10 行読んだ時点で終了するので、
+#      `printf` が書き終える前にパイプが閉じ、SIGPIPE / EPIPE で非ゼロを返す。
+#      `set -o pipefail` の下ではパイプライン全体が失敗し、**一覧が長いときだけ**警告が出なくなる。
+FILE_LIST="$(sort -u <<<"$MATCHED" | head -10 | tr '\n' ' ')"
 DOMAIN_WORDS="$(aidd_config_query '(.risk.domainKeywords // []) | join("/")' 'auth/rls/policy')"
 DOMAIN_DOC="$(aidd_config_query '.docs.domain // empty' 'docs/agents/domain.md')"
 DECISIONS_DOC="$(aidd_config_query '.docs.decisions // empty' 'docs/agents/decisions.md')"

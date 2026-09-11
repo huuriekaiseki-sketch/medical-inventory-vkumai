@@ -122,12 +122,12 @@ CREATE INDEX idx_children_code ON children (code);
 CREATE INDEX idx_children_code_parent ON children (code, parent_id);
 EOF
 BAD="$(find_unindexed_fks "$WORK/bad")"
-if printf '%s\n' "$BAD" | grep -qx 'children.parent_id'; then
+if grep -qx 'children.parent_id' <<<"$BAD"; then
   assert_ok "索引の無い外部キーを検知"
 else
   assert_fail "索引の無い外部キーを検知できない" "$BAD"
 fi
-if printf '%s\n' "$BAD" | grep -qx 'children.code'; then
+if grep -qx 'children.code' <<<"$BAD"; then
   assert_fail "外部キーでない列を誤検知した" "$BAD"
 else
   assert_ok "外部キーでない列は対象外"
@@ -162,7 +162,7 @@ ALTER TABLE children
   ADD CONSTRAINT children_reviewer_fkey FOREIGN KEY (reviewer_id) REFERENCES parents (id) NOT VALID;
 EOF
 LATER="$(find_unindexed_fks "$WORK/good")"
-if printf '%s\n' "$LATER" | grep -qx 'children.reviewer_id'; then
+if grep -qx 'children.reviewer_id' <<<"$LATER"; then
   assert_ok "後から足した外部キーの索引漏れを検知"
 else
   assert_fail "後付けの外部キーの索引漏れを検知できない" "$LATER"

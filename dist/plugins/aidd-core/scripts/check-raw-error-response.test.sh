@@ -79,7 +79,7 @@ make_fixture "${TMP_ROOT}/a" 'export async function GET() {
   }
 }'
 out="$(run_scan "${TMP_ROOT}/a")"
-if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "raw-error"; then
+if [ $? -ne 0 ] && grep -q "raw-error" <<<"${out}"; then
   ok "検知: そのまま返している"
 else
   ng "そのまま返す形を見逃した" "${out}"
@@ -95,7 +95,7 @@ make_fixture "${TMP_ROOT}/b" 'export async function GET() {
   }
 }'
 out="$(run_scan "${TMP_ROOT}/b")"
-if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "raw-error"; then
+if [ $? -ne 0 ] && grep -q "raw-error" <<<"${out}"; then
   ok "検知: 変数へ移してから返している"
 else
   ng "変数へ移す形を見逃した" "${out}"
@@ -112,7 +112,7 @@ make_fixture "${TMP_ROOT}/c" 'export async function GET() {
   }
 }'
 out="$(run_scan "${TMP_ROOT}/c")"
-if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "raw-error"; then
+if [ $? -ne 0 ] && grep -q "raw-error" <<<"${out}"; then
   ok "検知: 危ない語だけ弾くブラックリスト"
 else
   ng "ブラックリストの形を見逃した" "${out}"
@@ -137,7 +137,7 @@ export async function GET() {
   }
 }'
 out="$(run_scan "${TMP_ROOT}/i")"
-if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "raw-error"; then
+if [ $? -ne 0 ] && grep -q "raw-error" <<<"${out}"; then
   ok "検知: catch の外へ切り出したヘルパー"
 else
   ng "catch の外に置かれると見えない（走査の範囲が狭い）" "${out}"
@@ -243,7 +243,7 @@ cat > "${TMP_ROOT}/empty/aidd.config.json" <<'CONFIG'
 }
 CONFIG
 out="$(run_scan "${TMP_ROOT}/empty")"
-if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "見つけられなかった"; then
+if [ $? -ne 0 ] && grep -q "見つけられなかった" <<<"${out}"; then
   ok "route が 0 件なら落ちる"
 else
   ng "route が 0 件でも通ってしまう" "${out}"
@@ -258,7 +258,7 @@ make_fixture "${TMP_ROOT}/noconf" 'export async function GET() {
   }
 }' no
 out="$(run_scan "${TMP_ROOT}/noconf")"
-if [ $? -eq 0 ] && printf '%s' "${out}" | grep -q "configured=false"; then
+if [ $? -eq 0 ] && grep -q "configured=false" <<<"${out}"; then
   ok "設定が無ければ何も見ない（導入先が決める）"
 else
   ng "設定が無いのに何か言っている" "${out}"

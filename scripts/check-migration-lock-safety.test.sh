@@ -123,10 +123,10 @@ EOF
 
 OUT="$(find_missing_lock_note "$WORK/m" "$BASELINE")"
 for needle in 'index_without_note' 'check_without_not_valid' 'empty_note'; do
-  if printf '%s\n' "$OUT" | grep -q "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle" "$OUT"; fi
+  if grep -q "$needle" <<<"$OUT"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle" "$OUT"; fi
 done
 for needle in 'ok_note' 'safe_forms' 'old_one' 'comment_only'; do
-  if printf '%s\n' "$OUT" | grep -q "$needle"; then assert_fail "誤検知: $needle" "$OUT"; else assert_ok "誤検知しない: $needle"; fi
+  if grep -q "$needle" <<<"$OUT"; then assert_fail "誤検知: $needle" "$OUT"; else assert_ok "誤検知しない: $needle"; fi
 done
 
 if [ "$fail" -ne 0 ]; then

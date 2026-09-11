@@ -68,7 +68,7 @@ drop_allowlisted() {
   local hits="$1" p
   [ -n "$ALLOWLIST" ] || { printf '%s' "$hits"; return; }
   for p in $ALLOWLIST; do
-    hits="$(printf '%s\n' "$hits" | grep -v -F "$p" || true)"
+    hits="$(grep -v -F "$p" <<<"$hits" || true)"
   done
   printf '%s' "$hits"
 }
@@ -96,7 +96,7 @@ CATALOG="$REPO_ROOT/docs/agents/security-test-catalog.md"
 ROW="$(grep '^| インポート／エクスポート境界 ' "$CATALOG" || true)"
 if [ -z "$ROW" ]; then
   assert_fail "security-test-catalog に「インポート／エクスポート境界」の行が無い"
-elif printf '%s' "$ROW" | grep -q 'check-export-paths.test.sh'; then
+elif grep -q 'check-export-paths.test.sh' <<<"$ROW"; then
   assert_ok "引き出しの行がこの ratchet を指している"
 else
   assert_fail "引き出しの行がこの ratchet を指していない（状態と引き金を書き換える）" "$ROW"
@@ -118,9 +118,9 @@ cat > "$WORK/package.json" <<'EOF'
 EOF
 SRC_HITS="$(scan_source "$WORK")"
 DEP_HITS="$(scan_deps "$WORK")"
-if printf '%s\n' "$SRC_HITS" | grep -q 'text/csv'; then assert_ok "CSV の生成を検知"; else assert_fail "CSV の生成を検知できない" "$SRC_HITS"; fi
-if printf '%s\n' "$SRC_HITS" | grep -q 'Content-Disposition'; then assert_ok "添付ダウンロードを検知"; else assert_fail "添付ダウンロードを検知できない" "$SRC_HITS"; fi
-if printf '%s\n' "$DEP_HITS" | grep -q 'papaparse'; then assert_ok "エクスポート系依存を検知"; else assert_fail "エクスポート系依存を検知できない" "$DEP_HITS"; fi
+if grep -q 'text/csv' <<<"$SRC_HITS"; then assert_ok "CSV の生成を検知"; else assert_fail "CSV の生成を検知できない" "$SRC_HITS"; fi
+if grep -q 'Content-Disposition' <<<"$SRC_HITS"; then assert_ok "添付ダウンロードを検知"; else assert_fail "添付ダウンロードを検知できない" "$SRC_HITS"; fi
+if grep -q 'papaparse' <<<"$DEP_HITS"; then assert_ok "エクスポート系依存を検知"; else assert_fail "エクスポート系依存を検知できない" "$DEP_HITS"; fi
 
 mkdir -p "$WORK/clean/src"
 printf "export const x = 1\n" > "$WORK/clean/src/a.ts"

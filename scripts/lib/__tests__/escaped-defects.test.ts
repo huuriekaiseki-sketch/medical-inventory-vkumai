@@ -1,6 +1,15 @@
 import { readFileSync } from 'fs'
 import path from 'path'
 import { describe, it, expect } from 'vitest'
+// WHY(共通エンジンの分け方を使う。2026-09-11): この検査は素の `split('|')` で列を分けていた。
+//      共通エンジン（check-catalog.mjs）は 2026-09-09 に「**エスケープしたパイプ `\|` は
+//      区切りにしない**」へ直されていて、その WHY に「素の split は**正しい表を違反と
+//      報告していた**」と書いてある。**同じ表を読むこちらには、その直しが広がっていなかった**
+//      （docs/agents/check-design-pitfalls.md の C-047）。
+//      結果として「列の中にエスケープすればパイプを書ける」という緩和がこの表では効かず、
+//      実際に 2026-09-11 に E-049 を書いたとき 10 列と数えられて落ちた。
+// @ts-expect-error -- .mjs（型定義を持たない共通エンジン）を読む
+import { splitRow } from '../check-catalog.mjs'
 
 // WHY: 2026-09-07。ルールブックの「限界」が的外れかどうかは書いた時点では分からない。
 //      分かるのは検査で漏れが出たときだけなので、その漏れをルールブックへ戻す輪を閉じたい。
@@ -50,10 +59,7 @@ function loadRows(): Row[] {
   const rows: Row[] = []
   for (const line of text.split('\n')) {
     if (!/^\|\s*E-/.test(line)) continue
-    const cells = line
-      .split('|')
-      .slice(1, -1)
-      .map((c) => c.trim())
+    const cells: string[] = splitRow(line)
     expect(cells.length, `${cells[0]}: 9 列でない（${cells.length}）`).toBe(9)
     const [id, what, disposition, source, rulebook, decidedBy, fixed, prevention, status] = cells
     rows.push({ id, what, disposition, source, rulebook, decidedBy, fixed, prevention, status })

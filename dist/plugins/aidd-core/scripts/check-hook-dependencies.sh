@@ -44,7 +44,7 @@ STATUS=$?
 [ "$STATUS" -eq 0 ] && exit 0
 
 # 名指しの行だけを拾う（末尾の集計行は出さない）
-SUMMARY="$(printf '%s\n' "$OUT" | sed -n 's/^aidd-doctor: /・/p')"
+SUMMARY="$(sed -n 's/^aidd-doctor: /・/p' <<<"$OUT")"
 [ -z "$SUMMARY" ] && exit 0
 
 MSG="[hook 依存] この環境では一部の検知 hook が期待どおり動きません。

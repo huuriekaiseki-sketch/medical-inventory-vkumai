@@ -12,7 +12,7 @@ SCRIPT="$SCRIPT_DIR/check-blocked-issues-staleness.sh"
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then
+  if grep -qF -- "$needle" <<<"$haystack"; then
     echo "  OK: $label"
   else
     echo "  NG: $label"
@@ -100,7 +100,7 @@ STALE2="$(days_ago_iso 200)"
 setup_fake_gh "[{\"number\":438,\"title\":\"Fresh\",\"updatedAt\":\"$FRESH\",\"url\":\"https://example.com/438\"},{\"number\":999,\"title\":\"Stale\",\"updatedAt\":\"$STALE2\",\"url\":\"https://example.com/999\"}]"
 run_hook
 assert_contains "$OUT" "#999" "staleなissue番号が含まれる"
-if printf '%s' "$OUT" | grep -qF '#438'; then
+if grep -qF '#438' <<<"$OUT"; then
   echo "  NG: freshなissueが含まれてはいけない"
   fail=1
 else

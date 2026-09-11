@@ -68,11 +68,11 @@ check_catalog() {
     fi
 
     # 1. ID 規約と重複
-    if ! printf '%s' "$id" | grep -qE '^P-[0-9]{3}$'; then
+    if ! grep -qE '^P-[0-9]{3}$' <<<"$id"; then
       echo "    id: [$id] ID が P-3桁でない"
       violations=$((violations+1))
     fi
-    if printf '%s\n' "$seen_ids" | grep -qx "$id"; then
+    if grep -qx "$id" <<<"$seen_ids"; then
       echo "    id: [$id] ID が重複"
       violations=$((violations+1))
     fi
@@ -118,7 +118,7 @@ check_catalog() {
   # 4. テストコードにあってカタログに無い ID（孤児）
   test_ids="$(ids_in_tests "$roots")"
   for id in $test_ids; do
-    if ! printf '%s\n' "$seen_ids" | grep -qx "$id"; then
+    if ! grep -qx "$id" <<<"$seen_ids"; then
       echo "    orphan: テストコードにあるがカタログに無い ID: $id"
       violations=$((violations+1))
     fi
@@ -138,11 +138,11 @@ fi
 
 echo "=== scenario 2: 実態のカタログとテストコードに違反が無い（ID がテストに実在・孤児なし・9列・4語） ==="
 RESULT="$(check_catalog "$CATALOG" "$TEST_ROOTS")"
-printf '%s\n' "$RESULT" | grep -v '^violations=' || true
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+grep -v '^violations=' <<<"$RESULT" || true
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   assert_ok "違反なし"
 else
-  assert_fail "違反あり" "$(printf '%s\n' "$RESULT" | tail -n1)"
+  assert_fail "違反あり" "$(tail -n1 <<<"$RESULT")"
 fi
 
 echo "=== scenario 3: fixture 差し替えで違反を検知できる（RED 方向の自己検証） ==="
@@ -173,7 +173,7 @@ RESULT="$(REPO_ROOT="$FIX_ROOT" check_catalog "$FIXTURE" "tests")"
 # 期待: ID無し(P-901)・ファイル不在(P-902)・守るテスト空(P-903)・タイミング不正(P-904)・ID重複(P-900)・
 #       ID規約違反(P-12。規約違反 +1、そのIDはテストにも無いので id-in-test +1)・列ずれ(P-906)・孤児(P-999) = 9
 EXPECTED=9
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
   assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
@@ -181,13 +181,13 @@ fi
 for needle in \
   'id-in-test: \[P-901\]' 'path: \[P-902\]' 'tests: \[P-903\]' 'timing: \[P-904\]' \
   'id: \[P-900\] ID が重複' 'id: \[P-12\] ID が P-3桁でない' 'columns: \[P-906\]' 'orphan: .*P-999'; do
-  if printf '%s\n' "$RESULT" | grep -q "$needle"; then
+  if grep -q "$needle" <<<"$RESULT"; then
     assert_ok "検知: $needle"
   else
     assert_fail "検知できない: $needle"
   fi
 done
-if printf '%s\n' "$RESULT" | grep -q 'P-905'; then
+if grep -q 'P-905' <<<"$RESULT"; then
   assert_fail "未 の行が検査されている（P-905）"
 else
   assert_ok "未 の行は ID 検査を掛けない（P-905）"

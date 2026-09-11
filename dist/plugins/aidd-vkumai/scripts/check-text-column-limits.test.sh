@@ -69,7 +69,7 @@ fi
 
 echo "=== scenario 2: 上限の無い新しい自由入力の列が無い ==="
 OUT="$(compare "$MIGRATIONS" "$BASELINE")"
-NEW="$(printf '%s\n' "$OUT" | grep '^new ' || true)"
+NEW="$(grep '^new ' <<<"$OUT" || true)"
 if [ -z "$NEW" ]; then
   assert_ok "上限も固定語も無い列は、すべて一覧に理由がある"
 else
@@ -79,7 +79,7 @@ else
 fi
 
 echo "=== scenario 3: 一覧が陳腐化していない ==="
-STALE="$(printf '%s\n' "$OUT" | grep '^stale ' || true)"
+STALE="$(grep '^stale ' <<<"$OUT" || true)"
 if [ -z "$STALE" ]; then
   assert_ok "上限が付いたのに一覧に残っている列は無い"
 else
@@ -108,10 +108,10 @@ cat > "$WORK/baseline.json" <<'EOF'
 ] }
 EOF
 FOUT="$(compare "$WORK/migrations" "$WORK/baseline.json")"
-if printf '%s' "$FOUT" | grep -q '^new notes.memo$'; then assert_ok "上限の無い自由入力を検知"; else assert_fail "検知できない" "$FOUT"; fi
-if printf '%s' "$FOUT" | grep -q '^stale notes.body$'; then assert_ok "消し忘れを検知"; else assert_fail "消し忘れを検知できない" "$FOUT"; fi
-if printf '%s' "$FOUT" | grep -q 'notes.kind'; then assert_fail "固定語の列を違反にした" "$FOUT"; else assert_ok "固定語の列は誤検知しない"; fi
-if printf '%s' "$FOUT" | grep -q 'new notes.internal'; then assert_fail "一覧にある列を違反にした" "$FOUT"; else assert_ok "一覧にある列は誤検知しない"; fi
+if grep -q '^new notes.memo$' <<<"$FOUT"; then assert_ok "上限の無い自由入力を検知"; else assert_fail "検知できない" "$FOUT"; fi
+if grep -q '^stale notes.body$' <<<"$FOUT"; then assert_ok "消し忘れを検知"; else assert_fail "消し忘れを検知できない" "$FOUT"; fi
+if grep -q 'notes.kind' <<<"$FOUT"; then assert_fail "固定語の列を違反にした" "$FOUT"; else assert_ok "固定語の列は誤検知しない"; fi
+if grep -q 'new notes.internal' <<<"$FOUT"; then assert_fail "一覧にある列を違反にした" "$FOUT"; else assert_ok "一覧にある列は誤検知しない"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

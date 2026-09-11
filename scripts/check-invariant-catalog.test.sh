@@ -57,11 +57,11 @@ check_catalog() {
       continue
     fi
 
-    if ! printf '%s' "$id" | grep -qE '^I-[0-9]{3}$'; then
+    if ! grep -qE '^I-[0-9]{3}$' <<<"$id"; then
       echo "    id: [$id] ID が I-3桁でない"
       violations=$((violations+1))
     fi
-    if printf '%s\n' "$seen_ids" | grep -qx "$id"; then
+    if grep -qx "$id" <<<"$seen_ids"; then
       echo "    id: [$id] ID が重複"
       violations=$((violations+1))
     fi
@@ -108,7 +108,7 @@ check_catalog() {
 
   test_ids="$(ids_in_tests "$roots")"
   for id in $test_ids; do
-    if ! printf '%s\n' "$seen_ids" | grep -qx "$id"; then
+    if ! grep -qx "$id" <<<"$seen_ids"; then
       echo "    orphan: テストコードにあるがカタログに無い ID: $id"
       violations=$((violations+1))
     fi
@@ -128,11 +128,11 @@ fi
 
 echo "=== scenario 2: 実態のカタログとテストコードに違反が無い ==="
 RESULT="$(check_catalog "$CATALOG" "$TEST_ROOTS")"
-printf '%s\n' "$RESULT" | grep -v '^violations=' || true
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+grep -v '^violations=' <<<"$RESULT" || true
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   assert_ok "違反なし"
 else
-  assert_fail "違反あり" "$(printf '%s\n' "$RESULT" | tail -n1)"
+  assert_fail "違反あり" "$(tail -n1 <<<"$RESULT")"
 fi
 
 echo "=== scenario 3: fixture 差し替えで違反を検知できる（RED 方向の自己検証） ==="
@@ -159,7 +159,7 @@ RESULT="$(REPO_ROOT="$FIX_ROOT" check_catalog "$FIXTURE" "tests")"
 # 期待: I-901 id-in-test / I-902 path / I-903 status / I-904 status / I-900 重複 /
 #       I-12 規約違反 + id-in-test / I-906 列ずれ / I-999 孤児 = 9
 EXPECTED=9
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
   assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
@@ -167,13 +167,13 @@ fi
 for needle in \
   'id-in-test: \[I-901\]' 'path: \[I-902\]' 'status: \[I-903\]' 'status: \[I-904\]' \
   'id: \[I-900\] ID が重複' 'id: \[I-12\] ID が I-3桁でない' 'columns: \[I-906\]' 'orphan: .*I-999'; do
-  if printf '%s\n' "$RESULT" | grep -q "$needle"; then
+  if grep -q "$needle" <<<"$RESULT"; then
     assert_ok "検知: $needle"
   else
     assert_fail "検知できない: $needle"
   fi
 done
-if printf '%s\n' "$RESULT" | grep -q 'I-905'; then
+if grep -q 'I-905' <<<"$RESULT"; then
   assert_fail "未 の計画行が検査されている（I-905）"
 else
   assert_ok "未 の計画行は ID 検査を掛けない（I-905）"

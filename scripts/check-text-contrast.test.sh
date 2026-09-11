@@ -117,18 +117,18 @@ export const T = () => <button style={{ backgroundColor: '#9CA3AF' }} disabled>�
 EOF
 
 OUT="$(scan_text_color "$WORK")"
-if printf '%s' "$OUT" | grep -q 'bad-text.tsx'; then assert_ok "文字色の違反を検知"; else assert_fail "文字色の違反を検知できない" "$OUT"; fi
-if printf '%s' "$OUT" | grep -q 'good.tsx'; then assert_fail "正しい色を違反にした" "$OUT"; else assert_ok "文字色: 誤検知しない"; fi
+if grep -q 'bad-text.tsx' <<<"$OUT"; then assert_ok "文字色の違反を検知"; else assert_fail "文字色の違反を検知できない" "$OUT"; fi
+if grep -q 'good.tsx' <<<"$OUT"; then assert_fail "正しい色を違反にした" "$OUT"; else assert_ok "文字色: 誤検知しない"; fi
 
 OUT="$(scan_background "$WORK")"
-if printf '%s' "$OUT" | grep -q 'bad-bg.tsx'; then assert_ok "地色の違反を検知"; else assert_fail "地色の違反を検知できない" "$OUT"; fi
-if printf '%s' "$OUT" | grep -q 'good.tsx'; then assert_fail "正しい地色を違反にした" "$OUT"; else assert_ok "地色: 誤検知しない"; fi
+if grep -q 'bad-bg.tsx' <<<"$OUT"; then assert_ok "地色の違反を検知"; else assert_fail "地色の違反を検知できない" "$OUT"; fi
+if grep -q 'good.tsx' <<<"$OUT"; then assert_fail "正しい地色を違反にした" "$OUT"; else assert_ok "地色: 誤検知しない"; fi
 
 OUT="$(scan_light_gray "$WORK")"
-if printf '%s' "$OUT" | grep -q 'bad-gray.tsx'; then assert_ok "薄い灰色の文字を検知"; else assert_fail "薄い灰色を検知できない" "$OUT"; fi
+if grep -q 'bad-gray.tsx' <<<"$OUT"; then assert_ok "薄い灰色の文字を検知"; else assert_fail "薄い灰色を検知できない" "$OUT"; fi
 # WHY(無効化ボタンの地色は残す): 無効化された操作は WCAG のコントラスト要件の対象外で、
 #      axe も飛ばす。文字色としての使用だけを止める。
-if printf '%s' "$OUT" | grep -q 'good.tsx'; then assert_fail "無効化ボタンの地色を違反にした" "$OUT"; else assert_ok "無効化ボタンの地色は誤検知しない"; fi
+if grep -q 'good.tsx' <<<"$OUT"; then assert_fail "無効化ボタンの地色を違反にした" "$OUT"; else assert_ok "無効化ボタンの地色は誤検知しない"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

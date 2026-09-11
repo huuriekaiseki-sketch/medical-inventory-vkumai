@@ -41,11 +41,11 @@ check_inventory() {
       violations=$((violations+1))
       continue
     fi
-    if ! printf '%s' "$id" | grep -qE '^H-[0-9]{3}$'; then
+    if ! grep -qE '^H-[0-9]{3}$' <<<"$id"; then
       echo "    id: [$id] ID が H-3桁でない"
       violations=$((violations+1))
     fi
-    if printf '%s\n' "$seen" | grep -qx "$id"; then
+    if grep -qx "$id" <<<"$seen"; then
       echo "    id: [$id] ID が重複"
       violations=$((violations+1))
     fi
@@ -55,7 +55,7 @@ check_inventory() {
     case "$status" in
       記録される|不可) ;;
       一部|記録されない)
-        if ! printf '%s' "$procedure" | grep -qE 'log-manual-override|--safeguard|#757-[0-9]+'; then
+        if ! grep -qE 'log-manual-override|--safeguard|#757-[0-9]+' <<<"$procedure"; then
           echo "    procedure: [$id] $status なのに手動記録（--safeguard）か #757-N への導線が無い"
           violations=$((violations+1))
         fi
@@ -78,7 +78,7 @@ scan_skip() {
 
 echo "=== scenario 1: 棚卸しの表に違反が無い ==="
 RESULT="$(check_inventory "$INVENTORY")"
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   assert_ok "違反なし（$(grep -c '^| H-' "$INVENTORY" || echo 0) 行）"
 else
   assert_fail "違反あり" "$RESULT"
@@ -104,13 +104,13 @@ cat > "$WORK/inventory.md" <<'EOF'
 EOF
 RESULT="$(check_inventory "$WORK/inventory.md")"
 EXPECTED=5
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
   assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
 fi
 for needle in 'procedure: \[H-902\]' 'status: \[H-903\]' 'id: \[H-12\]' 'id: \[H-900\] ID が重複' 'columns: \[H-904\]'; do
-  if printf '%s\n' "$RESULT" | grep -qE "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
+  if grep -qE "$needle" <<<"$RESULT"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
 done
 
 mkdir -p "$WORK/src/__tests__" "$WORK/supabase/__tests__" "$WORK/e2e" "$WORK/scripts"
@@ -119,9 +119,9 @@ printf "describe.skip('y', () => {})\n" > "$WORK/supabase/__tests__/b.test.ts"
 printf "test.skip(!fixtures, '理由')\n" > "$WORK/e2e/c.spec.ts"
 ONLY="$(scan_only "$WORK")"
 SKIP="$(scan_skip "$WORK")"
-if printf '%s\n' "$ONLY" | grep -q 'a.test.ts'; then assert_ok ".only を検知"; else assert_fail ".only を検知できない" "$ONLY"; fi
-if printf '%s\n' "$SKIP" | grep -q 'b.test.ts'; then assert_ok "無条件 skip を検知"; else assert_fail "無条件 skip を検知できない" "$SKIP"; fi
-if printf '%s\n' "$SKIP" | grep -q 'c.spec.ts'; then assert_fail "e2e の条件付き skip を誤検知" "$SKIP"; else assert_ok "e2e の条件付き skip は対象外"; fi
+if grep -q 'a.test.ts' <<<"$ONLY"; then assert_ok ".only を検知"; else assert_fail ".only を検知できない" "$ONLY"; fi
+if grep -q 'b.test.ts' <<<"$SKIP"; then assert_ok "無条件 skip を検知"; else assert_fail "無条件 skip を検知できない" "$SKIP"; fi
+if grep -q 'c.spec.ts' <<<"$SKIP"; then assert_fail "e2e の条件付き skip を誤検知" "$SKIP"; else assert_ok "e2e の条件付き skip は対象外"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

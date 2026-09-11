@@ -60,7 +60,7 @@ check_migrations() {
 echo "=== scenario 1: 実態の migration（baseline より新しいもの）に違反が無い ==="
 RESULT="$(check_migrations "$MIGRATIONS_DIR" "$BASELINE")"
 NEWER="$(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | awk -F/ '{print $NF}' | awk -F_ -v b="$BASELINE" '$1 > b' | wc -l | tr -d ' ')"
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   assert_ok "違反なし（対象 ${NEWER} 本）"
 else
   assert_fail "違反あり" "$RESULT"
@@ -104,15 +104,15 @@ DROP TABLE legacy;
 EOF
 RESULT="$(check_migrations "$WORK" "$BASELINE")"
 EXPECTED=3
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
   assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
 fi
 for needle in 'release-order: \[20270101000003_missing_order.sql\]' 'rollback: \[20270101000004_missing_rollback.sql\]' 'contract: \[20270101000005_contract_without_note.sql\]'; do
-  if printf '%s\n' "$RESULT" | grep -qE "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
+  if grep -qE "$needle" <<<"$RESULT"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
 done
-if printf '%s\n' "$RESULT" | grep -q -e 'good_' -e 'comment_only' -e 'old_ignored'; then
+if grep -q -e 'good_' -e 'comment_only' -e 'old_ignored' <<<"$RESULT"; then
   assert_fail "正常・コメントのみ・baseline 以前を誤検知" "$RESULT"
 else
   assert_ok "正常な migration・コメント内の言及・baseline 以前は誤検知しない"

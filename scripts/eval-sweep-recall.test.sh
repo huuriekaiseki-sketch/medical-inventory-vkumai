@@ -47,7 +47,7 @@ chmod +x "$MOCK_AGENT"
 fail=0
 ok() { echo "  OK: $1"; }
 ng() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }
-assert_contains() { if printf '%s' "$1" | grep -qF -- "$2"; then ok "$3"; else ng "$3" "expected: $2 / actual: $1"; fi; }
+assert_contains() { if grep -qF -- "$2" <<<"$1"; then ok "$3"; else ng "$3" "expected: $2 / actual: $1"; fi; }
 
 # WHY(AIDD_LOG_DIR を一時ディレクトリへ向ける、2026-09-10・C-030): 回答本文の保存を足したとき、
 #      テストの模擬実行が**実物の `logs/eval-details/` に書いていた**。
@@ -106,7 +106,7 @@ assert_contains "$RUNS" '"fixturesTree"' "fixture の木を記録（条件）"
 assert_contains "$RUNS" '"model": "haiku"' "どのモデルで測ったかを記録（条件）"
 assert_contains "$RUNS" '"elapsedSeconds"' "所要時間を記録"
 # 条件の欄が壊れると比較が永久に一致しなくなる。改行を含む値が入っていないこと
-if printf '%s' "$RUNS" | grep -q 'HEAD:'; then
+if grep -q 'HEAD:' <<<"$RUNS"; then
   echo "  NG: 条件の欄に git rev-parse の未解決な引数が入っている"; fail=1
 else
   echo "  OK: 条件の欄が壊れていない（未解決の引数が混ざらない）"
@@ -139,7 +139,7 @@ RESP
 run_eval
 assert_contains "$OUT" "recall: 1 / 1" "同じ指摘の中でそろっていれば HIT"
 [ "$EXIT_CODE" -eq 0 ] && ok "exit 0" || ng "HIT なのに exit 0 でない" "$OUT"
-if printf '%s' "$OUT" | grep -q "従来の判定"; then
+if grep -q "従来の判定" <<<"$OUT"; then
   ng "差が無いのに従来の判定を出した"
 else
   ok "差が無いときは余計な行を出さない"
@@ -150,7 +150,7 @@ echo "=== scenario 8b: プロンプトが未コミットなら、走らせる前
 #      手元で直しただけの版は測られない。記録には workflowsDirty として残っていたが、
 #      **走らせている本人には何も出ていなかった**（「直したのに数字が変わらない」の原因になる）。
 # まず綺麗な木で出ないことを確かめる（対照。常に出す実装でも緑にならないように）
-if printf '%s' "$OUT" | grep -q "未コミットの変更があります"; then
+if grep -q "未コミットの変更があります" <<<"$OUT"; then
   ng "綺麗な木なのに警告が出た" "$OUT"
 else
   ok "未コミットが無ければ黙っている（対照）"
@@ -161,7 +161,7 @@ assert_contains "$OUT" ".claude/workflows に未コミットの変更があり�
 assert_contains "$OUT" "測られません" "その変更は評価に入らないと言う"
 (cd "$DUMMY_REPO" && git checkout -- .claude/workflows/lib/prompts/sweep.js)
 run_eval
-if printf '%s' "$OUT" | grep -q "未コミットの変更があります"; then
+if grep -q "未コミットの変更があります" <<<"$OUT"; then
   ng "戻したのに警告が残る" "$OUT"
 else
   ok "コミット済みに戻せば黙る"
@@ -206,7 +206,7 @@ else
 fi
 
 echo "=== scenario 8: 判定に使った回答本文が実際に保存されている ==="
-DETAILS_LINE="$(printf '%s' "$OUT" | grep -e "回答本文:" | head -1)"
+DETAILS_LINE="$(grep -e "回答本文:" <<<"$OUT" | head -1)"
 DETAILS_PATH="${DETAILS_LINE#回答本文: }"
 if [ -n "$DETAILS_PATH" ] && [ -f "$DETAILS_PATH/case-1.txt" ]; then
   ok "case ごとに本文を残す"

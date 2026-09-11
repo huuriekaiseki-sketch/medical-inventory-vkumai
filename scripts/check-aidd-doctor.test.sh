@@ -40,12 +40,12 @@ if [ "${status}" -eq 0 ]; then
   ok "この環境では沈黙しうる hook が無い"
 else
   echo "  注意: この環境には足りない実行系がある（下記）"
-  printf '%s\n' "${out}" | sed -n 's/^aidd-doctor: /      /p'
+  sed -n 's/^aidd-doctor: /      /p' <<<"${out}"
 fi
 
 echo "=== scenario 2: 実行系が無いと名指しする（RED 方向の自己検証） ==="
 out="$(AIDD_DOCTOR_ASSUME_MISSING=jq node "${DOCTOR}" "${REPO_ROOT}" 2>&1)"
-if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "jq が無いので"; then
+if [ $? -ne 0 ] && grep -q "jq が無いので" <<<"${out}"; then
   ok "jq が無い場合を名指しする"
 else
   ng "jq が無くても黙っている（この検査自体が沈黙している）" "${out}"
@@ -59,12 +59,12 @@ fi
 
 echo "=== scenario 3: 黙って降りる／拒否側へ倒れる を区別する ==="
 out="$(AIDD_DOCTOR_ASSUME_MISSING=jq node "${DOCTOR}" "${REPO_ROOT}" 2>&1)"
-if printf '%s' "${out}" | grep -q "黙って降りる"; then
+if grep -q "黙って降りる" <<<"${out}"; then
   ok "沈黙する側を数える"
 else
   ng "沈黙と拒否を区別していない" "${out}"
 fi
-if printf '%s' "${out}" | grep -q "拒否側へ倒れる"; then
+if grep -q "拒否側へ倒れる" <<<"${out}"; then
   ok "拒否側へ倒れる側も数える（安全側は別に数える）"
 else
   ng "拒否側を数えていない" "${out}"
@@ -72,7 +72,7 @@ fi
 
 echo "=== scenario 4: 複数の実行系をまとめて見る ==="
 out="$(AIDD_DOCTOR_ASSUME_MISSING=jq,python3 node "${DOCTOR}" "${REPO_ROOT}" 2>&1)"
-if printf '%s' "${out}" | grep -q "jq が無いので" && printf '%s' "${out}" | grep -q "python3 が無いので"; then
+if grep -q "jq が無いので" <<<"${out}" && grep -q "python3 が無いので" <<<"${out}"; then
   ok "2 つとも名指しする"
 else
   ng "片方しか見ていない" "${out}"
@@ -82,7 +82,7 @@ echo "=== scenario 5: hook が 0 本なら落ちる（fail-open 防止） ==="
 mkdir -p "${TMP_ROOT}/empty/.claude"
 echo '{}' > "${TMP_ROOT}/empty/.claude/settings.json"
 out="$(node "${DOCTOR}" "${TMP_ROOT}/empty" 2>&1)"
-if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "見つけられなかった"; then
+if [ $? -ne 0 ] && grep -q "見つけられなかった" <<<"${out}"; then
   ok "hook が 0 本なら落ちる"
 else
   ng "hook が 0 本でも通ってしまう" "${out}"
@@ -106,7 +106,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 jq -r '.x' <<< '{}'
 PROBE
 out="$(AIDD_DOCTOR_ASSUME_MISSING=jq node "${DOCTOR}" "${TMP_ROOT}/consumer" --plugin-root "${TMP_ROOT}/plug" 2>&1)"
-if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "probe-thing.sh"; then
+if [ $? -ne 0 ] && grep -q "probe-thing.sh" <<<"${out}"; then
   ok "プラグイン側の hook も名指しする"
 else
   ng "プラグイン側を見ていない（導入先で効かない）" "${out}"
@@ -156,7 +156,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 jq -n '{}'
 CODEXSCRIPT
 out="$(AIDD_DOCTOR_ASSUME_MISSING=jq node "${DOCTOR}" "${TMP_ROOT}/both" 2>&1)"
-if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "codex-only-thing.sh"; then
+if [ $? -ne 0 ] && grep -q "codex-only-thing.sh" <<<"${out}"; then
   ok "Codex 側の hook も名指しする"
 else
   ng "Codex 側を見ていない（片方のツールでだけ沈黙していても気づけない）" "${out}"
@@ -166,12 +166,12 @@ echo "=== scenario 11: イベント別の対応を並べ、片方に無いもの
 # WHY(2026-09-11): 「Codex 側には Stop hook が 1 本も無い」ことに**人が目視で気づいた**。
 #      揃えるべきかどうかは人が決めるが、**並べるところまでは機械がやる**。
 out="$(node "${DOCTOR}" "${TMP_ROOT}/both" --verbose 2>&1)"
-if printf '%s' "${out}" | grep -q "イベント別"; then
+if grep -q "イベント別" <<<"${out}"; then
   ok "イベント別の対応を出す"
 else
   ng "対応表を出していない（片方に無い検知に人しか気づけない）" "${out}"
 fi
-if printf '%s' "${out}" | grep -q "に無い"; then
+if grep -q "に無い" <<<"${out}"; then
   ok "片方にしか無いイベントを名指しする"
 else
   ng "欠落を名指ししない" "${out}"
@@ -194,7 +194,7 @@ else
     ng "jq を隠せていない（この検査が空振りしている）"
   else
     out="$(PATH="${FAKE_BIN}" AIDD_DOCTOR_ASSUME_MISSING=jq bash "${HOOK}" 2>&1)"
-    if printf '%s' "${out}" | grep -q "systemMessage"; then
+    if grep -q "systemMessage" <<<"${out}"; then
       ok "jq が無くても伝えられる"
     else
       ng "jq が無いと、それを伝える hook まで黙る" "${out}"
@@ -239,25 +239,25 @@ if [ "${status}" -ne 0 ]; then
 else
   ng "実体が無くても通る（呼ばれても何も起きない hook を見逃す）" "${out}"
 fi
-if printf '%s' "${out}" | grep -q "check-deleted.sh（実体なし）"; then
+if grep -q "check-deleted.sh（実体なし）" <<<"${out}"; then
   ok "Claude 側の実体なしを名指しする"
 else
   ng "Claude 側の実体なしを名指ししない" "${out}"
 fi
-if printf '%s' "${out}" | grep -q "codex-gone.sh（実体なし）"; then
+if grep -q "codex-gone.sh（実体なし）" <<<"${out}"; then
   ok "Codex 側の実体なしも名指しする"
 else
   ng "Codex 側の実体なしを名指ししない" "${out}"
 fi
 # WHY(SessionStart hook が読むのは `aidd-doctor: ` で始まる行だけ): その形で出していなければ、
 #      落ちても人には何も伝わらない（鎖として測る。C-043）
-if printf '%s' "${out}" | grep -q "^aidd-doctor: hook に登録された"; then
+if grep -q "^aidd-doctor: hook に登録された" <<<"${out}"; then
   ok "SessionStart hook が拾える形で出す"
 else
   ng "落ちるが人には伝わらない形で出している" "${out}"
 fi
 # 数える単位（C-031）: 実体の無いものを「実体」に数えない
-if printf '%s' "${out}" | grep -q "scripts=1 unresolved=2"; then
+if grep -q "scripts=1 unresolved=2" <<<"${out}"; then
   ok "実体 1 本・見つからず 2 本として数える（名前の種類と混ぜない）"
 else
   ng "実体の数え方が実態と違う" "${out}"
@@ -268,7 +268,7 @@ printf '#!/usr/bin/env bash\njq --version >/dev/null || exit 0\n' > "${FX}/scrip
 printf '#!/usr/bin/env bash\njq --version >/dev/null || exit 0\n' > "${FX}/scripts/codex-gone.sh"
 out="$(node "${DOCTOR}" "${FX}" 2>&1)"
 status=$?
-if [ "${status}" -eq 0 ] && ! printf '%s' "${out}" | grep -q "実体なし"; then
+if [ "${status}" -eq 0 ] && ! grep -q "実体なし" <<<"${out}"; then
   ok "揃っていれば実体なしとは言わない"
 else
   ng "揃っているのに実体なしと言う（誤検知）" "${out}"

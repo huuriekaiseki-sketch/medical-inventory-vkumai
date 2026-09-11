@@ -59,12 +59,12 @@ echo "=== scenario 4: 共有deny系ガード(check-direct-ddl-execution.sh)がCo
 if [ -f "$HOOKS_JSON" ] && jq -e '.hooks.PreToolUse[]? | select(.hooks[]?.command | test("check-direct-ddl-execution\\.sh"))' "$HOOKS_JSON" >/dev/null 2>&1; then
   assert_ok "PreToolUseにcheck-direct-ddl-execution.shが登録されている"
   MATCHER="$(jq -r '.hooks.PreToolUse[] | select(.hooks[].command | test("check-direct-ddl-execution\\.sh")) | .matcher' "$HOOKS_JSON")"
-  if printf '%s' "$MATCHER" | grep -q 'Bash'; then
+  if grep -q 'Bash' <<<"$MATCHER"; then
     assert_ok "matcherにBashが含まれる"
   else
     assert_fail "matcherにBashが含まれない" "matcher=$MATCHER"
   fi
-  if printf '%s' "$MATCHER" | grep -q 'execute_sql'; then
+  if grep -q 'execute_sql' <<<"$MATCHER"; then
     assert_ok "matcherにexecute_sqlが含まれる"
   else
     assert_fail "matcherにexecute_sqlが含まれない" "matcher=$MATCHER"

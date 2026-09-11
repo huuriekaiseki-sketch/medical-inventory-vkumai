@@ -90,7 +90,7 @@ fi
 
 echo "=== scenario 2: 検査を通さない新しい route が無い ==="
 OUT="$(scan "$API_DIR" "$BASELINE")"
-NEW="$(printf '%s\n' "$OUT" | grep '^new ' || true)"
+NEW="$(grep '^new ' <<<"$OUT" || true)"
 if [ -z "$NEW" ]; then
   assert_ok "クエリを検査せずに読む新しい route は無い"
 else
@@ -101,8 +101,8 @@ else
 fi
 
 echo "=== scenario 3: 一覧が陳腐化していない ==="
-STALE_USED="$(printf '%s\n' "$OUT" | grep '^stale-used ' || true)"
-STALE_MISSING="$(printf '%s\n' "$OUT" | grep '^stale-missing ' || true)"
+STALE_USED="$(grep '^stale-used ' <<<"$OUT" || true)"
+STALE_MISSING="$(grep '^stale-missing ' <<<"$OUT" || true)"
 if [ -z "$STALE_USED" ]; then
   assert_ok "移行済みなのに一覧に残っている route は無い"
 else
@@ -170,12 +170,12 @@ cat > "$WORK/baseline.json" <<'EOF'
 ] }
 EOF
 FOUT="$(scan "$WORK/api" "$WORK/baseline.json")"
-if printf '%s' "$FOUT" | grep -q '^new api/new-thing/route.ts$'; then assert_ok "新しい未検証 route を検知"; else assert_fail "新しい route を検知できない" "$FOUT"; fi
-if printf '%s' "$FOUT" | grep -q '^stale-used api/moved/route.ts$'; then assert_ok "移行済みの消し忘れを検知"; else assert_fail "消し忘れを検知できない" "$FOUT"; fi
-if printf '%s' "$FOUT" | grep -q '^stale-missing api/gone/route.ts$'; then assert_ok "存在しない行を検知"; else assert_fail "存在しない行を検知できない" "$FOUT"; fi
-if printf '%s' "$FOUT" | grep -q 'api/old-thing'; then assert_fail "一覧にある借金を違反にした" "$FOUT"; else assert_ok "一覧にある借金は誤検知しない"; fi
-if printf '%s' "$FOUT" | grep -q 'api/no-query'; then assert_fail "クエリを読まない route を違反にした" "$FOUT"; else assert_ok "クエリを読まない route は対象外"; fi
-if printf '%s' "$FOUT" | grep -q 'api/commented'; then assert_fail "コメント内の記述を違反にした" "$FOUT"; else assert_ok "コメントに残した説明は違反にしない"; fi
+if grep -q '^new api/new-thing/route.ts$' <<<"$FOUT"; then assert_ok "新しい未検証 route を検知"; else assert_fail "新しい route を検知できない" "$FOUT"; fi
+if grep -q '^stale-used api/moved/route.ts$' <<<"$FOUT"; then assert_ok "移行済みの消し忘れを検知"; else assert_fail "消し忘れを検知できない" "$FOUT"; fi
+if grep -q '^stale-missing api/gone/route.ts$' <<<"$FOUT"; then assert_ok "存在しない行を検知"; else assert_fail "存在しない行を検知できない" "$FOUT"; fi
+if grep -q 'api/old-thing' <<<"$FOUT"; then assert_fail "一覧にある借金を違反にした" "$FOUT"; else assert_ok "一覧にある借金は誤検知しない"; fi
+if grep -q 'api/no-query' <<<"$FOUT"; then assert_fail "クエリを読まない route を違反にした" "$FOUT"; else assert_ok "クエリを読まない route は対象外"; fi
+if grep -q 'api/commented' <<<"$FOUT"; then assert_fail "コメント内の記述を違反にした" "$FOUT"; else assert_ok "コメントに残した説明は違反にしない"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

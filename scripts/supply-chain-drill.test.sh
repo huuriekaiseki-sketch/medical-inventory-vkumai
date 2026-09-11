@@ -26,14 +26,14 @@ BEFORE="$(cd "$REPO_ROOT" && git status --porcelain)"
 OUT="$(bash "$SCRIPT_DIR/supply-chain-drill.sh" 2>&1)"
 RC=$?
 if [ "$RC" -eq 0 ]; then assert_ok "終了コード 0"; else assert_fail "終了コードが 0 でない: $RC" "$OUT"; fi
-if printf '%s' "$OUT" | grep -q -- '--- 検知 '; then assert_ok "集計行がある"; else assert_fail "集計行が無い" "$OUT"; fi
+if grep -q -- '--- 検知 ' <<<"$OUT"; then assert_ok "集計行がある"; else assert_fail "集計行が無い" "$OUT"; fi
 
 echo "=== scenario 2: 検知系のシナリオが検知する ==="
 for s in plugin-swap plugin-inject plugin-partial lockfile-swap; do
-  if printf '%s\n' "$OUT" | grep -q "✅ $s:"; then
+  if grep -q "✅ $s:" <<<"$OUT"; then
     assert_ok "$s を検知"
   else
-    assert_fail "$s を検知できない（検知器の退行を疑う）" "$(printf '%s\n' "$OUT" | grep "$s")"
+    assert_fail "$s を検知できない（検知器の退行を疑う）" "$(grep "$s" <<<"$OUT")"
   fi
 done
 
@@ -56,7 +56,7 @@ done
 
 echo "=== scenario 5: 未知のシナリオ名は黙って通さない ==="
 OUT2="$(bash "$SCRIPT_DIR/supply-chain-drill.sh" no-such-scenario 2>&1)"
-if printf '%s' "$OUT2" | grep -q '不明なシナリオ'; then
+if grep -q '不明なシナリオ' <<<"$OUT2"; then
   assert_ok "未知のシナリオを報告する"
 else
   assert_fail "未知のシナリオが黙って通った" "$OUT2"

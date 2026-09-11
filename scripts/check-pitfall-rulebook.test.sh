@@ -73,20 +73,20 @@ check_doc() {
     status="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$9); print $9}')"
 
     # (a) 実例に日付（YYYY-MM-DD）がある
-    if ! printf '%s' "$example" | grep -qE '[0-9]{4}-[0-9]{2}-[0-9]{2}'; then
+    if ! grep -qE '[0-9]{4}-[0-9]{2}-[0-9]{2}' <<<"$example"; then
       echo "    example: [$id] 実例に日付が無い（実際に起きたものだけを載せる）"
       violations=$((violations + 1))
     fi
 
     # (b) 守るテストが自分自身でない
-    if printf '%s' "$tests" | grep -q 'check-design-pitfalls\.md'; then
+    if grep -q 'check-design-pitfalls\.md' <<<"$tests"; then
       echo "    self: [$id] 守るテストがこの表自身を指している（自己言及で検知ありにできてしまう）"
       violations=$((violations + 1))
     fi
 
     # (c) 検知なし の行は「## 限界」に ID が名指しで出る
     if [ "$status" = "検知なし" ]; then
-      if ! printf '%s' "$limits" | grep -q "$id"; then
+      if ! grep -q "$id" <<<"$limits"; then
         echo "    limits: [$id] 検知なしなのに「## 限界」で名指しされていない"
         violations=$((violations + 1))
       fi
@@ -104,7 +104,7 @@ check_doc() {
 
 echo "=== scenario 1: 実態の一覧に違反が無い ==="
 OUT="$(check_doc "$DOC")"
-N="$(printf '%s\n' "$OUT" | tail -1 | sed 's/violations=//')"
+N="$(tail -1 <<<"$OUT" | sed 's/violations=//')"
 if [ "$N" = "0" ]; then
   assert_ok "違反なし（型 $(grep -c '^| C-' "$DOC") 件）"
 else
@@ -130,13 +130,13 @@ BAD="$TMP/bad.md"
   echo '（検知の無い型を名指ししていない限界の節）'
 } > "$BAD"
 OUT_BAD="$(check_doc "$BAD")"
-printf '%s\n' "$OUT_BAD" | grep -q 'example: \[C-010\]' \
+grep -q 'example: \[C-010\]' <<<"$OUT_BAD" \
   && assert_ok "検知: 実例に日付が無い" || assert_fail "実例の日付欠落を検知できない" "$OUT_BAD"
-printf '%s\n' "$OUT_BAD" | grep -q 'self: \[C-020\]' \
+grep -q 'self: \[C-020\]' <<<"$OUT_BAD" \
   && assert_ok "検知: 守るテストが自分自身" || assert_fail "自己言及を検知できない" "$OUT_BAD"
-printf '%s\n' "$OUT_BAD" | grep -q 'limits: \[C-030\]' \
+grep -q 'limits: \[C-030\]' <<<"$OUT_BAD" \
   && assert_ok "検知: 検知なしなのに限界で名指しされていない" || assert_fail "限界の名指し漏れを検知できない" "$OUT_BAD"
-printf '%s\n' "$OUT_BAD" | grep -q 'rows: 行が 3 件' \
+grep -q 'rows: 行が 3 件' <<<"$OUT_BAD" \
   && assert_ok "検知: 行が少なすぎる（fail-open 防止）" || assert_fail "行数の下限を検知できない" "$OUT_BAD"
 
 echo "=== scenario 3: 正しい fixture は 1 件も出さない（誤検知しない） ==="

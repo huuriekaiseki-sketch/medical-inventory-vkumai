@@ -12,7 +12,7 @@ fail=0
 assert_ok() { echo "  OK: $1"; }
 assert_fail() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }
 assert_contains() {
-  if printf '%s\n' "$1" | grep -qF -- "$2"; then assert_ok "$3"; else assert_fail "$3" "expected: $2"; fi
+  if grep -qF -- "$2" <<<"$1"; then assert_ok "$3"; else assert_fail "$3" "expected: $2"; fi
 }
 
 WORK="$(mktemp -d)"

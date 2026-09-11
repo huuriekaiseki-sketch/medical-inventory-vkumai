@@ -24,7 +24,7 @@ assert_eq() {
   if [ "$1" = "$2" ]; then ok "$3"; else ng "$3" "期待 [$2] / 実際 [$1]"; fi
 }
 assert_contains() {
-  if printf '%s' "$1" | grep -qF -- "$2"; then ok "$3"; else ng "$3" "期待 $2 / 実際 $1"; fi
+  if grep -qF -- "$2" <<<"$1"; then ok "$3"; else ng "$3" "期待 $2 / 実際 $1"; fi
 }
 
 payload() { printf '%s' "$1" | node "$LIB" --payload; }
@@ -137,7 +137,7 @@ EVAL_FINDINGS_REPORTED=0 EVAL_FINDINGS_SAMPLES=0 EVAL_FINDINGS_UNREADABLE=2 \
   EVAL_RUNS_REPO_DIR="$FX" EVAL_RUNS_FILE="$RUNS" record_eval_run "t" "set" 1 1 "$(date +%s)" "m"
 UNREAD_ROW="$(tail -n 1 "$RUNS")"
 assert_contains "$UNREAD_ROW" '"findingsUnreadable": 2' "読めなかった回を別に数える"
-if printf '%s' "$UNREAD_ROW" | grep -qF '"findingsReported"'; then
+if grep -qF '"findingsReported"' <<<"$UNREAD_ROW"; then
   ng "読めなかっただけなのに 0 件と記録した"
 else
   ok "読めなかった回を「0 件」と言わない"

@@ -100,7 +100,7 @@ check_matrix() {
     dkey="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$8); print $8}')"
 
     # 0b. ✅ 以外（➖ / 🟡 / ⬜）の行は理由列が必須（凡例の「理由必須」を機械で守る）
-    if ! printf '%s' "$status" | grep -q '✅'; then
+    if ! grep -q '✅' <<<"$status"; then
       if [ -z "$reason" ] || [ "$reason" = "—" ]; then
         echo "    reason: [$kind] 状態 '$status' なのに理由列が空"
         violations=$((violations+1))
@@ -109,7 +109,7 @@ check_matrix() {
 
     # 0c. 証跡列の「CI `xxx` ジョブ」は .github/workflows/*.yml の jobs: に実在する
     for job in $(printf '%s' "$evidence" | grep -o 'CI `[a-z][a-z0-9_-]*` ジョブ' | sed 's/CI `\(.*\)` ジョブ/\1/'); do
-      if ! printf '%s\n' "$jobs" | grep -qx "$job"; then
+      if ! grep -qx "$job" <<<"$jobs"; then
         echo "    job: [$kind] 証跡の CI ジョブが存在しない: $job"
         violations=$((violations+1))
       fi
@@ -122,8 +122,8 @@ check_matrix() {
     esac
 
     # 2. ✅ の行は証跡が空・—・未 ではない
-    if printf '%s' "$status" | grep -q '✅'; then
-      if [ -z "$evidence" ] || [ "$evidence" = "—" ] || printf '%s' "$evidence" | grep -q '^未'; then
+    if grep -q '✅' <<<"$status"; then
+      if [ -z "$evidence" ] || [ "$evidence" = "—" ] || grep -q '^未' <<<"$evidence"; then
         echo "    evidence: [$kind] ✅ なのに証跡が無い"
         violations=$((violations+1))
       fi
@@ -148,8 +148,8 @@ check_matrix() {
       echo "    derive: [$kind] derive キー列が空（判定対象外なら — と書く）"
       violations=$((violations+1))
     elif [ "$dkey" != "—" ]; then
-      rule_label="$(printf '%s\n' "$rules" | awk -F'\t' -v k="$dkey" '$1==k{print $2}')"
-      rule_timing="$(printf '%s\n' "$rules" | awk -F'\t' -v k="$dkey" '$1==k{print $3}')"
+      rule_label="$(awk -F'\t' -v k="$dkey" '$1==k{print $2}' <<<"$rules")"
+      rule_timing="$(awk -F'\t' -v k="$dkey" '$1==k{print $3}' <<<"$rules")"
       if [ -z "$rule_label" ]; then
         echo "    derive: [$kind] derive キーがルール表に無い: $dkey"
         violations=$((violations+1))
@@ -162,7 +162,7 @@ check_matrix() {
           echo "    derive: [$kind] 実施タイミング '$timing' がルール表の timing '$rule_timing' と食い違う"
           violations=$((violations+1))
         fi
-        if printf '%s\n' "$seen_keys" | grep -qx "$dkey"; then
+        if grep -qx "$dkey" <<<"$seen_keys"; then
           echo "    derive: [$kind] derive キーが重複: $dkey"
           violations=$((violations+1))
         fi
@@ -174,7 +174,7 @@ check_matrix() {
   # 5. ルール表の全キーが一覧に現れる（ルールを足したのに一覧に行が無い、を止める）
   while IFS=$'\t' read -r rkey _rlabel _rtiming; do
     [ -n "$rkey" ] || continue
-    if ! printf '%s\n' "$seen_keys" | grep -qx "$rkey"; then
+    if ! grep -qx "$rkey" <<<"$seen_keys"; then
       echo "    derive: ルール表のキーが一覧に無い: $rkey"
       violations=$((violations+1))
     fi
@@ -198,11 +198,11 @@ fi
 
 echo "=== scenario 2: 実態の一覧に違反が無い（タイミング4語・✅の証跡・証跡パスの実在・derive キーの双方向整合） ==="
 RESULT="$(check_matrix "$MATRIX")"
-printf '%s\n' "$RESULT" | grep -v '^violations=' || true
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+grep -v '^violations=' <<<"$RESULT" || true
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   assert_ok "違反なし"
 else
-  assert_fail "違反あり" "$(printf '%s\n' "$RESULT" | tail -n1)"
+  assert_fail "違反あり" "$(tail -n1 <<<"$RESULT")"
 fi
 
 echo "=== scenario 3: fixture 差し替えで違反を検知できる（RED 方向の自己検証） ==="
@@ -244,7 +244,7 @@ RESULT="$(TEST_MATRIX_RULES="$FIXTURE_RULES" check_matrix "$FIXTURE")"
 #              キー空・キー不在・名前違い（label と種別名）・タイミング食い違い・
 #              キー重複（重複 +1、種別名も label と違うので +1）・ルール表にだけあるキー = 14
 EXPECTED=14
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
   assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
@@ -255,7 +255,7 @@ for needle in \
   'derive: \[キー空\]' 'derive: \[キー不在\]' 'derive: \[名前違い\] 種別名' \
   'derive: \[タイミング食い違い\] 実施タイミング' 'derive: \[キー重複\] derive キーが重複' \
   'derive: ルール表のキーが一覧に無い: key-only-in-rules'; do
-  if printf '%s\n' "$RESULT" | grep -q "$needle"; then
+  if grep -q "$needle" <<<"$RESULT"; then
     assert_ok "検知: $needle"
   else
     assert_fail "検知できない: $needle"

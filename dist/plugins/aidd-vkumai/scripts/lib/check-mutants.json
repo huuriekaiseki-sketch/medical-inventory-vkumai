@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 66,
+  "minMutants": 73,
   "mutants": [
     {
       "id": "CM-001",
@@ -605,6 +605,69 @@
       "replace": "  const distinctive = [...holdoutNames].filter((n) => n.length >= 12 && /holdout/i.test(n))",
       "expect": "scripts/check-holdout-isolation.test.sh",
       "guards": "C-011。E-070 で fixture を業務らしい名前へ変えたとき、印で絞る判定は**何も見張らなくなった**"
+    },
+    {
+      "id": "CM-067",
+      "breaks": "逃がし口（同梱しない参照の免除）のうち、一度も当たらないものを落とす判定を外す",
+      "file": "scripts/lib/build-plugin.mjs",
+      "find": "    if (!allowedUsed.has(key)) {",
+      "replace": "    if (false) {",
+      "expect": "scripts/build-plugin.test.sh",
+      "guards": "E-045（死んだ免除が、同じ参照が戻ったとき別の文脈の理由で黙って通す）"
+    },
+    {
+      "id": "CM-068",
+      "breaks": "逃がし口の件数の上限（ratchet）を外す",
+      "file": "scripts/lib/build-plugin.mjs",
+      "find": "  } else if (typeof allowMax === 'number' && allowCount > allowMax) {",
+      "replace": "  } else if (false) {",
+      "expect": "scripts/build-plugin.test.sh",
+      "guards": "E-045（逃がし口は放っておくと増える）"
+    },
+    {
+      "id": "CM-069",
+      "breaks": "hook に登録されているのに実体が無いスクリプトの報告を外す",
+      "file": "scripts/lib/aidd-doctor.mjs",
+      "find": "  if (r.unresolved > 0) {",
+      "replace": "  if (false) {",
+      "expect": "scripts/check-aidd-doctor.test.sh",
+      "guards": "E-046（呼ばれても何も起きない hook を黙って見逃す）"
+    },
+    {
+      "id": "CM-070",
+      "breaks": "実体の無いものまで「実体」に数える（数える単位を壊す。C-031）",
+      "file": "scripts/lib/aidd-doctor.mjs",
+      "find": "    scripts: scripts.size - unresolved,",
+      "replace": "    scripts: scripts.size,",
+      "expect": "scripts/check-aidd-doctor.test.sh",
+      "guards": "E-046（表示が嘘をつき、実体 0 本でも fail-open 防止が発火しない）"
+    },
+    {
+      "id": "CM-071",
+      "breaks": "門のマーカーが 2 回以上出るときに落とす判定を外す（別の門を数えても通す）",
+      "file": "scripts/lib/gate-prompt-hash.mjs",
+      "find": "  if (occurrences > 1) {",
+      "replace": "  if (false) {",
+      "expect": "scripts/check-fault-injection-drill-staleness.test.sh",
+      "guards": "E-048（「版が一致した」が「正しい門を見た」を意味しなくなる。C-040）"
+    },
+    {
+      "id": "CM-072",
+      "breaks": "訓練した版といまの版の突合を外す（門の文言が変わっても黙る）",
+      "file": "scripts/check-fault-injection-drill-staleness.sh",
+      "find": "  [ \"$recorded\" = \"$current\" ] && return 0",
+      "replace": "  return 0",
+      "expect": "scripts/check-fault-injection-drill-staleness.test.sh",
+      "guards": "E-048（deny-by-default の門が変わったのに訓練していない）"
+    },
+    {
+      "id": "CM-073",
+      "breaks": "tools から sandbox_mode を決める規則を外し、常に read-only にする",
+      "file": "scripts/lib/generate-codex-agents.mjs",
+      "find": "  return /\\b(Edit|Write|MultiEdit)\\b/.test(tools ?? '') ? 'workspace-write' : 'read-only'",
+      "replace": "  return 'read-only'",
+      "expect": "scripts/check-codex-agents-generated.test.sh",
+      "guards": "書き込みロールの権限が実態とずれる（E-042 の写像）"
     }
   ]
 }

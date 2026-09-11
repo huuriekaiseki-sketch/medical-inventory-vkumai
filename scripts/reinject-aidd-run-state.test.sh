@@ -15,10 +15,10 @@ assert_empty() {
   if [ -z "$1" ]; then echo "  OK: $2"; else echo "  NG: $2 (actual=$1)"; fail=1; fi
 }
 assert_contains() {
-  if printf '%s' "$1" | grep -qF -- "$2"; then echo "  OK: $3"; else echo "  NG: $3"; echo "      expected: $2"; echo "      actual: $1"; fail=1; fi
+  if grep -qF -- "$2" <<<"$1"; then echo "  OK: $3"; else echo "  NG: $3"; echo "      expected: $2"; echo "      actual: $1"; fail=1; fi
 }
 assert_not_contains() {
-  if printf '%s' "$1" | grep -qF -- "$2"; then echo "  NG: $3 (unexpected: $2)"; fail=1; else echo "  OK: $3"; fi
+  if grep -qF -- "$2" <<<"$1"; then echo "  NG: $3 (unexpected: $2)"; fail=1; else echo "  OK: $3"; fi
 }
 
 WORK="$(mktemp -d)"

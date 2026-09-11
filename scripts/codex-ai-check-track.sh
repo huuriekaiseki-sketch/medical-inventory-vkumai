@@ -32,7 +32,7 @@ SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // "unknown"')"
 # WHY(統合テストも数える): vkumai の `ai:check` は typecheck / lint / test / 統合 / E2E を通す。
 #   どれか 1 つでも打っていれば「見ている」とみなす（打っていないことだけを警告したい）。
 CHECK_PATTERN='npm[[:space:]]+(run[[:space:]]+)?(ai:check|typecheck|lint|test|test:integration|test:e2e)\b|npx[[:space:]]+(vitest|tsc|playwright)\b'
-printf '%s' "$COMMAND" | grep -qE "$CHECK_PATTERN" || exit 0
+grep -qE "$CHECK_PATTERN" <<<"$COMMAND" || exit 0
 
 # WHY(git でルートを取る): Codex には CLAUDE_PROJECT_DIR が無い。`.codex/hooks.json` も
 #   `$(git rev-parse --show-toplevel)` でパスを解決しており、worktree でも正しく効く。

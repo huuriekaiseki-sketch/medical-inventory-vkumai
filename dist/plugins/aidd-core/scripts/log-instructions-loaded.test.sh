@@ -15,7 +15,7 @@ fail=0
 ok() { echo "  OK: $1"; }
 ng() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }
 assert_contains() {
-  if printf '%s' "$1" | grep -qF -- "$2"; then ok "$3"; else ng "$3" "expected: $2 / actual: $1"; fi
+  if grep -qF -- "$2" <<<"$1"; then ok "$3"; else ng "$3" "expected: $2 / actual: $1"; fi
 }
 
 WORK="$(mktemp -d)"
@@ -41,7 +41,7 @@ assert_contains "$ROW" '"filePath":"CLAUDE.md"' "PROJECT_DIR 配下は相対化"
 assert_contains "$ROW" '"fileSizeBytes":16' "バイト数を wc -c で補完"
 assert_contains "$ROW" '"fileChars":6' "文字数を記録"
 assert_contains "$ROW" '"loadReason":"session_start"' "loadReason を記録"
-if printf '%s' "$ROW" | grep -qF 'globPattern'; then ng "globPattern が無いのに出ている"; else ok "globPattern 無し"; fi
+if grep -qF 'globPattern' <<<"$ROW"; then ng "globPattern が無いのに出ている"; else ok "globPattern 無し"; fi
 
 echo "=== scenario 2: path_glob_match（glob_pattern・file_size_bytes あり） → ペイロードの値を優先 ==="
 run_logger "{\"session_id\":\"s1\",\"hook_event_name\":\"InstructionsLoaded\",\"load_reason\":\"path_glob_match\",\"file_path\":\"$PROJ/.claude/rules/e2e.md\",\"memory_type\":\"instructions\",\"glob_pattern\":\"e2e/**\",\"file_size_bytes\":999}"
@@ -59,7 +59,7 @@ echo "=== scenario 4: 存在しないファイル → サイズ・文字数無�
 run_logger "{\"session_id\":\"s1\",\"hook_event_name\":\"InstructionsLoaded\",\"load_reason\":\"compact\",\"file_path\":\"$PROJ/gone.md\",\"memory_type\":\"instructions\"}"
 ROW="$(tail -n 1 "$LOG")"
 assert_contains "$ROW" '"loadReason":"compact"' "記録は残る"
-if printf '%s' "$ROW" | grep -qF 'fileChars'; then ng "不在ファイルに fileChars が出ている"; else ok "fileChars 無し"; fi
+if grep -qF 'fileChars' <<<"$ROW"; then ng "不在ファイルに fileChars が出ている"; else ok "fileChars 無し"; fi
 
 echo "=== scenario 5: 不正入力（別イベント / 空 / 壊れた JSON） → exit 0・追記なし ==="
 BEFORE="$(wc -l < "$LOG" | tr -d ' ')"

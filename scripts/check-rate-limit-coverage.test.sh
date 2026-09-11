@@ -93,8 +93,8 @@ export async function GET() {
 }
 EOF
 OUT="$(scan_routes "$WORK")"
-if printf '%s' "$OUT" | grep -q 'bad/route.ts'; then assert_ok "抜けている route を検知"; else assert_fail "抜けを検知できない" "$OUT"; fi
-if printf '%s' "$OUT" | grep -q 'good/route.ts'; then assert_fail "正しい route を違反にした" "$OUT"; else assert_ok "正しい route は誤検知しない"; fi
+if grep -q 'bad/route.ts' <<<"$OUT"; then assert_ok "抜けている route を検知"; else assert_fail "抜けを検知できない" "$OUT"; fi
+if grep -q 'good/route.ts' <<<"$OUT"; then assert_fail "正しい route を違反にした" "$OUT"; else assert_ok "正しい route は誤検知しない"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

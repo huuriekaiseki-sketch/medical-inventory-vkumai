@@ -127,12 +127,12 @@ printf 'const k = process.env.SUPABASE_SERVICE_ROLE_KEY\n' > "$WORK_DIR/src/lib/
 printf 'const ok = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY\n' > "$WORK_DIR/src/lib/supabase/client.ts"
 git -C "$WORK_DIR" add -A
 FIX_SECRETS="$(scan_secrets "$WORK_DIR")"
-if printf '%s\n' "$FIX_SECRETS" | grep -q 'leak.env.example:1:'; then assert_ok "JWT を検知"; else assert_fail "JWT を検知できない" "$FIX_SECRETS"; fi
-if printf '%s\n' "$FIX_SECRETS" | grep -q 'key.pem.txt:1:'; then assert_ok "秘密鍵を検知"; else assert_fail "秘密鍵を検知できない" "$FIX_SECRETS"; fi
-if printf '%s\n' "$FIX_SECRETS" | grep -q 'client.ts'; then assert_fail "anon key の環境変数名を誤検知" "$FIX_SECRETS"; else assert_ok "環境変数名だけの参照は検知しない"; fi
+if grep -q 'leak.env.example:1:' <<<"$FIX_SECRETS"; then assert_ok "JWT を検知"; else assert_fail "JWT を検知できない" "$FIX_SECRETS"; fi
+if grep -q 'key.pem.txt:1:' <<<"$FIX_SECRETS"; then assert_ok "秘密鍵を検知"; else assert_fail "秘密鍵を検知できない" "$FIX_SECRETS"; fi
+if grep -q 'client.ts' <<<"$FIX_SECRETS"; then assert_fail "anon key の環境変数名を誤検知" "$FIX_SECRETS"; else assert_ok "環境変数名だけの参照は検知しない"; fi
 FIX_REFS="$(scan_service_role_refs "$WORK_DIR")"
-if printf '%s\n' "$FIX_REFS" | grep -q 'src/components/Bad.tsx'; then assert_ok "client 側の service role 参照を検知"; else assert_fail "client 側の参照を検知できない" "$FIX_REFS"; fi
-if printf '%s\n' "$FIX_REFS" | grep -q 'server.ts'; then assert_fail "サーバー側の参照を誤検知" "$FIX_REFS"; else assert_ok "サーバー側の参照は許可"; fi
+if grep -q 'src/components/Bad.tsx' <<<"$FIX_REFS"; then assert_ok "client 側の service role 参照を検知"; else assert_fail "client 側の参照を検知できない" "$FIX_REFS"; fi
+if grep -q 'server.ts' <<<"$FIX_REFS"; then assert_fail "サーバー側の参照を誤検知" "$FIX_REFS"; else assert_ok "サーバー側の参照は許可"; fi
 
 echo "=== scenario 5: コミット前（未追跡）でも検知し、gitignore 済みは見ない（E-039） ==="
 UT_DIR="$(mktemp -d)"
@@ -146,12 +146,12 @@ FAKE_AWS="${AWS_PREFIX}$(printf 'Z%.0s' $(seq 1 16))"
 printf 'key=%s\n' "$FAKE_AWS" > "$UT_DIR/never-added.txt"
 printf 'key=%s\n' "$FAKE_AWS" > "$UT_DIR/ignored-secrets.txt"
 UT_HITS="$(scan_secrets "$UT_DIR")"
-if printf '%s\n' "$UT_HITS" | grep -q 'never-added.txt'; then
+if grep -q 'never-added.txt' <<<"$UT_HITS"; then
   assert_ok "git add していないファイルでも検知する"
 else
   assert_fail "未追跡ファイルを検知できない（書いた直後の緑が当てにならない状態）" "$UT_HITS"
 fi
-if printf '%s\n' "$UT_HITS" | grep -q 'ignored-secrets.txt'; then
+if grep -q 'ignored-secrets.txt' <<<"$UT_HITS"; then
   assert_fail "gitignore 済みのファイルを走査している（.env.local が落ちる）" "$UT_HITS"
 else
   assert_ok "gitignore 済みは走査しない"

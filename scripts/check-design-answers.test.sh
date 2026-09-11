@@ -104,7 +104,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 printf '{}\n' > "$WORK/no-limits.json"
 OUT="$(check_limits "$WORK/no-limits.json")"
-if printf '%s' "$OUT" | grep -q 'missing: limits が無い'; then assert_ok "limits 無しを検知"; else assert_fail "limits 無しを検知できない" "$OUT"; fi
+if grep -q 'missing: limits が無い' <<<"$OUT"; then assert_ok "limits 無しを検知"; else assert_fail "limits 無しを検知できない" "$OUT"; fi
 
 cat > "$WORK/placeholder.json" <<'EOF'
 {
@@ -118,8 +118,8 @@ cat > "$WORK/placeholder.json" <<'EOF'
 }
 EOF
 OUT="$(check_limits "$WORK/placeholder.json")"
-if printf '%s' "$OUT" | grep -q 'placeholder: limits.textLength.title'; then assert_ok "0 の値を検知"; else assert_fail "0 を検知できない" "$OUT"; fi
-if printf '%s' "$OUT" | grep -q 'who: limits.decidedBy'; then assert_ok "AI が決めた印を検知"; else assert_fail "decidedBy を検知できない" "$OUT"; fi
+if grep -q 'placeholder: limits.textLength.title' <<<"$OUT"; then assert_ok "0 の値を検知"; else assert_fail "0 を検知できない" "$OUT"; fi
+if grep -q 'who: limits.decidedBy' <<<"$OUT"; then assert_ok "AI が決めた印を検知"; else assert_fail "decidedBy を検知できない" "$OUT"; fi
 
 cat > "$WORK/todo.json" <<'EOF'
 {
@@ -132,9 +132,9 @@ cat > "$WORK/todo.json" <<'EOF'
 }
 EOF
 OUT="$(check_limits "$WORK/todo.json")"
-if printf '%s' "$OUT" | grep -q 'placeholder: limits.decidedBy'; then assert_ok "TODO のままを検知"; else assert_fail "TODO を検知できない" "$OUT"; fi
-if printf '%s' "$OUT" | grep -q 'missing: limits.invitesPerDay'; then assert_ok "キー不足を検知"; else assert_fail "キー不足を検知できない" "$OUT"; fi
-if printf '%s' "$OUT" | grep -q 'stale: limits.decidedOn'; then assert_ok "古い決定日を検知"; else assert_fail "古い決定日を検知できない" "$OUT"; fi
+if grep -q 'placeholder: limits.decidedBy' <<<"$OUT"; then assert_ok "TODO のままを検知"; else assert_fail "TODO を検知できない" "$OUT"; fi
+if grep -q 'missing: limits.invitesPerDay' <<<"$OUT"; then assert_ok "キー不足を検知"; else assert_fail "キー不足を検知できない" "$OUT"; fi
+if grep -q 'stale: limits.decidedOn' <<<"$OUT"; then assert_ok "古い決定日を検知"; else assert_fail "古い決定日を検知できない" "$OUT"; fi
 
 cat > "$WORK/good.json" <<'EOF'
 {
@@ -168,7 +168,7 @@ TABLE="$(sed -n '/^## 決めた値/,$p' "$QUESTIONS" 2>/dev/null)"
 missing=""
 while read -r key val alt; do
   [ -z "${val:-}" ] && continue
-  if ! printf '%s' "$TABLE" | grep -qE "(^|[^0-9,])($val|$alt)([^0-9,]|$)"; then
+  if ! grep -qE "(^|[^0-9,])($val|$alt)([^0-9,]|$)" <<<"$TABLE"; then
     missing="$missing $key=$val"
   fi
 done <<< "$NUMS"

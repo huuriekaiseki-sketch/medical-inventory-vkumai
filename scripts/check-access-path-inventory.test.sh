@@ -45,8 +45,8 @@ check_inventory() {
 
   for ref in $(grep '^| X-' "$file" | grep -oE '[PI]-[0-9]{3}' | sort -u); do
     case "$ref" in
-      P-*) printf '%s\n' "$p_ids" | grep -qx "$ref" || { echo "    stale: [$ref] 約束カタログに無い ID を参照"; violations=$((violations+1)); } ;;
-      I-*) printf '%s\n' "$i_ids" | grep -qx "$ref" || { echo "    stale: [$ref] 不変条件カタログに無い ID を参照"; violations=$((violations+1)); } ;;
+      P-*) grep -qx "$ref" <<<"$p_ids" || { echo "    stale: [$ref] 約束カタログに無い ID を参照"; violations=$((violations+1)); } ;;
+      I-*) grep -qx "$ref" <<<"$i_ids" || { echo "    stale: [$ref] 不変条件カタログに無い ID を参照"; violations=$((violations+1)); } ;;
     esac
   done
 
@@ -59,11 +59,11 @@ check_inventory() {
       violations=$((violations+1))
       continue
     fi
-    if ! printf '%s' "$id" | grep -qE '^X-[0-9]{3}$'; then
+    if ! grep -qE '^X-[0-9]{3}$' <<<"$id"; then
       echo "    id: [$id] ID が X-3桁でない"
       violations=$((violations+1))
     fi
-    if printf '%s\n' "$seen" | grep -qx "$id"; then
+    if grep -qx "$id" <<<"$seen"; then
       echo "    id: [$id] ID が重複"
       violations=$((violations+1))
     fi
@@ -74,7 +74,7 @@ check_inventory() {
     case "$status" in
       検査あり|一部|対象外) ;;
       未*)
-        if ! printf '%s' "$status$tests" | grep -qE '#757-[0-9]+'; then
+        if ! grep -qE '#757-[0-9]+' <<<"$status$tests"; then
           echo "    plan: [$id] 未 なのに #757-N が無い"
           violations=$((violations+1))
         fi
@@ -99,7 +99,7 @@ check_inventory() {
 
 echo "=== scenario 1: 実態の表に違反が無い ==="
 RESULT="$(check_inventory "$INVENTORY" "$PROMISES" "$INVARIANTS")"
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   assert_ok "違反なし（$(grep -c '^| X-' "$INVENTORY" || echo 0) 経路、鍵 $(key_names "$INVENTORY" | grep -c . || echo 0) 種）"
 else
   assert_fail "違反あり" "$RESULT"
@@ -137,15 +137,15 @@ cat > "$WORK/inventory.md" <<'EOF'
 EOF
 RESULT="$(check_inventory "$WORK/inventory.md" "$WORK/promises.md" "$WORK/invariants.md")"
 EXPECTED=7
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
   assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
 fi
 for needle in 'plan: \[X-902\]' 'key: \[X-903\]' 'stale: \[P-999\]' 'status: \[X-905\]' 'id: \[X-12\]' 'id: \[X-900\] ID が重複' 'columns: \[X-906\]'; do
-  if printf '%s\n' "$RESULT" | grep -qE "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
+  if grep -qE "$needle" <<<"$RESULT"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
 done
-if printf '%s\n' "$RESULT" | grep -q -e 'X-901' -e 'X-907'; then assert_fail "正常行を誤検知" "$RESULT"; else assert_ok "計画付きの未・鍵なしの対象外は誤検知しない"; fi
+if grep -q -e 'X-901' -e 'X-907' <<<"$RESULT"; then assert_fail "正常行を誤検知" "$RESULT"; else assert_ok "計画付きの未・鍵なしの対象外は誤検知しない"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

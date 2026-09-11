@@ -120,8 +120,11 @@ scan_expected_paths() { # $1 = fixtures root
 }
 
 PATHS_RESULT="$(scan_expected_paths "$FIXTURES_ROOT")"
-EXPECTED_PATHS_CHECKED="$(printf '%s' "$PATHS_RESULT" | head -1 | sed 's/^COUNT=//')"
-MISSING_PATHS="$(printf '%s' "$PATHS_RESULT" | tail -n +2)"
+# WHY(パイプの先頭に printf を置かない。C-050): `head -1` は 1 行読んだ時点で終了するので、
+#      `printf` が書き終える前にパイプが閉じ、`set -o pipefail` の下で非ゼロになる。
+#      **走査が違反を見つけて出力が長くなったときだけ**壊れる（C-044 と同じ形）。
+EXPECTED_PATHS_CHECKED="$(head -1 <<<"$PATHS_RESULT" | sed 's/^COUNT=//')"
+MISSING_PATHS="$(tail -n +2 <<<"$PATHS_RESULT")"
 if [ "${EXPECTED_PATHS_CHECKED:-0}" -eq 0 ]; then
   ng "expected.json を持つ case が 1 つも無い（走査が壊れている）"
 elif [ -z "$MISSING_PATHS" ]; then
@@ -173,7 +176,7 @@ if IMPORT_OUT="$(FIXTURE_IMPORTS_ROOT="$FIXTURES_ROOT" FIXTURE_IMPORTS_SRC="$SCR
 else
   ng "fixture が存在しないモジュールを import している（仕込んだ欠陥を測れなくなる）" "$IMPORT_OUT"
 fi
-if printf '%s' "$IMPORT_OUT" | grep -q "imports=[1-9]"; then
+if grep -q "imports=[1-9]" <<<"$IMPORT_OUT"; then
   ok "import を実際に数えている（空振りでない）"
 else
   ng "import が 0 件（走査が壊れている疑い）" "$IMPORT_OUT"
@@ -193,7 +196,7 @@ fi
 printf "import { x } from '@/lib/security/facility-access'\nexport const a = x\n" \
   > "$IMPWORK/fx/sweep-x/case-1/files/src/app/api/thing/route.ts"
 RED_IMPORT="$(FIXTURE_IMPORTS_ROOT="$IMPWORK/fx" FIXTURE_IMPORTS_SRC="$IMPWORK/src" node "$IMPORT_SCAN" 2>&1 || true)"
-if printf '%s' "$RED_IMPORT" | grep -q "missing-import"; then
+if grep -q "missing-import" <<<"$RED_IMPORT"; then
   ok "存在しないモジュールへの import を名指しする"
 else
   ng "壊れた import を見逃す（E-073 が再発する）" "$RED_IMPORT"

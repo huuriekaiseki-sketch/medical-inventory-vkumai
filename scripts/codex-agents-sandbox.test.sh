@@ -135,33 +135,33 @@ mk "role-no-mode" "Read, Bash" ""
 printf 'name = "role-orphan"\nsandbox_mode = "read-only"\ndeveloper_instructions = """本文"""\n' > "$WORK/.codex/agents/role-orphan.toml"
 
 OUT="$(find_sandbox_mismatches "$WORK")"
-if printf '%s\n' "$OUT" | grep -q 'sandbox-mismatch: role-too-wide.toml'; then
+if grep -q 'sandbox-mismatch: role-too-wide.toml' <<<"$OUT"; then
   assert_ok "読み取り専用のはずが workspace-write なのを検知（権限が広すぎる側）"
 else
   assert_fail "広すぎる権限を検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q 'sandbox-mismatch: role-too-narrow.toml'; then
+if grep -q 'sandbox-mismatch: role-too-narrow.toml' <<<"$OUT"; then
   assert_ok "書き込みロールが read-only なのを検知（通したい向きも見る。C-024）"
 else
   assert_fail "狭すぎる権限を検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q 'no-sandbox-mode: role-no-mode.toml'; then
+if grep -q 'no-sandbox-mode: role-no-mode.toml' <<<"$OUT"; then
   assert_ok "sandbox_mode の明示漏れを検知"
 else
   assert_fail "明示漏れを検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q 'no-source: role-orphan.toml'; then
+if grep -q 'no-source: role-orphan.toml' <<<"$OUT"; then
   assert_ok "正本の md が無い toml を検知"
 else
   assert_fail "正本なしを検知できない" "$OUT"
 fi
 # 誤検知しない側（対を置く。C-021）
-if printf '%s\n' "$OUT" | grep -q 'role-ok-ro'; then
+if grep -q 'role-ok-ro' <<<"$OUT"; then
   assert_fail "そろっている読み取り専用ロールを誤検知した" "$OUT"
 else
   assert_ok "そろっている読み取り専用ロールは通る"
 fi
-if printf '%s\n' "$OUT" | grep -q 'role-ok-rw'; then
+if grep -q 'role-ok-rw' <<<"$OUT"; then
   assert_fail "そろっている書き込みロールを誤検知した" "$OUT"
 else
   assert_ok "そろっている書き込みロールは通る"
@@ -183,7 +183,7 @@ WORK3="$WORK/fx3"
 mkdir -p "$WORK3/.codex/agents"
 printf 'name = "role-ok"\nsandbox_mode = "read-only"\ndeveloper_instructions = """本文"""\n' > "$WORK3/.codex/agents/role-ok.toml"
 OUT3="$(find_sandbox_mismatches "$WORK3")"
-if printf '%s\n' "$OUT3" | grep -q 'empty-scan:'; then
+if grep -q 'empty-scan:' <<<"$OUT3"; then
   assert_ok "正本を拾えないのを走査の故障として検知"
 else
   assert_fail "空振りを検知できない" "$OUT3"

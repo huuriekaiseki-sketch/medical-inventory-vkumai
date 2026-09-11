@@ -35,11 +35,11 @@ fail=0
 ok() { echo "  OK: $1"; }
 ng() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }
 assert_contains() {
-  if printf '%s' "$1" | grep -qF -- "$2"; then ok "$3"; else
+  if grep -qF -- "$2" <<<"$1"; then ok "$3"; else
     ng "$3" "期待: $2"; echo "      実際: $1"; fi
 }
 assert_not_contains() {
-  if printf '%s' "$1" | grep -qF -- "$2"; then ng "$3" "出てはいけない: $2"; else ok "$3"; fi
+  if grep -qF -- "$2" <<<"$1"; then ng "$3" "出てはいけない: $2"; else ok "$3"; fi
 }
 
 command -v jq >/dev/null 2>&1 || { echo "jq が要ります"; exit 1; }

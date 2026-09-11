@@ -130,22 +130,22 @@ printf 'echo test\n' > "$WORK/scripts/check-skipped.test.sh"
 printf 'echo test\n' > "$WORK/scripts/check-forgotten.test.sh"
 
 OUT="$(find_unclassified "$WORK")"
-if printf '%s\n' "$OUT" | grep -q 'unclassified: check-forgotten.test.sh'; then
+if grep -q 'unclassified: check-forgotten.test.sh' <<<"$OUT"; then
   assert_ok "層を決めていない検査を検知"
 else
   assert_fail "未分類を検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q 'unclassified: check-known.test.sh'; then
+if grep -q 'unclassified: check-known.test.sh' <<<"$OUT"; then
   assert_fail "対象スクリプトがある検査を誤検知した" "$OUT"
 else
   assert_ok "対象がある検査は自動で層が決まる"
 fi
-if printf '%s\n' "$OUT" | grep -q 'stale: check-ghost.test.sh'; then
+if grep -q 'stale: check-ghost.test.sh' <<<"$OUT"; then
   assert_ok "消えたファイルが表に残っているのを検知"
 else
   assert_fail "幽霊エントリを検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q 'no-reason: check-skipped.test.sh'; then
+if grep -q 'no-reason: check-skipped.test.sh' <<<"$OUT"; then
   assert_ok "配らない理由が空なのを検知"
 else
   assert_fail "理由なしを検知できない" "$OUT"
@@ -175,17 +175,17 @@ printf 'echo test\n' > "$WORK2/scripts/check-a.test.sh"
 printf 'echo test\n' > "$WORK2/scripts/check-b.test.sh"
 
 OUT2="$(find_unclassified "$WORK2")"
-if printf '%s\n' "$OUT2" | grep -q 'over-max: 分ければ配れる検査が 2 件'; then
+if grep -q 'over-max: 分ければ配れる検査が 2 件' <<<"$OUT2"; then
   assert_ok "借金が上限を超えたのを検知"
 else
   assert_fail "上限超過を検知できない" "$OUT2"
 fi
-if printf '%s\n' "$OUT2" | grep -q 'no-plan: check-b.test.sh'; then
+if grep -q 'no-plan: check-b.test.sh' <<<"$OUT2"; then
   assert_ok "「あとで」のような中身の無い理由を検知"
 else
   assert_fail "出し方が書かれていないのを検知できない" "$OUT2"
 fi
-if printf '%s\n' "$OUT2" | grep -q 'unclassified: check-a.test.sh'; then
+if grep -q 'unclassified: check-a.test.sh' <<<"$OUT2"; then
   assert_fail "checksSplittable に書いた検査を未分類と誤検知した" "$OUT2"
 else
   assert_ok "checksSplittable も層として数える"
@@ -206,7 +206,7 @@ cat > "$WORK3/scripts/lib/plugin-layout.json" <<'EOF'
 EOF
 printf 'echo test\n' > "$WORK3/scripts/check-a.test.sh"
 OUT3="$(find_unclassified "$WORK3")"
-if printf '%s\n' "$OUT3" | grep -q 'no-max:'; then
+if grep -q 'no-max:' <<<"$OUT3"; then
   assert_ok "上限の書き忘れを検知"
 else
   assert_fail "上限の書き忘れを検知できない" "$OUT3"

@@ -13,7 +13,7 @@ fail=0
 pass_count=0
 
 contains() {
-  if printf '%s' "$1" | grep -q "$2"; then
+  if grep -q "$2" <<<"$1"; then
     echo "  OK: $3"
     pass_count=$((pass_count + 1))
   else

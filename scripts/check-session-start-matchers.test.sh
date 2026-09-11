@@ -49,17 +49,17 @@ check() {
     matcher="$(jq -r ".hooks.SessionStart[$i].matcher // \"\"" "$settings")"
     cmds="$(jq -r ".hooks.SessionStart[$i].hooks[].command" "$settings")"
     has_reinject=0
-    if printf '%s\n' "$cmds" | grep -qF "$REINJECT"; then has_reinject=1; reinject_registered=1; fi
+    if grep -qF "$REINJECT" <<<"$cmds"; then has_reinject=1; reinject_registered=1; fi
 
     if [ -z "$matcher" ] || [ "$matcher" = "*" ]; then
-      echo "    no-matcher: エントリ ${i}（$(printf '%s' "$cmds" | head -n1 | xargs basename) …）が全 source で実行される"
+      echo "    no-matcher: エントリ ${i}（$(head -n1 <<<"$cmds" | xargs basename) …）が全 source で実行される"
       violations=$((violations + 1))
       continue
     fi
 
     # compact にマッチするか
     if [[ "compact" =~ ^($matcher)$ ]]; then
-      if [ "$has_reinject" -ne 1 ] || [ "$(printf '%s\n' "$cmds" | grep -c .)" -ne 1 ]; then
+      if [ "$has_reinject" -ne 1 ] || [ "$(grep -c . <<<"$cmds")" -ne 1 ]; then
         echo "    compact-noise: エントリ ${i}（matcher=${matcher}）が compact 時に reinject 以外を実行する"
         violations=$((violations + 1))
       fi
@@ -92,11 +92,11 @@ check() {
 
 echo "=== scenario 1: 実態の settings.json が不変条件を満たす ==="
 RESULT="$(check "$SETTINGS")"
-printf '%s\n' "$RESULT" | grep -v '^violations=' || true
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+grep -v '^violations=' <<<"$RESULT" || true
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   ok "違反なし（SessionStart $(jq '.hooks.SessionStart | length' "$SETTINGS") エントリ）"
 else
-  ng "違反あり" "$(printf '%s\n' "$RESULT" | tail -n1)"
+  ng "違反あり" "$(tail -n1 <<<"$RESULT")"
 fi
 
 echo "=== scenario 2: fixture で違反を検知できる（RED 方向の自己検証） ==="
@@ -118,7 +118,7 @@ cat > "$WORK/bad.json" <<'EOF'
 EOF
 RESULT="$(check "$WORK/bad.json")"
 for needle in 'no-matcher:' 'compact-noise:' 'reinject-on-startup:' 'missing-fork:'; do
-  if printf '%s\n' "$RESULT" | grep -qF "$needle"; then ok "検知: $needle"; else ng "検知できない: $needle" "$RESULT"; fi
+  if grep -qF "$needle" <<<"$RESULT"; then ok "検知: $needle"; else ng "検知できない: $needle" "$RESULT"; fi
 done
 
 cat > "$WORK/good.json" <<'EOF'
@@ -132,7 +132,7 @@ cat > "$WORK/good.json" <<'EOF'
 }
 EOF
 RESULT="$(check "$WORK/good.json")"
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then ok "正しい構成は誤検知しない"; else ng "正しい構成を誤検知" "$RESULT"; fi
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then ok "正しい構成は誤検知しない"; else ng "正しい構成を誤検知" "$RESULT"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

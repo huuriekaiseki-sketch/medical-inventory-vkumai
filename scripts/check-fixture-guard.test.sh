@@ -32,7 +32,7 @@ assert_eq() {
     echo "  NG: $3"; echo "      expected: $2"; echo "      actual:   $1"; fail=1; fi
 }
 assert_contains() {
-  if printf '%s' "$1" | grep -qF -- "$2"; then echo "  OK: $3"; else
+  if grep -qF -- "$2" <<<"$1"; then echo "  OK: $3"; else
     echo "  NG: $3"; echo "      expected to find: $2"; echo "      actual: $1"; fail=1; fi
 }
 
@@ -50,7 +50,7 @@ NODE
 )"
 assert_contains "$OUT" "hospital_prices: p2" "消えた行を名指し"
 assert_contains "$OUT" "price_histories: h1" "連鎖で消えた行も名指し"
-if printf '%s' "$OUT" | grep -q 'p9'; then
+if grep -q 'p9' <<<"$OUT"; then
   echo "  NG: 走行中に増えた行を違反にしている"; fail=1
 else
   echo "  OK: 走行中に増えた行は違反にしない"

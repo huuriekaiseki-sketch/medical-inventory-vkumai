@@ -43,7 +43,7 @@ OUT="$(bash "$SCRIPT" --log-file "$LOG2" --streak-threshold 5 2>&1)"
 EXIT_CODE=$?
 set -e
 assert_eq "$EXIT_CODE" "0" "閾値未満はexit 0"
-if printf '%s' "$OUT" | grep -qF "スキップ"; then
+if grep -qF "スキップ" <<<"$OUT"; then
   echo "  OK: スキップの旨が出力される"
 else
   echo "  NG: スキップの旨が出力されない (actual=$OUT)"
@@ -59,7 +59,7 @@ OUT="$(bash "$SCRIPT" --log-file "$LOG3" --streak-threshold 3 2>&1)"
 EXIT_CODE=$?
 set -e
 assert_eq "$EXIT_CODE" "1" "直近N件が連続fail_openはexit 1"
-if printf '%s' "$OUT" | grep -qF "警告"; then
+if grep -qF "警告" <<<"$OUT"; then
   echo "  OK: 警告メッセージが出力される"
 else
   echo "  NG: 警告メッセージが出力されない (actual=$OUT)"

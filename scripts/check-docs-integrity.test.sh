@@ -17,15 +17,15 @@ fail=0
 assert_ok() { echo "  OK: $1"; }
 assert_fail() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }
 assert_contains() {
-  if printf '%s\n' "$1" | grep -qF -- "$2"; then assert_ok "$3"; else assert_fail "$3" "expected: $2"; fi
+  if grep -qF -- "$2" <<<"$1"; then assert_ok "$3"; else assert_fail "$3" "expected: $2"; fi
 }
 assert_not_contains() {
-  if printf '%s\n' "$1" | grep -qF -- "$2"; then assert_fail "$3" "unexpected: $2"; else assert_ok "$3"; fi
+  if grep -qF -- "$2" <<<"$1"; then assert_fail "$3" "unexpected: $2"; else assert_ok "$3"; fi
 }
 
 echo "=== scenario 1: 実態の docs に違反が無い ==="
 if OUT="$(node "$CHECKER" 2>&1)"; then
-  assert_ok "違反なし（$(printf '%s\n' "$OUT" | tail -n1)）"
+  assert_ok "違反なし（$(tail -n1 <<<"$OUT")）"
 else
   assert_fail "違反あり" "$OUT"
 fi

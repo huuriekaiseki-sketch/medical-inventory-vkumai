@@ -144,43 +144,43 @@ printf -- 'export const meta = {}\n' > "$WORK/.claude/workflows/wf-forgotten.js"
 printf -- 'export const helper = 1\n' > "$WORK/.claude/workflows/lib/router-risk.js"
 
 OUT="$(find_uncovered "$WORK")"
-if printf '%s\n' "$OUT" | grep -q 'uncovered: agents/agent-forgotten'; then
+if grep -q 'uncovered: agents/agent-forgotten' <<<"$OUT"; then
   assert_ok "層を決めていない agent を検知"
 else
   assert_fail "未分類の agent を検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q 'uncovered: workflows/wf-forgotten'; then
+if grep -q 'uncovered: workflows/wf-forgotten' <<<"$OUT"; then
   assert_ok "層を決めていない workflow を検知"
 else
   assert_fail "未分類の workflow を検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q 'stale: agents/agent-ghost'; then
+if grep -q 'stale: agents/agent-ghost' <<<"$OUT"; then
   assert_ok "実体の無い行が表に残っているのを検知"
 else
   assert_fail "幽霊エントリを検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q 'no-reason: agents/agent-local'; then
+if grep -q 'no-reason: agents/agent-local' <<<"$OUT"; then
   assert_ok "配らない理由が空なのを検知"
 else
   assert_fail "理由なしを検知できない" "$OUT"
 fi
 # 誤検知しない側（対を置く。C-021）
-if printf '%s\n' "$OUT" | grep -q 'agents/agent-known'; then
+if grep -q 'agents/agent-known' <<<"$OUT"; then
   assert_fail "層の表にある agent を誤検知した" "$OUT"
 else
   assert_ok "表にある agent は通る"
 fi
-if printf '%s\n' "$OUT" | grep -q 'agents/agent-local（層の表'; then
+if grep -q 'agents/agent-local（層の表' <<<"$OUT"; then
   assert_fail "配らないと決めた agent を未分類と誤検知した" "$OUT"
 else
   assert_ok "配らないと決めた agent は未分類にしない"
 fi
-if printf '%s\n' "$OUT" | grep -q 'router-risk'; then
+if grep -q 'router-risk' <<<"$OUT"; then
   assert_fail "workflows/lib/ の下請けを資産と誤検知した" "$OUT"
 else
   assert_ok "workflows/lib/ の下請けは数えない"
 fi
-if printf '%s\n' "$OUT" | grep -q 'skills/'; then
+if grep -q 'skills/' <<<"$OUT"; then
   assert_fail "そろっている skill を誤検知した" "$OUT"
 else
   assert_ok "そろっている skill は通る"
@@ -199,7 +199,7 @@ cat > "$WORK2/scripts/lib/plugin-layout.json" <<'EOF'
 }
 EOF
 OUT2="$(find_uncovered "$WORK2")"
-if printf '%s\n' "$OUT2" | grep -q 'empty-scan: agents'; then
+if grep -q 'empty-scan: agents' <<<"$OUT2"; then
   assert_ok "実体を拾えないのを走査の故障として検知"
 else
   assert_fail "空振りを検知できない" "$OUT2"

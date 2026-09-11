@@ -287,10 +287,18 @@
     "scripts/rehearse-merge.test.sh": "同上（マージ予行の検査は共通側、壊し方の登録簿は導入先）",
     "scripts/lib/judge-sweep-recall.py": "記録が条件として採点器の blob ハッシュを読むだけの参照。採点器が無ければ unknown になって degrade するので、同梱は要らない（eval スクリプト自体が配布対象外）",
     "scripts/lib/judge-sweep-recall.test.sh": "同上（採点器の検査は共通側、壊し方の登録簿は導入先）",
-    "scripts/lib/gate-prompt-hash.mjs": "fault injection 訓練の鮮度 hook（共通側）が呼ぶが、走査器は導入先のもの。門の文言は `.claude/workflows/` にあり、そこを読む部品（extract-template-literal.js）ごと導入先の資産なので同梱しない。hook 側は `[ -f ]` で無ければ黙る（この仕組みを持たない導入先では版の判定だけを飛ばす）"
+    "scripts/lib/gate-prompt-hash.mjs": "fault injection 訓練の鮮度 hook（共通側）が呼ぶが、走査器は導入先のもの。門の文言は `.claude/workflows/` にあり、そこを読む部品（extract-template-literal.js）ごと導入先の資産なので同梱しない。hook 側は `[ -f ]` で無ければ黙る（この仕組みを持たない導入先では版の判定だけを飛ばす）",
+    "scripts/lib/build-plugin.mjs": "壊し方の登録簿（check-mutants.json）の CM-067 / CM-068 が対象にする。生成そのものは中心リポジトリだけが行うので配布物には同梱しない（build-plugin.sh と同じ扱い）",
+    "scripts/build-plugin.test.sh": "同上（CM-067 / CM-068 の expect）。プラグインの層の表そのものを検査するので中心リポジトリだけが持つ",
+    "scripts/lib/aidd-doctor.mjs": "壊し方の登録簿（CM-069 / CM-070）が対象にする。診断器は共通側（aidd-core）、登録簿は導入先（aidd-vkumai）。依存関係で解決されるが、走査は同じプラグイン内しか見ない",
+    "scripts/check-aidd-doctor.test.sh": "同上（CM-069 / CM-070 の expect。検査は共通側、登録簿は導入先）",
+    "scripts/check-fault-injection-drill-staleness.sh": "壊し方の登録簿（CM-072）が対象にする。hook は共通側（aidd-core）、登録簿は導入先（aidd-vkumai）",
+    "scripts/check-fault-injection-drill-staleness.test.sh": "同上（CM-071 / CM-072 の expect。検査は共通側、登録簿は導入先）",
+    "scripts/lib/generate-codex-agents.mjs": "壊し方の登録簿（CM-073）が対象にする。生成器は共通側（aidd-core）、登録簿は導入先（aidd-vkumai）",
+    "scripts/check-codex-agents-generated.test.sh": "同上（CM-073 の expect）。`.claude/agents/` と `.codex/agents/` の実物を突き合わせるので配らない（checksNotDistributed）"
   },
   "_allowUnresolvedReferencesMax": "逃がし口（同梱しない参照）の上限。放っておくと増えるので件数で見る。2026-09-11 に幽霊 15 件を消して 36 件になった。上げるときは、なぜ同梱できないかを allowUnresolvedReferences の行に書いてから上げる。",
-  "allowUnresolvedReferencesMax": 37,
+  "allowUnresolvedReferencesMax": 45,
   "checks": {
     "_comment": "検査（*.test.sh）の層。check-x.sh に対する check-x.test.sh は自動で対象と同じプラグインへ付いていくので、ここに書くのは (1) 対象スクリプトを持たない構造テスト (2) 自動判定を上書きしたいもの の 2 つだけ。上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙（高リスクパスの例・ドメイン語・スタック名）で書かれている検査で、共通側の禁止語検査に引っかかるもの。 層は 3 つある: ここ（配る）／checksNotDistributed（エンジン自体が固有で配れない）／checksSplittable（**対象・閾値だけが固有で、登録簿へ出せば配れる**＝返す当てのある借金。件数の上限を機械で見る）。",
     "check-session-start-matchers.test.sh": "aidd-core",
@@ -301,6 +309,7 @@
     "codex-config-separation.test.sh": "aidd-core",
     "codex-agents-sandbox.test.sh": "aidd-core",
     "check-agent-progress-instructions.test.sh": "aidd-vkumai",
+    "check-pipe-assertion.test.sh": "aidd-core",
     "check-rls-grant-gaps.test.sh": "aidd-vkumai",
     "check-write-path-gaps.test.sh": "aidd-vkumai",
     "check-fixture-guard.test.sh": "aidd-vkumai",

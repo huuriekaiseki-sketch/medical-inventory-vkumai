@@ -51,7 +51,7 @@ fi
 echo "=== scenario 2: ソースを触って未実行なら警告する ==="
 echo "export const a = 2" > "${WORK}/src/a.ts"
 out="$(run_suggest '{"session_id":"s2"}')"
-if printf '%s' "${out}" | grep -q "systemMessage"; then
+if grep -q "systemMessage" <<<"${out}"; then
   ok "警告する"
 else
   ng "触ったのに黙っている（Codex 側が無警告のままになる）" "${out}"
@@ -77,7 +77,7 @@ echo "=== scenario 5: 打った後にさらに触ると、また警告する ===
 # WHY: ここが**ファイル名だけを見る実装との差**。同じファイルを編集し続けても検知する
 echo "export const a = 3" > "${WORK}/src/a.ts"
 out="$(run_suggest '{"session_id":"s2"}')"
-if printf '%s' "${out}" | grep -q "systemMessage"; then
+if grep -q "systemMessage" <<<"${out}"; then
   ok "打った後の変更を見つける"
 else
   ng "同じファイルを触り続けると見逃す（内容をハッシュに入れていない疑い）" "${out}"

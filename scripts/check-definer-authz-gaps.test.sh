@@ -36,7 +36,7 @@ trap 'rm -rf "$WORK"' EXIT
 echo "=== scenario 1: 実リポジトリに違反が無い（ratchet 0） ==="
 run_scan "$REPO_ROOT/supabase/migrations"
 if [ "$SCAN_CODE" -eq 0 ]; then ok "違反 0 件"; else ng "実リポジトリで違反が出た" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "client-reachable-definer=[1-9]"; then
+if grep -q "client-reachable-definer=[1-9]" <<<"$SCAN_OUT"; then
   ok "client から呼べる SECURITY DEFINER を実際に数えている（空振りでない）"
 else
   ng "対象を 1 件も数えていない（走査が壊れている疑い）" "$SCAN_OUT"
@@ -52,7 +52,7 @@ do
   dir="$REPO_ROOT/$fx/files/supabase/migrations"
   if [ ! -d "$dir" ]; then ng "fixture が無い: $fx"; continue; fi
   run_scan "$dir"
-  if [ "$SCAN_CODE" -ne 0 ] && printf '%s' "$SCAN_OUT" | grep -q "definer-authz-gap"; then
+  if [ "$SCAN_CODE" -ne 0 ] && grep -q "definer-authz-gap" <<<"$SCAN_OUT"; then
     ok "$(basename "$fx") を検知"
   else
     ng "$(basename "$fx") を検知できない（rc=${SCAN_CODE}）" "$SCAN_OUT"
@@ -158,7 +158,7 @@ $$;
 CREATE OR REPLACE FUNCTION weird_fn() RETURNS BOOLEAN LANGUAGE sql AS 'SELECT true';
 SQL
 run_scan "$WORK/unparsable"
-if [ "$SCAN_CODE" -ne 0 ] && printf '%s' "$SCAN_OUT" | grep -q "しか解析できていない"; then
+if [ "$SCAN_CODE" -ne 0 ] && grep -q "しか解析できていない" <<<"$SCAN_OUT"; then
   ok "解析できなかった定義があれば落とす"
 else
   ng "黙って読み飛ばした（rc=${SCAN_CODE}）" "$SCAN_OUT"

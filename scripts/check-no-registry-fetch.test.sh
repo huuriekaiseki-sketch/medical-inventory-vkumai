@@ -42,8 +42,8 @@ check() {
     [ -f "$f" ] || continue
     hits="$(grep -nE '^[[:space:]]*(- )?run:.*\bnpm install\b' "$f" || true)"
     if [ -n "$hits" ]; then
-      printf '%s\n' "$hits" | sed "s#^#    npm-install: $(basename "$f"):#"
-      violations=$((violations + $(printf '%s\n' "$hits" | grep -c .)))
+      sed "s#^#    npm-install: $(basename "$f"):#" <<<"$hits"
+      violations=$((violations + $(grep -c . <<<"$hits")))
     fi
   done
 
@@ -53,8 +53,8 @@ check() {
     case "$f" in *.test.sh) continue ;; esac
     hits="$(grep -nE '(^|[;&|(`])[[:space:]]*npx[[:space:]]' "$f" | grep -vE '^[0-9]+:[[:space:]]*#' || true)"
     if [ -n "$hits" ]; then
-      printf '%s\n' "$hits" | sed "s#^#    npx: $(basename "$f"):#"
-      violations=$((violations + $(printf '%s\n' "$hits" | grep -c .)))
+      sed "s#^#    npx: $(basename "$f"):#" <<<"$hits"
+      violations=$((violations + $(grep -c . <<<"$hits")))
     fi
   done
 
@@ -63,8 +63,8 @@ check() {
     [ -f "$f" ] || continue
     hits="$(grep -nE '^[[:space:]]*version:[[:space:]]*.?latest.?[[:space:]]*$' "$f" || true)"
     if [ -n "$hits" ]; then
-      printf '%s\n' "$hits" | sed "s#^#    version-latest: $(basename "$f"):#"
-      violations=$((violations + $(printf '%s\n' "$hits" | grep -c .)))
+      sed "s#^#    version-latest: $(basename "$f"):#" <<<"$hits"
+      violations=$((violations + $(grep -c . <<<"$hits")))
     fi
   done
 
@@ -72,12 +72,12 @@ check() {
   local ts entry queue seen="" spec target
   queue="$(grep -hoE 'node [^"]*--experimental-strip-types[^"]*"[^"]+\.ts"' "$sc"/*.sh 2>/dev/null | grep -oE '"[^"]+\.ts"' | tr -d '"' | sed "s#\$SCRIPT_DIR#$sc#" | sort -u || true)"
   while [ -n "$queue" ]; do
-    entry="$(printf '%s\n' "$queue" | head -n1)"
-    queue="$(printf '%s\n' "$queue" | tail -n +2)"
+    entry="$(head -n1 <<<"$queue")"
+    queue="$(tail -n +2 <<<"$queue")"
     ts="$entry"
     [ -f "$ts" ] || ts="$REPO_ROOT/$entry"
     [ -f "$ts" ] || continue
-    printf '%s\n' "$seen" | grep -qx "$ts" && continue
+    grep -qx "$ts" <<<"$seen" && continue
     seen="$(printf '%s\n%s' "$seen" "$ts")"
     for spec in $(grep -oE "from '\.\.?/[^']+'" "$ts" | sed "s/from '//; s/'\$//"); do
       case "$spec" in
@@ -95,11 +95,11 @@ check() {
 
 echo "=== scenario 1: 実態のワークフロー・スクリプトに違反が無い ==="
 RESULT="$(check "${NRF_WORKFLOWS_DIR:-$REPO_ROOT/.github/workflows}" "${NRF_SCRIPTS_DIR:-$REPO_ROOT/scripts}")"
-printf '%s\n' "$RESULT" | grep -v '^violations=' || true
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+grep -v '^violations=' <<<"$RESULT" || true
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   assert_ok "違反なし"
 else
-  assert_fail "違反あり" "$(printf '%s\n' "$RESULT" | tail -n1)"
+  assert_fail "違反あり" "$(tail -n1 <<<"$RESULT")"
 fi
 
 echo "=== scenario 2: fixture で違反を検知できる（RED 方向の自己検証） ==="
@@ -135,16 +135,16 @@ printf "import { a } from './dep.ts'\nimport { b } from './noext'\n" > "$WORK_DI
 printf "export const a = 1\n" > "$WORK_DIR/sc/lib/dep.ts"
 RESULT="$(check "$WORK_DIR/wf" "$WORK_DIR/sc")"
 # 期待: npm install 1 + npx 2（npx -y tsx、$(npx something)）+ version: latest 1 + 拡張子なし import 1 = 5
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=5" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=5" ]; then
   assert_ok "違反 5 件をちょうど検知"
 else
   assert_fail "違反件数が期待（5）と異なる" "$RESULT"
 fi
 for needle in 'npm-install: bad.yml' 'npx: bad-hook.sh:4' 'npx: bad-hook.sh:5' 'version-latest: bad.yml' "ts-import: entry.ts"; do
-  if printf '%s\n' "$RESULT" | grep -qF "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
+  if grep -qF "$needle" <<<"$RESULT"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
 done
 for needle in 'npm ci' 'playwright' 'bad-hook.test.sh' 'PATTERN' 'other/action'; do
-  if printf '%s\n' "$RESULT" | grep -qF "$needle"; then assert_fail "誤検知: $needle"; else assert_ok "誤検知しない: $needle"; fi
+  if grep -qF "$needle" <<<"$RESULT"; then assert_fail "誤検知: $needle"; else assert_ok "誤検知しない: $needle"; fi
 done
 
 echo "=== scenario 3: Supabase CLI の版が .supabase-version の 1 か所で決まっている ==="
@@ -155,7 +155,7 @@ else
   assert_fail ".supabase-version が無い（版の正本が不在）"
 fi
 PINNED="$(head -n1 "$PIN_FILE" 2>/dev/null || true)"
-if printf '%s' "$PINNED" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+if grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' <<<"$PINNED"; then
   assert_ok "版が固定の数字（${PINNED}）"
 else
   assert_fail "版が固定の数字でない" "actual=$PINNED"
@@ -163,7 +163,7 @@ fi
 # WHY(空振り防止): setup-cli を使うファイルが 0 件でもこのループは黙って通ってしまう。
 #      「1 本以上ある」ことを先に確かめてから、その全部が正本を読んでいるかを見る。
 SETUP_FILES="$(grep -rlF 'supabase/setup-cli' "$REPO_ROOT/.github/workflows" || true)"
-SETUP_COUNT="$(printf '%s\n' "$SETUP_FILES" | grep -c . || true)"
+SETUP_COUNT="$(grep -c . <<<"$SETUP_FILES" || true)"
 if [ "$SETUP_COUNT" -gt 0 ]; then
   assert_ok "supabase/setup-cli を使うワークフローが $SETUP_COUNT 本ある（検査が空振りしていない）"
 else

@@ -160,17 +160,17 @@ CREATE TRIGGER some_log_no_update_delete
   FOR EACH ROW EXECUTE FUNCTION some_log_immutable();
 EOF
 BAD="$(find_unindexed_log_columns "$WORK/bad")"
-if printf '%s\n' "$BAD" | grep -qx 'some_log.occurred_at'; then
+if grep -qx 'some_log.occurred_at' <<<"$BAD"; then
   assert_ok "新しい順の索引が無いことを検知"
 else
   assert_fail "occurred_at の索引欠けを検知できない" "$BAD"
 fi
-if printf '%s\n' "$BAD" | grep -qx 'some_log.actor_id'; then
+if grep -qx 'some_log.actor_id' <<<"$BAD"; then
   assert_ok "人で絞る索引が無いことを検知"
 else
   assert_fail "actor_id の索引欠けを検知できない" "$BAD"
 fi
-if printf '%s\n' "$BAD" | grep -qx 'some_log.note'; then
+if grep -qx 'some_log.note' <<<"$BAD"; then
   assert_fail "読み方の決まっていない列を誤検知した" "$BAD"
 else
   assert_ok "読み方の決まっていない列は対象外"
@@ -223,7 +223,7 @@ cat > "$WORK/later/0002_add_actor.sql" <<'EOF'
 ALTER TABLE some_log ADD COLUMN actor_id UUID;
 EOF
 LATER="$(find_unindexed_log_columns "$WORK/later")"
-if printf '%s\n' "$LATER" | grep -qx 'some_log.actor_id'; then
+if grep -qx 'some_log.actor_id' <<<"$LATER"; then
   assert_ok "後から足した列の索引欠けも検知する"
 else
   assert_fail "ALTER TABLE ADD COLUMN で足した列を見ていない" "$LATER"

@@ -71,12 +71,12 @@ printf 'leaked: %s\n' "$LEAK_EMAIL" > "$WORK_DIR/leak.md"
 printf 'signed-off: noreply@anthropic.com\n' > "$WORK_DIR/sig.md"
 git -C "$WORK_DIR" add -A
 FIX_HITS="$(scan_emails "$WORK_DIR")"
-if printf '%s\n' "$FIX_HITS" | grep -q "leak.md:1:$LEAK_EMAIL"; then
+if grep -q "leak.md:1:$LEAK_EMAIL" <<<"$FIX_HITS"; then
   assert_ok "gmail.com を検知"
 else
   assert_fail "gmail.com を検知できない" "$FIX_HITS"
 fi
-if printf '%s\n' "$FIX_HITS" | grep -q -e 'ok.md' -e 'sig.md'; then
+if grep -q -e 'ok.md' -e 'sig.md' <<<"$FIX_HITS"; then
   assert_fail "許可ドメインを誤検知" "$FIX_HITS"
 else
   assert_ok "example.com / anthropic.com は許可"

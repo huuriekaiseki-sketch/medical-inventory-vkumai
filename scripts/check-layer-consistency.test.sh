@@ -135,14 +135,14 @@ cat > "$WORK/map.json" <<'JSON'
 }
 JSON
 FOUT="$(node "$COMPARER" "$WORK/migrations" "$WORK/api.json" "$WORK/map.json" 2>&1)"
-check() { if printf '%s' "$FOUT" | grep -q "$1"; then assert_ok "$2"; else assert_fail "$2" "$FOUT"; fi; }
+check() { if grep -q "$1" <<<"$FOUT"; then assert_ok "$2"; else assert_fail "$2" "$FOUT"; fi; }
 check 'notes.amount' '規約で導いた先が API に無いことを検知'
 check 'notes.looser' '値の食い違い（DB 50 / API 999）を検知'
 check 'notes.kind' '固定語の食い違い（DB 2 語 / API 1 語）を検知'
 check 'notes.forgotten' '分類も規約も無い列を検知'
 check 'notes.gone' '陳腐化した行を検知'
-if printf '%s' "$FOUT" | grep -q 'notes.hidden'; then assert_fail "serverOnly を違反にした" "$FOUT"; else assert_ok "serverOnly は誤検知しない"; fi
-if printf '%s' "$FOUT" | grep -q 'notes.body'; then assert_fail "一致している列を違反にした" "$FOUT"; else assert_ok "一致は誤検知しない"; fi
+if grep -q 'notes.hidden' <<<"$FOUT"; then assert_fail "serverOnly を違反にした" "$FOUT"; else assert_ok "serverOnly は誤検知しない"; fi
+if grep -q 'notes.body' <<<"$FOUT"; then assert_fail "一致している列を違反にした" "$FOUT"; else assert_ok "一致は誤検知しない"; fi
 
 echo "=== scenario 4: 期限切れの例外を検知する ==="
 cat > "$WORK/map-expired.json" <<'JSON'
@@ -158,8 +158,8 @@ cat > "$WORK/map-expired.json" <<'JSON'
 }
 JSON
 EOUT="$(node "$COMPARER" "$WORK/migrations" "$WORK/api.json" "$WORK/map-expired.json" 2>&1)"
-if printf '%s' "$EOUT" | grep -q 'expired.*notes.amount'; then assert_ok "期限切れの例外を検知"; else assert_fail "期限切れを検知できない" "$EOUT"; fi
-if printf '%s' "$EOUT" | grep -q 'notes.kind'; then assert_fail "期限内の例外を違反にした" "$EOUT"; else assert_ok "期限内の例外は通す"; fi
+if grep -q 'expired.*notes.amount' <<<"$EOUT"; then assert_ok "期限切れの例外を検知"; else assert_fail "期限切れを検知できない" "$EOUT"; fi
+if grep -q 'notes.kind' <<<"$EOUT"; then assert_fail "期限内の例外を違反にした" "$EOUT"; else assert_ok "期限内の例外は通す"; fi
 
 cat > "$WORK/map-noreason.json" <<'JSON'
 {
@@ -174,7 +174,7 @@ cat > "$WORK/map-noreason.json" <<'JSON'
 }
 JSON
 NOUT="$(node "$COMPARER" "$WORK/migrations" "$WORK/api.json" "$WORK/map-noreason.json" 2>&1)"
-if printf '%s' "$NOUT" | grep -q 'no-expiry.*notes.amount'; then assert_ok "期限の無い例外を検知"; else assert_fail "期限なしを検知できない" "$NOUT"; fi
+if grep -q 'no-expiry.*notes.amount' <<<"$NOUT"; then assert_ok "期限の無い例外を検知"; else assert_fail "期限なしを検知できない" "$NOUT"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

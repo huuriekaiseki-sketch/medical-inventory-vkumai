@@ -24,12 +24,12 @@ SCRIPT="$SCRIPT_DIR/run-integration-tests.sh"
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then echo "  OK: $label"; else
+  if grep -qF -- "$needle" <<<"$haystack"; then echo "  OK: $label"; else
     echo "  NG: $label"; echo "      expected to find: $needle"; echo "      actual: $haystack"; fail=1; fi
 }
 assert_not_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then
+  if grep -qF -- "$needle" <<<"$haystack"; then
     echo "  NG: $label"; echo "      unexpected: $needle"; echo "      actual: $haystack"; fail=1
   else echo "  OK: $label"; fi
 }

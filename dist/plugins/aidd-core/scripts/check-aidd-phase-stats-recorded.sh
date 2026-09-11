@@ -104,10 +104,10 @@ shopt -s nullglob
 for wf_file in "$WORKFLOWS_DIR"/wf_*.json; do
   [ -f "$wf_file" ] || continue
   MATCHES="$(jq -r '[.result | .. | strings] | .[]' "$wf_file" 2>/dev/null || true)"
-  if printf '%s\n' "$MATCHES" | grep -q '^phase1'; then
+  if grep -q '^phase1' <<<"$MATCHES"; then
     PHASE1_SEEN=1
   fi
-  if printf '%s\n' "$MATCHES" | grep -q '^phase2$'; then
+  if grep -q '^phase2$' <<<"$MATCHES"; then
     PHASE2_SEEN=1
   fi
 done

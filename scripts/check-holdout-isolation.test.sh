@@ -35,12 +35,12 @@ trap 'rm -rf "$WORK"' EXIT
 echo "=== scenario 1: 実態に違反が無い（ratchet 0） ==="
 ALLOW_ZERO= run_scan "$REPO_ROOT/scripts/eval-fixtures" "$REPO_ROOT/.claude"
 if [ "$SCAN_CODE" -eq 0 ]; then ok "違反 0 件"; else ng "実態で違反が出た" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "holdout-sets=[1-9]"; then
+if grep -q "holdout-sets=[1-9]" <<<"$SCAN_OUT"; then
   ok "held-out セットを実際に見つけている（空振りでない）"
 else
   ng "held-out セットが 0 件" "$SCAN_OUT"
 fi
-if printf '%s' "$SCAN_OUT" | grep -q "watched-names=[1-9]"; then
+if grep -q "watched-names=[1-9]" <<<"$SCAN_OUT"; then
   ok "見張る名前を実際に取り出している"
 else
   ng "見張る名前が 0 件（名前の抽出が壊れている疑い）" "$SCAN_OUT"
@@ -71,7 +71,7 @@ UNMARKED="$WORK/unmarked"
 mk_case "$UNMARKED" "sweep-x-holdout" "case-1-secret-shape" '{"expectedFilePathContains":"sterilization-record.ts","expectedKeywords":["y"]}' "sterilization-record.ts"
 ALLOW_ZERO= run_scan "$UNMARKED" "$WORK/claude-empty"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "印の付け忘れで落ちる"; else ng "印が無くても通した" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "holdout-unmarked"; then
+if grep -q "holdout-unmarked" <<<"$SCAN_OUT"; then
   ok "どの case かを名指しする"
 else
   ng "付け忘れを名指ししない" "$SCAN_OUT"
@@ -83,7 +83,7 @@ mk_case "$MISPLACED" "sweep-x" "case-1" '{"heldOut":true,"expectedFilePathContai
 mk_case "$MISPLACED" "sweep-x-holdout" "case-1-secret-shape" '{"heldOut":true,"expectedFilePathContains":"sterilization-record.ts","expectedKeywords":["y"]}' "sterilization-record.ts"
 ALLOW_ZERO= run_scan "$MISPLACED" "$WORK/claude-empty"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "普通のセットの印で落ちる"; else ng "付け間違いを通した" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "holdout-misplaced"; then
+if grep -q "holdout-misplaced" <<<"$SCAN_OUT"; then
   ok "付け間違いを名指しする"
 else
   ng "付け間違いを名指ししない" "$SCAN_OUT"
@@ -100,7 +100,7 @@ name: sweep-x
 MD
 ALLOW_ZERO= run_scan "$GOOD" "$LEAKY_CLAUDE"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "プロンプトへの漏れで落ちる"; else ng "漏れを通した" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "holdout-leaked"; then
+if grep -q "holdout-leaked" <<<"$SCAN_OUT"; then
   ok "どのファイルが触れているかを名指しする"
 else
   ng "漏れを名指ししない" "$SCAN_OUT"
@@ -123,7 +123,7 @@ EMPTY="$WORK/empty"
 mkdir -p "$EMPTY"
 ALLOW_ZERO= run_scan "$EMPTY" "$WORK/claude-empty"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "セットが 0 件なら落ちる"; else ng "0 件で通した" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "1 つも見つけられなかった"; then
+if grep -q "1 つも見つけられなかった" <<<"$SCAN_OUT"; then
   ok "走査が壊れていると言う"
 else
   ng "空振りの理由を出さない" "$SCAN_OUT"

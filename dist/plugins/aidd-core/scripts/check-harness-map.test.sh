@@ -30,7 +30,7 @@ assert_eq() {
     echo "  NG: $3"; echo "      expected: $2"; echo "      actual:   $1"; fail=1; fi
 }
 assert_contains() {
-  if printf '%s' "$1" | grep -qF -- "$2"; then echo "  OK: $3"; else
+  if grep -qF -- "$2" <<<"$1"; then echo "  OK: $3"; else
     echo "  NG: $3"; echo "      expected to find: $2"; echo "      actual: $1"; fail=1; fi
 }
 

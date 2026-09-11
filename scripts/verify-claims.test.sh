@@ -45,7 +45,7 @@ chmod +x "$MOCK_VERIFIER"
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then
+  if grep -qF -- "$needle" <<<"$haystack"; then
     echo "  OK: $label"
   else
     echo "  NG: $label"
@@ -145,7 +145,7 @@ run_hook "s5"   # retry 2 (diff不変)
 run_hook "s5"   # retry 3 (diff不変)
 run_hook "s5"   # retry 4 → 上限超過
 assert_eq "$EXIT_CODE" "2" "上限超過後もブロック継続"
-if printf '%s' "$STDERR_OUT" | grep -qF -- "touch"; then
+if grep -qF -- "touch" <<<"$STDERR_OUT"; then
   echo "  NG: ブロックメッセージにtouchという語を含まないこと"
   fail=1
 else

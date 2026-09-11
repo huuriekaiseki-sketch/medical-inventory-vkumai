@@ -13,7 +13,7 @@ SETTINGS="$SCRIPT_DIR/../.claude/settings.json"
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then
+  if grep -qF -- "$needle" <<<"$haystack"; then
     echo "  OK: $label"
   else
     echo "  NG: $label"
@@ -74,7 +74,7 @@ assert_empty "$OUT" "出力が空である"
 
 echo "=== scenario 6: 実態の docs/agents/access-review-runbook.md から日付を読める（書式の回帰） ==="
 OUT="$(cd "$SCRIPT_DIR/.." && bash "$SCRIPT")"
-if printf '%s' "$OUT" | grep -qF "読み取れませんでした"; then
+if grep -qF "読み取れませんでした" <<<"$OUT"; then
   echo "  NG: 実態のファイルの「## 次回実施予定日」から日付を読み取れない"; fail=1
 else
   echo "  OK: 実態のファイルの書式は読み取れる（期限前なら沈黙、期限後なら超過警告）"

@@ -54,7 +54,7 @@ JSON
 echo "=== scenario 1: 実コードが上限以内で、理由もそろっている（ratchet） ==="
 run_scan "src,supabase,e2e" "$REPO_ROOT/scripts/lib/exemption-budget.json"
 if [ "$SCAN_CODE" -eq 0 ]; then ok "違反 0 件"; else ng "実コードで違反が出た" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "files=[1-9]"; then
+if grep -q "files=[1-9]" <<<"$SCAN_OUT"; then
   ok "ファイルを実際に走査している（空振りでない）"
 else
   ng "走査したファイルが 0 件" "$SCAN_OUT"
@@ -69,7 +69,7 @@ export const x: any = 1
 TS
 run_scan "$WORK/over" "$BUDGET_ZERO"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "上限 0 に対し 1 件で落ちる"; else ng "上限を超えても通した" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "over-budget"; then
+if grep -q "over-budget" <<<"$SCAN_OUT"; then
   ok "どの印が超えたかを名指しする"
 else
   ng "超えた印を名指ししない" "$SCAN_OUT"
@@ -86,7 +86,7 @@ export const y = a
 TS
 run_scan "$WORK/noreason" "$REPO_ROOT/scripts/lib/exemption-budget.json"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "理由が空なら落ちる"; else ng "理由なしで通した" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "missing-reason"; then
+if grep -q "missing-reason" <<<"$SCAN_OUT"; then
   ok "どこが理由なしかを名指しする"
 else
   ng "理由なしを名指ししない" "$SCAN_OUT"
@@ -121,7 +121,7 @@ cat > "$PARTIAL" <<'JSON'
 JSON
 run_scan "$WORK/prevline" "$PARTIAL"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "上限の書き忘れで落ちる"; else ng "上限が無くても通した" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "missing-budget"; then
+if grep -q "missing-budget" <<<"$SCAN_OUT"; then
   ok "どの印の上限が無いかを名指しする"
 else
   ng "上限の欠落を名指ししない" "$SCAN_OUT"
@@ -132,7 +132,7 @@ EMPTY="$WORK/empty"
 mkdir -p "$EMPTY"
 run_scan "$EMPTY" "$REPO_ROOT/scripts/lib/exemption-budget.json"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "ファイルが 0 件なら落ちる"; else ng "0 件で通した" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "1 つも見つけられなかった"; then
+if grep -q "1 つも見つけられなかった" <<<"$SCAN_OUT"; then
   ok "走査が壊れていると言う"
 else
   ng "空振りの理由を出さない" "$SCAN_OUT"

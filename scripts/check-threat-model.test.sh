@@ -53,8 +53,8 @@ check_model() {
   # (a) 脅威モデルが参照する ID はカタログに実在する
   for ref in $(grep -oE '[PI]-[0-9]{3}' "$model" | sort -u); do
     case "$ref" in
-      P-*) printf '%s\n' "$p_ids" | grep -qx "$ref" || { echo "    stale: [$ref] 約束カタログに無い ID を参照"; violations=$((violations+1)); } ;;
-      I-*) printf '%s\n' "$i_ids" | grep -qx "$ref" || { echo "    stale: [$ref] 不変条件カタログに無い ID を参照"; violations=$((violations+1)); } ;;
+      P-*) grep -qx "$ref" <<<"$p_ids" || { echo "    stale: [$ref] 約束カタログに無い ID を参照"; violations=$((violations+1)); } ;;
+      I-*) grep -qx "$ref" <<<"$i_ids" || { echo "    stale: [$ref] 不変条件カタログに無い ID を参照"; violations=$((violations+1)); } ;;
     esac
   done
 
@@ -73,11 +73,11 @@ check_model() {
       violations=$((violations+1))
       continue
     fi
-    if ! printf '%s' "$id" | grep -qE '^T-[0-9]{3}$'; then
+    if ! grep -qE '^T-[0-9]{3}$' <<<"$id"; then
       echo "    id: [$id] ID が T-3桁でない"
       violations=$((violations+1))
     fi
-    if printf '%s\n' "$seen" | grep -qx "$id"; then
+    if grep -qx "$id" <<<"$seen"; then
       echo "    id: [$id] ID が重複"
       violations=$((violations+1))
     fi
@@ -88,13 +88,13 @@ check_model() {
       守られている|一部|未) ;;
       *) echo "    status: [$id] 状態が3語以外: '$status'"; violations=$((violations+1)) ;;
     esac
-    if [ "$status" = "未" ] && ! printf '%s' "$tests" | grep -qE '#757-[0-9]+'; then
+    if [ "$status" = "未" ] && ! grep -qE '#757-[0-9]+' <<<"$tests"; then
       echo "    plan: [$id] 未 なのに #757-N が無い"
       violations=$((violations+1))
     fi
     if [ "$status" = "守られている" ]; then
       hit=0
-      printf '%s' "$tests" | grep -qE '[PI]-[0-9]{3}' && hit=1
+      grep -qE '[PI]-[0-9]{3}' <<<"$tests" && hit=1
       if [ "$hit" -eq 0 ]; then
         while IFS= read -r kind; do
           [ -n "$kind" ] || continue
@@ -118,7 +118,7 @@ if [ "$ROWS" -ge 1 ]; then assert_ok "脅威 $ROWS 行"; else assert_fail "脅�
 
 echo "=== scenario 2: 実態の脅威モデルとカタログに違反が無い ==="
 RESULT="$(check_model "$MODEL" "$PROMISES" "$INVARIANTS" "$MATRIX")"
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   assert_ok "違反なし"
 else
   assert_fail "違反あり" "$RESULT"
@@ -157,7 +157,7 @@ EOF
 RESULT="$(check_model "$WORK/model.md" "$WORK/promises.md" "$WORK/invariants.md" "$WORK/matrix.md")"
 # 期待: stale P-999 / uncovered P-901 / plan T-903 / evidence T-904 / status T-905 / 重複 T-900 / 桁 T-12 / 列ずれ T-906 = 8
 EXPECTED=8
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
   assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
@@ -165,9 +165,9 @@ fi
 for needle in \
   'stale: \[P-999\]' 'uncovered: \[P-901\]' 'plan: \[T-903\]' 'evidence: \[T-904\]' \
   'status: \[T-905\]' 'id: \[T-900\] ID が重複' 'id: \[T-12\]' 'columns: \[T-906\]'; do
-  if printf '%s\n' "$RESULT" | grep -qE "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
+  if grep -qE "$needle" <<<"$RESULT"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
 done
-if printf '%s\n' "$RESULT" | grep -q 'uncovered: \[I-900\]'; then assert_fail "紐づいている I-900 を uncovered と誤検知"; else assert_ok "紐づいている ID は uncovered にしない"; fi
+if grep -q 'uncovered: \[I-900\]' <<<"$RESULT"; then assert_fail "紐づいている I-900 を uncovered と誤検知"; else assert_ok "紐づいている ID は uncovered にしない"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

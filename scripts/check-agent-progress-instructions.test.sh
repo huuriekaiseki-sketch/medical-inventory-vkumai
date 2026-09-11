@@ -187,38 +187,38 @@ printf -- '---\nname: agent-unlisted\ntools: Read, Bash\n---\nscripts/log-agent-
 printf -- '---\nname: agent-writer\ntools: Read, Edit, Write, Bash\n---\nscripts/log-agent-progress.sh を呼ぶ\n' > "$WORK/.claude/agents/agent-writer.md"
 
 OUT="$(find_mismatches "$WORK")"
-if printf '%s\n' "$OUT" | grep -q 'missing-md: agent-gone'; then
+if grep -q 'missing-md: agent-gone' <<<"$OUT"; then
   assert_ok "一覧にあるが定義が無いのを検知"
 else
   assert_fail "定義の欠落を検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q 'no-bash: agent-no-bash'; then
+if grep -q 'no-bash: agent-no-bash' <<<"$OUT"; then
   assert_ok "Bash が無く構造的に呼べないのを検知"
 else
   assert_fail "Bash の欠落を検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q 'no-instruction: agent-no-instruction'; then
+if grep -q 'no-instruction: agent-no-instruction' <<<"$OUT"; then
   assert_ok "呼び出し指示が無いのを検知"
 else
   assert_fail "指示の欠落を検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q 'not-listed: agent-unlisted'; then
+if grep -q 'not-listed: agent-unlisted' <<<"$OUT"; then
   assert_ok "指示を持つのに一覧に無いのを検知（逆向き）"
 else
   assert_fail "逆向きを検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q 'not-readonly-guarded: agent-unlisted'; then
+if grep -q 'not-readonly-guarded: agent-unlisted' <<<"$OUT"; then
   assert_ok "読み取り専用なのに Bash の deny 対象でないのを検知"
 else
   assert_fail "deny 対象の漏れを検知できない" "$OUT"
 fi
 # 誤検知しない側（対を置く。C-021）
-if printf '%s\n' "$OUT" | grep -q 'agent-ok'; then
+if grep -q 'agent-ok' <<<"$OUT"; then
   assert_fail "そろっている agent を誤検知した" "$OUT"
 else
   assert_ok "そろっている agent は通る"
 fi
-if printf '%s\n' "$OUT" | grep -q 'not-readonly-guarded: agent-writer'; then
+if grep -q 'not-readonly-guarded: agent-writer' <<<"$OUT"; then
   assert_fail "書き込みツールを持つ agent を deny 対象漏れと誤検知した" "$OUT"
 else
   assert_ok "書き込みツールを持つ agent は deny 対象に入れない"
@@ -243,12 +243,12 @@ printf -- '---\nname: agent-ok\ntools: Read, Bash\n---\nscripts/log-agent-progre
 printf -- '---\nname: agent-extra\ntools: Read, Bash\n---\nscripts/log-agent-progress.sh を呼ぶ\n' > "$WORK2/.claude/agents/agent-extra.md"
 
 OUT2="$(find_mismatches "$WORK2")"
-if printf '%s\n' "$OUT2" | grep -q 'list-drift: 一覧の複製が食い違う（expectation=\[agent-extra,agent-ok\] phase2='; then
+if grep -q 'list-drift: 一覧の複製が食い違う（expectation=\[agent-extra,agent-ok\] phase2=' <<<"$OUT2"; then
   assert_ok "Workflow 側の複製のずれを検知"
 else
   assert_fail "Workflow 側の複製のずれを検知できない" "$OUT2"
 fi
-if printf '%s\n' "$OUT2" | grep -q 'canonical-event=\[agent-extra,agent-ghost,agent-ok\]'; then
+if grep -q 'canonical-event=\[agent-extra,agent-ghost,agent-ok\]' <<<"$OUT2"; then
   assert_ok "TS 側（canonical-event.ts）の複製のずれも検知"
 else
   assert_fail "TS 側の複製のずれを検知できない" "$OUT2"
@@ -260,7 +260,7 @@ mkdir -p "$WORK3/.claude/workflows/lib" "$WORK3/.claude/agents"
 printf -- 'export function isProgressLoggableAgentType() { return false }\n' > "$WORK3/.claude/workflows/lib/agent-progress-expectation.js"
 printf -- '---\nname: agent-ok\ntools: Read, Bash\n---\n本文\n' > "$WORK3/.claude/agents/agent-ok.md"
 OUT3="$(find_mismatches "$WORK3")"
-if printf '%s\n' "$OUT3" | grep -q 'parse-failed:'; then
+if grep -q 'parse-failed:' <<<"$OUT3"; then
   assert_ok "一覧を読めないのを違反として扱う"
 else
   assert_fail "読めないのを黙って通した" "$OUT3"
@@ -286,7 +286,7 @@ cat > "$WORK5/aidd.config.json" <<'EOF'
 EOF
 printf -- '---\nname: agent-ro\ntools: Read, Bash\n---\n本文\n' > "$WORK5/.claude/agents/agent-ro.md"
 OUT5="$(find_mismatches "$WORK5")"
-if printf '%s\n' "$OUT5" | grep -q 'not-readonly-guarded: agent-ro'; then
+if grep -q 'not-readonly-guarded: agent-ro' <<<"$OUT5"; then
   assert_ok "一覧が無くても deny 対象の漏れは見る"
 else
   assert_fail "一覧が無いと丸ごと降りている（配った先で何も見ない検査になる）" "$OUT5"

@@ -53,8 +53,8 @@ for pattern in ("scripts/**/*.sh", ".claude/**/*.sh"):
 print(f"__COUNT__ {count}")
 PY
 )"
-COUNT="$(printf '%s\n' "$HITS" | sed -n 's/^__COUNT__ //p')"
-LIST="$(printf '%s\n' "$HITS" | grep -v '^__COUNT__' || true)"
+COUNT="$(sed -n 's/^__COUNT__ //p' <<<"$HITS")"
+LIST="$(grep -v '^__COUNT__' <<<"$HITS" || true)"
 if [ "${COUNT:-0}" -eq 0 ]; then
   ok "既定値が { で始まる展開は 0 箇所"
 else

@@ -58,7 +58,7 @@ git -C "$FX" checkout -q main
 echo "=== scenario 1: 衝突しない 2 本は OK ==="
 OUT="$(node "$ENGINE" --repo "$FX" --base main --branches feat/a,feat/c 2>&1)"
 RC=$?
-if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q 'OK      feat/a' && printf '%s' "$OUT" | grep -q 'OK      feat/c'; then
+if [ "$RC" -eq 0 ] && grep -q 'OK      feat/a' <<<"$OUT" && grep -q 'OK      feat/c' <<<"$OUT"; then
   assert_ok "2 本とも OK・終了コード 0"
 else
   assert_fail "衝突しない組を OK と報告しない（rc=${RC}）" "$OUT"
@@ -67,12 +67,12 @@ fi
 echo "=== scenario 2: 同じ行を変える 2 本は衝突 ==="
 OUT="$(node "$ENGINE" --repo "$FX" --base main --branches feat/a,feat/b 2>&1)"
 RC=$?
-if [ "$RC" -eq 1 ] && printf '%s' "$OUT" | grep -q '衝突    feat/b'; then
+if [ "$RC" -eq 1 ] && grep -q '衝突    feat/b' <<<"$OUT"; then
   assert_ok "衝突を検知・終了コード 1"
 else
   assert_fail "衝突を検知できない（rc=${RC}）" "$OUT"
 fi
-if printf '%s' "$OUT" | grep -q 'shared.md'; then
+if grep -q 'shared.md' <<<"$OUT"; then
   assert_ok "衝突したファイル名を出す"
 else
   assert_fail "ファイル名を出さない" "$OUT"
@@ -93,7 +93,7 @@ fi
 
 echo "=== scenario 4: 無いブランチは飛ばす ==="
 OUT="$(node "$ENGINE" --repo "$FX" --base main --branches feat/a,feat/gone 2>&1)"
-if printf '%s' "$OUT" | grep -q '無し    feat/gone'; then
+if grep -q '無し    feat/gone' <<<"$OUT"; then
   assert_ok "無いブランチを「無し」と報告"
 else
   assert_fail "無いブランチで落ちる" "$OUT"
@@ -105,10 +105,10 @@ echo "=== scenario 5: 実態の順番ファイルで動く ==="
 #      **どちらの答え方でも「答えている」ことを確かめる**形にする。
 #      実リポジトリの起点の進み具合に依存しない（依存させると、GitHub 復旧の前後で結果が変わる）。
 OUT="$(bash "$SCRIPT_DIR/rehearse-merge.sh" --json 2>&1)"
-if printf '%s' "$OUT" | grep -q '"conflictCount"' || printf '%s' "$OUT" | grep -q '"staleBase"'; then
+if grep -q '"conflictCount"' <<<"$OUT" || grep -q '"staleBase"' <<<"$OUT"; then
   assert_ok "順番ファイルを読んで、合否か「判定できない」かのどちらかを機械可読で出す"
 else
-  assert_fail "順番ファイルで動かない" "$(printf '%s' "$OUT" | head -5)"
+  assert_fail "順番ファイルで動かない" "$(head -5 <<<"$OUT")"
 fi
 
 echo "=== scenario 6: 起点が遅れていたら、合否を出さずに止まる ==="
@@ -142,12 +142,12 @@ if [ "$RC" -eq 3 ]; then
 else
   assert_fail "遅れた起点でも合否を出してしまう（rc=${RC}）" "$OUT"
 fi
-if printf '%s' "$OUT" | grep -q '起点が遅れています'; then
+if grep -q '起点が遅れています' <<<"$OUT"; then
   assert_ok "何が起きたかを言う"
 else
   assert_fail "理由を言わない" "$OUT"
 fi
-if printf '%s' "$OUT" | grep -q -- '--base main'; then
+if grep -q -- '--base main' <<<"$OUT"; then
   assert_ok "どうすればよいかを言う"
 else
   assert_fail "直し方を言わない" "$OUT"
@@ -156,7 +156,7 @@ fi
 # 対照: 実際に積む先を起点にすれば、ふつうに合否が出る
 OUT="$(node "$ENGINE" --repo "$FX2" --base main --branches feat/x 2>&1)"
 RC=$?
-if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q 'OK      feat/x'; then
+if [ "$RC" -eq 0 ] && grep -q 'OK      feat/x' <<<"$OUT"; then
   assert_ok "実際に積む先を起点にすれば合否が出る（対照）"
 else
   assert_fail "正しい起点でも動かない（rc=${RC}）" "$OUT"
@@ -165,7 +165,7 @@ fi
 # 対照: 敢えて遅れた起点で測る逃げ道は残す
 OUT="$(node "$ENGINE" --repo "$FX2" --base frozen --branches feat/x --allow-stale-base 2>&1)"
 RC=$?
-if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q 'OK      feat/x'; then
+if [ "$RC" -eq 0 ] && grep -q 'OK      feat/x' <<<"$OUT"; then
   assert_ok "--allow-stale-base なら測れる（対照）"
 else
   assert_fail "逃げ道が効かない（rc=${RC}）" "$OUT"
@@ -173,7 +173,7 @@ fi
 
 # 機械可読でも「測っていない」と言う
 OUT="$(node "$ENGINE" --repo "$FX2" --base frozen --branches feat/x --json 2>&1)"
-if printf '%s' "$OUT" | grep -q '"measured": false'; then
+if grep -q '"measured": false' <<<"$OUT"; then
   assert_ok "JSON でも測っていないと言う（0 件と言わない）"
 else
   assert_fail "JSON が測ったように見える" "$OUT"
@@ -190,7 +190,7 @@ if [ "$RC" -ne 0 ]; then
 else
   assert_fail "空の順番を合格として通した" "$OUT"
 fi
-if printf '%s' "$OUT" | grep -q '測る対象が 1 本も無い'; then
+if grep -q '測る対象が 1 本も無い' <<<"$OUT"; then
   assert_ok "空であることを名指しする"
 else
   assert_fail "空だと言わない" "$OUT"

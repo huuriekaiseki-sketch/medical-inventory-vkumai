@@ -101,7 +101,7 @@ run_check() {
   fi
   # 本物のgap（出力に hasGap:true がある）と、npx/jq等の実行基盤エラー（gap有無を判定
   # できていない）を区別する。同一文言に丸めると原因調査の初手を誤らせるため（レビュー指摘）
-  if printf '%s' "$out" | grep -qF '"hasGap":true'; then
+  if grep -qF '"hasGap":true' <<<"$out"; then
     GAP_WARNINGS="${GAP_WARNINGS}
 - ${label}: ${out}"
   else

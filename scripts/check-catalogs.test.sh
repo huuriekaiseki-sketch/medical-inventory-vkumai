@@ -31,7 +31,7 @@ assert_fail() {
 
 echo "=== scenario 1: 登録簿の全ルールブックに違反が無い ==="
 OUT="$(node "$ENGINE" "$REGISTRY" --root "$REPO_ROOT")"
-LAST="$(printf '%s\n' "$OUT" | tail -n1)"
+LAST="$(tail -n1 <<<"$OUT")"
 COUNT="$(node -e '
 const fs = require("fs")
 const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
@@ -91,9 +91,9 @@ for needle in \
   'band: \[Z-030\]' \
   'columns: \[Z-007\]' \
 ; do
-  if printf '%s\n' "$OUT" | grep -qE "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle" "$OUT"; fi
+  if grep -qE "$needle" <<<"$OUT"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle" "$OUT"; fi
 done
-if printf '%s\n' "$OUT" | grep -q 'Z-002'; then
+if grep -q 'Z-002' <<<"$OUT"; then
   assert_fail "計画番号がある行を誤検知" "$OUT"
 else
   assert_ok "計画番号がある行は誤検知しない"
@@ -112,7 +112,7 @@ cat > "$WORK/good.md" <<'EOF'
 表の形（列・ID・状態の語彙）しか見ないので、書かれている中身が正しいかは見ない。
 EOF
 OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/good.md" --root "$REPO_ROOT")"
-if [ "$(printf '%s\n' "$OUT" | tail -n1)" = "violations=0" ]; then
+if [ "$(tail -n1 <<<"$OUT")" = "violations=0" ]; then
   assert_ok "誤検知なし"
 else
   assert_fail "正しい fixture を違反にした" "$OUT"
@@ -142,12 +142,12 @@ cat > "$WORK/mixed.md" <<'EOF'
 EOF
 SPEC_BANDS='{"id":"fixture","idPrefix":"Z","columns":4,"evidenceColumn":3,"statusColumn":4,"states":["済み","計画","対象外"],"evidenceRequiredStates":["済み"],"idBands":[0,60],"limits":"fixture 用。表の形しか見ないので中身の妥当性は見ない"}'
 OUT="$(node "$ENGINE" --spec "$SPEC_BANDS" --file "$WORK/mixed.md" --root "$REPO_ROOT")"
-if printf '%s\n' "$OUT" | grep -q '節「状態遷移」に帯が 2 つ混ざっている'; then
+if grep -q '節「状態遷移」に帯が 2 つ混ざっている' <<<"$OUT"; then
   assert_ok "節に別の帯が紛れたら検知"
 else
   assert_fail "節と帯の食い違いを検知できない" "$OUT"
 fi
-if printf '%s\n' "$OUT" | grep -q '帯 60x が 2 つの節に散っている'; then
+if grep -q '帯 60x が 2 つの節に散っている' <<<"$OUT"; then
   assert_ok "同じ帯が 2 つの節に散っているのも検知（逆向き）"
 else
   assert_fail "帯が散っているのを検知できない" "$OUT"
@@ -168,7 +168,7 @@ cat > "$WORK/single-section.md" <<'EOF'
 表の形（列・ID・状態の語彙）しか見ないので、書かれている中身が正しいかは見ない。
 EOF
 OUT="$(node "$ENGINE" --spec "$SPEC_BANDS" --file "$WORK/single-section.md" --root "$REPO_ROOT")"
-if [ "$(printf '%s\n' "$OUT" | tail -n1)" = "violations=0" ]; then
+if [ "$(tail -n1 <<<"$OUT")" = "violations=0" ]; then
   assert_ok "節が 1 つなら帯が混ざっていても違反にしない"
 else
   assert_fail "1 節に並べる書き方を違反にした" "$OUT"
@@ -189,7 +189,7 @@ cat > "$WORK/escaped.md" <<'EOF'
 表の形（列・ID・状態の語彙）しか見ないので、書かれている中身が正しいかは見ない。
 EOF
 OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/escaped.md" --root "$REPO_ROOT")"
-if [ "$(printf '%s\n' "$OUT" | tail -n1)" = "violations=0" ]; then
+if [ "$(tail -n1 <<<"$OUT")" = "violations=0" ]; then
   assert_ok "エスケープしたパイプを含む行を誤検知しない"
 else
   assert_fail "エスケープしたパイプで列数を誤判定した" "$OUT"
@@ -206,7 +206,7 @@ cat > "$WORK/raw-pipe.md" <<'EOF'
 表の形（列・ID・状態の語彙）しか見ないので、書かれている中身が正しいかは見ない。
 EOF
 OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/raw-pipe.md" --root "$REPO_ROOT")"
-if printf '%s\n' "$OUT" | grep -q 'columns:'; then
+if grep -q 'columns:' <<<"$OUT"; then
   assert_ok "エスケープしていない素のパイプは今までどおり違反"
 else
   assert_fail "素のパイプを見逃した" "$OUT"
@@ -215,7 +215,7 @@ fi
 echo "=== scenario 5: 行が 1 つも無いルールブックは違反にする（空の登録を許さない） ==="
 printf '| ID | 内容 |\n| --- | --- |\n\n## 限界\n\n表の形しか見ないので、中身が正しいかは見ない。\n' > "$WORK/empty.md"
 OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/empty.md" --root "$REPO_ROOT")"
-if printf '%s\n' "$OUT" | grep -q '行が 1 つも無い'; then
+if grep -q '行が 1 つも無い' <<<"$OUT"; then
   assert_ok "空のルールブックを検知"
 else
   assert_fail "空を検知できない" "$OUT"
@@ -227,7 +227,7 @@ echo "=== scenario 6: 「限界」を書いていないルールブックは通�
 #      取りこぼしが起きたときに「あの限界ではないか」と最初に疑えるのが目的。
 printf '| ID | 内容 | 守るテスト | 状態 |\n| --- | --- | --- | --- |\n| Z-001 | 正常 | `package.json` | 済み |\n' > "$WORK/nolimits.md"
 OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/nolimits.md" --root "$REPO_ROOT")"
-if printf '%s\n' "$OUT" | grep -q '「## 限界」の節が無い'; then
+if grep -q '「## 限界」の節が無い' <<<"$OUT"; then
   assert_ok "限界の節が無いのを検知"
 else
   assert_fail "限界の節が無いのを検知できない" "$OUT"
@@ -243,7 +243,7 @@ cat > "$WORK/todolimits.md" <<'EOF'
 TODO: あとで書く。ここに見つからないことを書く予定。
 EOF
 OUT="$(node "$ENGINE" --spec "$SPEC" --file "$WORK/todolimits.md" --root "$REPO_ROOT")"
-if printf '%s\n' "$OUT" | grep -q '「## 限界」が仮置きのまま'; then
+if grep -q '「## 限界」が仮置きのまま' <<<"$OUT"; then
   assert_ok "仮置きの限界を検知"
 else
   assert_fail "仮置きの限界を検知できない" "$OUT"
@@ -251,7 +251,7 @@ fi
 
 SPEC_NO_LIMITS='{"id":"fixture","idPrefix":"Z","columns":4,"evidenceColumn":3,"statusColumn":4,"states":["済み","計画","対象外"],"idBands":[0,10]}'
 OUT="$(node "$ENGINE" --spec "$SPEC_NO_LIMITS" --file "$WORK/good.md" --root "$REPO_ROOT")"
-if printf '%s\n' "$OUT" | grep -q '登録簿に limits'; then
+if grep -q '登録簿に limits' <<<"$OUT"; then
   assert_ok "登録簿の limits 未記入を検知（索引に空欄が出るのを防ぐ）"
 else
   assert_fail "登録簿の limits 未記入を検知できない" "$OUT"

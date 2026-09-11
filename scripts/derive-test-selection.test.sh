@@ -18,12 +18,12 @@ assert_eq() {
 }
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then echo "  OK: $label"; else
+  if grep -qF -- "$needle" <<<"$haystack"; then echo "  OK: $label"; else
     echo "  NG: $label"; echo "      expected to find: $needle"; fail=1; fi
 }
 assert_not_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then echo "  NG: $label"; echo "      unexpected: $needle"; fail=1; else echo "  OK: $label"; fi
+  if grep -qF -- "$needle" <<<"$haystack"; then echo "  NG: $label"; echo "      unexpected: $needle"; fail=1; else echo "  OK: $label"; fi
 }
 
 # required / not_required / milestone の key を改行区切りで取り出す
@@ -123,8 +123,8 @@ assert_eq "$(printf '%s' "$OUT" | jq -r '.unclassified | join(",")')" "weird/thi
 echo "=== scenario 11: table 形式は 04 表の3列で、状態は4値の ⬜ / ➖ だけを使う ==="
 run --files src/lib/supabase/orders.ts --format table
 assert_contains "$OUT" "| 種別（test-matrix.md の行） | 状態 | 結果・証跡 |" "見出し行"
-assert_eq "$(printf '%s\n' "$OUT" | grep -c '^| .* | ⬜ 未実施 | ')" "$(keys_of "$(bash "$SCRIPT" --files src/lib/supabase/orders.ts)" required | wc -l | tr -d ' ')" "⬜ 未実施 の行数 = required の件数"
-assert_eq "$(printf '%s\n' "$OUT" | grep '^| ' | grep -v -e '⬜ 未実施' -e '➖ 今回不要' -e '種別（test-matrix.md の行）' -e '^| ---' | wc -l | tr -d ' ')" "0" "⬜ / ➖ 以外の状態の行が無い"
+assert_eq "$(grep -c '^| .* | ⬜ 未実施 | ' <<<"$OUT")" "$(keys_of "$(bash "$SCRIPT" --files src/lib/supabase/orders.ts)" required | wc -l | tr -d ' ')" "⬜ 未実施 の行数 = required の件数"
+assert_eq "$(grep '^| ' <<<"$OUT" | grep -v -e '⬜ 未実施' -e '➖ 今回不要' -e '種別（test-matrix.md の行）' -e '^| ---' | wc -l | tr -d ' ')" "0" "⬜ / ➖ 以外の状態の行が無い"
 assert_contains "$OUT" "route: deep" "route を末尾に出す"
 
 echo "=== scenario 12: 不正入力は exit 2 で JSON エラー ==="
@@ -137,11 +137,11 @@ assert_eq "$EXIT_CODE" "2" "未知のフラグは exit 2"
 echo "=== scenario 13: --list-keys / --list-rules は全ルールを出し、label は重複しない ==="
 run --list-keys
 assert_eq "$EXIT_CODE" "0" "exit 0"
-KEY_COUNT="$(printf '%s\n' "$OUT" | grep -c .)"
+KEY_COUNT="$(grep -c . <<<"$OUT")"
 run --list-rules
-assert_eq "$(printf '%s\n' "$OUT" | grep -c .)" "$KEY_COUNT" "--list-rules の行数 = --list-keys の行数"
-assert_eq "$(printf '%s\n' "$OUT" | cut -f2 | sort | uniq -d | wc -l | tr -d ' ')" "0" "label（種別名）が重複しない"
-assert_eq "$(printf '%s\n' "$OUT" | cut -f3 | grep -v -e '^always$' -e '^on-change$' -e '^milestone$' | wc -l | tr -d ' ')" "0" "timing は3値のみ"
+assert_eq "$(grep -c . <<<"$OUT")" "$KEY_COUNT" "--list-rules の行数 = --list-keys の行数"
+assert_eq "$(cut -f2 <<<"$OUT" | sort | uniq -d | wc -l | tr -d ' ')" "0" "label（種別名）が重複しない"
+assert_eq "$(cut -f3 <<<"$OUT" | grep -v -e '^always$' -e '^on-change$' -e '^milestone$' | wc -l | tr -d ' ')" "0" "timing は3値のみ"
 
 echo "=== scenario 14: コミット前の変更（ステージ済み・作業ツリー・未追跡）も既定で拾う ==="
 DTS_DIR="$(mktemp -d)"

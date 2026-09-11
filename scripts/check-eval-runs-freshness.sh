@@ -99,7 +99,7 @@ print(fresh, stale)
 fi
 
 # eval-skip 申告: PR 本文の行頭 `eval-skip:` に続く非空の理由があれば許容する
-SKIP_LINE="$(printf '%s\n' "${PR_BODY:-}" | grep -m 1 -E '^[[:space:]]*eval-skip:' || true)"
+SKIP_LINE="$(grep -m 1 -E '^[[:space:]]*eval-skip:' <<<"${PR_BODY:-}" || true)"
 if [ -n "$SKIP_LINE" ]; then
   SKIP_REASON="$(printf '%s' "$SKIP_LINE" | sed -E 's/^[[:space:]]*eval-skip:[[:space:]]*//')"
   if [ -n "$SKIP_REASON" ]; then

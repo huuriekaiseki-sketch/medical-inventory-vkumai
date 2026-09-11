@@ -104,7 +104,7 @@ print(rel)
 fi
 
 HIGH_RISK_PATTERN="$(build_high_risk_pattern "$REPO_ROOT")"
-if ! printf '%s' "$RELATIVE_TARGET" | grep -qiE "$HIGH_RISK_PATTERN"; then
+if ! grep -qiE "$HIGH_RISK_PATTERN" <<<"$RELATIVE_TARGET"; then
   exit 0
 fi
 

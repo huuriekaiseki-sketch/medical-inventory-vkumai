@@ -67,10 +67,10 @@ printf 'MSG="docs/agents/x.md「実在する節」を参照"\n' > "$WORK/scripts
 printf 'MSG="docs/agents/x.md「消えた節」と docs/agents/gone.md「節」を参照"\n' > "$WORK/scripts/bad.sh"
 printf 'MSG="docs/agents/x.md「消えた節」"\n' > "$WORK/scripts/bad.test.sh"
 RED="$(scan "$WORK")"
-if printf '%s' "$RED" | grep -qF 'bad.sh:1'; then ok "消えた節を検知"; else ng "消えた節を検知できない" "$RED"; fi
-if printf '%s' "$RED" | grep -qF 'gone.md'; then ok "無いファイルを検知"; else ng "無いファイルを検知できない" "$RED"; fi
-if printf '%s' "$RED" | grep -qF 'good.sh'; then ng "実在する参照を誤検知" "$RED"; else ok "実在する参照は誤検知しない"; fi
-if printf '%s' "$RED" | grep -qF 'bad.test.sh'; then ng "テストファイルまで対象にしている"; else ok "テストファイルは対象外"; fi
+if grep -qF 'bad.sh:1' <<<"$RED"; then ok "消えた節を検知"; else ng "消えた節を検知できない" "$RED"; fi
+if grep -qF 'gone.md' <<<"$RED"; then ok "無いファイルを検知"; else ng "無いファイルを検知できない" "$RED"; fi
+if grep -qF 'good.sh' <<<"$RED"; then ng "実在する参照を誤検知" "$RED"; else ok "実在する参照は誤検知しない"; fi
+if grep -qF 'bad.test.sh' <<<"$RED"; then ng "テストファイルまで対象にしている"; else ok "テストファイルは対象外"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

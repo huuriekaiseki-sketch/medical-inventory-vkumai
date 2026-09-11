@@ -17,7 +17,7 @@ LOG="$WORK/manual-overrides.jsonl"
 
 echo "=== scenario 1: 必須引数が揃えば 1 行追記される（JSON、必要なキー） ==="
 OUT="$(bash "$SCRIPT" --safeguard H-009 --actor tester --reason "本番の価格を手修正" --ref "issue #1" --log-file "$LOG")"
-if printf '%s' "$OUT" | grep -q "記録しました"; then ok "記録した旨を出す"; else ng "出力が違う" "$OUT"; fi
+if grep -q "記録しました" <<<"$OUT"; then ok "記録した旨を出す"; else ng "出力が違う" "$OUT"; fi
 if [ "$(wc -l < "$LOG" | tr -d ' ')" -eq 1 ]; then ok "1 行追記"; else ng "行数が違う"; fi
 for key in timestamp safeguard actor reason ref branch; do
   if jq -e "has(\"$key\")" "$LOG" >/dev/null; then ok "キー $key"; else ng "キー $key が無い"; fi

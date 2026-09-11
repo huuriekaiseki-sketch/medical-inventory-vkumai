@@ -58,7 +58,7 @@ for required in id title prefix columns states; do
     exit 2
   fi
 done
-if ! printf '%s' "$prefix" | grep -qE '^[A-Z]$'; then
+if ! grep -qE '^[A-Z]$' <<<"$prefix"; then
   echo "new-rulebook: --prefix は英大文字 1 文字（例: M）" >&2
   exit 2
 fi

@@ -85,7 +85,7 @@ BODY="$(
   line_for "認可そのものの効き目の計測" "${RLS_MUTATION_DOC:-docs/agents/rls-mutation.md}" "手順: docs/agents/rls-mutation.md「## 使い方」"
 )"
 # サブシェル内の加算は親に戻らないため、本文の ⚠ を数え直す
-OVERDUE="$(printf '%s\n' "$BODY" | grep -c '⚠' || true)"
+OVERDUE="$(grep -c '⚠' <<<"$BODY" || true)"
 
 HEADER="定期メンテナンスのダイジェスト（issue #741。claude -p --maintenance または bash scripts/maintenance-digest.sh）"
 if [ "$OVERDUE" -gt 0 ]; then

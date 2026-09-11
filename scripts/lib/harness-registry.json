@@ -134,6 +134,7 @@
         "scripts/check-layer-consistency.test.sh",
         "scripts/check-no-registry-fetch.test.sh",
         "scripts/check-operation-contracts.test.sh",
+        "scripts/check-pipe-assertion.test.sh",
         "scripts/check-pitfall-rulebook.test.sh",
         "scripts/check-plugin-asset-coverage.test.sh",
         "scripts/check-plugin-check-coverage.test.sh",

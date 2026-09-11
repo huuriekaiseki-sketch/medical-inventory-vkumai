@@ -12,7 +12,7 @@ SCRIPT="$SCRIPT_DIR/check-fault-injection-drill-staleness.sh"
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then
+  if grep -qF -- "$needle" <<<"$haystack"; then
     echo "  OK: $label"
   else
     echo "  NG: $label"
@@ -178,7 +178,7 @@ else
   fi
   if [ "$HASHER_STATUS" -eq 2 ]; then
     echo "  ➖ 対象外: aidd.config.json に faultInjectionDrill を書いていない導入先"
-  elif printf '%s' "$REAL_VERSION" | grep -qE '^[0-9a-f]{12}$'; then
+  elif grep -qE '^[0-9a-f]{12}$' <<<"$REAL_VERSION"; then
     echo "  OK: 実物の門から版を数えられる（${REAL_VERSION}）"
   else
     echo "  NG: 設定はあるのに実物の門から版を数えられない（実運用では版の判定が効かない）"
@@ -196,7 +196,77 @@ if [ -z "$OUT" ]; then
   echo "  OK: 実態では無言（期限内かつ版が一致）"
 else
   echo "  注意: 実態で警告が出ている（本当の警告なのでこの検査は落とさない）"
-  printf '%s\n' "$OUT" | sed -n 's/^/      /p' | head -5
+  sed -n 's/^/      /p' <<<"$OUT" | head -5
+fi
+
+echo "=== scenario 11: 走査器が、マーカーの取り違えと不在で落ちる（fail-open 防止） ==="
+# WHY(C-040): マーカーが 2 つのリテラルに当たると**別の門を数えて**しまい、
+#      「版が一致した」が「正しい門を見た」を意味しなくなる。0 回なら何も見ていない。
+#      どちらも黙って通さず落とす。
+if [ ! -f "$HASHER" ] || ! command -v node >/dev/null 2>&1; then
+  echo "  ➖ 対象外: 版の走査器（または node）が無い導入先"
+else
+  FX_ROOT="$TMPDIR_TEST/hasher-fx"
+  mkdir -p "$FX_ROOT/.claude/workflows/lib/prompts" "$FX_ROOT/src"
+  cp "$SCRIPT_DIR/../.claude/workflows/lib/prompts/extract-template-literal.js" \
+     "$FX_ROOT/.claude/workflows/lib/prompts/" 2>/dev/null || true
+  cat > "$FX_ROOT/src/flow.js" <<'FLOWEOF'
+const a = await agent(`門A: ユニークな目印 です`)
+const b = await agent(`門B: 二重の目印 です`)
+const c = await agent(`別の場所にも 二重の目印 がある`)
+FLOWEOF
+
+  # 一意なマーカー → 版を出せる（対を置く。C-021）
+  cat > "$FX_ROOT/aidd.config.json" <<'CFGEOF'
+{ "faultInjectionDrill": { "promptSource": "src/flow.js", "gateMarkers": ["ユニークな目印"] } }
+CFGEOF
+  if FX_VERSION="$(node "$HASHER" --root "$FX_ROOT" 2>/dev/null)"; then FX_STATUS=0; else FX_STATUS=$?; fi
+  if [ "$FX_STATUS" -eq 0 ] && grep -qE '^[0-9a-f]{12}$' <<<"$FX_VERSION"; then
+    echo "  OK: 一意なマーカーなら版を出せる"
+  else
+    echo "  NG: 正しい fixture で版を出せない（走査器が壊れている）"
+    echo "      exit=${FX_STATUS} actual=${FX_VERSION}"
+    fail=1
+  fi
+
+  # 2 回出るマーカー → 落とす
+  cat > "$FX_ROOT/aidd.config.json" <<'CFGEOF'
+{ "faultInjectionDrill": { "promptSource": "src/flow.js", "gateMarkers": ["二重の目印"] } }
+CFGEOF
+  FX_ERR="$(node "$HASHER" --root "$FX_ROOT" 2>&1 >/dev/null || true)"
+  if grep -q "一意でない" <<<"$FX_ERR"; then
+    echo "  OK: マーカーが 2 回出れば落とす（別の門を数えない）"
+  else
+    echo "  NG: 取り違えを検知できない" "$FX_ERR"
+    fail=1
+  fi
+
+  # 0 回のマーカー → 落とす
+  cat > "$FX_ROOT/aidd.config.json" <<'CFGEOF'
+{ "faultInjectionDrill": { "promptSource": "src/flow.js", "gateMarkers": ["どこにも無い目印"] } }
+CFGEOF
+  FX_ERR="$(node "$HASHER" --root "$FX_ROOT" 2>&1 >/dev/null || true)"
+  if grep -q "マーカーが見つからない" <<<"$FX_ERR"; then
+    echo "  OK: マーカーが無ければ落とす（何も見ていない状態を通さない）"
+  else
+    echo "  NG: マーカー不在を検知できない" "$FX_ERR"
+    fail=1
+  fi
+
+  # 設定が無い導入先 → 2 で静かに降りる
+  # WHY(C-044): `set -e` の下で「走らせてから $? を見る」と、非ゼロの瞬間に**この検査自身が死ぬ**
+  rm -f "$FX_ROOT/aidd.config.json"
+  if node "$HASHER" --root "$FX_ROOT" >/dev/null 2>&1; then
+    FX_STATUS=0
+  else
+    FX_STATUS=$?
+  fi
+  if [ "$FX_STATUS" -eq 2 ]; then
+    echo "  OK: 設定が無い導入先では「持たない」として降りる"
+  else
+    echo "  NG: 設定が無い導入先で落ちる（配った先で必ず赤くなる）"
+    fail=1
+  fi
 fi
 
 if [ "$fail" -ne 0 ]; then

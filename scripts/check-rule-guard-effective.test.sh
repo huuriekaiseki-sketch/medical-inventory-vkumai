@@ -57,7 +57,7 @@ if [ -z "$GUARDS" ]; then
   exit 1
 fi
 
-count="$(printf '%s\n' "$GUARDS" | grep -c .)"
+count="$(grep -c . <<<"$GUARDS")"
 echo "=== ルールを守る検査 $count 本を no-op に置き換えて、テストが落ちるかを測る ==="
 
 # 本物のリポジトリは触らない。scripts/ だけ複製し、残りは symlink で見せる

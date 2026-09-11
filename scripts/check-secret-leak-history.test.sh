@@ -113,7 +113,7 @@ if [ "${#CANARIES[@]}" -ne "${#PATTERNS[@]}" ]; then
 else
   miss=""
   for i in "${!PATTERNS[@]}"; do
-    printf '%s\n' "${CANARIES[$i]}" | grep -q -a -E -- "${PATTERNS[$i]}" || miss="$miss
+    grep -q -a -E -- "${PATTERNS[$i]}" <<<"${CANARIES[$i]}" || miss="$miss
       ${PATTERNS[$i]}"
   done
   if [ -z "$miss" ]; then

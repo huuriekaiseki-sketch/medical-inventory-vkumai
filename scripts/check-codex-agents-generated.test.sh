@@ -45,7 +45,7 @@ sandbox_mode = "read-only"
 developer_instructions = """本文"""
 GHOST
 out="$(node "${GEN}" "${TMP_ROOT}/onlycodex" 2>&1)"
-if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "only-codex: ghost"; then
+if [ $? -ne 0 ] && grep -q "only-codex: ghost" <<<"${out}"; then
   ok "md が無い agent を名指しする"
 else
   ng "リポジトリに正本が無くても通ってしまう" "${out}"
@@ -72,7 +72,7 @@ sandbox_mode = "read-only"
 developer_instructions = """Codex 用の本文"""
 TOML
 out="$(node "${GEN}" "${TMP_ROOT}/drift" 2>&1)"
-if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "stale: thing.toml"; then
+if [ $? -ne 0 ] && grep -q "stale: thing.toml" <<<"${out}"; then
   ok "食い違いを名指しする"
 else
   ng "md を変えても気づかない（二重管理のまま）" "${out}"
@@ -130,7 +130,7 @@ model: haiku
 MD
 printf 'name = "odd"\ndescription = "d"\n' > "${TMP_ROOT}/nobody/.codex/agents/odd.toml"
 out="$(node "${GEN}" "${TMP_ROOT}/nobody" 2>&1)"
-if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "no-body: odd"; then
+if [ $? -ne 0 ] && grep -q "no-body: odd" <<<"${out}"; then
   ok "読めない toml を名指しして止まる"
 else
   ng "読めない toml を黙って上書きする恐れ" "${out}"

@@ -138,7 +138,7 @@ fi
 
 echo "=== scenario 2: 検査を通さない新しい route が無い ==="
 OUT="$(scan "$API_DIR" "$BASELINE")"
-NEW="$(printf '%s\n' "$OUT" | grep '^new ' || true)"
+NEW="$(grep '^new ' <<<"$OUT" || true)"
 if [ -z "$NEW" ]; then
   assert_ok "検査を通さずに本文を読む新しい route は無い"
 else
@@ -149,8 +149,8 @@ else
 fi
 
 echo "=== scenario 3: 一覧が陳腐化していない ==="
-STALE_USED="$(printf '%s\n' "$OUT" | grep '^stale-used ' || true)"
-STALE_MISSING="$(printf '%s\n' "$OUT" | grep '^stale-missing ' || true)"
+STALE_USED="$(grep '^stale-used ' <<<"$OUT" || true)"
+STALE_MISSING="$(grep '^stale-missing ' <<<"$OUT" || true)"
 if [ -z "$STALE_USED" ]; then
   assert_ok "移行済みなのに一覧に残っている route は無い"
 else
@@ -165,8 +165,8 @@ else
 fi
 
 echo "=== scenario 3b: eslint-disable で逃げていない ==="
-UNDECLARED="$(printf '%s\n' "$OUT" | grep '^undeclared-disable ' || true)"
-LEFTOVER="$(printf '%s\n' "$OUT" | grep '^leftover-disable ' || true)"
+UNDECLARED="$(grep '^undeclared-disable ' <<<"$OUT" || true)"
+LEFTOVER="$(grep '^leftover-disable ' <<<"$OUT" || true)"
 if [ -z "$UNDECLARED" ]; then
   assert_ok "一覧に無いのに eslint-disable だけ付いた route は無い"
 else
@@ -240,25 +240,25 @@ cat > "$WORK/baseline.json" <<'EOF'
 ] }
 EOF
 FOUT="$(scan "$WORK/api" "$WORK/baseline.json")"
-if printf '%s' "$FOUT" | grep -q '^new api/new-thing/route.ts#POST$'; then assert_ok "新しい未検証 route を検知"; else assert_fail "新しい route を検知できない" "$FOUT"; fi
-if printf '%s' "$FOUT" | grep -q '^stale-used api/moved/route.ts#POST$'; then assert_ok "移行済みの消し忘れを検知"; else assert_fail "消し忘れを検知できない" "$FOUT"; fi
+if grep -q '^new api/new-thing/route.ts#POST$' <<<"$FOUT"; then assert_ok "新しい未検証 route を検知"; else assert_fail "新しい route を検知できない" "$FOUT"; fi
+if grep -q '^stale-used api/moved/route.ts#POST$' <<<"$FOUT"; then assert_ok "移行済みの消し忘れを検知"; else assert_fail "消し忘れを検知できない" "$FOUT"; fi
 
 # 混在メソッド: POST は通っていて PUT だけが穴。**PUT だけ**が出ること
-if printf '%s' "$FOUT" | grep -q '^new api/mixed-methods/route.ts#PUT$'; then
+if grep -q '^new api/mixed-methods/route.ts#PUT$' <<<"$FOUT"; then
   assert_ok "同じ route の中で、検証していないメソッドだけを検知（複数メソッド）"
 else
   assert_fail "検証していないメソッドを検知できない（ファイル単位のままの疑い）" "$FOUT"
 fi
-if printf '%s' "$FOUT" | grep -q '^new api/mixed-methods/route.ts#POST$'; then
+if grep -q '^new api/mixed-methods/route.ts#POST$' <<<"$FOUT"; then
   assert_fail "検証済みのメソッドまで違反にした" "$FOUT"
 else
   assert_ok "検証済みのメソッドは違反にしない（対照）"
 fi
-if printf '%s' "$FOUT" | grep -q '^stale-missing api/gone/route.ts#POST$'; then assert_ok "存在しない行を検知"; else assert_fail "存在しない行を検知できない" "$FOUT"; fi
-if printf '%s' "$FOUT" | grep -q 'api/old-thing'; then assert_fail "一覧にある借金を違反にした" "$FOUT"; else assert_ok "一覧にある借金は誤検知しない"; fi
-if printf '%s' "$FOUT" | grep -q 'api/read-only'; then assert_fail "応答を作るだけの route を違反にした（NextResponse.json は本文読みではない）" "$FOUT"; else assert_ok "本文を読まない route は対象外"; fi
-if printf '%s' "$FOUT" | grep -q '^new api/renamed-arg/route.ts#POST$'; then assert_ok "引数名を変えても本文読みとして検知（R10）"; else assert_fail "引数名を変えると検査から外れる" "$FOUT"; fi
-if printf '%s' "$FOUT" | grep -q '^undeclared-disable api/sneaky/route.ts#POST$'; then assert_ok "印だけ付けて逃げる route を検知"; else assert_fail "印で逃げる route を検知できない" "$FOUT"; fi
+if grep -q '^stale-missing api/gone/route.ts#POST$' <<<"$FOUT"; then assert_ok "存在しない行を検知"; else assert_fail "存在しない行を検知できない" "$FOUT"; fi
+if grep -q 'api/old-thing' <<<"$FOUT"; then assert_fail "一覧にある借金を違反にした" "$FOUT"; else assert_ok "一覧にある借金は誤検知しない"; fi
+if grep -q 'api/read-only' <<<"$FOUT"; then assert_fail "応答を作るだけの route を違反にした（NextResponse.json は本文読みではない）" "$FOUT"; else assert_ok "本文を読まない route は対象外"; fi
+if grep -q '^new api/renamed-arg/route.ts#POST$' <<<"$FOUT"; then assert_ok "引数名を変えても本文読みとして検知（R10）"; else assert_fail "引数名を変えると検査から外れる" "$FOUT"; fi
+if grep -q '^undeclared-disable api/sneaky/route.ts#POST$' <<<"$FOUT"; then assert_ok "印だけ付けて逃げる route を検知"; else assert_fail "印で逃げる route を検知できない" "$FOUT"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

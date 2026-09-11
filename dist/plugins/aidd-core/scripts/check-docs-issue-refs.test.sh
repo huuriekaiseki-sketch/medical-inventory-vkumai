@@ -15,8 +15,8 @@ command -v node >/dev/null 2>&1 || { echo "node が必要です"; exit 1; }
 fail=0
 ok() { echo "  OK: $1"; }
 ng() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }
-contains() { if printf '%s\n' "$1" | grep -qF -- "$2"; then ok "$3"; else ng "$3" "expected: $2 / actual: $1"; fi; }
-not_contains() { if printf '%s\n' "$1" | grep -qF -- "$2"; then ng "$3" "unexpected: $2"; else ok "$3"; fi; }
+contains() { if grep -qF -- "$2" <<<"$1"; then ok "$3"; else ng "$3" "expected: $2 / actual: $1"; fi; }
+not_contains() { if grep -qF -- "$2" <<<"$1"; then ng "$3" "unexpected: $2"; else ok "$3"; fi; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

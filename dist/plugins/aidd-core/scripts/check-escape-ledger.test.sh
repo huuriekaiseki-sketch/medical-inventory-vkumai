@@ -18,7 +18,7 @@ pass_count=0
 ok() { echo "  OK: $1"; pass_count=$((pass_count + 1)); }
 ng() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }
 
-contains() { if printf '%s' "$1" | grep -q "$2"; then ok "$3"; else ng "$3" "$1"; fi }
+contains() { if grep -q "$2" <<<"$1"; then ok "$3"; else ng "$3" "$1"; fi }
 is_empty() {
   if [ -z "$(printf '%s' "$1" | tr -d '[:space:]')" ]; then ok "$2"; else ng "$2" "$1"; fi
 }

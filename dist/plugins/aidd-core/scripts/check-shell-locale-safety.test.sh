@@ -46,8 +46,8 @@ for p in sorted(root.glob("scripts/**/*.sh")):
 print(f"__COUNT__ {count}")
 PY
 )"
-COUNT="$(printf '%s\n' "$HITS" | sed -n 's/^__COUNT__ //p')"
-LIST="$(printf '%s\n' "$HITS" | grep -v '^__COUNT__' || true)"
+COUNT="$(sed -n 's/^__COUNT__ //p' <<<"$HITS")"
+LIST="$(grep -v '^__COUNT__' <<<"$HITS" || true)"
 if [ "${COUNT:-0}" -eq 0 ]; then
   ok "危ない書き方は 0 箇所"
 else
@@ -69,7 +69,7 @@ trap 'rm -rf "$WORK"' EXIT
 AVAILABLE="$(locale -a 2>/dev/null || true)"
 PROBE_LOCALE=""
 for L in ja_JP.UTF-8 en_US.UTF-8 C.UTF-8; do
-  if printf '%s\n' "$AVAILABLE" | grep -qxF "$L"; then
+  if grep -qxF "$L" <<<"$AVAILABLE"; then
     PROBE_LOCALE="$L"
     break
   fi

@@ -117,7 +117,7 @@ ORPHAN_THRESHOLD="${STALE_BRANCHES_ORPHAN_THRESHOLD:-5}"
 NOW_EPOCH="$(date +%s)"
 AGE_CUTOFF=$((NOW_EPOCH - AGE_DAYS * 86400))
 
-CHECKED_OUT_BRANCHES="$(printf '%s\n' "$WORKTREE_LIST" | sed -n 's/^branch refs\/heads\///p')"
+CHECKED_OUT_BRANCHES="$(sed -n 's/^branch refs\/heads\///p' <<<"$WORKTREE_LIST")"
 
 set +e
 ALL_PRS_JSON="$(gh pr list --state all --limit 300 --json headRefName 2>/dev/null)"
@@ -133,7 +133,7 @@ while IFS='|' read -r BNAME BUPSTREAM BCTIME; do
   [ "$BNAME" = "main" ] && continue
   [ "$BNAME" = "master" ] && continue
   [ -n "$BUPSTREAM" ] && continue
-  if printf '%s\n' "$CHECKED_OUT_BRANCHES" | grep -qxF "$BNAME"; then
+  if grep -qxF "$BNAME" <<<"$CHECKED_OUT_BRANCHES"; then
     continue
   fi
   [ -z "$BCTIME" ] && continue

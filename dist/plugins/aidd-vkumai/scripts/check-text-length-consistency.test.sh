@@ -127,8 +127,8 @@ orphan=""
 for v in $DV; do
   case "$CV" in *" $v "*) ;; *) orphan="$orphan $v" ;; esac
 done
-if printf '%s' "$orphan" | grep -q '999'; then assert_ok "設定に無い上限値を検知"; else assert_fail "検知できない" "$orphan"; fi
-if printf '%s' "$orphan" | grep -q '200'; then assert_fail "一致する値を違反にした" "$orphan"; else assert_ok "一致する値は誤検知しない"; fi
+if grep -q '999' <<<"$orphan"; then assert_ok "設定に無い上限値を検知"; else assert_fail "検知できない" "$orphan"; fi
+if grep -q '200' <<<"$orphan"; then assert_fail "一致する値を違反にした" "$orphan"; else assert_ok "一致する値は誤検知しない"; fi
 
 cat > "$WORK/bad-schema.ts" <<'EOF'
 export const s = z.string().max(200)

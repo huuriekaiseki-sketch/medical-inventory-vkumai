@@ -54,7 +54,7 @@ check_inventory() {
       violations=$((violations+1))
       continue
     fi
-    if ! printf '%s' "$id" | grep -qE '^F-[0-9]{3}$'; then
+    if ! grep -qE '^F-[0-9]{3}$' <<<"$id"; then
       echo "    id: [$id] ID が F-3桁でない"
       violations=$((violations+1))
     fi
@@ -90,7 +90,7 @@ fi
 
 echo "=== scenario 2: 棚卸しの表（F-xxx）に違反が無い ==="
 RESULT="$(check_inventory "$INVENTORY")"
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   assert_ok "違反なし（$(grep -c '^| F-' "$INVENTORY" || echo 0) 行）"
 else
   assert_fail "違反あり" "$RESULT"
@@ -120,9 +120,9 @@ cat > "$WORK/src/__tests__/ignored.test.ts" <<'EOF'
 const { data } = await db.rpc('is_facility_member')
 EOF
 DROPPED="$(scan_dropped_errors "$WORK/src")"
-if [ "$(printf '%s\n' "$DROPPED" | grep -c 'lib/bad.ts')" -eq 3 ]; then assert_ok "error を捨てた 3 行をちょうど検知"; else assert_fail "検知数が違う" "$DROPPED"; fi
-if printf '%s\n' "$DROPPED" | grep -q 'good.ts'; then assert_fail "error を受け取っている行を誤検知" "$DROPPED"; else assert_ok "error を受け取っている行・rpc 以外の呼び出しは誤検知しない"; fi
-if printf '%s\n' "$DROPPED" | grep -q 'ignored.test.ts'; then assert_fail "テストを走査した"; else assert_ok "テストは走査しない"; fi
+if [ "$(grep -c 'lib/bad.ts' <<<"$DROPPED")" -eq 3 ]; then assert_ok "error を捨てた 3 行をちょうど検知"; else assert_fail "検知数が違う" "$DROPPED"; fi
+if grep -q 'good.ts' <<<"$DROPPED"; then assert_fail "error を受け取っている行を誤検知" "$DROPPED"; else assert_ok "error を受け取っている行・rpc 以外の呼び出しは誤検知しない"; fi
+if grep -q 'ignored.test.ts' <<<"$DROPPED"; then assert_fail "テストを走査した"; else assert_ok "テストは走査しない"; fi
 
 cat > "$WORK/inventory.md" <<'EOF'
 | F-900 | 正常 | x | `error \|\| !data` で拒否 | 閉じる | `package.json` |
@@ -134,15 +134,15 @@ cat > "$WORK/inventory.md" <<'EOF'
 EOF
 RESULT="$(check_inventory "$WORK/inventory.md")"
 EXPECTED=5
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
   assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
 fi
 for needle in 'open: \[F-901\]' 'status: \[F-902\]' 'path: \[F-903\]' 'id: \[F-12\]' 'columns: \[F-904\]'; do
-  if printf '%s\n' "$RESULT" | grep -qE "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
+  if grep -qE "$needle" <<<"$RESULT"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
 done
-if printf '%s\n' "$RESULT" | grep -q 'F-900'; then assert_fail "正常行（エスケープ済み縦棒を含む）を誤検知" "$RESULT"; else assert_ok "正常行は誤検知しない"; fi
+if grep -q 'F-900' <<<"$RESULT"; then assert_fail "正常行（エスケープ済み縦棒を含む）を誤検知" "$RESULT"; else assert_ok "正常行は誤検知しない"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

@@ -38,12 +38,12 @@ trap 'rm -rf "$WORK"' EXIT
 echo "=== scenario 1: 実コードに違反が無い（ratchet 0） ==="
 ALLOW_ZERO= run_scan "$REPO_ROOT/e2e"
 if [ "$SCAN_CODE" -eq 0 ]; then ok "違反 0 件"; else ng "実コードで違反が出た" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "conditional-skips=[1-9]"; then
+if grep -q "conditional-skips=[1-9]" <<<"$SCAN_OUT"; then
   ok "条件つき skip を実際に数えている（空振りでない）"
 else
   ng "条件つき skip が 0 件（走査が壊れている疑い）" "$SCAN_OUT"
 fi
-if printf '%s' "$SCAN_OUT" | grep -q "describes=[1-9]"; then
+if grep -q "describes=[1-9]" <<<"$SCAN_OUT"; then
   ok "describe を実際に数えている"
 else
   ng "describe が 0 件" "$SCAN_OUT"
@@ -72,22 +72,22 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
 TS
 ALLOW_ZERO= run_scan "$BAD"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "落ちる"; else ng "同じ形なのに通った" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "violations=1"; then
+if grep -q "violations=1" <<<"$SCAN_OUT"; then
   ok "違反はちょうど 1 件（同期テストだけを数える）"
 else
   ng "違反件数が 1 件でない" "$SCAN_OUT"
 fi
-if printf '%s' "$SCAN_OUT" | grep -q "ratchet"; then
+if grep -q "ratchet" <<<"$SCAN_OUT"; then
   ok "どのテストが巻き込まれているかを名指しする"
 else
   ng "テスト名を出さない" "$SCAN_OUT"
 fi
-if printf '%s' "$SCAN_OUT" | grep -q "前提 2 件"; then
+if grep -q "前提 2 件" <<<"$SCAN_OUT"; then
   ok "効いている前提を全部数える（1 つ外しても直らないことが分かる）"
 else
   ng "前提の件数を出さない" "$SCAN_OUT"
 fi
-if printf '%s' "$SCAN_OUT" | grep -q "SUPABASE_SERVICE_ROLE_KEY"; then
+if grep -q "SUPABASE_SERVICE_ROLE_KEY" <<<"$SCAN_OUT"; then
   ok "2 つ目の前提も名指しする"
 else
   ng "2 つ目の前提を出さない" "$SCAN_OUT"
@@ -199,7 +199,7 @@ EMPTY="$WORK/empty"
 mkdir -p "$EMPTY"
 ALLOW_ZERO= run_scan "$EMPTY"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "spec が 0 本なら落ちる"; else ng "spec 0 本で通した" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "1 本も見つけられなかった"; then
+if grep -q "1 本も見つけられなかった" <<<"$SCAN_OUT"; then
   ok "走査が壊れていると言う"
 else
   ng "空振りの理由を出さない" "$SCAN_OUT"
@@ -218,7 +218,7 @@ test.describe('条件つきスキップがどこにも無い', () => {
 TS
 ALLOW_ZERO= run_scan "$NO_COND"
 if [ "$SCAN_CODE" -ne 0 ]; then ok "条件つき skip が 0 件なら落ちる"; else ng "0 件で通した" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "走査が壊れている疑い"; then
+if grep -q "走査が壊れている疑い" <<<"$SCAN_OUT"; then
   ok "探し方が変わった合図だと言う"
 else
   ng "疑いを出さない" "$SCAN_OUT"

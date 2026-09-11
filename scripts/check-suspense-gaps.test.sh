@@ -40,7 +40,7 @@ trap 'rm -rf "$WORK"' EXIT
 echo "=== scenario 1: 実コードに違反が無い（ratchet 0） ==="
 run_scan "$REPO_ROOT/src"
 if [ "$SCAN_CODE" -eq 0 ]; then ok "違反 0 件"; else ng "実コードで違反が出た" "$SCAN_OUT"; fi
-if printf '%s' "$SCAN_OUT" | grep -q "useSearchParams-callers=[1-9]"; then
+if grep -q "useSearchParams-callers=[1-9]" <<<"$SCAN_OUT"; then
   ok "useSearchParams を呼ぶファイルを実際に数えている（空振りでない）"
 else
   ng "対象を 1 件も数えていない（走査が壊れている疑い）" "$SCAN_OUT"
@@ -55,7 +55,7 @@ do
   dir="$REPO_ROOT/$fx/files/src"
   if [ ! -d "$dir" ]; then ng "fixture が無い: $fx"; continue; fi
   run_scan "$dir"
-  if [ "$SCAN_CODE" -ne 0 ] && printf '%s' "$SCAN_OUT" | grep -q "suspense-gap"; then
+  if [ "$SCAN_CODE" -ne 0 ] && grep -q "suspense-gap" <<<"$SCAN_OUT"; then
     ok "$(basename "$fx") を検知"
   else
     ng "$(basename "$fx") を検知できない（rc=${SCAN_CODE}）" "$SCAN_OUT"
@@ -157,7 +157,7 @@ if [ "$SCAN_CODE" -ne 0 ]; then ok "ファイル 0 件なら落とす"; else ng 
 mkdir -p "$WORK/nocaller/app"
 printf 'export default function Page() { return <p>x</p> }\n' > "$WORK/nocaller/app/page.tsx"
 run_scan "$WORK/nocaller"
-if [ "$SCAN_CODE" -ne 0 ] && printf '%s' "$SCAN_OUT" | grep -q "1 つも無い"; then
+if [ "$SCAN_CODE" -ne 0 ] && grep -q "1 つも無い" <<<"$SCAN_OUT"; then
   ok "useSearchParams が 0 件なら走査の壊れを疑う"
 else
   ng "0 件を黙って合格にした（rc=${SCAN_CODE}）" "$SCAN_OUT"

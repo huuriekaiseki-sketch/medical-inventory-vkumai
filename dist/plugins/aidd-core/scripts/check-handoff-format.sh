@@ -118,11 +118,11 @@ check_pr() {
   pr_body="$("$GH_CMD" pr view "$pr_number" --json body --jq '.body' 2>/dev/null || true)"
 
   has_summary=0
-  if printf '%s' "$pr_body" | grep -qF '30秒サマリー'; then
+  if grep -qF '30秒サマリー' <<<"$pr_body"; then
     has_summary=1
   fi
   has_verified=0
-  if printf '%s' "$pr_body" | grep -qF 'どう確認したか'; then
+  if grep -qF 'どう確認したか' <<<"$pr_body"; then
     has_verified=1
   fi
 
@@ -149,9 +149,9 @@ check_pr() {
   # 変更ファイル一覧が取れない場合は判定しない（fail-open）
   dep_issue=""
   pr_files="$("$GH_CMD" pr view "$pr_number" --json files --jq '.files[].path' 2>/dev/null || true)"
-  if printf '%s\n' "$pr_files" | grep -qxE '(.*/)?package(-lock)?\.json'; then
-    if ! printf '%s' "$pr_body" | grep -qF '依存の変更'; then
-      dep_issue="$(printf '%s\n' "$pr_files" | grep -E '(.*/)?package(-lock)?\.json' | tr '\n' ' ')"
+  if grep -qxE '(.*/)?package(-lock)?\.json' <<<"$pr_files"; then
+    if ! grep -qF '依存の変更' <<<"$pr_body"; then
+      dep_issue="$(grep -E '(.*/)?package(-lock)?\.json' <<<"$pr_files" | tr '\n' ' ')"
     fi
   fi
 
@@ -173,7 +173,7 @@ NEW_KEYS=""
 while IFS= read -r pr_number; do
   [ -n "$pr_number" ] || continue
   key="${SESSION_ID}:${pr_number}"
-  if printf '%s\n' "$WARNED_KEYS" | grep -qxF "$key"; then
+  if grep -qxF "$key" <<<"$WARNED_KEYS"; then
     continue
   fi
   msg="$(check_pr "$pr_number")"

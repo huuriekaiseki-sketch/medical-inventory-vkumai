@@ -24,7 +24,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 echo "=== scenario 1: 実態のロードマップに「要見直し」が無い ==="
 out="$(cd "$ROOT" && node "$CHECKER" 2>&1)"
-if printf '%s' "$out" | grep -q '要見直し=0'; then
+if grep -q '要見直し=0' <<<"$out"; then
   ok "要見直し 0 件"
 else
   ng "状態が実態より古い行がある" "$out"
@@ -46,9 +46,9 @@ touch "$TMP/fx/stryker.config.json"
 mkdir -p "$TMP/fx/docs/agents"
 touch "$TMP/fx/docs/agents/mutation-testing.md"
 out="$(cd "$ROOT" && node "$CHECKER" "--root=$TMP/fx" 2>&1)"
-if printf '%s' "$out" | grep -q '要見直し 計画 7'; then
+if grep -q '要見直し 計画 7' <<<"$out"; then
   ok "成果物が在る「計画」の行を検知する"
-  if printf '%s' "$out" | grep -q 'stryker.config.json'; then
+  if grep -q 'stryker.config.json' <<<"$out"; then
     ok "根拠のファイルを名指しする"
   else
     ng "根拠が出ていない" "$out"
@@ -60,7 +60,7 @@ fi
 echo "=== scenario 3: 成果物が無ければ「計画」のままでよい（誤検知しない） ==="
 rm -f "$TMP/fx/stryker.config.json" "$TMP/fx/docs/agents/mutation-testing.md"
 out="$(cd "$ROOT" && node "$CHECKER" "--root=$TMP/fx" 2>&1)"
-if printf '%s' "$out" | grep -q '要見直し=0'; then
+if grep -q '要見直し=0' <<<"$out"; then
   ok "着手前の「計画」は誤検知しない"
 else
   ng "着手前なのに要見直しと言っている" "$out"

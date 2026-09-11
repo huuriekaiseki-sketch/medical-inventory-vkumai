@@ -35,14 +35,14 @@ fi
 # verifier_called=false(同一diff再ブロック等、LLM呼び出しを伴わない判定)は
 # 「検証プロセス自体が動いたか」のシグナルとしては無関係なので除外する。
 RECENT_EVENTS="$(jq -r 'select(.verifier_called == true) | .event' "$LOG_FILE" 2>/dev/null | tail -n "$STREAK_THRESHOLD")"
-RECENT_COUNT="$(printf '%s\n' "$RECENT_EVENTS" | grep -c . || true)"
+RECENT_COUNT="$(grep -c . <<<"$RECENT_EVENTS" || true)"
 
 if [ "$RECENT_COUNT" -lt "$STREAK_THRESHOLD" ]; then
   echo "verify-claims: 検証プロセス呼び出しの件数が閾値(${STREAK_THRESHOLD})未満のため、連続fail-open検知はスキップしました(件数=${RECENT_COUNT})。"
   exit 0
 fi
 
-NON_FAIL_OPEN_COUNT="$(printf '%s\n' "$RECENT_EVENTS" | grep -vc '^fail_open$' || true)"
+NON_FAIL_OPEN_COUNT="$(grep -vc '^fail_open$' <<<"$RECENT_EVENTS" || true)"
 
 if [ "$NON_FAIL_OPEN_COUNT" -eq 0 ]; then
   echo "verify-claims: 警告: 直近${STREAK_THRESHOLD}回の検証プロセス呼び出しが連続でfail-openしています。claude -pサブプロセス・認証・ネットワーク等、検証エージェント自体が機能していない可能性があります。" >&2

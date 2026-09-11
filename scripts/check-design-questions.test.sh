@@ -123,10 +123,10 @@ EOF
 
 OUT="$(find_missing_design_note "$WORK/m" "$BASELINE" "$EXEMPT_TABLES")"
 for needle in 'new_table_without_note' 'empty_note'; do
-  if printf '%s\n' "$OUT" | grep -q "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle" "$OUT"; fi
+  if grep -q "$needle" <<<"$OUT"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle" "$OUT"; fi
 done
 for needle in 'with_note' 'exempt_table' 'no_table' 'old_table' 'comment_only'; do
-  if printf '%s\n' "$OUT" | grep -q "$needle"; then assert_fail "誤検知: $needle" "$OUT"; else assert_ok "誤検知しない: $needle"; fi
+  if grep -q "$needle" <<<"$OUT"; then assert_fail "誤検知: $needle" "$OUT"; else assert_ok "誤検知しない: $needle"; fi
 done
 
 if [ "$fail" -ne 0 ]; then
