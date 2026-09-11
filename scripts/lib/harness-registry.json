@@ -122,6 +122,7 @@
         "scripts/check-catalogs.test.sh",
         "scripts/check-claude-md-size.test.sh",
         "scripts/check-committed-html-generated.test.sh",
+        "scripts/check-control-bytes.test.sh",
         "scripts/check-design-answers.test.sh",
         "scripts/check-design-questions.test.sh",
         "scripts/check-docs-integrity.test.sh",
@@ -401,6 +402,7 @@
         "bash scripts/rehearse-merge.sh"
       ],
       "checks": [
+        "scripts/check-git-hooks.test.sh",
         "scripts/check-migration-lock-safety.test.sh",
         "scripts/check-migration-release-safety.test.sh",
         "scripts/rehearse-merge.test.sh"

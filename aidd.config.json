@@ -116,5 +116,10 @@
       "e2e/generate-auth-state.ts": "出力は成功時の 1 行だけで、process.exit(1) は .catch の中にある（出力したあとには走らない）。e2e は別のツール（tsx / playwright）が走らせるので、scripts/lib/ への import を足すと解決経路が増える",
       "e2e/generate-cross-facility-auth-state.ts": "同上（成功時 1 行・exit は .catch の中）"
     }
+  },
+  "controlBytes": {
+    "_comment": "制御バイト（TAB・LF・CR 以外の C0 と DEL）を置いてよいもの（C-052 / E-082）。scripts/check-control-bytes.test.sh が「宣言に無いもの」「理由が空」「一度も当たらない宣言」を落とす。2026-09-11 に追跡中の 1,516 本とメッセージ 707 件で 0 と実測して空で始めた。足すときは、なぜ制御バイトが要るのか（例: 端末の色の見本）を書くこと",
+    "allowedFiles": {},
+    "allowedCommits": {}
   }
 }

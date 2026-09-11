@@ -35,12 +35,12 @@
 | --- | --- | --- | --- | --- |
 | ワークフロー（H-01） | 決めた順番（調査 → 仕様 → 実装 → 統合 → 検証）を飛ばさない。飛ばしたら気づく | **人**（フローの起動は人。**記録漏れの検知だけ**が Stop hook で機械化されている） | `.claude/workflows/aidd-phase1-router.js`<br>`.claude/workflows/aidd-phase2.js` | 32 本 |
 | データ（H-02） | テストのデータが互いを壊さない。消しすぎない・消し残さない | **機械**（統合テスト・E2E を回すたびに走行の前後で実測する（走らせるのは人だが、走れば必ず測る）） | `scripts/run-integration-tests.sh`<br>`scripts/run-e2e-tests.sh` | 4 本 |
-| 契約（H-03） | 決めたことと動くものが食い違わない（操作の契約・層の突合・入口の検証） | **機械**（npm test と hooks-test が毎回回す） | `npm test`<br>`bash scripts/check-operation-contracts.test.sh` | 37 本 |
+| 契約（H-03） | 決めたことと動くものが食い違わない（操作の契約・層の突合・入口の検証） | **機械**（npm test と hooks-test が毎回回す） | `npm test`<br>`bash scripts/check-operation-contracts.test.sh` | 38 本 |
 | 実装（H-04） | 書いたものが型として通り、単体で動き、ビルドできる | **機械**（npm test / npm run typecheck / npm run lint / next build） | `npm test`<br>`npm run typecheck`<br>`npm run lint` | 8 本 |
 | セキュリティ・回帰（H-05） | 施設の境界を越えられない。4 つの入口すべてを総当たりする | **機械**（静的な検査は hooks-test。**実 DB を叩く総当たりは人が起動する**（統合テスト）。攻撃表と実在 route の突合は npm test で毎回（2026-09-10 に E2E から移した。E2E 側に置いていた間は `test.skip` に巻き込まれて Supabase を止めている間ずっとスキップされていた）） | `scripts/run-integration-tests.sh`<br>`bash scripts/check-guard-regressions.test.sh` | 14 本 |
 | ミューテーション（H-06） | 検査が本当に効いている（壊したら落ちる）。**その前に、そもそも実行されている**（前提に巻き込まれて黙っていない） | **機械**（判定エンジンの変異（CM）と hook の no-op 化は hooks-test。RLS 変異と Stryker は人が打つが、**打ち忘れは SessionStart hook が拾う**（2026-09-10。木のハッシュで「変わったのに測っていない」を見る。Stryker 側は測る対象の一覧も見張る——対象を減らせばスコアは上がるので）） | `bash scripts/check-detectors-effective.test.sh`<br>`bash scripts/check-rls-mutation.sh`<br>`bash scripts/run-mutation-tests.sh` | 7 本 |
 | 監視・観測（H-07） | 起きたことに気づける（夜間検査・鮮度・記録漏れ） | **機械**（夜間検査は pg_cron、鮮度は SessionStart / Stop hook。**hook 自身がこの環境で動くかも SessionStart で毎回見る**（2026-09-11。実測で 42 本中 41 本が jq を呼び、無い環境では 32 本が黙って降りると分かった）。**本番の監視は外部待ち**（#757-8）） | `scripts/check-integration-freshness.sh`<br>`scripts/check-e2e-freshness.sh`<br>`scripts/check-hook-dependencies.sh`<br>`scripts/maintenance-digest.sh` | 38 本 |
-| リリース（H-08） | 出す順番を間違えても壊れない（順序・巻き戻し・ロック） | **機械**（hooks-test が migration の注記を毎回検査する。**マージ予行は人が打つ**（bash scripts/rehearse-merge.sh --base main）） | `bash scripts/check-migration-release-safety.test.sh`<br>`bash scripts/rehearse-merge.sh` | 3 本 |
+| リリース（H-08） | 出す順番を間違えても壊れない（順序・巻き戻し・ロック） | **機械**（hooks-test が migration の注記を毎回検査する。**マージ予行は人が打つ**（bash scripts/rehearse-merge.sh --base main）） | `bash scripts/check-migration-release-safety.test.sh`<br>`bash scripts/rehearse-merge.sh` | 4 本 |
 
 **契約（守る対象・前提・実測の記録・反証）**
 
@@ -64,10 +64,10 @@
 | `query-validation-baseline.json`#pending.length | クエリを検証せずに読む route（H-03） | route | **0** |
 | `write-path-registry.json`#maxGaps | DB は書けるのにアプリに道が無い組み合わせ（H-05） | 組み合わせ | **0** |
 | `exemption-budget.json`#max.eslint-disable | 検査の逃がし口（上限。eslint-disable）（H-06） | 件 | **14** |
-| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **80** |
+| `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **83** |
 | `rls-mutants.json`#mutants.length | RLS・RPC の壊し方（H-06） | 件 | **20** |
 
-（ハーネス 8 件・検査 143 本・台帳 7 件。うち `scripts/**/*.test.sh` の 142 本は**この表で全数**——どこにも属さない検査があれば生成そのものが落ちる。残り 1 本は vitest 側から**手で足したもの**で、書き忘れは検知されない（限界の節））
+（ハーネス 8 件・検査 145 本・台帳 7 件。うち `scripts/**/*.test.sh` の 144 本は**この表で全数**——どこにも属さない検査があれば生成そのものが落ちる。残り 1 本は vitest 側から**手で足したもの**で、書き忘れは検知されない（限界の節））
 
 <!-- generated:harness-map end -->
 

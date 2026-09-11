@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# git の commit-msg hook。メッセージに制御バイト（TAB・LF・CR 以外の C0 制御文字と DEL）があれば止める。
+#
+# WHY(2026-09-11): 書き出しの経路で、エスケープのつもりの文字が実バイトになる事故が起きた
+#      （docs/agents/check-design-pitfalls.md の C-052）。コミットメッセージの下書きでも 1 バイト起きた。
+#      git 自身は NUL だけは拒むが、ESC / BS / DEL などは**通して履歴に残す**（git 2.50.1 で実測）。
+#      履歴に入ったメッセージは後から直せないので、**入る前**に止める。
+#
+# 止めるのは確実に見つけたときだけ。判定に使う node や走査器が無い・読めない、のときは止めない
+# （壊れた hook が全 worktree のコミットを止めるほうが害が大きい）。
+# その間の取りこぼしは hooks-test の走査（scripts/check-control-bytes.test.sh が HEAD から辿れる
+# 全メッセージを見る）が後から拾う。
+#
+# 入れ方: bash scripts/install-git-hooks.sh（git の core.hooksPath をこのディレクトリへ向ける）
+set -u
+
+msg_file="${1:-}"
+if [ -z "$msg_file" ] || [ ! -f "$msg_file" ]; then
+  exit 0
+fi
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+scanner="$root/scripts/lib/scan-control-bytes.mjs"
+if [ ! -f "$scanner" ]; then
+  exit 0
+fi
+if ! command -v node > /dev/null 2>&1; then
+  echo "[commit-msg] node が無いので、メッセージの制御バイトを確かめていません" >&2
+  exit 0
+fi
+
+node "$scanner" --message "$msg_file"
+rc=$?
+if [ "$rc" -eq 1 ]; then
+  echo "[commit-msg] メッセージに制御バイトがあります（上の位置）。書き出しの道具が、エスケープのつもりの文字を実バイトにした可能性があります（C-052）。" >&2
+  echo "[commit-msg] 直してからコミットしてください（エスケープは文字で説明するか、16 進の形で書く）。" >&2
+  exit 1
+fi
+exit 0

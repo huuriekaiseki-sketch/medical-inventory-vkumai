@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 80,
+  "minMutants": 83,
   "mutants": [
     {
       "id": "CM-001",
@@ -731,6 +731,33 @@
       "replace": "    elif false; then",
       "expect": "scripts/check-committed-html-generated.test.sh",
       "guards": "生成物が最新かを誰も確かめられない（C-022）"
+    },
+    {
+      "id": "CM-081",
+      "breaks": "NUL を制御バイトと数えない（今日の事故そのものを見逃す元の姿）",
+      "file": "scripts/lib/scan-control-bytes.mjs",
+      "find": "  return b !== 0x09 && b !== 0x0a && b !== 0x0d",
+      "replace": "  return b !== 0x00 && b !== 0x09 && b !== 0x0a && b !== 0x0d",
+      "expect": "scripts/check-control-bytes.test.sh",
+      "guards": "E-082（生の NUL が入っても検査 142 本のどれにも掛からなかった）"
+    },
+    {
+      "id": "CM-082",
+      "breaks": "コミットメッセージの走査で、見つけても通す",
+      "file": "scripts/lib/scan-control-bytes.mjs",
+      "find": "      if (hits.length === 0) process.exit(0)",
+      "replace": "      process.exit(0)",
+      "expect": "scripts/check-control-bytes.test.sh",
+      "guards": "C-052（git は ESC / BS / DEL をメッセージに通して記録する）"
+    },
+    {
+      "id": "CM-083",
+      "breaks": "commit-msg hook が制御バイトを見つけても止めない",
+      "file": "scripts/git-hooks/commit-msg",
+      "find": "if [ \"$rc\" -eq 1 ]; then",
+      "replace": "if false; then",
+      "expect": "scripts/check-git-hooks.test.sh",
+      "guards": "C-052（履歴に入ったメッセージは後から直せない）"
     }
   ]
 }

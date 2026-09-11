@@ -186,6 +186,32 @@
         }
       },
       "additionalProperties": false
+    },
+    "controlBytes": {
+      "type": "object",
+      "description": "制御バイトを置いてよいファイルとコミット（C-052）。エンジンは共通側、一覧は導入先",
+      "properties": {
+        "_comment": {
+          "type": "string"
+        },
+        "allowedFiles": {
+          "type": "object",
+          "description": "リポジトリ相対パス → なぜ制御バイトが要るか",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "allowedCommits": {
+          "type": "object",
+          "description": "コミットの先頭 7 桁以上 → なぜ直せないか（push 済みなど）",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "$defs": {
