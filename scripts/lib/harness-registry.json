@@ -121,6 +121,7 @@
         "scripts/check-aidd-doctor.test.sh",
         "scripts/check-catalogs.test.sh",
         "scripts/check-claude-md-size.test.sh",
+        "scripts/check-committed-html-generated.test.sh",
         "scripts/check-design-answers.test.sh",
         "scripts/check-design-questions.test.sh",
         "scripts/check-docs-integrity.test.sh",

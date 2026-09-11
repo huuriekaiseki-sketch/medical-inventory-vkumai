@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 78,
+  "minMutants": 80,
   "mutants": [
     {
       "id": "CM-001",
@@ -713,6 +713,24 @@
       "replace": "    unusedExemptions: [],",
       "expect": "scripts/check-stdout-truncation.test.sh",
       "guards": "C-049（逃がし口を作ったが、まだ要るかを誰も確かめない）"
+    },
+    {
+      "id": "CM-079",
+      "breaks": "生成物の見出しが無い HTML を通す（手で作ったその日の姿を置ける元の姿）",
+      "file": "scripts/check-committed-html-generated.test.sh",
+      "find": "    if ! grep -qF \"$HEADER\" \"$root/$rel\" 2>/dev/null; then",
+      "replace": "    if false; then",
+      "expect": "scripts/check-committed-html-generated.test.sh",
+      "guards": "レビュー artifact の鮮度（2026-09-11 に消した docs/aidd-status.html の再発）"
+    },
+    {
+      "id": "CM-080",
+      "breaks": "生成器が --check を持たなくても通す（生成物を名乗るだけで古びる元の姿）",
+      "file": "scripts/check-committed-html-generated.test.sh",
+      "find": "    elif ! grep -q -- '--check' \"$root/$regen\"; then",
+      "replace": "    elif false; then",
+      "expect": "scripts/check-committed-html-generated.test.sh",
+      "guards": "生成物が最新かを誰も確かめられない（C-022）"
     }
   ]
 }

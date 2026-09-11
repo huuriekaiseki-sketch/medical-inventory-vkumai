@@ -37,6 +37,7 @@
     "scripts/check-branch-tool-ownership.sh": "090f6f2f9fecf16b60dd0e79dc7470a09de2a10974d9eae249f79e5932210c3e",
     "scripts/check-claude-md-size.sh": "0196e369569d8aa57c55541975b3259d46711fc549f549c4a3fb485ff6983026",
     "scripts/check-claude-md-size.test.sh": "5d7acc2aa71716b5cb4ed65cb218d31f4acd16962bb9a068c2f13901044f947c",
+    "scripts/check-committed-html-generated.test.sh": "f95d16cc0774aed9ee94ecd1b9a49df84baf400902c0e26e1aec750116cc7521",
     "scripts/check-design-answers.test.sh": "3a86087e4272f1626668f7250a61f93f918472eba225b5dad550459289f19329",
     "scripts/check-detectors-effective.test.sh": "0e1fc27917d8163aad4db40a3b6d327bc5a8c6ad07637f779c39ca4cd8e38054",
     "scripts/check-docs-issue-refs.test.sh": "3ca1709a4d6053c0eb5aa72e53bde39c9b0d5e9b9a4bdaadda309f96ca368c06",
