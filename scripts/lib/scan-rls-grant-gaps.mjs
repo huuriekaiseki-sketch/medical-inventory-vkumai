@@ -30,6 +30,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeLine } from './stdout-sync.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const CMDS = ['select', 'insert', 'update', 'delete']
@@ -174,10 +175,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     for (const [name, t] of [...tables].sort()) {
       if (!t.rls) continue
       const g = [...(t.grants.get('authenticated') ?? [])].filter((p) => CMDS.includes(p)).sort()
-      console.log(`  ${name}: authenticated=${g.join(',') || 'なし'} ポリシー=${t.policies.size}`)
+      writeLine(`  ${name}: authenticated=${g.join(',') || 'なし'} ポリシー=${t.policies.size}`)
     }
   }
-  for (const v of violations) console.log(v)
-  console.log(`checked=${tables.size} violations=${violations.length}`)
+  for (const v of violations) writeLine(v)
+  writeLine(`checked=${tables.size} violations=${violations.length}`)
   process.exit(violations.length > 0 ? 1 : 0)
 }

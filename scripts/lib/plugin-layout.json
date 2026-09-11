@@ -165,6 +165,10 @@
       "aidd-core",
       "aidd-vkumai"
     ],
+    "lib/stdout-sync.mjs": [
+      "aidd-core",
+      "aidd-vkumai"
+    ],
     "harvest-journal-events.sh": "aidd-core",
     "lib/generate-codex-agents.mjs": "aidd-core",
     "otel-debug-collector.mjs": "aidd-core",
@@ -310,6 +314,7 @@
     "codex-agents-sandbox.test.sh": "aidd-core",
     "check-agent-progress-instructions.test.sh": "aidd-vkumai",
     "check-pipe-assertion.test.sh": "aidd-core",
+    "check-stdout-truncation.test.sh": "aidd-core",
     "check-rls-grant-gaps.test.sh": "aidd-vkumai",
     "check-write-path-gaps.test.sh": "aidd-vkumai",
     "check-fixture-guard.test.sh": "aidd-vkumai",

@@ -32,6 +32,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
 
 /** `a.b.length` のような単純な道をたどる。配列には `.length` だけ許す */
 export function resolvePath(obj, dotted) {
@@ -467,7 +468,7 @@ function main(argv) {
 
   // 証拠の状態は**その場で計算する**（コミットする文書へは焼き込まない。冒頭の WHY 参照）
   if (o.evidence) {
-    console.log(renderEvidence({ registry, root: o.root, logDir: resolveLogDir(o.root) }))
+    writeLine(renderEvidence({ registry, root: o.root, logDir: resolveLogDir(o.root) }))
     process.exit(0)
   }
 
@@ -480,14 +481,14 @@ function main(argv) {
   }
   if (o.check) {
     if (current === next) {
-      console.log('harness-map: 最新')
+      writeLine('harness-map: 最新')
       process.exit(0)
     }
     console.error('harness-map: 生成物と一致しない（bash scripts/render-harness-map.sh で作り直す）')
     process.exit(1)
   }
   writeFileSync(outAbs, next)
-  console.log(`書き出した: ${registry.output}`)
+  writeLine(`書き出した: ${registry.output}`)
 }
 
 // テストから import したときは実行しない

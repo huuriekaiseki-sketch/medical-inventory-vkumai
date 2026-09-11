@@ -20,6 +20,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
 
 /**
  * ロードマップの文書・番号の書き方・成果物の対応は導入先ごとに違う
@@ -70,25 +71,25 @@ if (process.argv[1] && process.argv[1].endsWith('check-roadmap-staleness.mjs')) 
   const { stale, undefined: undef, catalog, skipped } = check(root)
 
   if (skipped) {
-    console.log('scripts/lib/roadmap-registry.json が無いので飛ばしました（ロードマップの持ち方は導入先ごとに違う）。')
+    writeLine('scripts/lib/roadmap-registry.json が無いので飛ばしました（ロードマップの持ち方は導入先ごとに違う）。')
     process.exit(0)
   }
 
   for (const s of stale) {
-    console.log(`要見直し 計画 ${s.n}「${s.title}」は「計画」のままですが、成果物が在ります:`)
-    for (const f of s.found) console.log(`    ${f}`)
+    writeLine(`要見直し 計画 ${s.n}「${s.title}」は「計画」のままですが、成果物が在ります:`)
+    for (const f of s.found) writeLine(`    ${f}`)
   }
   if (verbose) {
     for (const u of undef) {
-      console.log(`(対応を定義していない) 計画 ${u.n}「${u.title}」`)
+      writeLine(`(対応を定義していない) 計画 ${u.n}「${u.title}」`)
     }
   }
   if (stale.length === 0) {
-    console.log(`checked=${catalog} 要見直し=0`)
+    writeLine(`checked=${catalog} 要見直し=0`)
   } else {
-    console.log('')
-    console.log('状態列を実態に合わせてください。**何が終わって何が残るかは人が決める**ので、')
-    console.log('この検査は落としません（落とすと「成果物を消せば通る」になるため）。')
+    writeLine('')
+    writeLine('状態列を実態に合わせてください。**何が終わって何が残るかは人が決める**ので、')
+    writeLine('この検査は落としません（落とすと「成果物を消せば通る」になるため）。')
   }
   // warning-only: 常に 0 で終わる
   process.exit(0)

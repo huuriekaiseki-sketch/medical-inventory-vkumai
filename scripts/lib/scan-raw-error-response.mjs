@@ -38,6 +38,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeLine } from './stdout-sync.mjs'
 
 const ROUTE_FILE = /^route\.(tsx?|jsx?|mjs)$/
 const REASON = /raw-error-ok[:：][ \t]*\S/
@@ -297,7 +298,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { configured, files, examined, violations } = scanRepo(repoRoot, config)
 
   if (!configured) {
-    console.log('configured=false（aidd.config.json に errorResponse が無いので何も見ていない）')
+    writeLine('configured=false（aidd.config.json に errorResponse が無いので何も見ていない）')
     process.exit(0)
   }
 
@@ -308,11 +309,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 
   if (process.argv.includes('--verbose')) {
-    console.log(`  files=${files} examined=${examined}`)
+    writeLine(`  files=${files} examined=${examined}`)
   }
   for (const v of violations) {
-    console.log(`raw-error: [${v.file}:${v.line}] ${v.text}`)
+    writeLine(`raw-error: [${v.file}:${v.line}] ${v.text}`)
   }
-  console.log(`files=${files} examined=${examined} violations=${violations.length}`)
+  writeLine(`files=${files} examined=${examined} violations=${violations.length}`)
   process.exit(violations.length > 0 ? 1 : 0)
 }

@@ -48,6 +48,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { scanTables } from './scan-rls-grant-gaps.mjs'
+import { writeLine } from './stdout-sync.mjs'
 
 const ENGINE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = process.env.CLAUDE_PROJECT_DIR ?? path.resolve(ENGINE_DIR, '../..')
@@ -227,7 +228,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const root = process.env.WRITE_PATH_GAPS_ROOT ?? DEFAULT_ROOT
   const registry = loadRegistry(root)
   if (!registry) {
-    console.log('write-path-gaps: 登録簿が無いので対象 0 件（scripts/lib/write-path-registry.json）')
+    writeLine('write-path-gaps: 登録簿が無いので対象 0 件（scripts/lib/write-path-registry.json）')
     process.exit(0)
   }
 
@@ -252,10 +253,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (verbose) {
     for (const [table, verbs] of [...dbVerbs].sort()) {
       const app = VERBS.filter((v) => writes.has(`${table}.${v}`))
-      console.log(`  ${table}: DB=${[...verbs].sort().join(',')} アプリ=${app.join(',') || 'なし'}`)
+      writeLine(`  ${table}: DB=${[...verbs].sort().join(',')} アプリ=${app.join(',') || 'なし'}`)
     }
   }
-  for (const v of violations) console.log(v)
-  console.log(`tables=${dbVerbs.size} gaps=${gapCount} violations=${violations.length}`)
+  for (const v of violations) writeLine(v)
+  writeLine(`tables=${dbVerbs.size} gaps=${gapCount} violations=${violations.length}`)
   process.exit(violations.length > 0 ? 1 : 0)
 }

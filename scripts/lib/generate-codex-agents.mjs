@@ -29,6 +29,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeLine } from './stdout-sync.mjs'
 
 /** frontmatter を読む（雑に 1 行 1 欄。値に改行は来ない前提） */
 export function parseFrontmatter(md) {
@@ -146,25 +147,25 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   const r = generate({ repoRoot, write })
 
-  for (const n of r.onlyClaude) console.log(`only-claude: ${n}（Codex 側に toml が無い。作るかどうかは人が決める）`)
-  for (const n of r.onlyCodex) console.log(`only-codex: ${n}（正本の md がリポジトリに無い。**配れない**）`)
-  for (const n of r.missingBody) console.log(`no-body: ${n}（developer_instructions を読めない toml。触っていない）`)
+  for (const n of r.onlyClaude) writeLine(`only-claude: ${n}（Codex 側に toml が無い。作るかどうかは人が決める）`)
+  for (const n of r.onlyCodex) writeLine(`only-codex: ${n}（正本の md がリポジトリに無い。**配れない**）`)
+  for (const n of r.missingBody) writeLine(`no-body: ${n}（developer_instructions を読めない toml。触っていない）`)
 
   if (write) {
-    for (const n of r.written) console.log(`書き換えた: ${n}.toml`)
-    console.log(`written=${r.written.length} onlyClaude=${r.onlyClaude.length} onlyCodex=${r.onlyCodex.length}`)
+    for (const n of r.written) writeLine(`書き換えた: ${n}.toml`)
+    writeLine(`written=${r.written.length} onlyClaude=${r.onlyClaude.length} onlyCodex=${r.onlyCodex.length}`)
     process.exit(0)
   }
 
-  for (const n of r.changed) console.log(`stale: ${n}.toml（md と食い違っている）`)
+  for (const n of r.changed) writeLine(`stale: ${n}.toml（md と食い違っている）`)
 
   const missing = countMissingSections(repoRoot)
   if (args.includes('--sections')) {
     for (const [name, list] of Object.entries(missing.byAgent)) {
-      console.log(`sections: ${name} — Codex に無い節 ${list.length} 個: ${list.join(' / ')}`)
+      writeLine(`sections: ${name} — Codex に無い節 ${list.length} 個: ${list.join(' / ')}`)
     }
   }
-  console.log(
+  writeLine(
     `changed=${r.changed.length} onlyClaude=${r.onlyClaude.length} onlyCodex=${r.onlyCodex.length}` +
       ` noBody=${r.missingBody.length} missingSections=${missing.total}`
   )

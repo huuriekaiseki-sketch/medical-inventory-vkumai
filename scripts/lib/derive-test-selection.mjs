@@ -17,6 +17,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '../..')
@@ -150,21 +151,21 @@ if (isMain) {
   try {
     opts = parseArgs(process.argv.slice(2))
   } catch (e) {
-    console.log(JSON.stringify({ error: e.message }))
+    writeLine(JSON.stringify({ error: e.message }))
     process.exit(2)
   }
   if (opts.listKeys) {
-    console.log(RULES.map(r => r.key).join('\n'))
+    writeLine(RULES.map(r => r.key).join('\n'))
     process.exit(0)
   }
   if (opts.listRules) {
     // key <TAB> label <TAB> timing。構造テストが test-matrix.md の derive キー列・種別列・
     // 実施タイミング列と突合するための機械可読出力
-    console.log(RULES.map(r => `${r.key}\t${r.label}\t${r.timing}`).join('\n'))
+    writeLine(RULES.map(r => `${r.key}\t${r.label}\t${r.timing}`).join('\n'))
     process.exit(0)
   }
   if (opts.listRisks) {
-    console.log(RISK_KEYS.join('\n'))
+    writeLine(RISK_KEYS.join('\n'))
     process.exit(0)
   }
   const files = opts.files ?? readStdinLines()
@@ -172,9 +173,9 @@ if (isMain) {
   try {
     result = derive(files, opts.risks)
   } catch (e) {
-    console.log(JSON.stringify({ error: e.message }))
+    writeLine(JSON.stringify({ error: e.message }))
     process.exit(2)
   }
-  if (opts.format === 'table') console.log(renderTable(result))
-  else console.log(JSON.stringify(result, null, 2))
+  if (opts.format === 'table') writeLine(renderTable(result))
+  else writeLine(JSON.stringify(result, null, 2))
 }

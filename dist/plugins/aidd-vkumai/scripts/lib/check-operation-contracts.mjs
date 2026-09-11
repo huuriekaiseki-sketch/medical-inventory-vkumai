@@ -36,6 +36,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { scanTables } from './scan-rls-grant-gaps.mjs'
 import { dbWritableVerbs, scanAppWrites, loadRegistry } from './check-write-path-gaps.mjs'
+import { writeLine } from './stdout-sync.mjs'
 
 const ENGINE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = process.env.CLAUDE_PROJECT_DIR ?? path.resolve(ENGINE_DIR, '../..')
@@ -271,16 +272,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   if (verbose) {
     for (const r of rows) {
-      console.log(`  ${r.id} ${r.table}.${r.operation} 直接=${r.directWrite} 入口=${r.entrypoints.join(' / ')}`)
+      writeLine(`  ${r.id} ${r.table}.${r.operation} 直接=${r.directWrite} 入口=${r.entrypoints.join(' / ')}`)
     }
   }
-  for (const x of violations) console.log(x)
+  for (const x of violations) writeLine(x)
   const forbidden = rows.filter((r) => r.directWrite === '禁止').length
   // WHY(何を測っていないかも出す、2026-09-09): 「violations=0」は**この検査が見た範囲で 0**
   //      という意味でしかない。見ていない軸（認可の本文・route の中身）を毎回一緒に出して、
   //      「安全が 0 件保証された」と読まれないようにする
-  console.log(`operations=${rows.length} 直接書き込み禁止=${forbidden} violations=${violations.length}`)
-  console.log(
+  writeLine(`operations=${rows.length} 直接書き込み禁止=${forbidden} violations=${violations.length}`)
+  writeLine(
     '  測っていないもの: 認可の列とポリシー本文の一致（掃き operation-authz-sweep が実 DB で測る）/ ' +
       'route の中で認可を呼んでいるか（攻撃表 P-017）/ その判定が正しいか（RLS の変異計測）',
   )

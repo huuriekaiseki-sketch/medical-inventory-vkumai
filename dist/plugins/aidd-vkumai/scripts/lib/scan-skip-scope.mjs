@@ -50,6 +50,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeLine } from './stdout-sync.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -154,9 +155,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 
   if (process.argv.includes('--verbose')) {
-    console.log(`  spec=${files} describe=${describes} 条件つき skip=${conditionalSkips}`)
+    writeLine(`  spec=${files} describe=${describes} 条件つき skip=${conditionalSkips}`)
   }
-  for (const v of violations) console.log(v)
-  console.log(`specs=${files} describes=${describes} conditional-skips=${conditionalSkips} violations=${violations.length}`)
+  for (const v of violations) writeLine(v)
+  writeLine(`specs=${files} describes=${describes} conditional-skips=${conditionalSkips} violations=${violations.length}`)
   process.exit(violations.length > 0 ? 1 : 0)
 }

@@ -18,6 +18,7 @@
 import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
 
 /** 記録を新しい順に最大 limit 行読む。壊れた行は飛ばす */
 export function readRecords(file, limit = Infinity, readFile = (p) => readFileSync(p, 'utf8')) {
@@ -335,7 +336,7 @@ function main(argv) {
     console.error('precision-metrics: 登録簿に指標が 1 件も無い（読めていない疑い）')
     process.exit(1)
   }
-  console.log(render({ registry, root: o.root, runs: o.runs }))
+  writeLine(render({ registry, root: o.root, runs: o.runs }))
 }
 
 if (process.argv[1] && process.argv[1].endsWith('precision-metrics.mjs')) {

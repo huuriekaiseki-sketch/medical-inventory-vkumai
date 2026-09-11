@@ -34,6 +34,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeLine } from './stdout-sync.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -137,10 +138,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   if (process.argv.includes('--verbose')) {
     for (const [name, v] of [...latest].sort()) {
-      console.log(`  ${name}: ${[...v.guards].sort().join(', ') || '判定なし'}（最後は ${v.file}）`)
+      writeLine(`  ${name}: ${[...v.guards].sort().join(', ') || '判定なし'}（最後は ${v.file}）`)
     }
   }
-  for (const v of violations) console.log(v)
-  console.log(`functions=${latest.size} definitions=${parsed} violations=${violations.length}`)
+  for (const v of violations) writeLine(v)
+  writeLine(`functions=${latest.size} definitions=${parsed} violations=${violations.length}`)
   process.exit(violations.length > 0 ? 1 : 0)
 }

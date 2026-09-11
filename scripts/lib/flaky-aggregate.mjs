@@ -16,6 +16,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
 
 const args = process.argv.slice(2)
 let asJson = false
@@ -210,6 +211,6 @@ lines.push(
 const md = lines.join('\n')
 
 if (mdPath) writeFileSync(mdPath, md + '\n')
-if (asJson) console.log(JSON.stringify(summary, null, 2))
-else console.log(md)
+if (asJson) writeLine(JSON.stringify(summary, null, 2))
+else writeLine(md)
 process.exit(exitCode)

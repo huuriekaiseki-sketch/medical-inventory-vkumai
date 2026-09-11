@@ -14,6 +14,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
 
 const dir = process.argv[2]
 if (!dir) {
@@ -102,4 +103,4 @@ for (const f of files) {
 
 const out = {}
 for (const key of [...constraints.keys()].sort()) out[key] = constraints.get(key)
-console.log(JSON.stringify(out, null, 2))
+writeLine(JSON.stringify(out, null, 2))

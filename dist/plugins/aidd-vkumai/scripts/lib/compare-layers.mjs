@@ -11,6 +11,7 @@
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
 
 const [migrations, apiJsonPath, mapPath] = process.argv.slice(2)
 if (!migrations || !apiJsonPath || !mapPath) {
@@ -99,5 +100,5 @@ for (const col of Object.keys(columns)) {
   if (!db[col]) say('stale', col, 'DB に CHECK が無い。CHECK を消したなら対応表からも消す')
 }
 
-for (const line of problems) console.log(line)
+for (const line of problems) writeLine(line)
 process.exit(problems.length > 0 ? 1 : 0)

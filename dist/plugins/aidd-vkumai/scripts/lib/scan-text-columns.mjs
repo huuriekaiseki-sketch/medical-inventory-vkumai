@@ -13,6 +13,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
 
 const dir = process.argv[2]
 if (!dir) {
@@ -112,4 +113,4 @@ for (const key of [...columns].sort()) {
   else unguarded.push(key)
 }
 
-console.log(JSON.stringify({ total: columns.size, guarded, bounded, unguarded }, null, 2))
+writeLine(JSON.stringify({ total: columns.size, guarded, bounded, unguarded }, null, 2))

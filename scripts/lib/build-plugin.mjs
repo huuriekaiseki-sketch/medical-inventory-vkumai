@@ -28,6 +28,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
+import { writeLine } from './stdout-sync.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -449,7 +450,7 @@ try {
       console.error('bash scripts/build-plugin.sh を実行して生成物を更新してください')
       process.exit(1)
     }
-    console.log(`build-plugin --check: OK（${Object.keys(want).length} ファイル一致）`)
+    writeLine(`build-plugin --check: OK（${Object.keys(want).length} ファイル一致）`)
   } else {
     for (const plugin of pluginNames) {
       const dst = path.join(OUT, plugin)
@@ -499,8 +500,8 @@ try {
       writeFileSync(path.join(repoRoot, 'README.md'), readme)
     }
     const summary = Object.fromEntries(pluginNames.map(p => [p, (written[p] ?? []).length]))
-    if (opts.json) console.log(JSON.stringify({ out: OUT, files: summary }, null, 2))
-    else console.log(`build-plugin: ${OUT} に生成（${pluginNames.map(p => `${p}: ${summary[p]} ファイル`).join(' / ')}）`)
+    if (opts.json) writeLine(JSON.stringify({ out: OUT, files: summary }, null, 2))
+    else writeLine(`build-plugin: ${OUT} に生成（${pluginNames.map(p => `${p}: ${summary[p]} ファイル`).join(' / ')}）`)
   }
 } finally {
   rmSync(tmp, { recursive: true, force: true })

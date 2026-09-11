@@ -14,6 +14,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '../..')
@@ -184,14 +185,14 @@ if (isMain) {
       const current = existsSync(abs) ? readFileSync(abs, 'utf-8') : null
       if (current !== content) {
         stale++
-        console.log(`  NG: ${rel} が生成結果と一致しません（node scripts/lib/render-aidd-graph.mjs で再生成してください）`)
+        writeLine(`  NG: ${rel} が生成結果と一致しません（node scripts/lib/render-aidd-graph.mjs で再生成してください）`)
       } else {
-        console.log(`  OK: ${rel}`)
+        writeLine(`  OK: ${rel}`)
       }
     } else {
       mkdirSync(path.dirname(abs), { recursive: true })
       writeFileSync(abs, content)
-      console.log(`wrote ${rel}`)
+      writeLine(`wrote ${rel}`)
     }
   }
   if (check && stale > 0) process.exit(1)

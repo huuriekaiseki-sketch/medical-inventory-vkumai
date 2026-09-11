@@ -28,6 +28,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeLine } from './stdout-sync.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = path.resolve(__dirname, '../..')
@@ -209,10 +210,10 @@ if (isMain) {
   const opts = parseArgs(process.argv.slice(2))
   const result = run(opts)
   if (opts.format === 'json') {
-    console.log(JSON.stringify(result, null, 2))
+    writeLine(JSON.stringify(result, null, 2))
   } else {
-    for (const v of result.violations) console.log(`  NG: ${v.file}:${v.line} [${v.kind}] ${v.detail}`)
-    console.log(`checked=${result.checkedFiles} violations=${result.violations.length}`)
+    for (const v of result.violations) writeLine(`  NG: ${v.file}:${v.line} [${v.kind}] ${v.detail}`)
+    writeLine(`checked=${result.checkedFiles} violations=${result.violations.length}`)
   }
   process.exit(result.violations.length === 0 ? 0 : 1)
 }

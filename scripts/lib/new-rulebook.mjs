@@ -4,6 +4,7 @@
 //      1 か所の入力から両方を作る。
 
 import { readFileSync, writeFileSync } from 'node:fs'
+import { writeLine } from './stdout-sync.mjs'
 
 function parseArgs(argv) {
   const o = { dryRun: false }
@@ -81,10 +82,10 @@ const entry = {
 }
 
 if (o.dryRun) {
-  console.log('--- ' + o.file + ' ---')
-  console.log(doc)
-  console.log('--- 登録簿へ足すエントリ ---')
-  console.log(JSON.stringify(entry, null, 2))
+  writeLine('--- ' + o.file + ' ---')
+  writeLine(doc)
+  writeLine('--- 登録簿へ足すエントリ ---')
+  writeLine(JSON.stringify(entry, null, 2))
 } else {
   writeFileSync(o.abs, doc)
   const registry = JSON.parse(readFileSync(o.registry, 'utf8'))
@@ -95,6 +96,6 @@ if (o.dryRun) {
   }
   registry.catalogs.push(entry)
   writeFileSync(o.registry, JSON.stringify(registry, null, 2) + '\n')
-  console.log(`作った: ${o.file}`)
-  console.log(`登録した: ${o.id}（${columns} 列 / ${o.prefix}-xxx / 状態 ${states.length} 語）`)
+  writeLine(`作った: ${o.file}`)
+  writeLine(`登録した: ${o.id}（${columns} 列 / ${o.prefix}-xxx / 状態 ${states.length} 語）`)
 }

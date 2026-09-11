@@ -32,6 +32,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
 
 /**
  * 導入先ごとの設定（**エンジンは共通・登録簿は導入先**。catalog-registry.json と同じ形）。
@@ -156,8 +157,8 @@ if (process.argv[1] && process.argv[1].endsWith('check-rule-guard-coverage.mjs')
   const { violations, summary } = check(root)
 
   if (verbose) {
-    for (const s of summary) console.log(`  [${s.state}] ${s.doc} 「${s.title}」`)
-    console.log('')
+    for (const s of summary) writeLine(`  [${s.state}] ${s.doc} 「${s.title}」`)
+    writeLine('')
   }
 
   for (const v of violations) {
@@ -172,5 +173,5 @@ if (process.argv[1] && process.argv[1].endsWith('check-rule-guard-coverage.mjs')
     process.exit(1)
   }
   const counts = summary.reduce((a, s) => ({ ...a, [s.state]: (a[s.state] ?? 0) + 1 }), {})
-  console.log(`checked=${summary.length} 守=${counts['守'] ?? 0} 宣=${counts['宣'] ?? 0} 対象外=${counts['対象外'] ?? 0} violations=0`)
+  writeLine(`checked=${summary.length} 守=${counts['守'] ?? 0} 宣=${counts['宣'] ?? 0} 対象外=${counts['対象外'] ?? 0} violations=0`)
 }

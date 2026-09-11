@@ -38,6 +38,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFINITION_RE, PARSE_RE, stripComments } from './scan-guard-regressions.mjs'
+import { writeLine } from './stdout-sync.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -153,11 +154,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   if (process.argv.includes('--verbose')) {
     for (const r of [...reachable].sort((a, b) => a.name.localeCompare(b.name))) {
-      console.log(`  ${r.name} [${r.roles.join(',')}]: ${r.guards.join(', ') || '**判定なし**'}（${r.file}）`)
+      writeLine(`  ${r.name} [${r.roles.join(',')}]: ${r.guards.join(', ') || '**判定なし**'}（${r.file}）`)
     }
   }
-  for (const v of violations) console.log(v)
-  console.log(
+  for (const v of violations) writeLine(v)
+  writeLine(
     `functions=${latest.size} definitions=${parsed} client-reachable-definer=${reachable.length} violations=${violations.length}`
   )
   process.exit(violations.length > 0 ? 1 : 0)

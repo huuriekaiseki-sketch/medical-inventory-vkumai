@@ -26,6 +26,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeLine } from './stdout-sync.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -128,7 +129,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1)
   }
 
-  for (const v of violations) console.log(v)
-  console.log(`files=${files} imports=${imports} violations=${violations.length}`)
+  for (const v of violations) writeLine(v)
+  writeLine(`files=${files} imports=${imports} violations=${violations.length}`)
   process.exit(violations.length > 0 ? 1 : 0)
 }

@@ -29,6 +29,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { readFileSync, existsSync } from 'node:fs'
+import { writeLine } from './stdout-sync.mjs'
 
 function parseArgs(argv) {
   const o = { base: 'origin/main', json: false, repo: process.cwd() }
@@ -97,7 +98,7 @@ const staleBase = staleBaseOf({
 
 if (staleBase && !o.allowStaleBase) {
   if (o.json) {
-    console.log(JSON.stringify({ base: o.base, measured: false, staleBase }, null, 2))
+    writeLine(JSON.stringify({ base: o.base, measured: false, staleBase }, null, 2))
   } else {
     console.error('rehearse-merge: 起点が遅れています（判定できません）')
     console.error(`  起点 ${o.base} = ${staleBase.base}`)
@@ -143,30 +144,30 @@ for (const { label, branch } of queue) {
 const conflicts = results.filter((r) => r.status === 'conflict')
 
 if (o.json) {
-  console.log(JSON.stringify({ base: o.base, results, conflictCount: conflicts.length }, null, 2))
+  writeLine(JSON.stringify({ base: o.base, results, conflictCount: conflicts.length }, null, 2))
 } else {
-  console.log(`起点: ${o.base} = ${git(['rev-parse', '--short', o.base])}`)
-  console.log('')
+  writeLine(`起点: ${o.base} = ${git(['rev-parse', '--short', o.base])}`)
+  writeLine('')
   for (const r of results) {
-    if (r.status === 'ok') console.log(`OK      ${r.label}`)
-    else if (r.status === 'already') console.log(`済み    ${r.label}（すでに積まれている）`)
-    else if (r.status === 'missing') console.log(`無し    ${r.label}（${r.branch} が無い）`)
+    if (r.status === 'ok') writeLine(`OK      ${r.label}`)
+    else if (r.status === 'already') writeLine(`済み    ${r.label}（すでに積まれている）`)
+    else if (r.status === 'missing') writeLine(`無し    ${r.label}（${r.branch} が無い）`)
     else {
-      console.log(`衝突    ${r.label}（${r.branch}）`)
-      for (const f of r.files) console.log(`          ${f}`)
+      writeLine(`衝突    ${r.label}（${r.branch}）`)
+      for (const f of r.files) writeLine(`          ${f}`)
     }
   }
-  console.log('')
-  console.log(`--- 衝突 ${conflicts.length} 件 / ${results.length} 本 ---`)
+  writeLine('')
+  writeLine(`--- 衝突 ${conflicts.length} 件 / ${results.length} 本 ---`)
   if (conflicts.length > 0) {
     const byFile = {}
     for (const c of conflicts) for (const f of c.files) (byFile[f] ??= []).push(c.label)
-    console.log('衝突したファイル（多い順）:')
+    writeLine('衝突したファイル（多い順）:')
     for (const [f, labels] of Object.entries(byFile).sort((a, b) => b[1].length - a[1].length)) {
-      console.log(`  ${f}: ${labels.length} 本（${labels.join(' / ')}）`)
+      writeLine(`  ${f}: ${labels.length} 本（${labels.join(' / ')}）`)
     }
   }
-  console.log('※ 作業ツリーとブランチには触れていない（merge-tree と commit-tree だけを使う）')
+  writeLine('※ 作業ツリーとブランチには触れていない（merge-tree と commit-tree だけを使う）')
 }
 
 process.exit(conflicts.length > 0 ? 1 : 0)

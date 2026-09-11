@@ -44,6 +44,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { writeLine } from './stdout-sync.mjs'
 
 const ENGINE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = process.env.CLAUDE_PROJECT_DIR ?? path.resolve(ENGINE_DIR, '../..')
@@ -250,7 +251,7 @@ if (isMain) {
   // WHY(登録簿が無い導入先): エンジンは配るが、**壊し方は導入先が決める**。
   //      登録簿が無いのは「まだ決めていない」であって違反ではないので、対象 0 件で通す
   if (!fs.existsSync(registryPath)) {
-    console.log('check-detectors-effective: 登録簿が無いので対象 0 件（scripts/lib/check-mutants.json）')
+    writeLine('check-detectors-effective: 登録簿が無いので対象 0 件（scripts/lib/check-mutants.json）')
     process.exit(0)
   }
 
@@ -259,6 +260,6 @@ if (isMain) {
     registryPath,
     onProgress: quiet ? undefined : (r) => process.stderr.write(`  … ${r.id}: ${r.verdict}\n`),
   })
-  console.log(formatReport(report))
+  writeLine(formatReport(report))
   process.exit(report.ok && report.violations.length === 0 ? 0 : 1)
 }

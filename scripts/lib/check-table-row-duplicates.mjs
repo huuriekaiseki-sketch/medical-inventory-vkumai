@@ -20,6 +20,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
 
 /**
  * 対象の表と鍵の列は導入先ごとに違う（**エンジンは共通・登録簿は導入先**）。
@@ -99,5 +100,5 @@ if (process.argv[1] && process.argv[1].endsWith('check-table-row-duplicates.mjs'
     console.error('古い方（多くは「計画のまま・根拠列が空」）を消してください。')
     process.exit(1)
   }
-  console.log(`checked=${loadTables(root).length} violations=0`)
+  writeLine(`checked=${loadTables(root).length} violations=0`)
 }

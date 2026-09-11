@@ -33,6 +33,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
+import { writeLine } from './stdout-sync.mjs'
 
 /** 実行系ごとの、呼び出しを見つける正規表現 */
 const RUNTIMES = [
@@ -224,19 +225,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 
   if (args.includes('--verbose')) {
-    console.log(`  登録 ${r.registrations} 件 / 名前 ${r.registeredNames} 種 / 実体 ${r.scripts} 本（実体を見つけられず: ${r.unresolved}）`)
+    writeLine(`  登録 ${r.registrations} 件 / 名前 ${r.registeredNames} 種 / 実体 ${r.scripts} 本（実体を見つけられず: ${r.unresolved}）`)
     for (const [k, v] of Object.entries(r.required)) {
-      console.log(`  ${k}: ${v} 本が呼ぶ（この環境: ${r.env[k] ? 'あり' : '**なし**'}）`)
+      writeLine(`  ${k}: ${v} 本が呼ぶ（この環境: ${r.env[k] ? 'あり' : '**なし**'}）`)
     }
     const tools = Object.keys(r.byTool)
     if (tools.length > 0) {
       const events = [...new Set(tools.flatMap((t) => Object.keys(r.byTool[t])))].sort()
-      console.log(`  イベント別（ツールごとに使えるものが違うので、揃っていないこと自体は異常ではない）:`)
+      writeLine(`  イベント別（ツールごとに使えるものが違うので、揃っていないこと自体は異常ではない）:`)
       for (const ev of events) {
         const cells = tools.map((t) => `${t}=${r.byTool[t][ev] ?? 0}`).join(' ')
         const missing = tools.filter((t) => !r.byTool[t][ev])
         const note = missing.length > 0 && missing.length < tools.length ? `  ← ${missing.join(' / ')} に無い` : ''
-        console.log(`    ${ev}: ${cells}${note}`)
+        writeLine(`    ${ev}: ${cells}${note}`)
       }
     }
   }
@@ -246,11 +247,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   //      それまで `--verbose` でしか出さず、終了コードにも効いていなかった。
   //      SessionStart hook は `aidd-doctor: ` で始まる行しか拾わないので、その形で出す。
   if (r.unresolved > 0) {
-    console.log(
+    writeLine(
       `aidd-doctor: hook に登録された ${r.unresolved} 本のスクリプトが見つからない` +
         `（呼ばれても何も起きない。名前を変えたか消した疑い）`
     )
-    for (const name of r.missingScripts) console.log(`  - ${name}（実体なし）`)
+    for (const name of r.missingScripts) writeLine(`  - ${name}（実体なし）`)
   }
 
   if (r.atRisk.length > 0) {
@@ -260,15 +261,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       const silent = list.filter((a) => a.mode === 'silent').length
       const closed = list.filter((a) => a.mode === 'closed').length
       const unknown = list.filter((a) => a.mode === 'unknown').length
-      console.log(
+      writeLine(
         `aidd-doctor: ${runtime} が無いので ${list.length} 本が期待どおり動かない` +
           `（黙って降りる ${silent} / 拒否側へ倒れる ${closed} / 読み切れない ${unknown}）`
       )
-      for (const a of list) console.log(`  - ${a.script}（${a.mode}）`)
+      for (const a of list) writeLine(`  - ${a.script}（${a.mode}）`)
     }
   }
 
-  console.log(
+  writeLine(
     `registrations=${r.registrations} scripts=${r.scripts} unresolved=${r.unresolved} atRisk=${r.atRisk.length}` +
       ` env=${Object.entries(r.env).map(([k, v]) => `${k}:${v ? 'y' : 'n'}`).join(',')}`
   )

@@ -14,6 +14,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
 
 function parseArgs(argv) {
   const o = { root: process.cwd(), check: false }
@@ -102,11 +103,11 @@ const outAbs = path.isAbsolute(o.out) ? o.out : path.join(o.root, o.out)
 if (o.check) {
   const current = existsSync(outAbs) ? readFileSync(outAbs, 'utf8') : ''
   if (current === rendered) {
-    console.log('rulebook index: 最新')
+    writeLine('rulebook index: 最新')
     process.exit(0)
   }
   console.error('rulebook index: 生成物と一致しない（bash scripts/render-rulebook-index.sh で作り直す）')
   process.exit(1)
 }
 writeFileSync(outAbs, rendered)
-console.log(`書き出した: ${o.out}`)
+writeLine(`書き出した: ${o.out}`)

@@ -144,6 +144,7 @@
         "scripts/check-rule-guard-coverage.test.sh",
         "scripts/check-session-start-matchers.test.sh",
         "scripts/check-skill-size.test.sh",
+        "scripts/check-stdout-truncation.test.sh",
         "scripts/check-text-length-consistency.test.sh",
         "scripts/check-threat-model.test.sh",
         "scripts/lib/aidd-config.test.sh",

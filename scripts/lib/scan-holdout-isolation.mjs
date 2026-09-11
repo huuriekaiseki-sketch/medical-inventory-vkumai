@@ -26,6 +26,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeLine } from './stdout-sync.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -190,10 +191,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 
   if (process.argv.includes('--verbose')) {
-    console.log(`  セット=${sets} held-out=${holdoutSets} held-out の case=${holdoutCases} 見張る名前=${distinctive}`)
+    writeLine(`  セット=${sets} held-out=${holdoutSets} held-out の case=${holdoutCases} 見張る名前=${distinctive}`)
   }
-  for (const v of violations) console.log(v)
-  console.log(
+  for (const v of violations) writeLine(v)
+  writeLine(
     `sets=${sets} holdout-sets=${holdoutSets} holdout-cases=${holdoutCases} watched-names=${distinctive} violations=${violations.length}`
   )
   process.exit(violations.length > 0 ? 1 : 0)
