@@ -264,6 +264,32 @@ function build(outRoot) {
     for (const plugin of plugins) copyText(plugin, 'scripts/' + name, 'scripts/' + name, null, 0o755)
   }
 
+  // 検査が「何を見るか」（self / consumer / both）を配布物にも持たせる。
+  // bin/aidd-check がこれを読み、**導入先を見る検査だけ**を導入先のルートで回す。
+  // 宣言が無い検査はここに出さない——入口が黙って回すより、載っていないほうが分かる
+  // （宣言の抜けは check-plugin-check-coverage.test.sh が落とす）。
+  // 検査そのものが supportScripts に置かれている場合（対象スクリプトを持たない走査系）も数える
+  const scopeOwners = new Map()
+  for (const [name, plugins] of Object.entries(testOwners)) scopeOwners.set(name, new Set(plugins))
+  for (const [name, owners] of Object.entries(layout.supportScripts ?? {})) {
+    if (!name.endsWith('.test.sh')) continue
+    const set = scopeOwners.get(name) ?? new Set()
+    for (const p of (Array.isArray(owners) ? owners : [owners])) set.add(p)
+    scopeOwners.set(name, set)
+  }
+  for (const plugin of pluginNames) {
+    const scopes = {}
+    for (const [name, plugins] of scopeOwners) {
+      if (!plugins.has(plugin)) continue
+      const scope = (layout.checkScopes ?? {})[name]
+      if (scope) scopes[name] = scope
+    }
+    put(plugin, 'scripts/lib/check-scopes.json', JSON.stringify({
+      _comment: '生成物。正本は中心リポジトリの scripts/lib/plugin-layout.json の checkScopes。手で編集しない',
+      checks: scopes,
+    }, null, 2) + '\n')
+  }
+
   // 7 項目のファイル（対応版・変更履歴・既知の制約・移行手順・破壊的変更・実証結果）を両プラグインの
   // ルートへ。設定スキーマは schema/、導入先ひな形は templates/ へ（いずれも共通側）
   const rd = layout.releaseDocs

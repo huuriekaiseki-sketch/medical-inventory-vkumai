@@ -32,6 +32,12 @@ v0 は中心リポジトリの `.claude/` と `scripts/` を導入先へ手で�
    - `Workflow({ name: 'aidd-vkumai:aidd-phase1-router', args: { ... } })` で sweep 4 体が起動し `failedCount: 0`
      （2026-09-12 に導入先を模したリポジトリで実測: sweep 4 体・72 秒・$0.58・指摘 12 件）
    - `logs/` に `instructions-loaded.jsonl` と `subagent-skeleton.jsonl` が増える
+6. **配った検査を回す**
+   - `bin/aidd-check --list` で、この導入先で回る検査を確認する
+     （`self`＝配っているスクリプト自身の単体テストは回らない）
+   - `bin/aidd-check` で実際に回す。導入先のルートは `CLAUDE_PROJECT_DIR` で決まる
+   - **いまは `both` の多くがプラグイン自身を見ている**（KNOWN-LIMITS 参照）。
+     赤が出たら、まずその検査が導入先を見ているかを確かめる
 
 ## v1 → v2（未定）
 

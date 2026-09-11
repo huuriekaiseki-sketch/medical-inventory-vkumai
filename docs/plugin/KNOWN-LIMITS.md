@@ -29,6 +29,21 @@
   `check-claude-md-size.sh` が担う
 - プラグイン同梱 subagent の frontmatter `hooks` / `permissionMode` / `mcpServers` は無視される
 
+## 配った検査の回し方（2026-09-12）
+
+- 導入先から検査を回す入口は `bin/aidd-check`（アダプター側は `scripts/aidd-check.sh`）。
+  導入先のルートを `CLAUDE_PROJECT_DIR` で明示し、**導入先を見る検査だけ**を回す。
+  `aidd-check --list` で対象だけを出せる
+- 各検査が「何を見るか」は `scripts/lib/check-scopes.json`（生成物）に入っている:
+  `self` = 配っているスクリプト自身の単体テスト（回さない）/ `consumer` = 導入先だけを見る /
+  `both` = 自己検証と実態の走査が同居
+- **まだ多くの `both` はプラグイン自身を見る。** 2026-09-12 に根を導入先へ向けたのは
+  `consumer` の 4 本（shell の 2 本・スキル本文の長さ・Codex 設定の分離）だけ。
+  残りは順次。実測（導入先を模した 2 リポジトリ）:
+  aidd-core 側は 30 本中 9 本が通り、aidd-vkumai 側は 20 本中 2 本しか通らない——
+  **aidd-vkumai の検査は、この製品の実データ（e2e・stryker・migrations の形・package.json の script・
+  eval-fixtures）を前提にしているものが多い**。順次「配らない」へ移すか、閾値と名前を設定へ出す
+
 ## 運用上の制約
 
 - Codex には配布できない（プラグイン機構が無い）。`.codex/hooks.json` と `.codex/agents/*.toml` は

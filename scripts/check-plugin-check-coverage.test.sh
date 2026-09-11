@@ -96,6 +96,33 @@ if (typeof splittableMax !== "number") {
       "（出してから足すか、出せない理由なら checksNotDistributed へ）",
   )
 }
+// 配る検査は「何を見るか」も宣言する（2026-09-12）。
+// 宣言が無いと、導入先から回す入口（bin/aidd-check）は**その検査を回しようがない**——
+// 実際 2026-09-12 まで入口が無く、配った 92 本は導入先ではなくプラグイン自身を見ていた（E-086）。
+// checkScopes を持たない導入先（まだこの仕組みを入れていない）では何も言わない。
+if (layout.checkScopes) {
+  const scopes = layout.checkScopes
+  const valid = new Set(["self", "consumer", "both"])
+  // 配っている検査の集合。生成器（build-plugin.mjs）と同じ数え方にそろえる:
+  //   対象スクリプトから自動で付いていくもの ＋ checks に書いたもの
+  //   ＋ supportScripts に**検査そのもの**として置かれているもの − checksNotDistributed
+  // 「分ければ配れる（checksSplittable）」はまだ配っていないので含めない。
+  const distributed = new Set([...withSubject, ...declared])
+  for (const name of Object.keys(layout.supportScripts ?? {})) {
+    if (name.endsWith(".test.sh")) distributed.add(name)
+  }
+  for (const n of notDistributedNames) distributed.delete(n)
+  // 宣言を求めるのは**検査だけ**（層の表には検査以外のスクリプトや登録簿も並ぶ）
+  for (const t of [...distributed].filter((n) => n.endsWith(".test.sh")).sort()) {
+    const s = scopes[t]
+    if (!s) console.log(`no-scope: ${t}（何を見るかの宣言が checkScopes に無い）`)
+    else if (!valid.has(s)) console.log(`bad-scope: ${t}（層は self / consumer / both のいずれか。いまは ${s}）`)
+  }
+  for (const name of Object.keys(scopes)) {
+    if (name.startsWith("_")) continue
+    if (!distributed.has(name)) console.log(`stale-scope: ${name}（配っていないのに層の宣言が残っている）`)
+  }
+}
 ' "$1"
 }
 

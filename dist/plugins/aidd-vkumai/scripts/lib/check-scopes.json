@@ -1,0 +1,32 @@
+{
+  "_comment": "生成物。正本は中心リポジトリの scripts/lib/plugin-layout.json の checkScopes。手で編集しない",
+  "checks": {
+    "check-integration-freshness.test.sh": "both",
+    "check-full-run-before-finish.test.sh": "self",
+    "check-e2e-freshness.test.sh": "both",
+    "check-rls-mutation-freshness.test.sh": "both",
+    "check-mutation-freshness.test.sh": "both",
+    "check-readonly-bash.test.sh": "self",
+    "check-dependency-change.test.sh": "self",
+    "ai-check-suggest.test.sh": "self",
+    "check-automode-config.test.sh": "self",
+    "check-direct-ddl-execution.test.sh": "both",
+    "check-dependency-update-staleness.test.sh": "both",
+    "lib/resolve-log-dir.test.sh": "self",
+    "lib/aidd-config.test.sh": "both",
+    "check-rls-mutation.test.sh": "self",
+    "run-integration-tests.test.sh": "both",
+    "check-no-registry-fetch.test.sh": "both",
+    "check-agent-progress-instructions.test.sh": "both",
+    "check-rls-grant-gaps.test.sh": "both",
+    "check-write-path-gaps.test.sh": "both",
+    "check-fixture-guard.test.sh": "both",
+    "check-test-entrypoints.test.sh": "both",
+    "check-observability-chain.test.sh": "both",
+    "check-operation-contracts.test.sh": "both",
+    "check-guard-regressions.test.sh": "both",
+    "check-definer-authz-gaps.test.sh": "both",
+    "check-suspense-gaps.test.sh": "both",
+    "check-skip-scope.test.sh": "both"
+  }
+}

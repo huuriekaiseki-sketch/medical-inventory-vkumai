@@ -22,7 +22,13 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**を導入先だと思い込み、導入先の木を一度も見ないまま緑になる（E-086）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 
 fail=0
 ok() { echo "  OK: $1"; }
@@ -64,8 +70,11 @@ fi
 echo "=== scenario 2: 走査対象が空でない（fail-open 防止） ==="
 # WHY(C-021): 走査が壊れると違反 0 件で合格に見える。数えた本数を先に見る
 SCANNED="$(find "$REPO_ROOT/scripts" -name '*.sh' -type f | wc -l | tr -d ' ')"
-if [ "$SCANNED" -lt 20 ]; then
-  ng "走査した .sh が ${SCANNED} 本しかありません（走査が壊れている疑い）"
+# WHY(2026-09-12): 以前は 20 本未満を「走査が壊れている」として落としていたが、
+#      **配った先の導入先は小さいことがある**（実測: Python の導入先で 2 本）。
+#      0 本のときだけ落とす。
+if [ "$SCANNED" -eq 0 ]; then
+  ng "走査した .sh が 0 本です（走査が壊れているか、この導入先に対象がありません）"
 else
   ok "${SCANNED} 本の .sh を走査した"
 fi

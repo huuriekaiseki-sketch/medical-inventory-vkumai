@@ -8,9 +8,25 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**の .codex/ と .claude/ を見に行き、導入先の分離状態を一度も見ない（E-086）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 HOOKS_JSON="$REPO_ROOT/.codex/hooks.json"
 CLAUDE_SETTINGS="$REPO_ROOT/.claude/settings.json"
+
+# WHY(2026-09-12): 配った先が Codex を併用しているとは限らない。`.codex/` が無い導入先で
+#      「分離できていない」と赤くするのは**意味の無い警告**（実測: Python の導入先で
+#      9 シナリオ中 4 つがこの理由だけで赤くなった）。併用していなければ対象なしとして黙る。
+if [ ! -d "$REPO_ROOT/.codex" ]; then
+  echo "=== scenario 0: この導入先は Codex を併用していない ==="
+  echo "  SKIP: .codex/ が無いので対象なし（Claude と Codex の設定分離を見る検査）"
+  echo "ALL PASSED"
+  exit 0
+fi
 
 fail=0
 assert_ok() {

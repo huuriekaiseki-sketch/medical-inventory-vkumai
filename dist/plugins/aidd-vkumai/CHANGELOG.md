@@ -37,3 +37,11 @@
   中心リポジトリは router を直接呼ぶので 1 段に収まる——**配布物の形でだけ壊れていた**。
   ひな形から Workflow を削り、MIGRATION.md と README を直接呼び出しへ直した。連鎖そのものは
   `scripts/check-workflow-nesting.test.sh` が門にする（型は C-053、実例は E-085）
+- **2026-09-12: 配った検査に「何を見るか」の宣言と、導入先から回す入口を付けた。** それまで
+  入口が無く、配った 92 本は**導入先ではなくプラグイン自身**を見ていた（導入先に置いた違反 4 件のうち
+  反応したのは 1 本だけ、と実測）。層（self / consumer / both）を `plugin-layout.json` の `checkScopes` で
+  宣言し、生成物へ `scripts/lib/check-scopes.json` として配る。入口は `bin/aidd-check`。
+  宣言が無い検査は `scripts/check-plugin-check-coverage.test.sh` が落とす。
+  あわせて `consumer` の 4 本（shell の 2 本・スキル本文の長さ・Codex 設定の分離）の根を
+  `CLAUDE_PROJECT_DIR` 優先へ変え、**小さい導入先で意味の無い赤が出ない**ようにした
+  （空振り防止の下限を 20 本 → 0 本、`.codex/` が無ければ対象なしで黙る）
