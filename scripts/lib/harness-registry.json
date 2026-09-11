@@ -118,8 +118,8 @@
       "checks": [
         "scripts/build-plugin.test.sh",
         "scripts/check-access-path-inventory.test.sh",
-        "scripts/check-catalogs.test.sh",
         "scripts/check-aidd-doctor.test.sh",
+        "scripts/check-catalogs.test.sh",
         "scripts/check-claude-md-size.test.sh",
         "scripts/check-design-answers.test.sh",
         "scripts/check-design-questions.test.sh",
@@ -142,6 +142,7 @@
         "scripts/check-promise-catalog.test.sh",
         "scripts/check-query-validation-coverage.test.sh",
         "scripts/check-rule-guard-coverage.test.sh",
+        "scripts/check-session-handoff-format.test.sh",
         "scripts/check-session-start-matchers.test.sh",
         "scripts/check-skill-size.test.sh",
         "scripts/check-stdout-truncation.test.sh",

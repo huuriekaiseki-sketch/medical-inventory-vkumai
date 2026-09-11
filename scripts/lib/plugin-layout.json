@@ -174,6 +174,7 @@
       "aidd-core",
       "aidd-vkumai"
     ],
+    "lib/handoff-04-table.sh": "aidd-core",
     "harvest-journal-events.sh": "aidd-core",
     "lib/generate-codex-agents.mjs": "aidd-core",
     "otel-debug-collector.mjs": "aidd-core",
@@ -417,7 +418,8 @@
     "check-catalogs.test.sh": "登録簿（catalog-registry.json）と索引の実データを検査する。登録簿は導入先のものなので中心リポジトリの実データでは配れない",
     "check-design-answers.test.sh": "aidd.config.json の limits と design-questions.md の実データを突合する。値が導入先ごとに違う",
     "check-design-questions.test.sh": "supabase/migrations/ の実データを走査する",
-    "check-export-paths.test.sh": "src/ の実コードと依存名を走査する（エクスポート経路が生えた瞬間に落とす ratchet）"
+    "check-export-paths.test.sh": "src/ の実コードと依存名を走査する（エクスポート経路が生えた瞬間に落とす ratchet）",
+    "check-session-handoff-format.test.sh": "docs/sessions/ の実データを検査する。形式は汎用だが、**対象を切る日付（00〜05 形式が入った日）とメモの置き場は導入先ごとに違う**。配ると『まだそのフォーマットを使っていない導入先』の過去のメモを一斉に違反にする"
   },
   "checksSplittable": {
     "_comment": "**分ければ配れる**検査の層（2026-09-09 新設）。エンジンは汎用で、固有なのは対象・閾値・対応表だけ、というもの。`checksNotDistributed`（エンジン自体が固有で本当に配れない）とは別物で、ここは**返す当てのある借金**。増やさないことだけを機械で守る（減らすのは人が決める）。",

@@ -71,10 +71,11 @@ command -v jq >/dev/null 2>&1 || exit 0
 cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# 表の行を列に割るのはここだけ（`\|` を区切りとして数えないため。C-047）。
-# 04 表の証跡列にはコマンドを書くので、`a \| b` は実際に出うる
-# shellcheck source=lib/table-row.sh
-source "$SCRIPT_DIR/lib/table-row.sh"
+# 04 表の判定（4 値・理由の有無）は共通の入口を使う。
+# docs/sessions/ 側の構造テストと同じ判定にするため（複製すると片方だけ古くなる。C-047）。
+# 表の割り方（`\|` を区切りにしない）もこの先で読まれる
+# shellcheck source=lib/handoff-04-table.sh
+source "$SCRIPT_DIR/lib/handoff-04-table.sh"
 MARKER_FILE="${HANDOFF_CHECK_MARKER_FILE:-.aidd/handoff-format-warning-shown.json}"
 GH_CMD="${HANDOFF_CHECK_GH_CMD:-gh}"
 
@@ -130,25 +131,11 @@ check_pr() {
     has_verified=1
   fi
 
-  # 04 表の4値検知。「どう確認したか」節の表行（見出し行・区切り行を除く）ごとに
-  # 状態列（2列目）が4値のいずれかで始まるか、➖ / ⬜ の行に3列目（理由）があるかを見る。
-  # 外れた行の種別名を four_state_issues に溜める（空なら問題なし）
+  # 04 表の4値検知。判定そのものは lib/handoff-04-table.sh が持つ
+  # （docs/sessions/ 側の構造テストと**同じ判定**を使う。複製すると片方だけ古くなる。C-047）
   four_state_issues=""
   if [ "$has_verified" -eq 1 ]; then
-    four_state_issues="$(printf '%s\n' "$pr_body" | table_mask_stream | awk -F'|' '
-      /^#+ .*どう確認したか/ {f=1; next}
-      /^## / {f=0}
-      f && /^\| / {
-        kind=$2; gsub(/^ +| +$/,"",kind)
-        if (kind=="" || kind ~ /^-+$/ || kind ~ /^種別/) next
-        status=$3; gsub(/^ +| +$/,"",status)
-        reason=$4; gsub(/^ +| +$/,"",reason)
-        if (status !~ /^(✅|➖|🟡|⬜)/) { printf "%s（状態 \"%s\" が4値でない）; ", kind, status; next }
-        # substr は Linux の awk（C ロケール）だとバイト単位で絵文字を切るため使わない
-        if (status ~ /^(➖|⬜)/ && (reason=="" || reason=="—")) { mark = (status ~ /^➖/) ? "➖" : "⬜"; printf "%s（%s なのに理由が無い）; ", kind, mark }
-      }' 2>/dev/null || true)"
-    # 退避した文字は警告文に出す前に戻す（人が読む文字列なので）
-    four_state_issues="${four_state_issues//$TABLE_ROW_SENTINEL/\\|}"
+    four_state_issues="$(handoff_four_state_issues "$pr_body")"
   fi
 
   # 依存の変更（package.json / package-lock.json を触った PR に「依存の変更」の記述があるか）。
