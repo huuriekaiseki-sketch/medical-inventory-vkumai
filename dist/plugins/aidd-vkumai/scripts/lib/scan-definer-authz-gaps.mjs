@@ -40,7 +40,11 @@ import { fileURLToPath } from 'node:url'
 import { DEFINITION_RE, PARSE_RE, stripComments } from './scan-guard-regressions.mjs'
 import { writeLine } from './stdout-sync.mjs'
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+// WHY(2026-09-12): 配られると、この走査器は**配布物の中**にある。スクリプトの位置から
+//      `../..` で組み立てると、導入先ではなく**プラグイン自身**を探して ENOENT で落ちる（E-086）。
+const REPO_ROOT = process.env.CLAUDE_PROJECT_DIR
+  ? path.resolve(process.env.CLAUDE_PROJECT_DIR)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 /** 呼び出し元が誰かを確かめる判定。ここに無いものは「確かめていない」とみなす（安全側） */
 export const CALLER_GUARDS = [

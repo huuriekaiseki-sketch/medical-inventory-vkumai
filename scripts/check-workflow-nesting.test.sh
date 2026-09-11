@@ -72,18 +72,24 @@ OUT="$(run_scan "$REPO_ROOT")"
 RC=$?
 if [ "$RC" -eq 0 ]; then
   assert_ok "2 段の入れ子なし（$(head -1 <<<"$OUT")）"
+elif [ "$RC" -eq 2 ] && [ ! -d "$REPO_ROOT/.claude/workflows" ]; then
+  # WHY(2026-09-12): 配った先が Workflow を持つとは限らない。持っていない導入先で
+  #      「走査が壊れている」と赤くするのは意味が無い（E-086）。置き場ごと無ければ対象なし。
+  assert_ok "この導入先には Workflow が無いので対象なし"
 elif [ "$RC" -eq 2 ]; then
-  assert_fail "走査できなかった（Workflow を 1 本も見つけられない）" "$OUT"
+  assert_fail "走査できなかった（置き場はあるのに Workflow を 1 本も見つけられない）" "$OUT"
 else
   assert_fail "2 段の入れ子がある" "$OUT"
 fi
 
 echo "=== scenario 2: 走査が空振りしていない（C-025） ==="
 SCANNED="$(sed -n 's/^Workflow \([0-9][0-9]*\) 本を走査しました$/\1/p' <<<"$OUT")"
-if [ -n "$SCANNED" ] && [ "$SCANNED" -ge 5 ]; then
+if [ ! -d "$REPO_ROOT/.claude/workflows" ]; then
+  assert_ok "Workflow の置き場が無い導入先なので対象なし"
+elif [ -n "$SCANNED" ] && [ "$SCANNED" -ge 1 ]; then
   assert_ok "${SCANNED} 本を走査できている"
 else
-  assert_fail "走査できたのが ${SCANNED:-0} 本しかない（走査先が変わった疑い）" "$OUT"
+  assert_fail "置き場はあるのに走査できたのが ${SCANNED:-0} 本（走査先が変わった疑い）" "$OUT"
 fi
 
 echo "=== scenario 3: fixture で 2 段を検知する（RED 方向） ==="

@@ -68,7 +68,13 @@ BASE_SCAN='"migrationsDir":"supabase/migrations","scan":{"roots":["src"],"extens
 echo "=== scenario 1: 実態に違反が無い ==="
 OUT="$(cd "$REPO_ROOT" && node "$ENGINE" 2>&1)"
 CODE=$?
-assert_contains "$OUT" "violations=0" "違反なし"
+# WHY(2026-09-12): 登録簿を持たない導入先では、エンジンは「対象 0 件」と言って通る。
+#      それを違反として読むと、**持っていないだけで赤くなる**（E-086）。どちらも合格として読む。
+if grep -qF -- "violations=0" <<<"$OUT" || grep -qF -- "対象 0 件" <<<"$OUT"; then
+  echo "  OK: 違反なし（または対象なし）"
+else
+  echo "  NG: 違反なし"; echo "      actual: $OUT"; fail=1
+fi
 if [ "$CODE" -eq 0 ]; then echo "  OK: exit 0"; else echo "  NG: exit $CODE"; fail=1; fi
 
 echo "=== scenario 2: 宣言していない隙間を検知する（RED 方向） ==="

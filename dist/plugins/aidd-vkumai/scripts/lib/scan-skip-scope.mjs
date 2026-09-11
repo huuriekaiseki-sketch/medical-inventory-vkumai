@@ -52,7 +52,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeLine } from './stdout-sync.mjs'
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+// WHY(2026-09-12): 配られると、この走査器は**配布物の中**にある。スクリプトの位置から
+//      `../..` で組み立てると、導入先ではなく**プラグイン自身**の e2e を探すことになる（E-086）。
+const REPO_ROOT = process.env.CLAUDE_PROJECT_DIR
+  ? path.resolve(process.env.CLAUDE_PROJECT_DIR)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 /** describe 直下の「条件つき」スキップ。`test.skip()` 単体（条件なし）は対象外 */
 const CONDITIONAL_SKIP_RE = /^\s*test\.skip\(\s*[^)\s]/

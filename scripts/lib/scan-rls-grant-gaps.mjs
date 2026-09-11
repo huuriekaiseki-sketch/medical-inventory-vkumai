@@ -32,7 +32,13 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { writeLine } from './stdout-sync.mjs'
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+// WHY(2026-09-12): 配られると、この走査器は**配布物の中**にある。スクリプトの位置から
+//      `../..` で組み立てると、導入先ではなく**プラグイン自身**の supabase/migrations を探して
+//      ENOENT で落ちる（E-086。実測: 導入先を模したリポジトリで 2 本がこれで落ちた）。
+//      導入先のルートが分かるときはそれを使う。
+const REPO_ROOT = process.env.CLAUDE_PROJECT_DIR
+  ? path.resolve(process.env.CLAUDE_PROJECT_DIR)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const CMDS = ['select', 'insert', 'update', 'delete']
 /** RLS が効くロールだけを見る。service_role は RLS を通らない */
 const CLIENT_ROLES = ['anon', 'authenticated']

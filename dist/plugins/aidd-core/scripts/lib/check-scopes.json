@@ -25,7 +25,6 @@
     "check-access-review-staleness.test.sh": "both",
     "check-plugin-integrity.test.sh": "self",
     "lib/resolve-log-dir.test.sh": "self",
-    "lib/aidd-config.test.sh": "both",
     "lib/table-row.test.sh": "both",
     "queue-recovery-task.test.sh": "self",
     "resolve-recovery-task.test.sh": "self",

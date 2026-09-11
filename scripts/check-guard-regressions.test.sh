@@ -23,7 +23,13 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**を導入先だと思い込み、導入先の木を一度も見ないまま落ちる（E-086）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 SCANNER="$SCRIPT_DIR/lib/scan-guard-regressions.mjs"
 
 fail=0
@@ -46,10 +52,17 @@ trap cleanup EXIT
 run_on() { GUARD_REGRESSION_DIR="$1" node "$SCANNER" 2>&1; }
 
 echo "=== scenario 1: 実態の migration に違反が無い ==="
+# WHY(2026-09-12): 配った先の migration に関数定義が 1 つも無いことはふつうにある。
+#      そこで「走査が壊れている」と赤くするのは**持っていないだけで赤くなる**形（E-086）。
+#      対象が無ければ対象なしとして黙る（走査の故障は、対象がある導入先でだけ意味を持つ）。
 OUT="$(cd "$REPO_ROOT" && node "$SCANNER" 2>&1)"
 CODE=$?
-assert_contains "$OUT" "violations=0" "違反なし"
-if [ "$CODE" -eq 0 ]; then echo "  OK: exit 0"; else echo "  NG: exit $CODE"; fail=1; fi
+if grep -qF -- "関数を 1 つも見つけられなかった" <<<"$OUT"; then
+  echo "  OK: この導入先の migration に関数定義が無いので対象なし"
+else
+  assert_contains "$OUT" "violations=0" "違反なし"
+  if [ "$CODE" -eq 0 ]; then echo "  OK: exit 0"; else echo "  NG: exit $CODE"; fail=1; fi
+fi
 
 echo "=== scenario 2: 今日の実物（has_aal2 を落とす再定義）を検知する ==="
 BAD="$WORK_DIR/aal2"

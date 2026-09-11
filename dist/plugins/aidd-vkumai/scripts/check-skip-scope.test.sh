@@ -20,7 +20,13 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**を導入先だと思い込み、導入先の e2e を一度も見ないまま落ちる（E-086）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 SCAN="$SCRIPT_DIR/lib/scan-skip-scope.mjs"
 
 fail=0
@@ -36,6 +42,11 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 echo "=== scenario 1: 実コードに違反が無い（ratchet 0） ==="
+# WHY(2026-09-12): 配った先に e2e/ があるとは限らない。無い導入先で「走査が壊れている」と
+#      赤くするのは**持っていないだけで赤くなる**形（E-086）。対象が無ければ対象なしとして黙る。
+if [ ! -d "$REPO_ROOT/e2e" ]; then
+  ok "この導入先には e2e/ が無いので対象なし"
+else
 ALLOW_ZERO= run_scan "$REPO_ROOT/e2e"
 if [ "$SCAN_CODE" -eq 0 ]; then ok "違反 0 件"; else ng "実コードで違反が出た" "$SCAN_OUT"; fi
 if grep -q "conditional-skips=[1-9]" <<<"$SCAN_OUT"; then
@@ -47,6 +58,7 @@ if grep -q "describes=[1-9]" <<<"$SCAN_OUT"; then
   ok "describe を実際に数えている"
 else
   ng "describe が 0 件" "$SCAN_OUT"
+fi
 fi
 
 echo "=== scenario 2: 今日の実例と同じ形で落ちる（RED 方向） ==="
