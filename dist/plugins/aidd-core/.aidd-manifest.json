@@ -40,7 +40,6 @@
     "scripts/check-claude-md-size.test.sh": "5d7acc2aa71716b5cb4ed65cb218d31f4acd16962bb9a068c2f13901044f947c",
     "scripts/check-committed-html-generated.test.sh": "f95d16cc0774aed9ee94ecd1b9a49df84baf400902c0e26e1aec750116cc7521",
     "scripts/check-control-bytes.test.sh": "b0b87a8e15efacb7ff2a93ba799ac72a66bc9c70359d3bc3e9687f18e1d2f6d9",
-    "scripts/check-design-answers.test.sh": "3a86087e4272f1626668f7250a61f93f918472eba225b5dad550459289f19329",
     "scripts/check-detectors-effective.test.sh": "0e1fc27917d8163aad4db40a3b6d327bc5a8c6ad07637f779c39ca4cd8e38054",
     "scripts/check-docs-issue-refs.test.sh": "3ca1709a4d6053c0eb5aa72e53bde39c9b0d5e9b9a4bdaadda309f96ca368c06",
     "scripts/check-domain-decisions-suggest.sh": "ad33c84a7e50ba15165c7795f7b46ab20c2fda6e10f266fc865603eb54a87c26",
