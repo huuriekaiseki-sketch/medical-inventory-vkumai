@@ -45,6 +45,10 @@ import {
 } from './helpers/seed-rls-idor'
 import { enrollAndVerifyTotp } from './helpers/mfa-totp'
 import { describeDenial, isPermissionDenied, isRlsRejected } from './helpers/pg-error'
+// WHY(2026-09-11): 表の割り方を共通エンジンに寄せる。素の `split('|')` は
+//      「列の中のパイプは `\|` と書いてよい」という 2026-09-09 の緩和を知らず、
+//      誰かがこの契約表に 1 つ書いた瞬間に**列が 1 つずれた宣言で実 DB を測る**（C-047）。
+import { splitRow } from '../../../scripts/lib/check-catalog.mjs'
 
 const CONTRACTS = path.resolve(__dirname, '../../../docs/agents/operation-contracts.md')
 // WHY(助っ人と同じ値にする): `createSeededUser` が使う定数と違うと `signInWithPassword` が
@@ -82,8 +86,8 @@ function parseContracts(): Contract[] {
   const rows: Contract[] = []
   for (const line of readFileSync(CONTRACTS, 'utf8').split('\n')) {
     if (!line.startsWith('| O-')) continue
-    const c = line.split('|').map((x) => x.trim())
-    const [, id, table, operation, , directWrite, authorization, , state] = c
+    const c: string[] = splitRow(line)
+    const [id, table, operation, , directWrite, authorization, , state] = c
     rows.push({
       id,
       table,

@@ -21,6 +21,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { writeLine } from './stdout-sync.mjs'
+import { splitRow } from './check-catalog.mjs'
 
 /**
  * ロードマップの文書・番号の書き方・成果物の対応は導入先ごとに違う
@@ -53,7 +54,8 @@ export function check(root = '.') {
     const m = line.match(planPattern)
     if (!m) continue
     const n = Number(m[1])
-    const title = line.split('|')[1]?.trim() ?? ''
+    // 割るのは共通エンジンだけ（`\|` を区切りにしない。C-047）
+    const title = splitRow(line)[0] ?? ''
     const ev = EVIDENCE[n]
     if (!ev) {
       undefined_.push({ n, title })

@@ -13,6 +13,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# 表の行を列に割るのはここだけ（`\|` を区切りとして数えないため。docs/agents/check-design-pitfalls.md C-047）
+source "$SCRIPT_DIR/lib/table-row.sh"
 CATALOG="${INVARIANT_CATALOG_PATH:-$REPO_ROOT/docs/agents/invariant-catalog.md}"
 TEST_ROOTS="${INVARIANT_TEST_ROOTS:-supabase/__tests__ supabase/migrations/__tests__ src e2e}"
 
@@ -48,9 +50,9 @@ check_catalog() {
 
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    id="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')"
+    id="$(table_field "$line" 2)"
 
-    nf="$(printf '%s' "$line" | awk -F'|' '{print NF}')"
+    nf="$(table_nf "$line")"
     if [ "$nf" -ne 9 ]; then
       echo "    columns: [$id] 列数が7列でない（区切り数=$((nf-1))）"
       violations=$((violations+1))
@@ -67,8 +69,8 @@ check_catalog() {
     fi
     seen_ids="$(printf '%s\n%s' "$seen_ids" "$id")"
 
-    tests="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$7); print $7}')"
-    status="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$8); print $8}')"
+    tests="$(table_field "$line" 7)"
+    status="$(table_field "$line" 8)"
 
     case "$status" in
       実装済み|計画|対象外) ;;
@@ -181,7 +183,7 @@ fi
 
 echo "=== scenario 4: 実態のカタログの ID は区分ごとの番号帯に収まる ==="
 BAD_BAND=0
-for id in $(catalog_rows "$CATALOG" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}'); do
+for id in $(catalog_rows "$CATALOG" | table_mask_stream | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}' | table_unmask_stream); do
   case "$id" in
     I-01[0-9]|I-02[0-9]|I-03[0-9]|I-04[0-9]|I-05[0-9]|I-06[0-9]) ;;
     *) echo "    band: $id は定義済みの番号帯（01x〜06x）に無い"; BAD_BAND=1 ;;

@@ -19,6 +19,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# 表の行を列に割るのはここだけ（`\|` を区切りとして数えないため。docs/agents/check-design-pitfalls.md C-047）
+source "$SCRIPT_DIR/lib/table-row.sh"
 MATRIX="${TEST_MATRIX_PATH:-$REPO_ROOT/docs/agents/test-matrix.md}"
 SKILL="$REPO_ROOT/.claude/skills/handoff-format/SKILL.md"
 DERIVE="$REPO_ROOT/scripts/derive-test-selection.sh"
@@ -36,7 +38,9 @@ assert_fail() {
 # 落とさず、check_matrix 側で違反として数えるため）。
 # 列: 1=種別 2=状態 3=実施タイミング 4=トリガー 5=理由 6=証跡 7=derive キー 8=相場 9=コマンド
 matrix_rows() {
-  awk -F'|' '/^## 一覧/{f=1; next} /^## /{f=0} f && /^\| / && $2 !~ /^ *-+ *$/ && $2 !~ /^ *種別 *$/ {print}' "$MATRIX"
+  table_mask_stream "$MATRIX" |
+    awk -F'|' '/^## 一覧/{f=1; next} /^## /{f=0} f && /^\| / && $2 !~ /^ *-+ *$/ && $2 !~ /^ *種別 *$/ {print}' |
+    table_unmask_stream
 }
 
 # .github/workflows/*.yml の jobs: 直下のジョブ名を全て返す（証跡列の「CI `xxx` ジョブ」の実在検査用）。
@@ -81,23 +85,23 @@ check_matrix() {
 
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    kind="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')"
+    kind="$(table_field "$line" 2)"
 
     # 0. 列数は9列（区切り "|" で分けると先頭・末尾の空を含めて NF=11）ちょうど。
     #    理由や証跡に "|" を含めると列がずれ、以降の検査が別の列を見てしまうため、
     #    ずれた行は無言で落とさず違反として数える
-    nf="$(printf '%s' "$line" | awk -F'|' '{print NF}')"
+    nf="$(table_nf "$line")"
     if [ "$nf" -ne 11 ]; then
       echo "    columns: [$kind] 列数が9列でない（区切り数=$((nf-1))。理由・証跡に | を含めていないか、derive キー列が抜けていないか）"
       violations=$((violations+1))
       continue
     fi
 
-    status="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')"
-    timing="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')"
-    reason="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$6); print $6}')"
-    evidence="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$7); print $7}')"
-    dkey="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$8); print $8}')"
+    status="$(table_field "$line" 3)"
+    timing="$(table_field "$line" 4)"
+    reason="$(table_field "$line" 6)"
+    evidence="$(table_field "$line" 7)"
+    dkey="$(table_field "$line" 8)"
 
     # 0b. ✅ 以外（➖ / 🟡 / ⬜）の行は理由列が必須（凡例の「理由必須」を機械で守る）
     if ! grep -q '✅' <<<"$status"; then

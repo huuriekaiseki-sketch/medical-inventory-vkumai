@@ -89,13 +89,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 const root = process.argv[2]
 const { checkTableCoverage } = await import(`file://${root}/scripts/lib/fixture-guard.mjs`)
+// 表を列に割るのは共通エンジンだけ（`\|` を区切りにしない。C-047）
+const { splitRow } = await import(`file://${root}/scripts/lib/check-catalog.mjs`)
 const text = fs.readFileSync(path.join(root, 'docs/agents/table-rulebook.md'), 'utf8')
 const tables = []
 for (const line of text.split('\n')) {
   if (!line.startsWith('| TB-')) continue
-  const c = line.split('|').map((x) => x.trim())
-  if (c[8] !== '実装済み') continue
-  tables.push(c[2])
+  const c = splitRow(line)
+  if (c[7] !== '実装済み') continue
+  tables.push(c[1])
 }
 if (tables.length < 15) {
   console.log(`FEWTABLES ${tables.length}`)

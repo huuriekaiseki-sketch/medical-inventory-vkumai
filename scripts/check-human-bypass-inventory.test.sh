@@ -14,6 +14,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# 表の行を列に割るのはここだけ（`\|` を区切りとして数えないため。docs/agents/check-design-pitfalls.md C-047）
+source "$SCRIPT_DIR/lib/table-row.sh"
 INVENTORY="${HUMAN_BYPASS_INVENTORY_PATH:-$REPO_ROOT/docs/agents/human-bypass-inventory.md}"
 SCAN_ROOT="${HUMAN_BYPASS_SCAN_ROOT:-$REPO_ROOT}"
 
@@ -34,8 +36,8 @@ check_inventory() {
   fi
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    id="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')"
-    nf="$(printf '%s' "$line" | awk -F'|' '{print NF}')"
+    id="$(table_field "$line" 2)"
+    nf="$(table_nf "$line")"
     if [ "$nf" -ne 8 ]; then
       echo "    columns: [$id] 列数が6列でない（区切り数=$((nf-1))）"
       violations=$((violations+1))
@@ -50,8 +52,8 @@ check_inventory() {
       violations=$((violations+1))
     fi
     seen="$(printf '%s\n%s' "$seen" "$id")"
-    procedure="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$6); print $6}')"
-    status="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$7); print $7}')"
+    procedure="$(table_field "$line" 6)"
+    status="$(table_field "$line" 7)"
     case "$status" in
       記録される|不可) ;;
       一部|記録されない)

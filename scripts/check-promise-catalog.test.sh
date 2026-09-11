@@ -15,6 +15,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# 表の行を列に割るのはここだけ（`\|` を区切りとして数えないため。docs/agents/check-design-pitfalls.md C-047）
+source "$SCRIPT_DIR/lib/table-row.sh"
 CATALOG="${PROMISE_CATALOG_PATH:-$REPO_ROOT/docs/agents/promise-catalog.md}"
 TEST_ROOTS="${PROMISE_TEST_ROOTS:-supabase/__tests__ supabase/migrations/__tests__ src e2e}"
 
@@ -57,10 +59,10 @@ check_catalog() {
 
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    id="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')"
+    id="$(table_field "$line" 2)"
 
     # 0. 9 列ちょうど（NF=11）
-    nf="$(printf '%s' "$line" | awk -F'|' '{print NF}')"
+    nf="$(table_nf "$line")"
     if [ "$nf" -ne 11 ]; then
       echo "    columns: [$id] 列数が9列でない（区切り数=$((nf-1))。列の中に | を含めていないか）"
       violations=$((violations+1))
@@ -78,8 +80,8 @@ check_catalog() {
     fi
     seen_ids="$(printf '%s\n%s' "$seen_ids" "$id")"
 
-    tests="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$9); print $9}')"
-    timing="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$10); print $10}')"
+    tests="$(table_field "$line" 9)"
+    timing="$(table_field "$line" 10)"
 
     # 2. 実施タイミングは 4 語のみ
     case "$timing" in
@@ -195,7 +197,7 @@ fi
 
 echo "=== scenario 4: 実態のカタログの ID は区分ごとの番号帯に収まる（凡例の規約） ==="
 BAD_BAND=0
-for id in $(catalog_rows "$CATALOG" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}'); do
+for id in $(catalog_rows "$CATALOG" | table_mask_stream | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}' | table_unmask_stream); do
   case "$id" in
     P-00[0-9]|P-01[0-9]|P-02[0-9]|P-03[0-9]|P-04[0-9]|P-05[0-9]|P-06[0-9]) ;;
     *) echo "    band: $id は定義済みの番号帯（00x〜06x）に無い"; BAD_BAND=1 ;;

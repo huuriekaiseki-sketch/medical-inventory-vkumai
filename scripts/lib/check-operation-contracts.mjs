@@ -37,6 +37,7 @@ import { fileURLToPath } from 'node:url'
 import { scanTables } from './scan-rls-grant-gaps.mjs'
 import { dbWritableVerbs, scanAppWrites, loadRegistry } from './check-write-path-gaps.mjs'
 import { writeLine } from './stdout-sync.mjs'
+import { splitRow } from './check-catalog.mjs'
 
 const ENGINE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = process.env.CLAUDE_PROJECT_DIR ?? path.resolve(ENGINE_DIR, '../..')
@@ -62,9 +63,9 @@ export function parseContracts(text) {
   const rows = []
   for (const line of text.split('\n')) {
     if (!line.startsWith('| O-')) continue
-    const cells = line.split('|').map((c) => c.trim())
-    // cells[0] は行頭の空文字
-    const [, id, table, operation, entrypoints, directWrite, authorization, risk, state] = cells
+    // 割るのは共通エンジンだけ（`\|` を区切りにしない。C-047）
+    const cells = splitRow(line)
+    const [id, table, operation, entrypoints, directWrite, authorization, risk, state] = cells
     rows.push({
       id,
       table,

@@ -14,6 +14,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# 表の行を列に割るのはここだけ（`\|` を区切りとして数えないため。docs/agents/check-design-pitfalls.md C-047）
+source "$SCRIPT_DIR/lib/table-row.sh"
 MODEL="${THREAT_MODEL_PATH:-$REPO_ROOT/docs/agents/threat-model.md}"
 PROMISES="${PROMISE_CATALOG_PATH:-$REPO_ROOT/docs/agents/promise-catalog.md}"
 INVARIANTS="${INVARIANT_CATALOG_PATH:-$REPO_ROOT/docs/agents/invariant-catalog.md}"
@@ -31,7 +33,9 @@ catalog_ids() { grep -oE "^\| $2-[0-9]{3} " "$1" | grep -oE "$2-[0-9]{3}" | sort
 model_rows() { grep '^| T-' "$1" || true; }
 matrix_kinds() {
   # test-matrix の一覧の種別名（1 列目）
-  awk -F'|' '/^## 一覧/{f=1; next} /^## /{f=0} f && /^\| / && $2 !~ /^ *-+ *$/ && $2 !~ /^ *種別 *$/ {gsub(/^ +| +$/,"",$2); print $2}' "$1"
+  table_mask_stream "$1" |
+    awk -F'|' '/^## 一覧/{f=1; next} /^## /{f=0} f && /^\| / && $2 !~ /^ *-+ *$/ && $2 !~ /^ *種別 *$/ {gsub(/^ +| +$/,"",$2); print $2}' |
+    table_unmask_stream
 }
 
 # 検査本体。$1=脅威モデル $2=約束カタログ $3=不変条件カタログ $4=test-matrix。末尾行に violations=N
@@ -66,8 +70,8 @@ check_model() {
   # (c) 行の形
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    id="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')"
-    nf="$(printf '%s' "$line" | awk -F'|' '{print NF}')"
+    id="$(table_field "$line" 2)"
+    nf="$(table_nf "$line")"
     if [ "$nf" -ne 10 ]; then
       echo "    columns: [$id] 列数が8列でない（区切り数=$((nf-1))）"
       violations=$((violations+1))
@@ -82,8 +86,8 @@ check_model() {
       violations=$((violations+1))
     fi
     seen="$(printf '%s\n%s' "$seen" "$id")"
-    tests="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$8); print $8}')"
-    status="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$9); print $9}')"
+    tests="$(table_field "$line" 8)"
+    status="$(table_field "$line" 9)"
     case "$status" in
       守られている|一部|未) ;;
       *) echo "    status: [$id] 状態が3語以外: '$status'"; violations=$((violations+1)) ;;

@@ -1,6 +1,10 @@
 import { readdirSync, readFileSync, statSync } from 'fs'
 import path from 'path'
 import { describe, it, expect } from 'vitest'
+// WHY(2026-09-11): 表の割り方を共通エンジンに寄せる。素の `split('|')` は
+//      「列の中のパイプは `\|` と書いてよい」という 2026-09-09 の緩和を知らず、
+//      誰かがこの表に 1 つ書いた瞬間に**列が 1 つずれた値を黙って読む**（C-047）。
+import { splitRow } from '../../scripts/lib/check-catalog.mjs'
 
 // WHY: issue #757 の 27 の続き（優先順位 4）。`service_role` は RLS を通らないので、
 //      **認可はアプリ側のガードにしか無い**。ガードを書き忘れても DB は止めてくれない。
@@ -64,10 +68,7 @@ function loadRulebook(): Row[] {
   const rows: Row[] = []
   for (const line of text.split('\n')) {
     if (!/^\|\s*W-/.test(line)) continue
-    const cells = line
-      .split('|')
-      .slice(1, -1)
-      .map((c) => c.trim())
+    const cells: string[] = splitRow(line)
     expect(cells.length, `${cells[0]}: 8 列でない（${cells.length}）`).toBe(8)
     const [id, route, , guard, , , , status] = cells
     rows.push({

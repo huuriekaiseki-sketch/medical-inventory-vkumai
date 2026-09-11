@@ -19,6 +19,10 @@
 import { readFileSync } from 'fs'
 import path from 'path'
 import { CLIENT_ROLES, type ClientRole } from './table-facts'
+// WHY(2026-09-11): 表を割るのは共通エンジンだけに任せる。素の `split('|')` は
+//      「列の中のパイプは `\|` と書いてよい」という 2026-09-09 の緩和を知らないため、
+//      この表に 1 つ書かれた瞬間に列が 1 つずれた値を黙って読む（C-047）。
+import { splitRow } from '../../../scripts/lib/check-catalog.mjs'
 
 export const TABLE_RULEBOOK_PATH = 'docs/agents/table-rulebook.md'
 
@@ -69,11 +73,7 @@ export function loadTableRulebook(): Record<string, TableDecl> {
 
   for (const line of text.split('\n')) {
     if (!/^\|\s*TB-/.test(line)) continue
-    // 先頭と末尾の `|` の外側は空文字
-    const cells = line
-      .split('|')
-      .slice(1, -1)
-      .map((c) => c.trim())
+    const cells: string[] = splitRow(line)
     if (cells.length !== 8) {
       throw new Error(`${TABLE_RULEBOOK_PATH}: 8 列でない行がある（${cells[0]}）`)
     }

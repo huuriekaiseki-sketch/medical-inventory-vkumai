@@ -21,6 +21,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { writeLine } from './stdout-sync.mjs'
+import { splitRow } from './check-catalog.mjs'
 
 /**
  * 対象の表と鍵の列は導入先ごとに違う（**エンジンは共通・登録簿は導入先**）。
@@ -40,8 +41,11 @@ export function loadTables(root = '.') {
 
 const SEPARATOR = /^\|[-:\s|]+\|$/
 
+// WHY(2026-09-11): 割るのは共通エンジンに任せる。素の `split('|')` は
+//      「列の中のパイプは `\|` と書いてよい」という 2026-09-09 の緩和を知らないので、
+//      その表に 1 つ書かれた瞬間に鍵の列が 1 つずれる（C-047）
 function cellsOf(trimmedLine) {
-  return trimmedLine.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim())
+  return splitRow(trimmedLine)
 }
 
 /**

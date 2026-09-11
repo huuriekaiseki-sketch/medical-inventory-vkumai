@@ -33,6 +33,9 @@ else
 fi
 # shellcheck source=lib/aidd-config.sh
 source "$SCRIPT_DIR/lib/aidd-config.sh"
+# 表の行を列に割るのはここだけ（`\|` を区切りとして数えないため。C-047）
+# shellcheck source=lib/table-row.sh
+source "$SCRIPT_DIR/lib/table-row.sh"
 DOC="${PITFALL_RULEBOOK_PATH:-$REPO_ROOT/docs/agents/check-design-pitfalls.md}"
 MIN_ROWS="${PITFALL_MIN_ROWS:-$(aidd_config_query '.limits.pitfallTypesMinRows // empty' '' "$REPO_ROOT")}"
 
@@ -67,10 +70,10 @@ check_doc() {
   while IFS= read -r line; do
     [ -z "$line" ] && continue
     rows=$((rows + 1))
-    id="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')"
-    example="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$7); print $7}')"
-    tests="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$8); print $8}')"
-    status="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$9); print $9}')"
+    id="$(table_field "$line" 2)"
+    example="$(table_field "$line" 7)"
+    tests="$(table_field "$line" 8)"
+    status="$(table_field "$line" 9)"
 
     # (a) 実例に日付（YYYY-MM-DD）がある
     if ! grep -qE '[0-9]{4}-[0-9]{2}-[0-9]{2}' <<<"$example"; then

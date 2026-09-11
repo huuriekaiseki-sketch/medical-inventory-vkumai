@@ -8,7 +8,6 @@ import { describe, it, expect } from 'vitest'
 //      （docs/agents/check-design-pitfalls.md の C-047）。
 //      結果として「列の中にエスケープすればパイプを書ける」という緩和がこの表では効かず、
 //      実際に 2026-09-11 に E-049 を書いたとき 10 列と数えられて落ちた。
-// @ts-expect-error -- .mjs（型定義を持たない共通エンジン）を読む
 import { splitRow } from '../check-catalog.mjs'
 
 // WHY: 2026-09-07。ルールブックの「限界」が的外れかどうかは書いた時点では分からない。

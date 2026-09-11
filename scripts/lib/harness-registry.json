@@ -145,10 +145,12 @@
         "scripts/check-session-start-matchers.test.sh",
         "scripts/check-skill-size.test.sh",
         "scripts/check-stdout-truncation.test.sh",
+        "scripts/check-table-row-parsing.test.sh",
         "scripts/check-text-length-consistency.test.sh",
         "scripts/check-threat-model.test.sh",
         "scripts/lib/aidd-config.test.sh",
-        "scripts/lib/resolve-log-dir.test.sh"
+        "scripts/lib/resolve-log-dir.test.sh",
+        "scripts/lib/table-row.test.sh"
       ],
       "ledgers": [
         {

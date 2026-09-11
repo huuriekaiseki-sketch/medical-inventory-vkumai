@@ -16,6 +16,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# 表の行を列に割るのはここだけ（`\|` を区切りとして数えないため。docs/agents/check-design-pitfalls.md C-047）
+source "$SCRIPT_DIR/lib/table-row.sh"
 SRC_ROOT="${FAIL_OPEN_SRC_ROOT:-$REPO_ROOT/src}"
 INVENTORY="${FAIL_OPEN_INVENTORY_PATH:-$REPO_ROOT/docs/agents/fail-open-inventory.md}"
 
@@ -46,9 +48,9 @@ check_inventory() {
   fi
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    id="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')"
+    id="$(table_field "$line" 2)"
     # セル内の `\|`（エスケープ済み縦棒）は列区切りではない
-    nf="$(printf '%s' "$line" | sed 's/\\|//g' | awk -F'|' '{print NF}')"
+    nf="$(table_nf "$line")"
     if [ "$nf" -ne 8 ]; then
       echo "    columns: [$id] 列数が6列でない（区切り数=$((nf-1))）"
       violations=$((violations+1))
@@ -58,8 +60,8 @@ check_inventory() {
       echo "    id: [$id] ID が F-3桁でない"
       violations=$((violations+1))
     fi
-    status="$(printf '%s' "$line" | sed 's/\\|//g' | awk -F'|' '{gsub(/^ +| +$/,"",$6); print $6}')"
-    tests="$(printf '%s' "$line" | sed 's/\\|//g' | awk -F'|' '{gsub(/^ +| +$/,"",$7); print $7}')"
+    status="$(table_field "$line" 6)"
+    tests="$(table_field "$line" 7)"
     case "$status" in
       閉じる|"閉じる（UI）"|情報のみ) ;;
       開く) echo "    open: [$id] 状態が「開く」のまま（直すか、理由と #757-N を付けて閉じる）"; violations=$((violations+1)) ;;

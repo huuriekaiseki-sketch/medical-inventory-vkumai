@@ -26,6 +26,10 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { readFileSync } from 'fs'
 import path from 'path'
 import { randomUUID } from 'crypto'
+// WHY(2026-09-11): 表を割るのは共通エンジンだけに任せる。素の `split('|')` は
+//      「列の中のパイプは `\|` と書いてよい」という 2026-09-09 の緩和を知らないため、
+//      この表に 1 つ書かれた瞬間に列が 1 つずれた値を黙って読む（C-047）。
+import { splitRow } from '../../../scripts/lib/check-catalog.mjs'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
   createServiceRoleClient,
@@ -50,9 +54,8 @@ function parseRulebook(): RulebookRow[] {
   const rows: RulebookRow[] = []
   for (const line of readFileSync(RULEBOOK, 'utf8').split('\n')) {
     if (!line.startsWith('| TB-')) continue
-    const cells = line.split('|').map((c) => c.trim())
-    // cells[0] は行頭の空文字
-    const [, id, table, , readers, , , , status] = cells
+    const cells: string[] = splitRow(line)
+    const [id, table, , readers, , , , status] = cells
     if (status !== '実装済み') continue
     rows.push({
       id,
