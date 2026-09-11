@@ -383,9 +383,20 @@ export function renderTables({ registry, root }) {
   }
   lines.push('')
   const checkTotal = (registry.harnesses ?? []).reduce((n, h) => n + (h.checks ?? []).length, 0)
+  // WHY(「全数」と書かないこと。2026-09-11): この行は地図でいちばん読まれる場所にある。
+  //     ここで「全数」と書くと、**vitest 側の検査も網羅していると読める**が、実際に
+  //     「どこにも属さない検査があれば落ちる」が効くのは `scripts/**/*.test.sh` だけで、
+  //     vitest は 296 本のうち役割を持たせたものを手で足す運用（限界の節に書いてある）。
+  //     いちばん目立つ場所に、確かめていないことを書かない（C-010）。
+  const shellTotal = (registry.harnesses ?? []).reduce(
+    (n, h) => n + (h.checks ?? []).filter((c) => c.endsWith('.test.sh')).length,
+    0,
+  )
   lines.push(
     `（ハーネス ${(registry.harnesses ?? []).length} 件・検査 ${checkTotal} 本・台帳 ${ledgers.length} 件。` +
-      `**検査はこの表で全数**——どこにも属さない検査があれば生成そのものが落ちる）`,
+      `うち \`scripts/**/*.test.sh\` の ${shellTotal} 本は**この表で全数**——` +
+      `どこにも属さない検査があれば生成そのものが落ちる。` +
+      `残り ${checkTotal - shellTotal} 本は vitest 側から**手で足したもの**で、書き忘れは検知されない（限界の節））`,
   )
   return lines.join('\n')
 }

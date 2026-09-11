@@ -212,6 +212,68 @@ if [ -f "${HOOK}" ]; then
   fi
 fi
 
+echo "=== scenario 12: 登録されているのに実体が無い hook を名指しする ==="
+# WHY(2026-09-11 に実測して見つけた穴): 名前を変えた・消したのに登録が残っている hook は、
+#      **呼ばれても何も起きないまま黙って終わる**。この診断がいちばん拾うべき形なのに、
+#      それまで `--verbose` でしか出さず、終了コードにも効いていなかった
+#      （既定の出力は atRisk=0・exit 0 で、SessionStart hook は何も言わなかった）。
+#      同時に、実体の無いものまで「実体」に数えていたので**表示も嘘をついていた**（C-031）。
+FX="${TMP_ROOT}/unresolved"
+mkdir -p "${FX}/.claude" "${FX}/.codex" "${FX}/scripts"
+printf '#!/usr/bin/env bash\njq --version >/dev/null || exit 0\n' > "${FX}/scripts/check-real.sh"
+cat > "${FX}/.claude/settings.json" <<'EOF'
+{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[
+  {"type":"command","command":"$CLAUDE_PROJECT_DIR/scripts/check-real.sh","timeout":5},
+  {"type":"command","command":"$CLAUDE_PROJECT_DIR/scripts/check-deleted.sh","timeout":5}
+]}]}}
+EOF
+cat > "${FX}/.codex/hooks.json" <<'EOF'
+{"hooks":{"Stop":[{"hooks":[
+  {"type":"command","command":"\"$(git rev-parse --show-toplevel)\"/scripts/codex-gone.sh","timeout":5}
+]}]}}
+EOF
+out="$(node "${DOCTOR}" "${FX}" 2>&1)"
+status=$?
+if [ "${status}" -ne 0 ]; then
+  ok "実体の無い hook があれば落ちる（終了コード ${status}）"
+else
+  ng "実体が無くても通る（呼ばれても何も起きない hook を見逃す）" "${out}"
+fi
+if printf '%s' "${out}" | grep -q "check-deleted.sh（実体なし）"; then
+  ok "Claude 側の実体なしを名指しする"
+else
+  ng "Claude 側の実体なしを名指ししない" "${out}"
+fi
+if printf '%s' "${out}" | grep -q "codex-gone.sh（実体なし）"; then
+  ok "Codex 側の実体なしも名指しする"
+else
+  ng "Codex 側の実体なしを名指ししない" "${out}"
+fi
+# WHY(SessionStart hook が読むのは `aidd-doctor: ` で始まる行だけ): その形で出していなければ、
+#      落ちても人には何も伝わらない（鎖として測る。C-043）
+if printf '%s' "${out}" | grep -q "^aidd-doctor: hook に登録された"; then
+  ok "SessionStart hook が拾える形で出す"
+else
+  ng "落ちるが人には伝わらない形で出している" "${out}"
+fi
+# 数える単位（C-031）: 実体の無いものを「実体」に数えない
+if printf '%s' "${out}" | grep -q "scripts=1 unresolved=2"; then
+  ok "実体 1 本・見つからず 2 本として数える（名前の種類と混ぜない）"
+else
+  ng "実体の数え方が実態と違う" "${out}"
+fi
+
+echo "=== scenario 13: 実体がすべて揃っていれば黙る（誤検知しない。対を置く） ==="
+printf '#!/usr/bin/env bash\njq --version >/dev/null || exit 0\n' > "${FX}/scripts/check-deleted.sh"
+printf '#!/usr/bin/env bash\njq --version >/dev/null || exit 0\n' > "${FX}/scripts/codex-gone.sh"
+out="$(node "${DOCTOR}" "${FX}" 2>&1)"
+status=$?
+if [ "${status}" -eq 0 ] && ! printf '%s' "${out}" | grep -q "実体なし"; then
+  ok "揃っていれば実体なしとは言わない"
+else
+  ng "揃っているのに実体なしと言う（誤検知）" "${out}"
+fi
+
 if [ "${fail}" -eq 0 ]; then
   echo "ALL PASSED"
   exit 0

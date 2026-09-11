@@ -170,11 +170,19 @@ export function diagnose({ repoRoot, pluginRoots = [], available = null }) {
   for (const r of RUNTIMES) {
     required[r.name] = [...scripts.values()].filter((s) => s.runtimes.has(r.name)).length
   }
+  // WHY(実体の無いものを「実体」に数えない。2026-09-11): ここは Map の大きさ＝**登録された名前の
+  //      種類**であって、実体のある本数ではなかった（C-031: 数える単位が実際に壊れる単位と違う）。
+  //      そのせいで ① 「実体 N 本」という表示が嘘をつき ② fail-open 防止（実体 0 本なら落とす）が
+  //      **実体ゼロでも名前さえあれば発火しない**という 2 つの穴が空いていた。
+  const missingScripts = [...scripts.entries()].filter(([, s]) => !s.file).map(([name]) => name)
 
   return {
     registrations: commands.length,
-    scripts: scripts.size,
+    // 実体のある本数だけを「実体」と数える（名前の種類は registeredNames）
+    scripts: scripts.size - unresolved,
+    registeredNames: scripts.size,
     unresolved,
+    missingScripts,
     env,
     required,
     atRisk,
@@ -216,7 +224,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 
   if (args.includes('--verbose')) {
-    console.log(`  登録 ${r.registrations} 件 / 実体 ${r.scripts} 本（実体を見つけられず: ${r.unresolved}）`)
+    console.log(`  登録 ${r.registrations} 件 / 名前 ${r.registeredNames} 種 / 実体 ${r.scripts} 本（実体を見つけられず: ${r.unresolved}）`)
     for (const [k, v] of Object.entries(r.required)) {
       console.log(`  ${k}: ${v} 本が呼ぶ（この環境: ${r.env[k] ? 'あり' : '**なし**'}）`)
     }
@@ -231,6 +239,18 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         console.log(`    ${ev}: ${cells}${note}`)
       }
     }
+  }
+
+  // WHY(既定の出力に出す。2026-09-11): 登録されているのに**実体が無い** hook は、
+  //      呼ばれても何も起きないまま黙って終わる——この診断がいちばん拾うべき形なのに、
+  //      それまで `--verbose` でしか出さず、終了コードにも効いていなかった。
+  //      SessionStart hook は `aidd-doctor: ` で始まる行しか拾わないので、その形で出す。
+  if (r.unresolved > 0) {
+    console.log(
+      `aidd-doctor: hook に登録された ${r.unresolved} 本のスクリプトが見つからない` +
+        `（呼ばれても何も起きない。名前を変えたか消した疑い）`
+    )
+    for (const name of r.missingScripts) console.log(`  - ${name}（実体なし）`)
   }
 
   if (r.atRisk.length > 0) {
@@ -249,8 +269,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 
   console.log(
-    `registrations=${r.registrations} scripts=${r.scripts} atRisk=${r.atRisk.length}` +
+    `registrations=${r.registrations} scripts=${r.scripts} unresolved=${r.unresolved} atRisk=${r.atRisk.length}` +
       ` env=${Object.entries(r.env).map(([k, v]) => `${k}:${v ? 'y' : 'n'}`).join(',')}`
   )
-  process.exit(r.atRisk.length > 0 ? 1 : 0)
+  process.exit(r.atRisk.length > 0 || r.unresolved > 0 ? 1 : 0)
 }

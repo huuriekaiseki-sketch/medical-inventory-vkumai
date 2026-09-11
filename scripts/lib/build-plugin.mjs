@@ -369,6 +369,13 @@ function build(outRoot) {
     }
   }
   // 2b. 逃がし口の衛生: 使われていない免除を残さない／理由を空にしない／件数の上限
+  //
+  // WHY(この規則を隣へ広げないこと。2026-09-11 に実測して確かめた): 同じ扱いをしてよいのは
+  //     **1 件ずつの免除**（この一覧は「この参照を許す」という個別の宣言）だけ。
+  //     `forbiddenWordsSkipPaths` は**種類ごとの方針**（「リリース文書は禁止語の対象外」）で、
+  //     いま中身に禁止語が無くても次の版で書かれる。実測では COMPATIBILITY.md と BREAKING.md が
+  //     「今は禁止語を含まない」状態だったが、これを理由に外すと**一度も通らない道**を作る（C-024）。
+  //     `forbiddenWordsAllowPhrases` は 3 件とも実際に使われていた（腐っていない）。
   for (const [key, reason] of Object.entries(allowed)) {
     if (key.startsWith('_')) continue
     if (!String(reason ?? '').trim()) {
