@@ -78,8 +78,12 @@
     "decisions": "docs/agents/decisions.md"
   },
   "errorResponse": {
-    "translatedErrorTypes": ["ClientVisibleError"],
-    "scanDirs": ["src/app/api"]
+    "translatedErrorTypes": [
+      "ClientVisibleError"
+    ],
+    "scanDirs": [
+      "src/app/api"
+    ]
   },
   "limits": {
     "decidedOn": "2026-09-07",
@@ -103,5 +107,14 @@
     "authJudgmentTimeoutMs": 5000,
     "localLogRowsWarnAt": 800,
     "pitfallTypesMinRows": 10
+  },
+  "stdoutSync": {
+    "_comment": "出力してから process.exit() を呼ぶのに console.log のままでよいもの（C-051 / E-080）。scripts/lib/scan-stdout-exit.mjs が走査し、scripts/check-stdout-truncation.test.sh が「宣言に無い違反」「理由が空」「一度も当たらない宣言」を落とす。理由は『小さいから』で止めず、**なぜ今も要るか**が後から確かめられる形で書くこと",
+    "exemptions": {
+      ".claude/workflows/lib/agent-progress-gap.js": "出力は {actualCount, expectedCount, hasGap} の 1 行だけ（数十バイト）で 64KB に届かない。加えて、このファイルは配布時に scripts/workflow-lib/ へ移るため、scripts/lib/stdout-sync.mjs への相対パスがリポジトリと配布物で違う（../../../ と ../）。出力が育つ設計に変えるなら、先に配布の置き場を揃えること",
+      ".claude/workflows/lib/loop-observability-gap.js": "同上（出力は 1 行の JSON。配布時に scripts/workflow-lib/ へ移るので相対パスが揃わない）",
+      "e2e/generate-auth-state.ts": "出力は成功時の 1 行だけで、process.exit(1) は .catch の中にある（出力したあとには走らない）。e2e は別のツール（tsx / playwright）が走らせるので、scripts/lib/ への import を足すと解決経路が増える",
+      "e2e/generate-cross-facility-auth-state.ts": "同上（成功時 1 行・exit は .catch の中）"
+    }
   }
 }

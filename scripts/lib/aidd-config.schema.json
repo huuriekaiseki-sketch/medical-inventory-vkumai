@@ -44,7 +44,9 @@
       "additionalProperties": false,
       "description": "fault injection 訓練が守る deny-by-default ゲートのプロンプトの在り処。書かなければ『この仕組みを持たない導入先』として鮮度判定を飛ばす",
       "properties": {
-        "_comment": { "type": "string" },
+        "_comment": {
+          "type": "string"
+        },
         "promptSource": {
           "type": "string",
           "description": "ゲートのプロンプトが書かれているファイル（リポジトリ相対）"
@@ -54,7 +56,10 @@
           "description": "各ゲートのプロンプトを一意に指す文字列。promptSource 内で 1 回だけ出ること（2 回以上出ると別の門を数えるので落ちる）"
         }
       },
-      "required": ["promptSource", "gateMarkers"]
+      "required": [
+        "promptSource",
+        "gateMarkers"
+      ]
     },
     "commands": {
       "type": "object",
@@ -96,12 +101,16 @@
         "translatedErrorTypes": {
           "type": "array",
           "description": "message をそのまま返してよい型の名前（例: ClientVisibleError）。**危ない語を弾くブラックリストは書かない**——列挙から漏れたものが全部そのまま出るため。",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "scanDirs": {
           "type": "array",
           "description": "走査するディレクトリ（例: src/app/api）。この配下の route ファイルだけを見る。",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -159,6 +168,24 @@
           "description": "「検査の設計で間違えやすい型」の表（C-xxx）に、少なくとも何行あるかの下限。表の読み取りが壊れて 0 件になっても気づけるようにするための空振り防止で、**型を増やす目標値ではない**。導入先が実際に踏んで書き足した数に合わせて上げていく（ratchet）。この値を書かない導入先では、型の表そのものを持っていないものとして検査を飛ばす"
         }
       }
+    },
+    "stdoutSync": {
+      "type": "object",
+      "description": "出力してから process.exit() を呼ぶ書き方の免除（C-051）。エンジンは共通側、一覧は導入先",
+      "properties": {
+        "_comment": {
+          "type": "string"
+        },
+        "exemptions": {
+          "type": "object",
+          "description": "リポジトリ相対パス → なぜ今も console.log のままでよいかの理由",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "$defs": {
