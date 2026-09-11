@@ -108,7 +108,7 @@
     "scripts/lib/generate-codex-agents.mjs": "a1d9503b0e55ebf8a2f3e1f2df1b584a8d42db57c630c6cb4420ebaaf355df5e",
     "scripts/lib/handoff-04-table.sh": "c1e38ca268895e1de83d8bcbc15cc460722ea37f8d3d2902b8f2974c21c3df05",
     "scripts/lib/harvest-journal-events.ts": "63fb76382f15c8051a4956e33f9255091b0077625a76cf5eaa9d429c9d8f8029",
-    "scripts/lib/hook-registry-hash.mjs": "ab69aa7a9b167ce62157557b77d5861e97c2d8ac959158aa34a066621cabdaec",
+    "scripts/lib/hook-registry-hash.mjs": "54705e51f482166b9ccb1186cf8017284a411b0730c596f4f903102fd30dfaeb",
     "scripts/lib/judge-sweep-recall.test.sh": "fc4d309c92ad06bf55c9e14f38877d57d9735837725aac6d171dab407aff9a51",
     "scripts/lib/model-pricing.ts": "34ab4d65b17c14aa48ddb235b6a27ccc9f4a2205e41344c27d664b5d379a10f8",
     "scripts/lib/new-rulebook.mjs": "f279e056089ccd290399abc6c8aa5e4a4b469000a40df1f75683f309af0f78ea",
