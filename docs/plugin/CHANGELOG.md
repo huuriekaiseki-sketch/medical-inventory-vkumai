@@ -31,3 +31,9 @@
   なのでビルドは成功し、生成物の差分にも出なかった。agent / skill / workflow の実体と層の表を
   **両方向**で突き合わせる `scripts/check-plugin-asset-coverage.test.sh` を足して塞いだ
   （hook は最初から両方向だった。型は `docs/agents/check-design-pitfalls.md` の C-047）
+- **2026-09-12: 導入先の入口を wrapper Workflow からセッションの直接呼び出しへ変えた。** ひな形の
+  wrapper は `aidd-vkumai:aidd-phase1-router` を呼び、その router がさらに `aidd-phase1` を呼ぶので
+  **入れ子が 2 段**になり、エージェントを 1 体も起動しないまま失敗していた（Claude Code 2.1.258 で実測）。
+  中心リポジトリは router を直接呼ぶので 1 段に収まる——**配布物の形でだけ壊れていた**。
+  ひな形から Workflow を削り、MIGRATION.md と README を直接呼び出しへ直した。連鎖そのものは
+  `scripts/check-workflow-nesting.test.sh` が門にする（型は C-053、実例は E-085）

@@ -17,7 +17,14 @@
 ## Claude Code の仕様による制約
 
 - `.claude/rules/`（パス限定ルール）と CLAUDE.md は同梱できない。導入先が持つ（`templates/consumer/`）
-- Workflow は導入先のファイルを読めない。固有語彙は `args.riskConfig` で渡す（wrapper Workflow の役目）
+- Workflow は導入先のファイルを読めない。固有語彙は `args.riskConfig` で**呼ぶ側が**渡す
+- **Workflow の入れ子は 1 段まで。** 導入先が wrapper Workflow を置いて
+  `aidd-vkumai:aidd-phase1-router` を呼ぶと、その router がさらに `aidd-phase1` を呼ぶので 2 段になり、
+  エージェントを 1 体も起動しないまま
+  「workflow() cannot be called from within a child workflow」で失敗する（2026-09-12 実測）。
+  **入口はセッションから直接呼ぶ**。中心リポジトリは router を直接呼ぶので 1 段に収まり、
+  この形にならない——**配布物の形でだけ壊れる**ので、連鎖を
+  `scripts/check-workflow-nesting.test.sh` が門にしている（型は C-053、実例は E-085）
 - `InstructionsLoaded` の出力は無視される。常時ロード量の上限判定は SessionStart の
   `check-claude-md-size.sh` が担う
 - プラグイン同梱 subagent の frontmatter `hooks` / `permissionMode` / `mcpServers` は無視される

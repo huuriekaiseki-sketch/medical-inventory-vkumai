@@ -13,18 +13,24 @@ v0 は中心リポジトリの `.claude/` と `scripts/` を導入先へ手で�
    - `aidd.config.json`: 高リスクの語・パス、読み取り専用ロール、検査コマンド、追記先 docs
    - `.claude/rules/*.md`: パス限定ルール（プラグインは同梱できない）
    - `CLAUDE.md`: フローの骨格と、Workflow の呼び方（修飾名）
-   - `.claude/workflows/aidd-phase1-router.js`（wrapper）: `aidd.config.json` の `risk` を
-     `args.riskConfig` として `aidd-vkumai:aidd-phase1-router` に渡す
+   - **Workflow は置かない。** 入口は `aidd-vkumai:aidd-phase1-router` を**セッションから直接**呼び、
+     `aidd.config.json` の `risk` を `args.riskConfig` として渡す。
+     wrapper Workflow を置くと wrapper → router → phase1 で**入れ子が 2 段**になり、
+     エージェントを 1 体も起動しないまま失敗する（2026-09-12 実測。E-085）
 3. **手コピーした旧ファイルを消す**
    - `.claude/agents/`・`.claude/skills/`・`.claude/workflows/`（wrapper 以外）・`scripts/` のうち、
      プラグインに同梱されたもの（`plugin-layout.json` の一覧）。残すと二重に定義される
    - `.claude/settings.json` の hooks のうち、プラグインの `hooks/hooks.json` に移ったもの。残すと二重に発火する
 4. **呼び方を修飾名に変える**
-   - `Workflow({ name: 'aidd-phase1-router' })` → `Workflow({ name: 'aidd-vkumai:aidd-phase1-router' })`
+   - `Workflow({ name: 'aidd-phase1-router' })` →
+     `Workflow({ name: 'aidd-vkumai:aidd-phase1-router', args: { taskDescription, changedFiles, riskConfig } })`
+     （`riskConfig` は `aidd.config.json` の `risk` と同じ値。Workflow は導入先のファイルを読めないので
+     **呼ぶ側が渡す**。既定値に足すだけで、既定値は消せない）
    - agent 名も同様（`aidd-core:reviewer` / `aidd-vkumai:sweep-ui`）
 5. **確認**
    - 新規セッションを起動し、SessionStart の警告が出ること（ブランチ・worktree・docs の期限）
-   - `Workflow({ name: 'aidd-vkumai:aidd-phase1' })` で sweep 4 体が起動し `failedCount: 0`
+   - `Workflow({ name: 'aidd-vkumai:aidd-phase1-router', args: { ... } })` で sweep 4 体が起動し `failedCount: 0`
+     （2026-09-12 に導入先を模したリポジトリで実測: sweep 4 体・72 秒・$0.58・指摘 12 件）
    - `logs/` に `instructions-loaded.jsonl` と `subagent-skeleton.jsonl` が増える
 
 ## v1 → v2（未定）

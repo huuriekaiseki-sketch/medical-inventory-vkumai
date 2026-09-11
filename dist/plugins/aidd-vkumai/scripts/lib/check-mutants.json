@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 87,
+  "minMutants": 88,
   "mutants": [
     {
       "id": "CM-001",
@@ -794,6 +794,15 @@
       "replace": "    :",
       "expect": "scripts/check-git-hooks.test.sh",
       "guards": "H-001（main へ直接 push もできる。GitHub 側でブランチ保護を掛けられない）"
+    },
+    {
+      "id": "CM-088",
+      "breaks": "Workflow の連鎖の走査で、2 段目を数えない（配布物の入口が動かないことに気づけない元の姿）",
+      "file": "scripts/lib/scan-workflow-nesting.mjs",
+      "find": "        if (!c || c.file === b.file) continue",
+      "replace": "        if (c) continue",
+      "expect": "scripts/check-workflow-nesting.test.sh",
+      "guards": "E-085（導入先の入口が一度も動いていなかった。C-053）"
     }
   ]
 }

@@ -10,8 +10,11 @@ AIDD パイプラインは `aidd-core` / `aidd-vkumai` プラグインから提�
 Phase 1 調査 → Phase 2 仕様書 → [停止① 人間レビュー] → Phase 3 実装 → Phase 4 統合ゲート → Phase 5 検証 → [停止② 構造化レビュー]
 
 ## Workflow の呼び方（名前はプラグイン名で修飾する）
-- Phase 1 入口: `Workflow({ name: 'aidd-phase1-router', args: { taskDescription, changedFiles } })`
-  （このリポジトリの wrapper。`aidd.config.json` の risk を渡して `aidd-vkumai:aidd-phase1-router` を呼ぶ）
+- Phase 1 入口:
+  `Workflow({ name: 'aidd-vkumai:aidd-phase1-router', args: { taskDescription, changedFiles, riskConfig } })`
+  （`riskConfig` は `aidd.config.json` の `risk` と同じ値。Workflow は導入先のファイルを読めないので**呼ぶ側が渡す**）
+- **wrapper Workflow を作らない。** wrapper → router → phase1 で入れ子が 2 段になり、
+  エージェントを 1 体も起動しないまま失敗する（2026-09-12 実測）
 - 直接呼ぶ場合: `aidd-vkumai:aidd-phase1` / `aidd-vkumai:aidd-1-1-deep-task` / `aidd-vkumai:aidd-phase2`
 - エージェント: `aidd-core:reviewer` / `aidd-vkumai:sweep-ui` など
 
