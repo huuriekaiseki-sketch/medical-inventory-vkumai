@@ -8,6 +8,14 @@
 // 判定テーブル・更新ロジックを「文書化かつテスト可能な形」で保持するためのものである。
 // プロンプト文言（aidd-phase2.js内の該当箇所）を変更した場合、このファイルとテストも
 // 手動で追従させる必要がある（自動では同期されない）。
+//
+// ただし 2026-09-11 に、**プロンプト文言そのものの複製**は機械同期するようにした:
+// 正本は .claude/workflows/lib/prompts/manifest-check.js、突合は
+// .claude/workflows/lib/__tests__/manifest-check-prompt-sync.test.js（npm test で毎回）。
+// それまでは Spec Check にだけ同期テストがあり、ここは「自動では同期されない」と書いたまま
+// 放置されていた（docs/agents/check-design-pitfalls.md の C-047）。
+// **この判定表（下の純粋関数）とプロンプトの一致は、いまも機械では見ていない**——
+// 同期しているのは文言の 2 つの複製どうしであって、文言と判定表の意味ではない。
 
 // manifest: .aidd/run-manifest.json の内容（存在しなければnull）
 // actualSpecHash: 現在のSPEC.md内容から再計算したsha256ハッシュ

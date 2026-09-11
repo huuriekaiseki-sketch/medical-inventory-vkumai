@@ -254,8 +254,11 @@ if (shouldBlock([specCheck])) {
 // issue #316: 下記プロンプトの1〜4の判定テーブルは .claude/workflows/lib/manifest-check.js の
 // classifyManifestCheck にテスト可能な形で文書化している。ただし実行パス自体はプロンプト依存の
 // ままであり（Workflow DSLの制約上、実際のmanifest読込・ハッシュ計算はエージェントに委譲する
-// 必要がある）、このプロンプト文言を変更した場合はmanifest-check.js側も手動で追従させること
-// （自動では同期されない）。
+// 必要がある）、このプロンプト文言を変更した場合はmanifest-check.js側の**判定表**も手動で
+// 追従させること（そちらの一致は機械では見ていない）。
+// 2026-09-11: **プロンプト文言そのもの**の正本は .claude/workflows/lib/prompts/manifest-check.js
+// に置き、同期は manifest-check-prompt-sync.test.js が検証する（Spec Check と同じ形）。
+// 下のテンプレートリテラルを変えたら、正本も一字一句同じに更新すること。
 phase('Manifest Check')
 
 const MANIFEST_CHECK_SCHEMA = {
