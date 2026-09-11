@@ -244,7 +244,8 @@
     "lib/scan-suspense-gaps.mjs": "aidd-vkumai",
     "lib/scan-skip-scope.mjs": "aidd-vkumai",
     "lib/scan-raw-error-response.mjs": "aidd-core",
-    "lib/aidd-doctor.mjs": "aidd-core"
+    "lib/aidd-doctor.mjs": "aidd-core",
+    "lib/hook-registry-hash.mjs": "aidd-core"
   },
   "workflowLib": {
     "_comment": ".claude/workflows/lib/ の純粋関数のうち bin/ のスクリプトが node で呼ぶもの。scripts/workflow-lib/ に置く（workflows/ 配下に置くと Workflow として走査されるため）",

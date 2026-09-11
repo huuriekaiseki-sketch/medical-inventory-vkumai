@@ -8,6 +8,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SCRIPT="$SCRIPT_DIR/maintenance-digest.sh"
 SETTINGS="$SCRIPT_DIR/../.claude/settings.json"
 
@@ -93,6 +94,62 @@ contains "$REAL" "依存の月次棚卸し" "依存の棚卸しが実態のダ�
 contains "$REAL" "鍵・権限の四半期棚卸し" "鍵・権限の棚卸しが実態のダイジェストに出る"
 contains "$REAL" "テストの効き目の計測" "一覧にテストの効き目の計測が出る"
 contains "$REAL" "認可そのものの効き目の計測" "一覧に認可そのものの効き目の計測が出る"
+
+echo "=== scenario 8: hook 実走ドリルは期限のほかに**配線の版**でも見る（2026-09-11） ==="
+# WHY: ランブックは「hook を追加・変更したときに回す」と書いてあるのに、
+#      変わったかどうかは誰も見ていなかった（期限＝四半期だけが機械化されていた）。
+HASHER="$SCRIPT_DIR/lib/hook-registry-hash.mjs"
+if [ ! -f "$HASHER" ] || ! command -v node >/dev/null 2>&1; then
+  ng "版の走査器（lib/hook-registry-hash.mjs）か node が無い"
+else
+  if CURRENT="$(node "$HASHER" --root "$REPO_ROOT" 2>/dev/null)"; then
+    ok "実態の配線から版を出せる（${CURRENT}）"
+  else
+    CURRENT=""
+    ng "実態の配線から版を出せない"
+  fi
+fi
+
+hook_doc_with() {
+  # $1=最後に実走した版（空なら未記録） $2=入れた時点の版
+  {
+    printf '# x\n\n## 実走した版\n\n'
+    if [ -n "$1" ]; then printf '最後に実走した版: `%s`\n' "$1"; else printf '最後に実走した版: 未記録\n'; fi
+    printf 'この仕組みを入れた時点の版: `%s`\n' "$2"
+    printf '\n## 次回実施予定日\n\n%s（目安）\n' "$(iso_offset 60)"
+  } > "$WORK/hl.md"
+}
+
+if [ -n "${CURRENT:-}" ]; then
+  write_doc "$WORK/fi.md" "$(iso_offset 30)"
+  write_doc "$WORK/ud.md" "$(iso_offset 10)"
+  write_doc "$WORK/du.md" "$(iso_offset 20)"
+  write_doc "$WORK/ar.md" "$(iso_offset 90)"
+  write_doc "$WORK/mt.md" "$(iso_offset 45)"
+  write_doc "$WORK/rm.md" "$(iso_offset 91)"
+
+  hook_doc_with "$CURRENT" "$CURRENT"
+  run_digest
+  not_contains "$OUT" "hook 実走ドリル（版）" "実走した版が今と同じなら何も言わない"
+
+  hook_doc_with "deadbeef1234" "$CURRENT"
+  run_digest
+  contains "$OUT" "hook の登録か中身が変わっています" "版が違えば警告する"
+  contains "$OUT" "deadbeef1234" "実走した版を名指しする"
+  contains "$OUT" "$CURRENT" "いまの版も出す"
+
+  hook_doc_with "" "$CURRENT"
+  run_digest
+  contains "$OUT" "実走時の版がまだ記録されていません" "未記録かつ配線が変わっていなければ、記録を促すだけ"
+  not_contains "$OUT" "⚠ hook が変わっています" "その場合は警告にしない（毎回鳴らさない）"
+
+  hook_doc_with "" "0000deadbeef"
+  run_digest
+  contains "$OUT" "⚠ hook が変わっています" "未記録で配線も変わっていれば警告する"
+
+  # 実態のランブックに戻す（後続で使わないが、fixture を残したまま終えない）
+  write_doc "$WORK/hl.md" "$(iso_offset 60)"
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

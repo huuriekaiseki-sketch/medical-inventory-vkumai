@@ -150,6 +150,48 @@ else
   assert_fail "共有ガードにCLAUDE_PROJECT_DIR依存がある" "$BAD"
 fi
 
+echo "=== scenario 9: 登録された hook が、書いたそのパスにあり実行できる ==="
+# WHY(2026-09-11): 「登録されているのに実体が無い」は診断器（scripts/lib/aidd-doctor.mjs）が
+#      **既に両ツール分を見ている**（E-046）。ここが足すのは**その診断器が見ていない 2 つ**:
+#        (a) `.codex/hooks.json` が書いた**そのパス**に実体があるか
+#            （診断器は**名前**で scripts/ scripts/lib/ bin/ を順に探すので、
+#            別の場所に同名のファイルがあれば「見つかった」と数える）
+#        (b) **実行ビットが立っているか**
+#      Codex はコマンドをそのまま起動するので、どちらが欠けても起動できない。
+#      しかも Codex の hook は失敗しても黙って fail-open するので、誰も気づけない。
+HASHER="$SCRIPT_DIR/lib/hook-registry-hash.mjs"
+if [ ! -f "$HASHER" ] || ! command -v node >/dev/null 2>&1; then
+  assert_fail "走査器（lib/hook-registry-hash.mjs）か node が無く、登録と実体を突き合わせられない"
+else
+  # WHY(C-044): `set -e` の下で素の代入をすると、走査が非ゼロを返した瞬間にこの検査自身が死ぬ
+  if REG_LIST="$(node "$HASHER" --root "$REPO_ROOT" --codex-list 2>&1)"; then
+    REG_COUNT="$(grep -c . <<<"$REG_LIST" || true)"
+    if [ "$REG_COUNT" -ge 1 ]; then
+      assert_ok "登録 ${REG_COUNT} 本を取り出せた（走査が空振りしていない）"
+    else
+      assert_fail "登録を 1 本も取り出せない（走査が壊れている疑い）" "$REG_LIST"
+    fi
+    BAD_ENTRY=""
+    while IFS= read -r rel; do
+      [ -n "$rel" ] || continue
+      if [ ! -f "$REPO_ROOT/$rel" ]; then
+        BAD_ENTRY="$BAD_ENTRY
+        実体なし: $rel"
+      elif [ ! -x "$REPO_ROOT/$rel" ]; then
+        BAD_ENTRY="$BAD_ENTRY
+        実行できない: $rel"
+      fi
+    done <<<"$REG_LIST"
+    if [ -z "$BAD_ENTRY" ]; then
+      assert_ok "登録されたスクリプトはすべて実在し実行できる"
+    else
+      assert_fail "登録と実体が食い違う（Codex の hook は黙って fail-open する）" "$BAD_ENTRY"
+    fi
+  else
+    assert_fail "登録の取り出しに失敗した" "$REG_LIST"
+  fi
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
