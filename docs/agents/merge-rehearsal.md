@@ -151,6 +151,33 @@ decisions・known-failure-patterns。jsonunion が効いたのは plugin-layout.
 新しい clone・worktree では `bash scripts/setup-merge-drivers.sh` を 1 回実行する
 （マージドライバの中身は git の仕様で配れない）。
 
+## GitHub 復旧時の入れ方（2026-09-11）
+
+GitHub のアカウント停止中に、ローカルの main には GitHub に無いコミットが溜まった（2026-09-11 の実測で 285 件。GitLab には控えとして push 済み）。
+**main をそのまま GitHub へ push しない。** CI（lint・hooks-test・dependency-audit）を一度も通さずに正本へ入る——
+[`human-bypass-inventory.md`](./human-bypass-inventory.md) の H-001「main へ直接 push もできる」の経路そのもの。
+Free プランでは GitHub 側でブランチ保護を掛けられないので、手元の pre-push hook（`scripts/git-hooks/pre-push`）が
+GitHub の main への直接 push を止める（`bash scripts/install-git-hooks.sh` を打った clone で効く）。
+
+1. ブランチとして push する
+
+   ```bash
+   git push origin main:refs/heads/recovery/local-main
+   ```
+
+2. PR を 1 本だけ作る。溜まった 37 本はすべて main に入っているので、ブランチごとに PR を出さない
+   （1 日の PR 数を増やすと、アカウント停止の再発につながりうる）
+
+   ```bash
+   gh pr create --base main --head recovery/local-main
+   ```
+
+3. CI がすべて緑になってからマージする。赤が出たら、そのブランチで直してから
+4. マージしたら `git fetch origin` し、ローカルの main と origin/main が一致することを確かめる
+
+マージ予行の順番は、37 本がすべて main に入ったので空（対象なし）になっている。
+復旧後に新しく溜まったブランチを `scripts/lib/merge-queue.json` に足して回す。
+
 ## 更新の引き金
 
 - 並行ブランチが 3 本を超えたとき（マージ前に 1 回回す）
