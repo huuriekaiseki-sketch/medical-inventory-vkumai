@@ -8,6 +8,9 @@
 #   (d) 実行しても作業ツリー・現在のブランチ・HEAD が変わらない
 #   (e) 無いブランチは「無し」として飛ばす（マージ済みのブランチを消しても動く）
 #   (f) 起点が実際に積む先より遅れていたら、合否を出さずに止まる（2026-09-10）
+#   (g) 合流させる対象が 0 本（順番が空・全部が済みか無し）なら、合格ではなく「対象なし」（4。2026-09-11）
+#   (h) --prune-merged は「済み」だけを順番ファイルから外し、ほかの項目は残す（2026-09-11）
+#   (i) 記録係は合格以外（衝突・対象なし）も記録する。set -e で途中終了しない（C-044 / E-084。2026-09-11）
 #
 # 実行: bash scripts/rehearse-merge.test.sh
 set -uo pipefail
@@ -104,9 +107,10 @@ echo "=== scenario 5: 実態の順番ファイルで動く ==="
 #      いまは起点が遅れていれば合否を出さずに止まる（scenario 6）ので、
 #      **どちらの答え方でも「答えている」ことを確かめる**形にする。
 #      実リポジトリの起点の進み具合に依存しない（依存させると、GitHub 復旧の前後で結果が変わる）。
-OUT="$(bash "$SCRIPT_DIR/rehearse-merge.sh" --json 2>&1)"
-if grep -q '"conflictCount"' <<<"$OUT" || grep -q '"staleBase"' <<<"$OUT"; then
-  assert_ok "順番ファイルを読んで、合否か「判定できない」かのどちらかを機械可読で出す"
+# 記録はこのテストの一時ディレクトリへ（本物の実測の記録を、テストの実行で上書きしない）
+OUT="$(AIDD_LOG_DIR="$WORK/logs" bash "$SCRIPT_DIR/rehearse-merge.sh" --json 2>&1)"
+if grep -q '"conflictCount"' <<<"$OUT" || grep -q '"staleBase"' <<<"$OUT" || grep -q '"empty"' <<<"$OUT"; then
+  assert_ok "順番ファイルを読んで、合否・「判定できない」・「対象なし」のどれかを機械可読で出す"
 else
   assert_fail "順番ファイルで動かない" "$(head -5 <<<"$OUT")"
 fi
@@ -185,10 +189,10 @@ echo "=== scenario 7: 順番が空なら「合格」と読まない（走査の�
 printf '{"queue":[]}\n' > "$WORK/empty-queue.json"
 OUT="$(node "$ENGINE" --repo "$FX" --base main --queue "$WORK/empty-queue.json" 2>&1)"
 RC=$?
-if [ "$RC" -ne 0 ]; then
-  assert_ok "空の順番では合格にしない（rc=${RC}）"
+if [ "$RC" -eq 4 ]; then
+  assert_ok "空の順番では合格にしない（rc=4 = 対象なし）"
 else
-  assert_fail "空の順番を合格として通した" "$OUT"
+  assert_fail "空の順番を rc=${RC} で返した（4 = 対象なし のはず）" "$OUT"
 fi
 if grep -q '測る対象が 1 本も無い' <<<"$OUT"; then
   assert_ok "空であることを名指しする"
@@ -204,6 +208,102 @@ if [ "$RC" -eq 0 ]; then
   assert_ok "1 本あれば通る（対照）"
 else
   assert_fail "1 本でも落ちる（rc=${RC}）" "$OUT"
+fi
+
+echo "=== scenario 8: 合流させる対象が 0 本なら「合格」と読まない（全部が済み・無し） ==="
+# WHY(C-021、2026-09-11 の外部レビュー): 順番が空でなくても、全部が「済み」か「無し」なら
+#      **1 本も合流させていない**。それでも「衝突 0 件」で終了コード 0 になり、
+#      実際に 2026-09-11 の予行は 37 本すべてが済みのまま合格を記録していた（E-083）。
+#      起点を feat/a にすると feat/a は「済み」、feat/zzz は「無し」になる
+printf '{"queue":[{"label":"済みのもの","branch":"feat/a"},{"label":"無いもの","branch":"feat/zzz"}]}\n' > "$WORK/done-queue.json"
+OUT="$(node "$ENGINE" --repo "$FX" --base feat/a --queue "$WORK/done-queue.json" 2>&1)"
+RC=$?
+if [ "$RC" -eq 4 ]; then
+  assert_ok "合流させた本数 0 は 4（対象なし）で終わる"
+else
+  assert_fail "合流させた本数 0 を rc=${RC} で返した（0 なら合格と読まれる）" "$OUT"
+fi
+if grep -qF '対象なし' <<<"$OUT"; then
+  assert_ok "対象なしだと名指しする"
+else
+  assert_fail "対象なしと言わない" "$OUT"
+fi
+OUT="$(node "$ENGINE" --repo "$FX" --base feat/a --queue "$WORK/done-queue.json" --json 2>&1)"
+if grep -qF '"empty": true' <<<"$OUT"; then
+  assert_ok "機械可読の出力でも empty を立てる"
+else
+  assert_fail "機械可読の出力に empty が無い" "$OUT"
+fi
+# 対照: 1 本でも合流させれば、ふつうに 0
+printf '{"queue":[{"label":"済みのもの","branch":"feat/a"},{"label":"合流させるもの","branch":"feat/c"}]}\n' > "$WORK/mixed-queue.json"
+OUT="$(node "$ENGINE" --repo "$FX" --base feat/a --queue "$WORK/mixed-queue.json" 2>&1)"
+RC=$?
+if [ "$RC" -eq 0 ]; then
+  assert_ok "1 本でも合流させれば 0（対照）"
+else
+  assert_fail "合流させたのに rc=${RC}" "$OUT"
+fi
+
+echo "=== scenario 9: --prune-merged は「済み」だけを順番ファイルから外す ==="
+printf '{"_comment":"順番の説明は残す","queue":[{"label":"済みのもの","branch":"feat/a"},{"label":"合流させるもの","branch":"feat/c"},{"label":"無いもの","branch":"feat/zzz"}]}\n' > "$WORK/prune-queue.json"
+OUT="$(node "$ENGINE" --repo "$FX" --base feat/a --queue "$WORK/prune-queue.json" --prune-merged 2>&1)"
+AFTER="$(cat "$WORK/prune-queue.json")"
+if grep -qF 'feat/a"' <<<"$AFTER"; then
+  assert_fail "済みを外していない" "$AFTER"
+else
+  assert_ok "済みを外す"
+fi
+if grep -qF 'feat/c' <<<"$AFTER"; then
+  assert_ok "まだのものは残す"
+else
+  assert_fail "まだのものまで外した" "$AFTER"
+fi
+if grep -qF 'feat/zzz' <<<"$AFTER"; then
+  assert_ok "無いものは残す（済みとは限らない）"
+else
+  assert_fail "無いものまで外した" "$AFTER"
+fi
+if grep -qF '順番の説明は残す' <<<"$AFTER"; then
+  assert_ok "順番ファイルのほかの項目は残す"
+else
+  assert_fail "順番ファイルの説明を消した" "$AFTER"
+fi
+OUT="$(node "$ENGINE" --repo "$FX" --base feat/a --branches feat/a --prune-merged 2>&1)"
+RC=$?
+if [ "$RC" -eq 2 ]; then
+  assert_ok "書き換える順番ファイルが無ければ --prune-merged は使えない"
+else
+  assert_fail "--queue なしの --prune-merged を rc=${RC} で通した" "$OUT"
+fi
+
+echo "=== scenario 10: 記録係は合格以外も記録する（set -e で途中終了しない） ==="
+# WHY(C-044 / E-084、2026-09-11 に実測): 記録係は set -e の下で node を素のまま呼んでいたので、
+#      0 以外（衝突・判定できない・対象なし）で**記録する前に**終わっていた。記録には pass しか無かった。
+#      記録はこのテストの一時ディレクトリへ（AIDD_LOG_DIR）。後から渡した --repo が優先される
+LOGS="$WORK/logs-rec"
+AIDD_LOG_DIR="$LOGS" bash "$SCRIPT_DIR/rehearse-merge.sh" --repo "$FX" --base main --branches feat/a,feat/b > /dev/null 2>&1
+RC=$?
+LAST="$(tail -1 "$LOGS/release-rehearsal-runs.jsonl" 2>/dev/null || true)"
+if [ "$RC" -eq 1 ] && grep -qF '"result": "fail"' <<<"$LAST"; then
+  assert_ok "衝突（1）を fail として記録する"
+else
+  assert_fail "衝突を記録していない（rc=${RC}）" "${LAST:-（記録が無い）}"
+fi
+AIDD_LOG_DIR="$LOGS" bash "$SCRIPT_DIR/rehearse-merge.sh" --repo "$FX" --base feat/a --branches feat/a > /dev/null 2>&1
+RC=$?
+LAST="$(tail -1 "$LOGS/release-rehearsal-runs.jsonl" 2>/dev/null || true)"
+if [ "$RC" -eq 4 ] && grep -qF '"result": "empty"' <<<"$LAST"; then
+  assert_ok "対象なし（4）を empty として記録する"
+else
+  assert_fail "対象なしを記録していない（rc=${RC}）" "${LAST:-（記録が無い）}"
+fi
+AIDD_LOG_DIR="$LOGS" bash "$SCRIPT_DIR/rehearse-merge.sh" --repo "$FX" --base main --branches feat/c > /dev/null 2>&1
+RC=$?
+LAST="$(tail -1 "$LOGS/release-rehearsal-runs.jsonl" 2>/dev/null || true)"
+if [ "$RC" -eq 0 ] && grep -qF '"result": "pass"' <<<"$LAST"; then
+  assert_ok "合格（0）は pass として記録する（対照）"
+else
+  assert_fail "合格を記録していない（rc=${RC}）" "${LAST:-（記録が無い）}"
 fi
 
 if [ "$fail" -ne 0 ]; then

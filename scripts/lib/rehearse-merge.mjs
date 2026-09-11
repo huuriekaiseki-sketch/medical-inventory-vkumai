@@ -16,7 +16,8 @@
 //
 // 出力: 各ブランチの OK / 衝突 / 済み と、衝突したファイルの一覧。
 //       衝突したブランチは積まずに次へ進む（後続の判定を実態に近づけるため）。
-// 終了コード: 0 = 衝突なし / 1 = 衝突あり / 2 = 使い方が違う / 3 = **起点が遅れていて判定できない**
+// 終了コード: 0 = 衝突なし / 1 = 衝突あり / 2 = 使い方が違う / 3 = **起点が遅れていて判定できない** /
+//             4 = **対象なし**（順番が空、または全部が「済み」か「無し」。合格にも不合格にも数えない）
 //
 // WHY(起点の遅れを合否に混ぜない、2026-09-10): 既定の起点は `origin/main`。
 //      2026-09-06 の GitHub アカウント停止以降 `origin/main` は凍ったままで、
@@ -26,9 +27,15 @@
 //      これは「衝突している」でも「衝突していない」でもなく、
 //      **誰も聞いていない問いに答えている**状態なので、合否に混ぜず 3 で止める（C-025）。
 //      遅れた起点で敢えて測りたいときは --allow-stale-base。
+//
+// WHY(合流させた本数 0 を合格にしない、2026-09-11 の外部レビュー): 順番が空でなくても、
+//      全部が「済み」か「無し」なら **1 本も合流させていない**。それでも「衝突 0 件」で 0 を返し、
+//      実際に 2026-09-11 の予行は 37 本すべてが済みのまま合格を記録していた（E-083）。
+//      **次に本当の衝突が出るまで緑が続く**ので、空の順番と同じ「対象なし」（4）で止める（C-021）。
+//      済みのブランチは --prune-merged で順番ファイルから外せる（無いブランチは済みとは限らないので残す）。
 
 import { execFileSync } from 'node:child_process'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { writeLine } from './stdout-sync.mjs'
 
 function parseArgs(argv) {
@@ -41,11 +48,16 @@ function parseArgs(argv) {
     else if (a === '--repo') o.repo = argv[++i]
     else if (a === '--json') o.json = true
     else if (a === '--allow-stale-base') o.allowStaleBase = true
+    else if (a === '--prune-merged') o.pruneMerged = true
   }
   return o
 }
 
 const o = parseArgs(process.argv.slice(2))
+if (o.pruneMerged && !o.queue) {
+  console.error('rehearse-merge: --prune-merged は --queue（書き換える順番ファイル）と一緒に使う')
+  process.exit(2)
+}
 const git = (args) => execFileSync('git', ['-C', o.repo, ...args], { encoding: 'utf8' }).trim()
 const tryGit = (args) => {
   try { return { ok: true, out: execFileSync('git', ['-C', o.repo, ...args], { encoding: 'utf8' }) } }
@@ -71,8 +83,9 @@ if (o.queue) {
 //      「衝突 0 件 / 0 本」で**終了コード 0**になる。測る対象が 1 本も無いことと
 //      「調べたら衝突が無かった」ことは別なので、分けて落とす（C-021: 走査の空振り）。
 if (queue.length === 0) {
-  console.error('rehearse-merge: 順番が空です（測る対象が 1 本も無い）。0 件を合格と読まないため落とします')
-  process.exit(2)
+  if (o.json) writeLine(JSON.stringify({ base: o.base, measured: false, empty: true, reason: '順番が空' }, null, 2))
+  console.error('rehearse-merge: 順番が空です（測る対象が 1 本も無い）。対象なし——0 件を合格と読まないため 4 で止めます')
+  process.exit(4)
 }
 
 let base = git(['rev-parse', o.base])
@@ -142,9 +155,29 @@ for (const { label, branch } of queue) {
 }
 
 const conflicts = results.filter((r) => r.status === 'conflict')
+const rehearsed = results.filter((r) => r.status === 'ok' || r.status === 'conflict').length
+const alreadyCount = results.filter((r) => r.status === 'already').length
+const missingCount = results.filter((r) => r.status === 'missing').length
+
+// 済みを順番ファイルから外す（明示されたときだけ書き換える）。無いものは済みとは限らないので残す
+let pruned = 0
+if (o.pruneMerged) {
+  const merged = new Set(results.filter((r) => r.status === 'already').map((r) => r.branch))
+  const j = JSON.parse(readFileSync(o.queue, 'utf8'))
+  const before = (j.queue ?? []).length
+  j.queue = (j.queue ?? []).filter((e) => !merged.has(typeof e === 'string' ? e : e.branch))
+  pruned = before - j.queue.length
+  writeFileSync(o.queue, JSON.stringify(j, null, 2) + '\n')
+}
 
 if (o.json) {
-  writeLine(JSON.stringify({ base: o.base, results, conflictCount: conflicts.length }, null, 2))
+  writeLine(
+    JSON.stringify(
+      { base: o.base, results, conflictCount: conflicts.length, rehearsed, empty: rehearsed === 0, pruned },
+      null,
+      2,
+    ),
+  )
 } else {
   writeLine(`起点: ${o.base} = ${git(['rev-parse', '--short', o.base])}`)
   writeLine('')
@@ -159,6 +192,11 @@ if (o.json) {
   }
   writeLine('')
   writeLine(`--- 衝突 ${conflicts.length} 件 / ${results.length} 本 ---`)
+  if (rehearsed === 0) {
+    writeLine(`--- 合流させた本数 0（済み ${alreadyCount} / 無し ${missingCount}）。**対象なし**（合格ではない） ---`)
+    writeLine('    済みのブランチは --prune-merged で順番ファイルから外せる')
+  }
+  if (pruned > 0) writeLine(`順番ファイルから済みを ${pruned} 本外した: ${o.queue}`)
   if (conflicts.length > 0) {
     const byFile = {}
     for (const c of conflicts) for (const f of c.files) (byFile[f] ??= []).push(c.label)
@@ -170,4 +208,6 @@ if (o.json) {
   writeLine('※ 作業ツリーとブランチには触れていない（merge-tree と commit-tree だけを使う）')
 }
 
+// 合流させた本数が 0 なら、衝突 0 件は「調べて無かった」ではなく「調べていない」（C-021 / E-083）
+if (rehearsed === 0) process.exit(4)
 process.exit(conflicts.length > 0 ? 1 : 0)

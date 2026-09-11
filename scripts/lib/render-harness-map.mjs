@@ -304,7 +304,10 @@ export function evidenceState({ root, harness, logDir, read = lastRecord, tree =
     }
     const passField = e.pass?.field ?? 'result'
     const passValue = e.pass?.value ?? 'pass'
-    const passed = record[passField] === passValue
+    // 判定できなかった・対象が無かった記録は、合格にも不合格にも数えない（下の NEUTRAL_RESULTS）
+    const passRaw = record[passField]
+    const neutral = Object.prototype.hasOwnProperty.call(NEUTRAL_RESULTS, passRaw) ? NEUTRAL_RESULTS[passRaw] : null
+    const passed = neutral ? null : record[passField] === passValue
     const stale = []
     let unknownTree = false
     for (const w of e.watch ?? []) {
@@ -324,12 +327,26 @@ export function evidenceState({ root, harness, logDir, read = lastRecord, tree =
     }
     const fresh = unknownTree ? null : stale.length === 0
     let reason = ''
-    if (!passed) reason = `直近が ${JSON.stringify(record[passField])}（赤のまま）`
+    if (neutral) reason = neutral
+    else if (!passed) reason = `直近が ${JSON.stringify(record[passField])}（赤のまま）`
     else if (fresh === null) reason = '記録に木のハッシュ（またはコミット）が無く、最新かどうか判定できない'
     else if (!fresh) reason = `${stale.join('・')} が記録時から変わっている`
     rows.push({ name: e.name, measured: true, passed, fresh, reason, at: record.at ?? record.timestamp })
   }
   return rows
+}
+
+/**
+ * 合格でも不合格でもない記録の値と、そのとき出す理由。
+ *
+ * WHY(2026-09-11): マージ予行が 1 本も合流させずに「合格」を記録していた（E-083）。
+ *      「対象なし」を合格にしないのは当然として、**赤として出すのも誤り**——
+ *      「赤のまま放置」に見え、直すものが無いのに直しに行くことになる（C-025）。
+ *      記録の値がここにあるなら、合格の欄は「？」になる。
+ */
+const NEUTRAL_RESULTS = {
+  unmeasured: '直近は判定できなかった（起点が遅れている等。合格にも不合格にも数えない）',
+  empty: '直近は対象なし（測る対象が 0 本。合格にも不合格にも数えない）',
 }
 
 /** 台帳の現在値を読む（違反は checkRegistry が見る。ここは読めた値だけを返す） */

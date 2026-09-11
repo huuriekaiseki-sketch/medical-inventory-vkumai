@@ -4,7 +4,7 @@
   "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
   "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
   "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
-  "minMutants": 83,
+  "minMutants": 86,
   "mutants": [
     {
       "id": "CM-001",
@@ -758,6 +758,33 @@
       "replace": "if false; then",
       "expect": "scripts/check-git-hooks.test.sh",
       "guards": "C-052（履歴に入ったメッセージは後から直せない）"
+    },
+    {
+      "id": "CM-084",
+      "breaks": "マージ予行で、合流させた本数 0 を「対象なし」にしない（全部が済みでも合格を記録する元の姿）",
+      "file": "scripts/lib/rehearse-merge.mjs",
+      "find": "if (rehearsed === 0) process.exit(4)",
+      "replace": "void rehearsed",
+      "expect": "scripts/rehearse-merge.test.sh",
+      "guards": "E-083（次に本当の衝突が出るまで緑が続く。C-021）"
+    },
+    {
+      "id": "CM-085",
+      "breaks": "証拠の欄で、対象なし・判定できなかったを赤として出す（直すものが無いのに赤のまま放置に見える元の姿）",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "    const passed = neutral ? null : record[passField] === passValue",
+      "replace": "    const passed = record[passField] === passValue",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "C-025（測れなかったを合格にも不合格にも数えない）"
+    },
+    {
+      "id": "CM-086",
+      "breaks": "記録係で終了コードを受けずに node を素のまま呼ぶ（合格以外は記録の前に終わる元の姿）",
+      "file": "scripts/rehearse-merge.sh",
+      "find": "node \"$SCRIPT_DIR/lib/rehearse-merge.mjs\" \"$@\" || REHEARSE_EXIT=$?",
+      "replace": "node \"$SCRIPT_DIR/lib/rehearse-merge.mjs\" \"$@\"",
+      "expect": "scripts/rehearse-merge.test.sh",
+      "guards": "E-084（衝突が出ても証拠の欄が緑のまま。C-044）"
     }
   ]
 }

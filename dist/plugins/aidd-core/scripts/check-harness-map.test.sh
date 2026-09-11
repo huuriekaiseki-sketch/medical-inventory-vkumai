@@ -263,6 +263,16 @@ printf '{"at":"2026-01-01T00:00:00Z","result":"pass"}\n' > "$WORK/root/logs/thin
 run_engine --evidence
 assert_contains "$ENGINE_OUT" "最新 ？" "判定できないことを緑にも赤にもしない"
 
+# (f) 判定できなかった・対象が無かった → 合格は「？」（赤にも緑にもしない。2026-09-11、E-083）
+printf '{"at":"2026-01-01T00:00:00Z","result":"empty","scriptsTree":"%s"}\n' "$SCRIPTS_TREE" > "$WORK/root/logs/thing-runs.jsonl"
+run_engine --evidence
+assert_contains "$ENGINE_OUT" "合格 ？" "対象なしを赤にも緑にもしない"
+assert_contains "$ENGINE_OUT" "対象なし（測る対象が 0 本" "対象なしだと言う"
+printf '{"at":"2026-01-01T00:00:00Z","result":"unmeasured","scriptsTree":"%s"}\n' "$SCRIPTS_TREE" > "$WORK/root/logs/thing-runs.jsonl"
+run_engine --evidence
+assert_contains "$ENGINE_OUT" "合格 ？" "判定できなかったを赤にも緑にもしない"
+assert_contains "$ENGINE_OUT" "判定できなかった" "判定できなかったと言う"
+
 # (e) 記録を持たない役割は、持たない理由を出す
 write_registry "$(printf '%s' "$GOOD" | sed 's#"evidence": \[{ "name": "全件実行", "log": "logs/thing-runs.jsonl", "watch": \["scripts"\] }\]#"evidence": [], "unmeasuredReason": "毎回の CI で回るので記録を持たない"#')"
 run_engine --evidence
