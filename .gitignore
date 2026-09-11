@@ -62,6 +62,7 @@ session-report-*.html
 
 # Stop hookのセッション内重複提案抑止用の一時状態（ローカル専用）
 /.claude/.ai-check-suggest-state/
+/.codex/.ai-check-suggest-state/
 /.claude/.domain-decisions-suggest-state/
 /.claude/.verify-state/
 /.claude/.gate-effectiveness-state/

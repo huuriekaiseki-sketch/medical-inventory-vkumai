@@ -22,6 +22,7 @@
       ],
       "checks": [
         "scripts/ai-check-suggest.test.sh",
+        "scripts/codex-ai-check.test.sh",
         "scripts/check-aidd-graph-rendered.test.sh",
         "scripts/check-aidd-phase-stats-recorded.test.sh",
         "scripts/check-aidd-stats-recorded.test.sh",

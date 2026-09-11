@@ -120,6 +120,63 @@ else
   ng "揃っているのに警告する" "${out}"
 fi
 
+echo "=== scenario 10: Codex 側の hook（.codex/hooks.json）も数える ==="
+# WHY(2026-09-11): このリポジトリは Claude と Codex の両方で作業する。Codex 側の hook は
+#      **同じスクリプトを呼ぶ**ので同じ実行系に依存するが、最初の版は `.claude/settings.json` と
+#      プラグインしか見ておらず、**Codex では沈黙していることに気づけなかった**。
+mkdir -p "${TMP_ROOT}/both/.claude" "${TMP_ROOT}/both/.codex" "${TMP_ROOT}/both/scripts"
+# WHY(両方に hook を置く): 片方しか無い fixture では「片方に無い」を判定できない。
+#      claude 側に SessionStart、codex 側に Stop を置いて、**互いに無いイベント**を作る
+cat > "${TMP_ROOT}/both/.claude/settings.json" <<'CLAUDEHOOKS'
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/claude-only-thing.sh" }] }
+    ]
+  }
+}
+CLAUDEHOOKS
+cat > "${TMP_ROOT}/both/scripts/claude-only-thing.sh" <<'CLAUDESCRIPT'
+#!/usr/bin/env bash
+command -v jq >/dev/null 2>&1 || exit 0
+jq -n '{}'
+CLAUDESCRIPT
+cat > "${TMP_ROOT}/both/.codex/hooks.json" <<'CODEXHOOKS'
+{
+  "hooks": {
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "\"$(git rev-parse --show-toplevel)\"/scripts/codex-only-thing.sh" }] }
+    ]
+  }
+}
+CODEXHOOKS
+cat > "${TMP_ROOT}/both/scripts/codex-only-thing.sh" <<'CODEXSCRIPT'
+#!/usr/bin/env bash
+command -v jq >/dev/null 2>&1 || exit 0
+jq -n '{}'
+CODEXSCRIPT
+out="$(AIDD_DOCTOR_ASSUME_MISSING=jq node "${DOCTOR}" "${TMP_ROOT}/both" 2>&1)"
+if [ $? -ne 0 ] && printf '%s' "${out}" | grep -q "codex-only-thing.sh"; then
+  ok "Codex 側の hook も名指しする"
+else
+  ng "Codex 側を見ていない（片方のツールでだけ沈黙していても気づけない）" "${out}"
+fi
+
+echo "=== scenario 11: イベント別の対応を並べ、片方に無いものを名指しする ==="
+# WHY(2026-09-11): 「Codex 側には Stop hook が 1 本も無い」ことに**人が目視で気づいた**。
+#      揃えるべきかどうかは人が決めるが、**並べるところまでは機械がやる**。
+out="$(node "${DOCTOR}" "${TMP_ROOT}/both" --verbose 2>&1)"
+if printf '%s' "${out}" | grep -q "イベント別"; then
+  ok "イベント別の対応を出す"
+else
+  ng "対応表を出していない（片方に無い検知に人しか気づけない）" "${out}"
+fi
+if printf '%s' "${out}" | grep -q "に無い"; then
+  ok "片方にしか無いイベントを名指しする"
+else
+  ng "欠落を名指ししない" "${out}"
+fi
+
 echo "=== scenario 8: 依存を伝える hook 自身が、その依存を要求しない（自己言及の罠） ==="
 # WHY: `jq` が無いことを伝える hook が `jq` で JSON を組んでいたら、**まさにその状況で黙る**。
 #      jq だけを PATH から外した環境を作り、それでも systemMessage が出ることを見る。

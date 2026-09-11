@@ -107,11 +107,27 @@ function isAvailable(probe) {
  *   available を渡すと環境の実測を差し替えられる（テスト用の注入ポイント）
  */
 export function diagnose({ repoRoot, pluginRoots = [], available = null }) {
+  // WHY(Codex も見る、2026-09-11): このリポジトリは Claude と Codex の両方で作業する。
+  //      Codex 側の hook は `.codex/hooks.json` にあり、**同じスクリプトを呼ぶ**ので
+  //      同じ実行系に依存する。片方だけ見ると「Codex では沈黙している」に気づけない。
+  //      `.codex/` が無い導入先では単に 0 件として扱う（黙る）。
   const configs = [
-    path.join(repoRoot, '.claude/settings.json'),
-    ...pluginRoots.map((r) => path.join(r, 'hooks/hooks.json')),
+    { file: path.join(repoRoot, '.claude/settings.json'), tool: 'claude' },
+    { file: path.join(repoRoot, '.codex/hooks.json'), tool: 'codex' },
+    ...pluginRoots.map((r) => ({ file: path.join(r, 'hooks/hooks.json'), tool: 'plugin' })),
   ]
-  const commands = configs.flatMap((c) => collectHookCommands(c))
+  const commands = configs.flatMap(({ file, tool }) =>
+    collectHookCommands(file).map((c) => ({ ...c, tool }))
+  )
+
+  // WHY(2026-09-11): **どのイベントがどちらのツールに登録されているか**を並べる。
+  //      「Codex 側には Stop hook が 1 本も無い」ことに人が目視で気づいた実例があり、
+  //      それは機械が持つべき情報だった。**揃えるべきだとは言わない**——
+  //      ツールごとに使えるイベントが違うので、判断は人がする。並べるところまでを機械がやる。
+  const byTool = {}
+  for (const c of commands) {
+    ;(byTool[c.tool] ??= {})[c.event] = (byTool[c.tool][c.event] ?? 0) + 1
+  }
 
   const roots = [repoRoot, ...pluginRoots]
   const scripts = new Map() // name -> { file, runtimes: Map<name, failMode> }
@@ -162,6 +178,7 @@ export function diagnose({ repoRoot, pluginRoots = [], available = null }) {
     env,
     required,
     atRisk,
+    byTool,
   }
 }
 
@@ -202,6 +219,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`  登録 ${r.registrations} 件 / 実体 ${r.scripts} 本（実体を見つけられず: ${r.unresolved}）`)
     for (const [k, v] of Object.entries(r.required)) {
       console.log(`  ${k}: ${v} 本が呼ぶ（この環境: ${r.env[k] ? 'あり' : '**なし**'}）`)
+    }
+    const tools = Object.keys(r.byTool)
+    if (tools.length > 0) {
+      const events = [...new Set(tools.flatMap((t) => Object.keys(r.byTool[t])))].sort()
+      console.log(`  イベント別（ツールごとに使えるものが違うので、揃っていないこと自体は異常ではない）:`)
+      for (const ev of events) {
+        const cells = tools.map((t) => `${t}=${r.byTool[t][ev] ?? 0}`).join(' ')
+        const missing = tools.filter((t) => !r.byTool[t][ev])
+        const note = missing.length > 0 && missing.length < tools.length ? `  ← ${missing.join(' / ')} に無い` : ''
+        console.log(`    ${ev}: ${cells}${note}`)
+      }
     }
   }
 

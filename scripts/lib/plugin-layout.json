@@ -365,6 +365,7 @@
     "statusline.test.sh": "個人設定の statusline。配布対象外",
     "subagent-statusline.test.sh": "同上",
     "codex-skip-marker-deny.test.sh": "Codex 用ラッパー。v1 の配布対象外（plugin-layout の他の Codex 項目と同じ扱い）",
+    "codex-ai-check.test.sh": "Codex の hooks.json と `.codex/` の実配置を見る。**Codex にはプラグイン機構が無い**ので v1 の配布対象外（KNOWN-LIMITS の『Codex には配布できない』と同じ理由）。配るなら `.codex/` 一式を生成物にする必要があり、それは別の設計（提案 H）",
     "check-branch-tool-ownership.test.sh": "ブランチ命名規約（codex/* claude/*）がこのリポジトリの運用",
     "log-subagent-hook-skeleton.test.sh": "subagent hook の骨格記録。導入先の agents 構成に依存する",
     "check-run-manifest-presence.test.sh": "fixture が高リスクパスの実例（このリポジトリのドメイン語）で書かれていて共通側に置けず、対象の hook は共通側にあるためアダプター側にも回せない。fixture を中立化できたら共通側へ移す",

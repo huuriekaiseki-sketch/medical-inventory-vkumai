@@ -45,6 +45,26 @@ Claude CodeとCodexを**同じ物理worktreeで同時に動かさない**。
   `scripts/log-agent-progress.sh` 等）に**書き込まない**。Codexの記録が混ざると
   Claude側のgap check集計（期待件数 vs 実測件数の突合）が狂う
 
+### どちらのツールに、どのイベントの検知が付いているか（2026-09-11）
+
+**片方にしか無い検知は、そのツールで作業した人だけが守られない。**
+2026-09-11 に外部レビューが目視で「Codex 側には Stop hook が 1 本も無い」ことを見つけた——
+同じ人が同じリポジトリを触っていても、**使うツールで守りの厚みが変わっていた**。
+目視で気づく形になっていたので、機械が並べるようにした:
+
+```bash
+node scripts/lib/aidd-doctor.mjs --verbose   # イベント別に「どちらに何本あるか」を出す
+```
+
+**揃えるべきだとは言わない。** ツールごとに使えるイベントが違う（`SubagentStart` /
+`InstructionsLoaded` / `Setup` は Codex に無い）。並べるところまでが機械の仕事で、
+足りないものを足すかどうかは人が決める。
+
+同じ日に、Codex 側へ品質チェックの警告（`codex-ai-check-track.sh` / `codex-ai-check-suggest.sh`）を
+派生先から逆輸入した。**Claude 版と作りが違う**——Claude は transcript から実行コマンドを直接読むが、
+**Codex の transcript は形式が安定しない**ので、PostToolUse で「打った瞬間のソースの姿」を残し
+Stop で比べる。結果として Codex 版のほうが厳しい（打った**後**に触ればまた警告する）。
+
 ## push前検証ゲート（hook変更時）
 
 hook・ガードスクリプトを変更した場合、push前に以下を両方満たすこと

@@ -90,13 +90,40 @@ else
 fi
 
 echo "=== scenario 6: Claude transcript形式依存のスクリプトをCodex側に登録しない（原則7） ==="
+# WHY(2026-09-11 に実態ベースへ変えた): それまでは**スクリプト名の一覧**で判定しており、
+#   `ai-check-suggest.sh` というパターンが `codex-ai-check-suggest.sh` にも部分一致していた。
+#   後者は**まさに transcript を使わないために作った** Codex 専用版なのに違反と出た（誤検知）。
+#   名前で判定する限り、同じことがまた起きる（C-011: 実態ではなく印だけを見る）。
+#   いまは**スクリプトの中身で `transcript_path` を読んでいるか**を見る。
+#   実体が見つからないものは「読めなかった」として違反側に倒す（fail-open にしない）。
 if [ -f "$HOOKS_JSON" ]; then
-  TRANSCRIPT_DEPENDENT="verify-claims\.sh|ai-check-suggest\.sh|log-subagent-hook-skeleton\.sh|check-handoff-format\.sh|check-aidd-stats-recorded\.sh|check-aidd-phase-stats-recorded\.sh|check-find-av-precision-recorded\.sh|check-gap-check-state\.sh"
-  FOUND="$(jq -r '[.hooks[][]?.hooks[]?.command // empty] | .[]' "$HOOKS_JSON" | grep -E "$TRANSCRIPT_DEPENDENT" || true)"
-  if [ -z "$FOUND" ]; then
-    assert_ok "transcript依存スクリプトの登録なし"
+  FOUND=""
+  EXAMINED=0
+  while IFS= read -r cmd; do
+    [ -n "$cmd" ] || continue
+    # command からスクリプトのファイル名を取り出す
+    name="$(printf '%s' "$cmd" | sed -n 's/.*\/\([A-Za-z0-9_.-]*\.sh\).*/\1/p')"
+    [ -n "$name" ] || continue
+    file="$REPO_ROOT/scripts/$name"
+    if [ ! -f "$file" ]; then
+      FOUND="${FOUND}${name}（実体が見つからず中身を確かめられない）
+"
+      continue
+    fi
+    EXAMINED=$((EXAMINED + 1))
+    if grep -q 'transcript_path' "$file"; then
+      FOUND="${FOUND}${name}（transcript_path を読んでいる）
+"
+    fi
+  done <<EOF
+$(jq -r '[.hooks[][]?.hooks[]?.command // empty] | .[]' "$HOOKS_JSON")
+EOF
+  if [ "$EXAMINED" -eq 0 ]; then
+    assert_fail "Codex 側の hook スクリプトを 1 本も読めていない（走査が壊れている）"
+  elif [ -z "$FOUND" ]; then
+    assert_ok "transcript に依存する登録なし（中身を ${EXAMINED} 本確かめた）"
   else
-    assert_fail "transcript依存スクリプトが登録されている" "$FOUND"
+    assert_fail "transcript に依存するスクリプトが登録されている" "$FOUND"
   fi
 else
   assert_fail "hooks.jsonが無いため検証不能"
