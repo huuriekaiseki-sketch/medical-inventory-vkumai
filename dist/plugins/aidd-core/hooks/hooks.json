@@ -90,6 +90,11 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-plugin-integrity.sh",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-hook-dependencies.sh",
+            "timeout": 20
           }
         ]
       },

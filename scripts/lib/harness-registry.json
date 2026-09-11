@@ -117,6 +117,7 @@
         "scripts/build-plugin.test.sh",
         "scripts/check-access-path-inventory.test.sh",
         "scripts/check-catalogs.test.sh",
+        "scripts/check-aidd-doctor.test.sh",
         "scripts/check-claude-md-size.test.sh",
         "scripts/check-design-answers.test.sh",
         "scripts/check-design-questions.test.sh",
@@ -322,10 +323,11 @@
       "role": "監視・観測",
       "guards": "起きたことに気づける（夜間検査・鮮度・記録漏れ）",
       "trigger": "機械",
-      "triggerDetail": "夜間検査は pg_cron、鮮度は SessionStart / Stop hook。**本番の監視は外部待ち**（#757-8）",
+      "triggerDetail": "夜間検査は pg_cron、鮮度は SessionStart / Stop hook。**hook 自身がこの環境で動くかも SessionStart で毎回見る**（2026-09-11。実測で 42 本中 41 本が jq を呼び、無い環境では 32 本が黙って降りると分かった）。**本番の監視は外部待ち**（#757-8）",
       "entrypoints": [
         "scripts/check-integration-freshness.sh",
         "scripts/check-e2e-freshness.sh",
+        "scripts/check-hook-dependencies.sh",
         "scripts/maintenance-digest.sh"
       ],
       "checks": [

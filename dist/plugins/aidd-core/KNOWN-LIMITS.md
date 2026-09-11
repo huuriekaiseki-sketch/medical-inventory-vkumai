@@ -22,8 +22,22 @@
   導入先へ手コピー
 - 中心リポジトリと同じ hook を settings.json とプラグインの両方で入れると二重に発火する。中心リポジトリ
   自身では生成物を読まない
-- hook 33 本のうち 18 本が node / python3 / npx のいずれかを呼ぶ。無い環境では fail-open で沈黙する
-  （警告が出ないだけで、止まりはしない）
+- **実行系が無い環境では多くの hook が沈黙する。** 2026-09-11 に実測し直した数字は次のとおり
+  （それまでは「hook 33 本のうち 18 本が node / python3 / npx」と書いていたが、
+  **`jq` を数えておらず実態より狭かった**）:
+
+  | 実行系 | 呼ぶ hook | 無いとどうなるか |
+  | --- | --- | --- |
+  | `jq` | **42 本**（ほぼ全部） | **32 本が黙って降りる** / 4 本は拒否側へ倒れる / 6 本は読み切れない |
+  | `python3` | 20 本 | 同様に沈黙しうる |
+  | `node` | 3 本 | 同上 |
+  | `npx` | 3 本 | 同上 |
+
+  沈黙は**警告が出ないだけで、止まりはしない**。つまり導入先の人には「検知が入っている」ように
+  しか見えない。**この状態を毎セッション知らせる hook を入れた**——
+  `check-hook-dependencies.sh`（SessionStart）。走査の本体は `scripts/lib/aidd-doctor.mjs` で、
+  何に依存するかは**スクリプトの実体から実測する**（宣言表を持たない。持つと実態とずれる）。
+  数字は `node scripts/lib/aidd-doctor.mjs --verbose` でいつでも測り直せる。
 - 個人環境のスクリプト（`~/write_aidd_stats.sh`・`~/.claude/pending_issues.jsonl`）は同梱しない。
   それらに依存する Stop hook（AIDD stats の記録漏れ検知）は導入先で該当スクリプトが無ければ沈黙する
 - `gate-effectiveness-monthly-check.sh` 等の TS 補助スクリプトは node の `--experimental-strip-types`
