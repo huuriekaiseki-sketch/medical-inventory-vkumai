@@ -23,6 +23,7 @@
       "checks": [
         "scripts/ai-check-suggest.test.sh",
         "scripts/codex-ai-check.test.sh",
+        "scripts/check-codex-agents-generated.test.sh",
         "scripts/check-aidd-graph-rendered.test.sh",
         "scripts/check-aidd-phase-stats-recorded.test.sh",
         "scripts/check-aidd-stats-recorded.test.sh",
@@ -134,6 +135,7 @@
         "scripts/check-no-registry-fetch.test.sh",
         "scripts/check-operation-contracts.test.sh",
         "scripts/check-pitfall-rulebook.test.sh",
+        "scripts/check-plugin-asset-coverage.test.sh",
         "scripts/check-plugin-check-coverage.test.sh",
         "scripts/check-plugin-integrity.test.sh",
         "scripts/check-promise-catalog.test.sh",
@@ -334,6 +336,7 @@
       "checks": [
         "scripts/check-access-review-staleness.test.sh",
         "scripts/check-agent-baseline-freshness.test.sh",
+        "scripts/check-agent-progress-instructions.test.sh",
         "scripts/check-blocked-issues-staleness.test.sh",
         "scripts/check-dependency-update-staleness.test.sh",
         "scripts/check-e2e-freshness.test.sh",

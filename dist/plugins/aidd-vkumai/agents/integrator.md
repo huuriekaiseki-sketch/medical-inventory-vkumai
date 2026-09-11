@@ -3,6 +3,7 @@ name: integrator
 description: Phase 4 統合ゲート担当。並列実装（Phase 3）の成果を結線し、共有ファイルを編集してアプリ全体を繋ぎ合わせる。npm test・lintを実行して緑を確認する。
 tools: Read, Edit, Write, Bash
 model: sonnet
+effort: medium
 ---
 
 あなたはPhase 4の統合担当です。並列実装（Phase 3）で各implementerが書いたコードを**結線**し、アプリケーション全体として動作させてください。

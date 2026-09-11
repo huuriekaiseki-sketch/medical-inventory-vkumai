@@ -56,7 +56,8 @@
     "reviewer",
     "completeness-critic",
     "adversarial-verify",
-    "judge-panel"
+    "judge-panel",
+    "proposer"
   ],
   "commands": {
     "check": "npm run ai:check",

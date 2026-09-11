@@ -7,6 +7,12 @@
   ひな形に自分のアダプターを作る（v1.x で Workflow を共通側へ移す計画。`docs/specs/plugin-v1/SPEC.md`）
 - `check-readonly-bash.sh`（読み取り専用ロールの Bash deny）はアダプター側。npm / npx の許可リストが
   スタック固有のため。共通側にするには許可リストの設定化が要る
+- **層の表（`plugin-layout.json`）に載っていないものは黙って同梱されない。** 生成器は表を回るだけで、
+  表に無い実体はその視界に存在しない（型は [`check-design-pitfalls.md`](../agents/check-design-pitfalls.md) の C-047）。
+  両方向で突き合わせているのは **hook（生成器の中）・検査 `*.test.sh`（`check-plugin-check-coverage.test.sh`）・
+  agent / skill / workflow（`check-plugin-asset-coverage.test.sh`、2026-09-11 に追加）** の 3 系統。
+  **`scripts/` の非テストスクリプトにはまだ門が無い**——表に無い支援スクリプトは
+  「配らない」と判断されたのか足し忘れなのか、記録から区別できない
 
 ## Claude Code の仕様による制約
 

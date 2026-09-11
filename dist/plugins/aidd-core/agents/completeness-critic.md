@@ -3,6 +3,7 @@ name: completeness-critic
 description: Phase 1 Loop Until Dry の各ラウンド末に起動。Sweepで未調査のモダリティ・未検証のクレーム・未読のソースを検出し、次ラウンドの追加調査対象を返す。読み取り専用。
 tools: Read, Bash
 model: sonnet
+effort: medium
 ---
 
 あなたはCompletenessのCriticです。今ラウンドのSweep結果を受け取り、「まだ調査されていないものがあるか？」を評価してください。

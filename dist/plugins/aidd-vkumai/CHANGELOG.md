@@ -25,3 +25,9 @@
   aidd-core は 74 → 107 ファイル、aidd-vkumai は 31 → 39 ファイルになった
 - 2026-09-06: 配布形態 (a) へ移行。marketplace `aidd-plugins`（非公開）に生成物を置き、`aidd-core--v0.1.0` /
   `aidd-vkumai--v0.1.0` をタグ付け。manifest の生成元注記を `metadata` へ、`author` を追加
+- **2026-09-11: `aidd-core` にエージェント `proposer` を追加した（4 → 5 体）。** 足りていたつもりで
+  1 体欠けていた——Claude 側の正本が `~/.claude/agents/`（グローバル）にしか無く、リポジトリには
+  Codex 側の toml だけがあった。リポジトリへ移したあとも層の表へ足し忘れたが、**生成器は表を回るだけ**
+  なのでビルドは成功し、生成物の差分にも出なかった。agent / skill / workflow の実体と層の表を
+  **両方向**で突き合わせる `scripts/check-plugin-asset-coverage.test.sh` を足して塞いだ
+  （hook は最初から両方向だった。型は `docs/agents/check-design-pitfalls.md` の C-047）
