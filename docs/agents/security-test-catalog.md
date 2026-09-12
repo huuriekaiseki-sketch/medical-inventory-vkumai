@@ -77,10 +77,10 @@
 | 供給網の侵害シミュレーション | marketplace・npm・Action・bin・Codex 手コピーの改ざんを検知・隔離・停止 | 実装済み（一部） | `scripts/supply-chain-drill.sh`（5 シナリオ）と `docs/agents/supply-chain-drill.md`。初回 2026-09-07 は検知 4 / 未検知 1（GitHub Action をタグで参照している点は #757-21 の月次棚卸しで判断する）。四半期に fault injection 訓練と同じ回で実施する |
 | ビルド成果物の同一性 | ソースから作った成果物と配布 plugin のハッシュ一致・署名 | 実装済み（一部） | 生成の決定性（`build-plugin.sh --check`）に加え、配布物の自己検査 `scripts/check-plugin-integrity.sh`（`.aidd-manifest.json` と突合、CI と導入先の SessionStart）を入れた。**署名は未**なので manifest ごと書き換えられたら検知できない（#757-30 の供給網演習と同時に判断する） |
 | 依存の名前取り違え | typo-squatting・scope 違い・registry 差し替え | 実装済み（一部） | ロック出所の検査、registry fetch 禁止テスト。scope 違いは引き金付き（依存追加時に ask 文言へ） |
-| Archive slip・symlink・Git hook・submodule・巨大入力 | 展開・リンク・Git 由来で保護外へ書く、圧縮爆弾で停止 | 引き金付き | plugin か製品がファイル・アーカイブ・外部 Git を受け取る機能を持ったとき |
-| ターミナル制御文字 | plugin・hook の出力に ANSI escape を混ぜて端末を欺く | 引き金付き | hook の出力に外部由来の文字列（issue 本文・商品名）を含めるとき |
+| Archive slip・symlink・Git hook・submodule・巨大入力 | 展開・リンク・Git 由来で保護外へ書く、圧縮爆弾で停止 | 引き金付き | plugin か製品がファイル・アーカイブ・外部 Git を受け取る機能を持ったとき。**2026-09-12 実測で前提を確認**（`<input type="file">` が 0 件。下の「前提を実測で確かめた行」を参照）。**4 つの引き金のうち印が強いのはここだけ**なので、ratchet を作れる側 |
+| ターミナル制御文字 | plugin・hook の出力に ANSI escape を混ぜて端末を欺く | 引き金付き | hook の出力に外部由来の文字列（issue 本文・商品名）を含めるとき。**既存の `check-control-bytes` はこの行の検査ではない**——見ているのは追跡ファイルとコミットメッセージで、hook の実行時出力は対象外（下の「前提を実測で確かめた行」を参照） |
 | SSRF・クラウド metadata | URL 取得機能や hook から内部 API・クラウド認証情報へ | 対象外（現状） | URL を受け取る機能は無い。追加時に引き金。**2026-09-12 実測で前提を確認した**（`src/app/api` に `fetch` の呼び出しは 0 件——ヒットしたのはコメント 1・モック 1・自前の DB 関数 `fetchOrderAmountReport` 2 だけ。`proxy.ts` もコメント 1 件のみ。`axios` / `node-fetch` / `got` / `undici` / `request` はいずれも未導入。`src/` 全体の `fetch` 41 ファイルは**すべてブラウザから自分の `/api/...` を呼ぶ相対パス**で、サーバーが外部 URL を取りに行く経路は 1 本も無い）。**エクスポート境界のような ratchet は意図して作らない**（下の「引き金が引けない行」の末尾を参照） |
-| 通信の再構成差異 | proxy・CDN・Next.js・Supabase で HTTP の解釈が違い認証を迂回 | 引き金付き | CDN・WAF を前段に置いたとき |
+| 通信の再構成差異 | proxy・CDN・Next.js・Supabase で HTTP の解釈が違い認証を迂回 | 引き金付き | CDN・WAF を前段に置いたとき。**2026-09-12 実測で前提を確認**（`next.config.ts` に該当設定 0 件）。ただし**前段はリポジトリの外で入る**ので、ファイルを見ても検知できない（下の「前提を実測で確かめた行」を参照） |
 | 乱数・識別子の推測 | 招待 URL・注文番号・一時 token の予測 | 実装済み（一部） | 主キーは UUID。招待リンクは Supabase 発行。エクスポート URL は機能追加時 |
 | 設定変更の承認 | RLS・許可リスト・Webhook・環境変数の変更にレビュー・記録が要るか | 実装済み（一部） | migration と settings は PR 経由。Vercel / Supabase ダッシュボード側は #757-35 で棚卸し |
 | 安全な初期値 | 新しい施設・ユーザー・plugin が明示的に許可するまで危険な権限を持たないか | 実装済み（一部） | 新ユーザーは未所属（role null）。plugin は defaultEnabled の扱いを COMPATIBILITY.md に |
@@ -97,7 +97,7 @@
 | 復元テスト・復元後の検証 | バックアップから復元し、RLS・権限・hook・秘密情報が戻るか | 計画 #757-11・23 | |
 | ロールバックの完全性 | コードだけ戻して schema・データ形式・権限・キャッシュが不整合にならないか | 実装済み（一部） | `release-safety-runbook.md`（順序の規約: 絞る・足すは DB が先、縮めるはアプリが先。混在表・ロールバック手順。2026-09-06、#757-13・25）。2026-09-07 以降の migration は `-- release-order:` と `-- ROLLBACK:` を `scripts/check-migration-release-safety.test.sh` が必須にする。実演（本番でのロールバック）は #757-11 と同時 |
 | 部分成功 | DB 更新は成功しメール送信は失敗、のような中間状態 | 実装済み（一部） | `partial-success-inventory.md`（M-xxx）に書き込み経路 17 本の中間状態と再試行の約束を一覧化。招待・施設割当・削除の再送は実 DB で固定。残り: メール送信だけ失敗（M-021）の実測、代理店商品作成の再送重複（M-012）は #757-38 |
-| リプレイ・順序逆転 | 古い Webhook・遅延応答・同一イベント再送・処理順逆転 | 引き金付き | Webhook か非同期処理を導入したとき |
+| リプレイ・順序逆転 | 古い Webhook・遅延応答・同一イベント再送・処理順逆転 | 引き金付き | Webhook か非同期処理を導入したとき。**2026-09-12 実測で前提を確認**（`src/` のヒットは偽 DB ヘルパーの変数名 1 本のみ。下の「前提を実測で確かめた行」を参照） |
 | 削除・退会の復活 | 復元で無効化済みの権限まで復活しないか | 計画 #757-23 に含める | |
 | 秘密情報のローテーション | 鍵交換後に旧鍵が全経路で無効になるか | 計画 #757-29 | |
 | 証明書・鍵・token の期限 | 期限前に安全に更新・通知できるか | 実装済み（一部） | 四半期の棚卸し（`access-review-runbook.md`）で token の期限と用途を見る。SessionStart と maintenance-digest が期限切れを警告。ローテーションの実測は #757-29 |
@@ -172,3 +172,28 @@
 **この判断は C-044 / C-045 / C-046 / C-048 と同じ扱い**（[`check-design-pitfalls.md`](./check-design-pitfalls.md) の「## 限界」）。
 機械検知を作らないと決めた型は、**なぜ作らないかを書いて残す**——書かないと、次の人が
 同じ検討を最初からやり直すか、印の弱い検査を作ってしまう。
+
+### 前提を実測で確かめた行（2026-09-12）
+
+**「まだその機能が無い」と書いた行は、本当に無いかを測ってから信じる。** 書いた日には正しくても、
+機能が生えた日に行を直す人はいない。**測った印を残しておけば次の人が同じ手順で測り直せる**——
+測り方の書いていない行は、結局もう一度ゼロから考えることになる。
+
+| 判断した対象 | 測った印 | 結果 |
+| --- | --- | --- |
+| C 節「Archive slip・symlink・Git hook・submodule・巨大入力」の引き金 | `<input type="file">`、および `FormData` / `multipart` / `upload` | `type="file"` は **0 件**でファイル受け取りの UI が無い。`FormData` 等は 6 ファイルに出るが、いずれも通常のフォーム値の送信。**ヒット 6 件を「該当あり」と読めば誤り**だった |
+| C 節「ターミナル制御文字」の引き金 | `scan-control-bytes.mjs` が見る 3 経路（`--files` / `--commits` / `--message`） | 既存の `check-control-bytes` は**追跡ファイルとコミットメッセージ**の ratchet で、**hook が実行時に組み立てる出力は対象外**。名前が近いだけの別経路なので「検査済み」とは書けない。C1 制御文字とゼロ幅文字も対象外（同ファイルの限界節） |
+| C 節「通信の再構成差異」の引き金 | `next.config.ts` の `cdn` / `cloudflare` / `waf` | **0 件**。前段に CDN・WAF は置いていない |
+| D 節「リプレイ・順序逆転」の引き金 | `src/` の `webhook` / `queue` / `cron` | ヒットは `src/lib/consumables/__tests__/repository.test.ts` **1 本だけ**で、中身は偽 DB ヘルパーの変数名（`makeDb(queues)` / `const queue = queues[table]`）。**本物の非同期処理は 1 つも無い** |
+
+**印の強さは 4 つで違う。ratchet を作るかどうかはここで決まる**:
+
+- **強い（作る）**: ファイル受け取り。`<input type="file">` と `request.formData()` の File 取り出しは
+  **避けて通れない印**で、エクスポート境界の `text/csv`・`Content-Disposition` と同じ強さがある
+- **弱い（作らない）**: 残り 3 つ。hook 出力の「外部由来の文字列」は書き方が無数にある。
+  **CDN・WAF はそもそもリポジトリの外**（Cloudflare・Vercel のダッシュボード）で前段に入るので、
+  ファイルをどれだけ見ても永久に分からない。Webhook も「外から POST される route」を
+  静的に見分ける印が無い（session を見ない route は他にもある）
+
+**4 つを同じ扱いにしないこと**が要点。印の弱い 3 つに ratchet を作れば、E-086 で踏んだ
+「検査はあるのに効かない、しかも**あること自体が安心の根拠になる**」状態をまた作る。
