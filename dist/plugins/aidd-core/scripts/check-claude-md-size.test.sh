@@ -105,9 +105,20 @@ assert_empty "$OUT" "閾値ちょうどなら警告なし"
 rm -rf "$W"
 
 echo "=== scenario 7: 実態のリポジトリで既定閾値を超えていない（超えたら分離を検討する合図） ==="
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-OUT="$(CLAUDE_PROJECT_DIR="$REPO_ROOT" bash "$SCRIPT")"
-assert_not_contains "$OUT" "常時ロードされる指示ファイルの合計" "実態が STARTUP_CONTEXT_CHAR_LIMIT 以内"
+# WHY(2026-09-12): 根が $SCRIPT_DIR/.. のままだと、配られたとき**プラグイン自身**の CLAUDE.md を
+#      測る（E-086・E-087）。実測でも、導入先が CLAUDE.md を持っているのに出力が変わらなかった。
+#      導入先のルートを明示できるならそちらを見る。持たない導入先では対象なしと言う（C-025）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+if [ ! -f "$REPO_ROOT/CLAUDE.md" ]; then
+  echo "  SKIP: 対象なし（この導入先は CLAUDE.md を持たない）"
+else
+  OUT="$(CLAUDE_PROJECT_DIR="$REPO_ROOT" bash "$SCRIPT")"
+  assert_not_contains "$OUT" "常時ロードされる指示ファイルの合計" "実態が STARTUP_CONTEXT_CHAR_LIMIT 以内"
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

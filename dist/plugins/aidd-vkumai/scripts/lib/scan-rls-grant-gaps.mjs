@@ -62,7 +62,11 @@ export function scanTables(migrationsDir = path.join(REPO_ROOT, 'supabase/migrat
     return tables.get(name)
   }
 
-  for (const file of fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort()) {
+  // WHY(2026-09-12): 導入先が supabase/migrations を持たないと readdirSync が ENOENT で
+  //      **スクリプトごと異常終了**していた（空のリポジトリで実測）。持っていないだけで
+  //      赤くなるのは違う。0 件として進め、「表が 1 つも無い」の判定は呼ぶ側に任せる。
+  const files = fs.existsSync(migrationsDir) ? fs.readdirSync(migrationsDir) : []
+  for (const file of files.filter((f) => f.endsWith('.sql')).sort()) {
     const sql = stripComments(fs.readFileSync(path.join(migrationsDir, file), 'utf8'))
     const events = []
     const push = (m, e) => events.push({ at: m.index, ...e })

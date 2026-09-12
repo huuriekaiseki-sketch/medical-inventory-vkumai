@@ -103,7 +103,9 @@ if [ -f "$REPO_ROOT/scripts/lib/check-mutants.json" ]; then
   assert_not_contains "$OUT" "生き残り" "生き残りが 1 件も無い"
   if [ "$CODE" -eq 0 ]; then echo "  OK: exit 0"; else echo "  NG: exit $CODE"; fail=1; fi
 else
-  echo "  SKIP: 登録簿が無い導入先（壊し方をまだ決めていない）"
+  # WHY(2026-09-12): 印の語を「対象なし」に揃える。呼ぶ側（aidd-check）は
+  #      この語で「見た結果の合格」と「対象が無いので黙った」を分ける（C-025）。
+  echo "  SKIP: 対象なし（登録簿が無い導入先。壊し方をまだ決めていない）"
 fi
 
 echo "=== scenario 2: 生き残り（壊しても落ちないテスト）を見逃さない ==="

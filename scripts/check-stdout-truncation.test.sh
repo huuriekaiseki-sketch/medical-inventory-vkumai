@@ -145,7 +145,12 @@ echo "=== scenario 5: この書き方が増えていない（ratchet） ==="
 SCAN_OUT="$(node "$SCRIPT_DIR/lib/scan-stdout-exit.mjs" "$REPO_ROOT" "$EXEMPT_FILE" 2>&1)"
 SCANNED="$(sed -n 's/^scanned=//p' <<<"$SCAN_OUT")"
 SUMMARY="$(grep '^violations=' <<<"$SCAN_OUT")"
-if [ "$SUMMARY" = "violations=0 unusedExemptions=0 emptyReasons=0" ]; then
+# WHY(2026-09-12): 走査対象が 0 件のとき、免除が 1 つも当たらないのは**当たり前**なのに、
+#      それを「免除が腐っている」（C-049）として落としていた。空のリポジトリで実測して発覚。
+#      判定の順序が逆で、**対象が無いことを先に見てから**免除の腐りを見る必要がある。
+if [ "${SCANNED:-0}" -eq 0 ]; then
+  assert_ok "対象なし: この導入先には走査する .mjs / .js が無い（免除の腐りもここでは見ない）"
+elif [ "$SUMMARY" = "violations=0 unusedExemptions=0 emptyReasons=0" ]; then
   assert_ok "宣言に無い箇所は 0 件・免除も腐っていない（${SCANNED} ファイル走査）"
 else
   assert_fail "この書き方が宣言の外にある（または免除が腐っている）" "$(grep '^NG ' <<<"$SCAN_OUT" | head -10)

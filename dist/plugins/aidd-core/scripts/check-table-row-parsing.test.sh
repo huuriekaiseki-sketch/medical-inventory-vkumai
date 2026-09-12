@@ -119,9 +119,12 @@ echo "=== scenario 3: 走査が空振りしていない（C-044） ==="
 COUNT_FILES="$(list_files "$REPO_ROOT" | wc -l | tr -d ' ')"
 # WHY(2026-09-12): 下限 100 は大きなリポジトリを前提にしていた。配った先は小さい
 #      （実測: 導入先を模した 2 リポジトリで 9 ファイルと 10 ファイル）。
-#      持っていないだけで赤くなるので、0 件のときだけ落とす。
-if [ "$COUNT_FILES" -eq 0 ]; then
-  assert_fail "走査できたファイルが 0 件（走査が壊れているか、この導入先に対象がありません）"
+#      さらに、**0 件を一律で故障として落とすと、まだ何も置いていない導入先が赤くなる**
+#      （空のリポジトリで実測して発覚）。「見る場所が無い」と「場所はあるのに 0 件」を分ける（C-025）。
+if [ ! -d "$REPO_ROOT/docs" ] && [ ! -d "$REPO_ROOT/scripts" ] && [ ! -d "$REPO_ROOT/src" ]; then
+  assert_ok "対象なし: この導入先には走査する置き場（docs / scripts / src）がまだ無い"
+elif [ "$COUNT_FILES" -eq 0 ]; then
+  assert_fail "置き場はあるのに走査できたファイルが 0 件（走査が壊れている疑い。C-044）"
 else
   assert_ok "${COUNT_FILES} ファイルを走査できている"
 fi

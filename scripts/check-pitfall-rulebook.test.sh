@@ -106,12 +106,19 @@ check_doc() {
 }
 
 echo "=== scenario 1: 実態の一覧に違反が無い ==="
-OUT="$(check_doc "$DOC")"
-N="$(tail -1 <<<"$OUT" | sed 's/violations=//')"
-if [ "$N" = "0" ]; then
-  assert_ok "違反なし（型 $(grep -c '^| C-' "$DOC") 件）"
+# WHY(2026-09-12): scenario 0 は「上限の宣言があるか」しか見ておらず、**文書そのものの不在**は
+#      ここで missing として違反になっていた（空のリポジトリで実測して発覚）。同じ検査の中で
+#      「持っていない」の扱いが 2 通りあると、持っていないだけの導入先が赤くなる（C-025）。
+if [ ! -f "$DOC" ]; then
+  echo "  SKIP: 対象なし（この導入先はまだ型の一覧 ${DOC#"$REPO_ROOT"/} を持たない）"
 else
-  assert_fail "違反あり" "$(printf '%s\n' "$OUT")"
+  OUT="$(check_doc "$DOC")"
+  N="$(tail -1 <<<"$OUT" | sed 's/violations=//')"
+  if [ "$N" = "0" ]; then
+    assert_ok "違反なし（型 $(grep -c '^| C-' "$DOC") 件）"
+  else
+    assert_fail "違反あり" "$(printf '%s\n' "$OUT")"
+  fi
 fi
 
 echo "=== scenario 2: fixture で各違反を検知できる（RED 方向の自己検証） ==="

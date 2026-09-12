@@ -239,6 +239,90 @@ else
   assert_fail "上限の書き忘れを検知できない" "$OUT3"
 fi
 
+echo "=== scenario 5: 配る検査は、対象が無い木で『対象なし』と言う（黙って合格にしない） ==="
+# WHY(2026-09-12): 実測——導入先で回すと、配る 29 本のうち実際に相手を見ていたのは 13〜14 本で、
+#      残りは「持っていないので何もしなかった」だった。それを入口が「合格」に数えており、
+#      導入先の人には全部が守っているように見えた（C-025: 合否・検査不能・未実行を 1 つに潰す）。
+#      **空の木で回せば、配る検査はすべて「対象が無い」状態になる。** そこで黙って通るもの、
+#      あるいは落ちるものは、入口が合格と区別できない検査なので落とす。
+#      この製品固有の前提を持つものは plugin-layout.json の emptyRepoExempt に**理由つき**で宣言する。
+EMPTY_REPO="$WORK/empty-repo"
+git init -q "$EMPTY_REPO"
+SCOPED="$(node -e '
+const fs = require("fs")
+const path = require("path")
+const root = process.argv[1]
+const layout = JSON.parse(fs.readFileSync(path.join(root, "scripts/lib/plugin-layout.json"), "utf8"))
+const exempt = new Set(Object.keys(layout.emptyRepoExempt ?? {}).filter((k) => !k.startsWith("_")))
+for (const [name, scope] of Object.entries(layout.checkScopes ?? {})) {
+  if (name.startsWith("_")) continue
+  if (scope !== "consumer" && scope !== "both") continue
+  if (exempt.has(name)) continue
+  console.log(name)
+}
+' "$REPO_ROOT")"
+NOMARK=""
+RAN=0
+while IFS= read -r t; do
+  [ -n "$t" ] || continue
+  s="$REPO_ROOT/scripts/$t"
+  [ -f "$s" ] || continue
+  RAN=$((RAN + 1))
+  out="$(cd "$EMPTY_REPO" && CLAUDE_PROJECT_DIR="$EMPTY_REPO" bash "$s" 2>&1)"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    NOMARK="${NOMARK}  落ちた: ${t}（対象が無いだけで赤くなる）"$'\n'
+  elif ! grep -q '対象なし' <<<"$out"; then
+    NOMARK="${NOMARK}  印なし: ${t}（対象が無いのに何も言わない）"$'\n'
+  fi
+done <<< "$SCOPED"
+if [ "$RAN" -eq 0 ]; then
+  assert_fail "配る検査を 1 本も回せなかった（列挙が壊れている。C-044）"
+elif [ -z "$NOMARK" ]; then
+  assert_ok "配る検査 ${RAN} 本すべてが、対象の無い木で『対象なし』と言う"
+else
+  assert_fail "対象が無い木で黙る／落ちる検査がある" "$NOMARK
+      直し方: その検査に「対象なし」と言う分岐を入れる。
+      この製品固有の前提が要るなら plugin-layout.json の emptyRepoExempt へ理由つきで足す"
+fi
+
+echo "=== scenario 5b: emptyRepoExempt に幽霊が残っていない（腐った免除を検知。C-049） ==="
+# WHY: 免除は前提が変わっても自動では消えない。**空の木で通るようになったのに載ったまま**なら、
+#      その行はもう要らない（C-049 と同じ型）。
+GHOST=""
+EXEMPT_NAMES="$(node -e '
+const fs = require("fs")
+const path = require("path")
+const layout = JSON.parse(fs.readFileSync(path.join(process.argv[1], "scripts/lib/plugin-layout.json"), "utf8"))
+for (const [name, reason] of Object.entries(layout.emptyRepoExempt ?? {})) {
+  if (name.startsWith("_")) continue
+  if (!String(reason ?? "").trim()) { console.log("NOREASON\t" + name); continue }
+  console.log("NAME\t" + name)
+}
+' "$REPO_ROOT")"
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  kind="${line%%	*}"
+  t="${line#*	}"
+  if [ "$kind" = "NOREASON" ]; then
+    GHOST="${GHOST}  理由が空: ${t}"$'\n'
+    continue
+  fi
+  s="$REPO_ROOT/scripts/$t"
+  if [ ! -f "$s" ]; then
+    GHOST="${GHOST}  実体なし: ${t}"$'\n'
+    continue
+  fi
+  if (cd "$EMPTY_REPO" && CLAUDE_PROJECT_DIR="$EMPTY_REPO" bash "$s" > /dev/null 2>&1); then
+    GHOST="${GHOST}  もう要らない: ${t}（空の木で通るようになった）"$'\n'
+  fi
+done <<< "$EXEMPT_NAMES"
+if [ -z "$GHOST" ]; then
+  assert_ok "emptyRepoExempt に腐った行は無い"
+else
+  assert_fail "emptyRepoExempt が実態と合っていない" "$GHOST"
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

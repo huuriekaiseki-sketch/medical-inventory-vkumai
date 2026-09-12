@@ -191,12 +191,24 @@ echo "=== scenario 10: 実態でこの hook が何を言うか ==="
 # WHY: 片方だけ動いていても意味が無い。**鳴るべきときに鳴るのは scenario 6**、
 #      鳴らないべきときに鳴らないのがここ。ただし期限切れ・版の不一致は**本当の警告**なので、
 #      この検査を落とすのではなく内容を出す（doctor の scenario 1 と同じ扱い）。
-OUT="$(bash "$SCRIPT")"
-if [ -z "$OUT" ]; then
-  echo "  OK: 実態では無言（期限内かつ版が一致）"
+# WHY(2026-09-12): 配った先がこのランブックを持っているとは限らない。持っていないとき本体は
+#      沈黙するので、その無言を「期限内で正常」と読むと**対象が無いのを合格と混ぜる**（C-025）。
+#      「対象なし」と明示し、呼ぶ側（aidd-check）が 4 値へ分けられるようにする。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REAL_DOC="${CLAUDE_PROJECT_DIR}/docs/agents/fault-injection-drill.md"
 else
-  echo "  注意: 実態で警告が出ている（本当の警告なのでこの検査は落とさない）"
-  sed -n 's/^/      /p' <<<"$OUT" | head -5
+  REAL_DOC="$(cd "$SCRIPT_DIR/.." && pwd)/docs/agents/fault-injection-drill.md"
+fi
+if [ ! -f "$REAL_DOC" ]; then
+  echo "  SKIP: 対象なし（この導入先は docs/agents/fault-injection-drill.md を持たない）"
+else
+  OUT="$(bash "$SCRIPT")"
+  if [ -z "$OUT" ]; then
+    echo "  OK: 実態では無言（期限内かつ版が一致）"
+  else
+    echo "  注意: 実態で警告が出ている（本当の警告なのでこの検査は落とさない）"
+    sed -n 's/^/      /p' <<<"$OUT" | head -5
+  fi
 fi
 
 echo "=== scenario 11: 走査器が、マーカーの取り違えと不在で落ちる（fail-open 防止） ==="

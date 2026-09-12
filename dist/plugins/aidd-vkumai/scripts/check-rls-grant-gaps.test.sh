@@ -50,8 +50,16 @@ run_on() { # $1=migration ディレクトリ
 echo "=== scenario 1: 実態の migration に違反が無い ==="
 OUT="$(cd "$REPO_ROOT" && node "$SCANNER" 2>&1)"
 CODE=$?
-assert_contains "$OUT" "violations=0" "違反なし"
-if [ "$CODE" -eq 0 ]; then echo "  OK: exit 0"; else echo "  NG: exit $CODE"; fail=1; fi
+# WHY(2026-09-12): 導入先が migration を持たないと走査器は「表を 1 つも見つけられなかった」と
+#      言う。それを違反として読むと、**持っていないだけで赤くなる**（空のリポジトリで実測）。
+#      対象が無ければ対象なしとして黙る（走査の故障は、対象がある導入先でだけ意味を持つ）。
+#      check-guard-regressions.test.sh の scenario 1 と同じ形。
+if grep -qF -- "表を 1 つも見つけられなかった" <<<"$OUT"; then
+  echo "  OK: この導入先の migration に表の定義が無いので対象なし"
+else
+  assert_contains "$OUT" "violations=0" "違反なし"
+  if [ "$CODE" -eq 0 ]; then echo "  OK: exit 0"; else echo "  NG: exit $CODE"; fail=1; fi
+fi
 
 echo "=== scenario 2: 権限はあるがポリシーが無い（RED 方向）==="
 BAD="$WORK_DIR/bad"

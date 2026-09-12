@@ -79,7 +79,10 @@ if ! git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
 else
   TRACKED="$(git -C "$REPO_ROOT" ls-files '*.html')"
   if [ -z "$TRACKED" ]; then
-    assert_ok "追跡されている HTML は無い（この導入先は生成物の HTML を持たない）"
+    # WHY(2026-09-12): 理由は言えていたが、**印の語が揃っていない**ので呼ぶ側（aidd-check）が
+    #      「見た結果の合格」と「対象が無いので黙った」を区別できなかった（C-025）。
+    #      「対象なし」を必ず含める、が配る検査の印の決まり。
+    assert_ok "対象なし: 追跡されている HTML が 1 本も無い（この導入先は生成物の HTML を持たない）"
   else
     COUNT="$(grep -c . <<<"$TRACKED")"
     # shellcheck disable=SC2086

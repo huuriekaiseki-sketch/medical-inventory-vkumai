@@ -82,10 +82,17 @@ elif [ "$RC" -eq 1 ]; then
 else
   assert_fail "走査できない（rc=${RC}。走査できないことを緑にしない）" "$OUT"
 fi
-if [ "${SCANNED:-0}" -ge 10 ]; then
+# WHY(2026-09-12): 下限 10 本は大きなリポジトリ前提だった。**まだ何も追跡していない導入先**では
+#      0 本が普通で、持っていないだけで赤くなる（空のリポジトリで実測して発覚）。
+#      scenario 3 が「コミットが無い」を対象なしと言えているのと同じ扱いに揃える。
+#      「追跡ファイルが 1 本も無い」と「あるのに走査が 0 本」は別物なので分ける（C-025）。
+TRACKED_N="$(git -C "$REPO_ROOT" ls-files 2>/dev/null | grep -c . || true)"
+if [ "${TRACKED_N:-0}" -eq 0 ]; then
+  assert_ok "対象なし: この導入先はまだファイルを 1 つも追跡していない"
+elif [ "${SCANNED:-0}" -ge 1 ]; then
   assert_ok "走査が空振りしていない（${SCANNED} 本）"
 else
-  assert_fail "走査できたのが ${SCANNED:-0} 本しかない（走査が壊れている疑い。C-044）"
+  assert_fail "追跡ファイルは ${TRACKED_N} 本あるのに走査できたのが 0 本（走査が壊れている疑い。C-044）"
 fi
 
 echo "=== scenario 3: HEAD から辿れるコミットメッセージに制御バイトが無い ==="

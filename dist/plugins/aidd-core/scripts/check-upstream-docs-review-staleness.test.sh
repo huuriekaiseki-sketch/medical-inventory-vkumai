@@ -80,11 +80,23 @@ OUT="$(UPSTREAM_DOCS_REVIEW_DOC="$TMPDIR_TEST/no-such-file.md" bash "$SCRIPT")"
 assert_empty "$OUT" "出力が空である"
 
 echo "=== scenario 6: 実態の docs/agents/upstream-docs-review.md から日付を読める（書式の回帰） ==="
-OUT="$(bash "$SCRIPT")"
-if grep -qF "読み取れませんでした" <<<"$OUT"; then
-  echo "  NG: 実態のファイルの「## 次回実施予定日」から日付を読み取れない"; fail=1
+# WHY(2026-09-12): 配った先がこのランブックを持っているとは限らない。持っていないとき本体は
+#      沈黙するので、そのまま「読み取れた」と読むと**対象が無いのを合格と混ぜる**（C-025）。
+#      「対象なし」と明示し、呼ぶ側（aidd-check）が 4 値へ分けられるようにする。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REAL_DOC="${CLAUDE_PROJECT_DIR}/docs/agents/upstream-docs-review.md"
 else
-  echo "  OK: 実態のファイルの書式は読み取れる（期限前なら沈黙、期限後なら超過警告）"
+  REAL_DOC="$(cd "$SCRIPT_DIR/.." && pwd)/docs/agents/upstream-docs-review.md"
+fi
+if [ ! -f "$REAL_DOC" ]; then
+  echo "  SKIP: 対象なし（この導入先は docs/agents/upstream-docs-review.md を持たない）"
+else
+  OUT="$(bash "$SCRIPT")"
+  if grep -qF "読み取れませんでした" <<<"$OUT"; then
+    echo "  NG: 実態のファイルの「## 次回実施予定日」から日付を読み取れない"; fail=1
+  else
+    echo "  OK: 実態のファイルの書式は読み取れる（期限前なら沈黙、期限後なら超過警告）"
+  fi
 fi
 
 if [ "$fail" -ne 0 ]; then

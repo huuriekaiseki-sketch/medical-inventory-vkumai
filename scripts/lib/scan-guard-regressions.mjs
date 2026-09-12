@@ -85,7 +85,11 @@ export function scan(migrationsDir = path.join(REPO_ROOT, 'supabase/migrations')
   let declared = 0
   let parsed = 0
 
-  for (const file of fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort()) {
+  // WHY(2026-09-12): 導入先が supabase/migrations を持たないと readdirSync が ENOENT で
+  //      **スクリプトごと異常終了**していた（空のリポジトリで実測）。持っていないだけで
+  //      赤くなるのは違う。0 件として進め、「1 つも無い」の判定は呼ぶ側の空振り防止に任せる。
+  const files = fs.existsSync(migrationsDir) ? fs.readdirSync(migrationsDir) : []
+  for (const file of files.filter((f) => f.endsWith('.sql')).sort()) {
     const raw = fs.readFileSync(path.join(migrationsDir, file), 'utf8')
     const sql = stripComments(raw)
 
