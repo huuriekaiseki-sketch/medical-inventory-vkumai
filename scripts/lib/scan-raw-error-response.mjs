@@ -281,7 +281,11 @@ export function scanRepo(repoRoot, config) {
 //   設定は <リポジトリ>/aidd.config.json の errorResponse から読む。
 //   終了コード: 0 = 違反なし（設定が無い導入先も 0）/ 1 = 違反あり、または走査が空振り
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const defaultRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+  // WHY(2026-09-12): 配られると、この走査器は配布物の中にある。自分の位置から `../..` を
+  //      組み立てると**プラグイン自身**を導入先だと思い込む（E-087）。
+  const defaultRoot = process.env.CLAUDE_PROJECT_DIR
+    ? path.resolve(process.env.CLAUDE_PROJECT_DIR)
+    : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
   const repoRoot = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : defaultRoot
   const configPath = path.join(repoRoot, 'aidd.config.json')
 

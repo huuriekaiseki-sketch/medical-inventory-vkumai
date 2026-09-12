@@ -30,7 +30,14 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**を走査する（E-086・E-087）。実測: 導入先に `awk -F'|'` を置いても
+#      プラグイン側の 146 ファイルを見て「自前の区切りは 0 件」と言っていた。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 
 fail=0
 assert_ok() { echo "  OK: $1"; }
@@ -82,13 +89,18 @@ find_bare_splits() {
 }
 
 echo "=== scenario 1: 入口が 2 つとも実在する ==="
-if grep -q 'export function splitRow' "$REPO_ROOT/scripts/lib/check-catalog.mjs" 2>/dev/null; then
-  assert_ok "JS / TS の入口: splitRow（scripts/lib/check-catalog.mjs）"
+# WHY(2026-09-12): 入口の実体は**配布物側**にあり、導入先の `scripts/lib/` には無いのが正常。
+#      導入先で「入口が見つからない」を違反として読むと、正しく入れた導入先ほど赤くなる（E-086）。
+#      入口を探す先は、この検査自身の隣（＝配布物なら配布物、中心リポジトリなら中心）にする。
+ENTRY_JS="$SCRIPT_DIR/lib/check-catalog.mjs"
+ENTRY_SH="$SCRIPT_DIR/lib/table-row.sh"
+if grep -q 'export function splitRow' "$ENTRY_JS" 2>/dev/null; then
+  assert_ok "JS / TS の入口: splitRow（$(basename "$ENTRY_JS")）"
 else
   assert_fail "JS / TS の入口 splitRow が見つからない（消えたら全員が自前に戻る）"
 fi
-if grep -q '^table_field()' "$REPO_ROOT/scripts/lib/table-row.sh" 2>/dev/null; then
-  assert_ok "shell の入口: table_field（scripts/lib/table-row.sh）"
+if grep -q '^table_field()' "$ENTRY_SH" 2>/dev/null; then
+  assert_ok "shell の入口: table_field（$(basename "$ENTRY_SH")）"
 else
   assert_fail "shell の入口 table_field が見つからない"
 fi
@@ -105,10 +117,13 @@ fi
 
 echo "=== scenario 3: 走査が空振りしていない（C-044） ==="
 COUNT_FILES="$(list_files "$REPO_ROOT" | wc -l | tr -d ' ')"
-if [ "$COUNT_FILES" -ge 100 ]; then
-  assert_ok "${COUNT_FILES} ファイルを走査できている"
+# WHY(2026-09-12): 下限 100 は大きなリポジトリを前提にしていた。配った先は小さい
+#      （実測: 導入先を模した 2 リポジトリで 9 ファイルと 10 ファイル）。
+#      持っていないだけで赤くなるので、0 件のときだけ落とす。
+if [ "$COUNT_FILES" -eq 0 ]; then
+  assert_fail "走査できたファイルが 0 件（走査が壊れているか、この導入先に対象がありません）"
 else
-  assert_fail "走査できたのが ${COUNT_FILES} ファイルしかない（走査が壊れている疑い）"
+  assert_ok "${COUNT_FILES} ファイルを走査できている"
 fi
 
 echo "=== scenario 4: fixture で検知できる（RED 方向の自己検証） ==="

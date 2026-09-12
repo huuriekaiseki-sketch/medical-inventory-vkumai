@@ -16,7 +16,16 @@ set -euo pipefail
 export LC_ALL=C.UTF-8
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="${HOOK_DOC_POINTERS_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。導入先のルートが分かるときはそれを使う（E-087）
+ROOT="${HOOK_DOC_POINTERS_ROOT:-${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
+
+# hook の文言が指す先は導入先の docs/agents/。持っていない導入先では見るものが無い（E-086）
+if [ ! -d "$ROOT/docs/agents" ]; then
+  echo "=== scenario 0: この導入先には docs/agents/ が無い ==="
+  echo "  SKIP: hook の文言が指す先が無いので対象なし"
+  echo "ALL PASSED"
+  exit 0
+fi
 
 fail=0
 ok() { echo "  OK: $1"; }

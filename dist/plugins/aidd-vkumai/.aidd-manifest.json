@@ -4,10 +4,10 @@
   "files": {
     ".claude-plugin/plugin.json": "e310596da8efde0b1ef674162addbf9a69e1adf514ae31fd67e82ddd4bfae409",
     "BREAKING.md": "0ab04f05300c977e1768f9492e7747e3d38874dc20b528a7590f83a711822e0a",
-    "CHANGELOG.md": "706d3dbd21d1142e3e21b9ebee1a0105e1768e563630d6f589947a25a2cc37d8",
+    "CHANGELOG.md": "03773afd15069e25db6c778de095e3debe6ed1089f34bdc0d6cf72b583857900",
     "COMPATIBILITY.md": "671fc1398d81ecd0e17fa0536c6f89e627e372832a3d11037059ae2c7815f32c",
-    "KNOWN-LIMITS.md": "d7784d5c656f81130a19c931d9005a5c0d075e47584354d12acadd77d8aae4a9",
-    "MIGRATION.md": "ded55c728e675fe984bfcd9a8d3fe2741cc3870583a3ea25234025af647530ec",
+    "KNOWN-LIMITS.md": "58a9a18ce8c2cf53a33f511d73ee452260ef30608f7aafde737ecaccbec9e992",
+    "MIGRATION.md": "ed96a1db2d1a72fdc50d5c68066b728a349616ac8d741c82d84bd84550ce34a0",
     "agents/contract-writer.md": "47e8731c8c7f699c20f80c70565b67dfd92d5e3803cf1355689146b8ad18b595",
     "agents/implementer.md": "50ae8c2fc97c3f7713df88ede313b45be9d1eac673652bd9bbb8705dfe2a2373",
     "agents/integrator.md": "c5e736316615b3faacd2773e521a2daade8f33b795cae79b16bd3eadcf5741ea",

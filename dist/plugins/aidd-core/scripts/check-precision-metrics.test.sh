@@ -12,9 +12,23 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**を導入先だと思い込む（E-086・E-087）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 ENGINE="$SCRIPT_DIR/lib/precision-metrics.mjs"
 SHOW="$SCRIPT_DIR/show-precision-metrics.sh"
+
+# 指標の登録簿は導入先のもの（エンジンは共通側）。無ければ見るものが無い
+if [ ! -f "$REPO_ROOT/scripts/lib/precision-metrics.json" ]; then
+  echo "=== scenario 0: この導入先には指標の登録簿が無い ==="
+  echo "  SKIP: scripts/lib/precision-metrics.json が無いので対象なし"
+  echo "ALL PASSED"
+  exit 0
+fi
 
 fail=0
 ok() { echo "  OK: $1"; }

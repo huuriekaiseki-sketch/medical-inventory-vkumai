@@ -16,7 +16,13 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**を走査する（E-086・E-087）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+fi
 SCANNER="${SCRIPT_DIR}/lib/scan-raw-error-response.mjs"
 
 fail=0
@@ -58,9 +64,13 @@ if [ "${status}" -eq 0 ]; then
 else
   ng "実物に違反がある" "${out}"
 fi
-# fail-open 防止: 対象を 1 つも見ていなければ「違反 0」に意味が無い
-examined="$(printf '%s' "${out}" | sed -n 's/.*examined=\([0-9]*\).*/\1/p' | tail -1)"
-if [ -n "${examined}" ] && [ "${examined}" -ge 5 ]; then
+# fail-open 防止: 対象を 1 つも見ていなければ「違反 0」に意味が無い。
+# WHY(2026-09-12): ただし**設定を持たない導入先**では走査器が `configured=false` と言って何も見ない。
+#      それを「走査が壊れている」と読むと、持っていないだけで赤くなる（E-086）。
+examined="$(sed -n 's/.*examined=\([0-9]*\).*/\1/p' <<<"${out}" | tail -1)"
+if grep -qF -- "configured=false" <<<"${out}"; then
+  ok "この導入先は errorResponse を設定していないので対象なし"
+elif [ -n "${examined}" ] && [ "${examined}" -ge 5 ]; then
   ok "対象を実際に見ている（examined=${examined}）"
 else
   ng "対象がほとんど無い（走査が壊れている疑い）" "${out}"

@@ -24,6 +24,14 @@ REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 RENDER="$SCRIPT_DIR/render-harness-map.sh"
 ENGINE="$SCRIPT_DIR/lib/render-harness-map.mjs"
 
+# ハーネスの登録簿は導入先のもの（地図のエンジンは共通側）。無ければ見るものが無い（E-086）
+if [ ! -f "$REPO_ROOT/scripts/lib/harness-registry.json" ]; then
+  echo "=== scenario 0: この導入先にはハーネスの登録簿が無い ==="
+  echo "  SKIP: scripts/lib/harness-registry.json が無いので対象なし"
+  echo "ALL PASSED"
+  exit 0
+fi
+
 fail=0
 assert_eq() {
   if [ "$1" = "$2" ]; then echo "  OK: $3"; else

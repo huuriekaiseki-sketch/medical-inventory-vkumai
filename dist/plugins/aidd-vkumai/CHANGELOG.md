@@ -40,7 +40,8 @@
 - **2026-09-12: 配った検査に「何を見るか」の宣言と、導入先から回す入口を付けた。** それまで
   入口が無く、配った 92 本は**導入先ではなくプラグイン自身**を見ていた（導入先に置いた違反 4 件のうち
   反応したのは 1 本だけ、と実測）。層（self / consumer / both）を `plugin-layout.json` の `checkScopes` で
-  宣言し、生成物へ `scripts/lib/check-scopes.json` として配る。入口は `bin/aidd-check`。
+  宣言し、生成物へ `scripts/lib/check-scopes.json` として配る。入口は `aidd-check.sh`
+  （aidd-core の `bin/` に入り PATH に足される）。
   宣言が無い検査は `scripts/check-plugin-check-coverage.test.sh` が落とす。
   あわせて `consumer` の 4 本（shell の 2 本・スキル本文の長さ・Codex 設定の分離）の根を
   `CLAUDE_PROJECT_DIR` 優先へ変え、**小さい導入先で意味の無い赤が出ない**ようにした

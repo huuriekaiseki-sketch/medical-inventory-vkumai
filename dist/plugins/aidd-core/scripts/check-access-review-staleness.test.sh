@@ -8,7 +8,21 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="$SCRIPT_DIR/check-access-review-staleness.sh"
-SETTINGS="$SCRIPT_DIR/../.claude/settings.json"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**の .claude/settings.json を探す（E-086・E-087）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+SETTINGS="$REPO_ROOT/.claude/settings.json"
+
+if [ ! -f "$SETTINGS" ]; then
+  echo "=== scenario 0: この導入先には .claude/settings.json が無い ==="
+  echo "  SKIP: 登録を確かめる相手が無いので対象なし"
+  echo "ALL PASSED"
+  exit 0
+fi
 
 fail=0
 assert_contains() {
@@ -81,11 +95,18 @@ else
 fi
 
 echo "=== scenario 7: settings.json の SessionStart に登録されている（登録が落ちると無音で止まる） ==="
-if [ -f "$SETTINGS" ]; then
-  REG="$(jq -r '.hooks.SessionStart[].hooks[].command' "$SETTINGS")"
-  assert_contains "$REG" "scripts/check-access-review-staleness.sh" "SessionStart から呼ばれる"
+# WHY(2026-09-12): プラグインとして配られると、登録は**プラグインの hooks.json** にあり、
+#      導入先の settings.json には無い。無いことを違反として読むと、
+#      正しく入れた導入先ほど赤くなる（E-086）。登録が無ければ対象なしとして黙る。
+#      実測(2026-09-12): 導入先は**自前の SessionStart hook** を持つことがある（2 つの導入先とも）。
+#      「登録があるか」で分けると自前 hook ですり抜け、AIDD 未登録を違反として読む。
+#      AIDD の実体（scripts/ 配下）を指す登録だけで分ける（実測: 導入先 0 本 / 中心 44 本）。
+REG="$(jq -r '.hooks.SessionStart[]?.hooks[]?.command' "$SETTINGS" 2>/dev/null || true)"
+AIDD_REG="$(grep 'scripts/' <<<"$REG" || true)"
+if [ -z "$AIDD_REG" ]; then
+  echo "  OK: この導入先の settings.json には AIDD の SessionStart 登録が無い（プラグイン側で登録される）ので対象なし"
 else
-  echo "  NG: settings.json が見つからない"; fail=1
+  assert_contains "$AIDD_REG" "scripts/check-access-review-staleness.sh" "SessionStart から呼ばれる"
 fi
 
 if [ "$fail" -ne 0 ]; then

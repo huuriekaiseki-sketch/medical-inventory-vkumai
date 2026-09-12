@@ -12,8 +12,22 @@ set -uo pipefail
 export LC_ALL=C.UTF-8
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CHECKER="$ROOT/scripts/lib/check-roadmap-staleness.mjs"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**を導入先だと思い込む（E-086・E-087）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  ROOT="$CLAUDE_PROJECT_DIR"
+else
+  ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+CHECKER="$SCRIPT_DIR/lib/check-roadmap-staleness.mjs"
+
+# ロードマップの登録簿は導入先のもの（エンジンは共通側）。無ければ見るものが無い
+if [ ! -f "$ROOT/scripts/lib/roadmap-registry.json" ]; then
+  echo "=== scenario 0: この導入先にはロードマップの登録簿が無い ==="
+  echo "  SKIP: scripts/lib/roadmap-registry.json が無いので対象なし"
+  echo "ALL PASSED"
+  exit 0
+fi
 
 fail=0
 ok() { echo "  OK: $1"; }

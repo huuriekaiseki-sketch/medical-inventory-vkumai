@@ -20,9 +20,22 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**の .claude/settings.json を探す（E-086・E-087）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 SETTINGS="${CLAUDE_SETTINGS_PATH:-$REPO_ROOT/.claude/settings.json}"
 REINJECT="reinject-aidd-run-state.sh"
+
+if [ ! -f "$SETTINGS" ]; then
+  echo "=== scenario 0: この導入先には .claude/settings.json が無い ==="
+  echo "  SKIP: SessionStart の配線を確かめる相手が無いので対象なし"
+  echo "ALL PASSED"
+  exit 0
+fi
 
 command -v jq >/dev/null 2>&1 || { echo "jq が必要です"; exit 1; }
 
@@ -91,12 +104,23 @@ check() {
 }
 
 echo "=== scenario 1: 実態の settings.json が不変条件を満たす ==="
-RESULT="$(check "$SETTINGS")"
-grep -v '^violations=' <<<"$RESULT" || true
-if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
-  ok "違反なし（SessionStart $(jq '.hooks.SessionStart | length' "$SETTINGS") エントリ）"
+# WHY(2026-09-12): プラグインとして配られると、SessionStart の登録は**プラグインの hooks.json** にあり、
+#      導入先の settings.json には AIDD の登録が 0 件のことがある。0 件を違反として読むと、
+#      正しく入れた導入先ほど赤くなる（E-086）。
+#      実測(2026-09-12): 導入先は**自前の SessionStart hook** を持つことがある（2 つの導入先とも）。
+#      エントリ数で分けると自前 hook ですり抜けるので、AIDD の実体（scripts/ 配下）を
+#      指す登録の本数で分ける（実測: 導入先 0 本 / 中心リポジトリ 44 本）。
+AIDD_REGISTERED_N="$(jq '[.hooks // {} | to_entries[].value[]?.hooks[]?.command | select(test("scripts/"))] | length' "$SETTINGS" 2>/dev/null || echo 0)"
+if [ "${AIDD_REGISTERED_N:-0}" -eq 0 ]; then
+  ok "この導入先の settings.json には AIDD の SessionStart 登録が無い（プラグイン側で登録される）ので対象なし"
 else
-  ng "違反あり" "$(tail -n1 <<<"$RESULT")"
+  RESULT="$(check "$SETTINGS")"
+  grep -v '^violations=' <<<"$RESULT" || true
+  if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
+    ok "違反なし（SessionStart $(jq '.hooks.SessionStart | length' "$SETTINGS") エントリ）"
+  else
+    ng "違反あり" "$(tail -n1 <<<"$RESULT")"
+  fi
 fi
 
 echo "=== scenario 2: fixture で違反を検知できる（RED 方向の自己検証） ==="

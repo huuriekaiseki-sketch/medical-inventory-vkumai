@@ -15,8 +15,22 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**の hook 登録を数えることになる（E-086・E-087）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+fi
 DOCTOR="${SCRIPT_DIR}/lib/aidd-doctor.mjs"
+
+# 診断は導入先の hook 登録（.claude/settings.json）を数える。無ければ見るものが無い（E-086）
+if [ ! -f "${REPO_ROOT}/.claude/settings.json" ]; then
+  echo "=== scenario 0: この導入先には .claude/settings.json が無い ==="
+  echo "  SKIP: 数える hook 登録が無いので対象なし"
+  echo "ALL PASSED"
+  exit 0
+fi
 
 fail=0
 ok() { echo "  OK: $1"; }
@@ -27,6 +41,19 @@ cleanup() { rm -rf "${TMP_ROOT}"; }
 trap cleanup EXIT
 
 echo "=== scenario 1: 実物の hook を列挙できている ==="
+# WHY(2026-09-12): プラグインとして配られると、hook の登録は**プラグインの hooks.json** にあり、
+#      導入先の settings.json には無いことがある。0 本を「列挙が壊れている」と読むと、
+#      正しく入れた導入先ほど赤くなる（E-086）。登録が無ければ対象なしとして黙る。
+#      実測(2026-09-12): 導入先は**自前の hook** を持つことがある（2 つの導入先とも 2 本）。
+#      「登録が 1 本でもあるか」で分けると自前 hook ですり抜け、AIDD の hook が 0 本なのを
+#      「列挙が壊れている」と読んで赤くなる。AIDD の実体（scripts/ 配下）を指す登録で分ける
+#      （実測: 導入先 0 本 / 中心リポジトリ 44 本）。
+AIDD_REGISTERED_N="$(jq '[.hooks // {} | to_entries[].value[]?.hooks[]?.command | select(test("scripts/"))] | length' "${REPO_ROOT}/.claude/settings.json" 2>/dev/null || echo 0)"
+if [ "${AIDD_REGISTERED_N:-0}" -eq 0 ]; then
+  echo "  SKIP: この導入先の settings.json には AIDD の hook 登録が無い（プラグイン側で登録される）ので対象なし"
+  echo "ALL PASSED"
+  exit 0
+fi
 out="$(node "${DOCTOR}" "${REPO_ROOT}" --verbose 2>&1)"
 status=$?
 scripts_n="$(printf '%s' "${out}" | sed -n 's/.*scripts=\([0-9]*\).*/\1/p' | tail -1)"

@@ -34,7 +34,16 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENGINE="$SCRIPT_DIR/lib/generate-codex-agents.mjs"
-REPO_ROOT="${CODEX_SANDBOX_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。導入先のルートが分かるときはそれを使う（E-087）
+REPO_ROOT="${CODEX_SANDBOX_ROOT:-${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
+
+# 導入先が Codex を併用しているとは限らない。`.codex/agents` が無ければ対象なし（E-086）
+if [ ! -d "$REPO_ROOT/.codex/agents" ]; then
+  echo "=== scenario 0: この導入先は Codex を併用していない ==="
+  echo "  SKIP: .codex/agents が無いので対象なし"
+  echo "ALL PASSED"
+  exit 0
+fi
 
 fail=0
 assert_ok() { echo "  OK: $1"; }

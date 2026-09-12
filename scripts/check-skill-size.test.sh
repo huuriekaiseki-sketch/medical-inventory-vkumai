@@ -61,8 +61,10 @@ for dir in $DIRS; do
 done
 
 if [ "$checked" -eq 0 ]; then
-  echo "  NG: 検査対象の SKILL.md が 1 つも見つかりませんでした（SKILL_DIRS=${DIRS}）"
-  fail=1
+  # WHY(2026-09-12): 配った先がスキルを 1 つも持たないことは普通にある（実測: 2 つの導入先とも 0 件）。
+  #      0 件を違反として読むと、スキルを使っていないだけで赤くなる（E-086）。対象なしとして黙る。
+  #      違反 0 件と対象なしを混同しないよう、文言で区別する（C-021）。
+  echo "  SKIP: この導入先には SKILL.md が 1 つも無いので対象なし（SKILL_DIRS=${DIRS}）"
 fi
 
 if [ "$fail" -ne 0 ]; then

@@ -8,9 +8,24 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**を導入先だと思い込む（E-086・E-087）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 SCRIPT="$SCRIPT_DIR/maintenance-digest.sh"
-SETTINGS="$SCRIPT_DIR/../.claude/settings.json"
+SETTINGS="$REPO_ROOT/.claude/settings.json"
+
+# 導入先が settings.json とランブックを持っていなければ、この検査は見るものが無い。
+# 持っていないだけで赤くしない（E-086）
+if [ ! -f "$SETTINGS" ]; then
+  echo "=== scenario 0: この導入先には .claude/settings.json が無い ==="
+  echo "  SKIP: 登録を確かめる相手が無いので対象なし"
+  echo "ALL PASSED"
+  exit 0
+fi
 
 fail=0
 ok() { echo "  OK: $1"; }
@@ -75,15 +90,28 @@ not_contains "$PLAIN" "systemMessage" "素のテキストには JSON キーが�
 contains "$PLAIN" "定期メンテナンスのダイジェスト" "見出し行がある"
 
 echo "=== scenario 6: settings.json に Setup(maintenance) が登録されている ==="
-if [ -f "$SETTINGS" ]; then
-  REG="$(jq -r '.hooks.Setup[]? | select(.matcher == "maintenance") | .hooks[].command' "$SETTINGS")"
-  contains "$REG" "scripts/maintenance-digest.sh" "Setup(maintenance) から maintenance-digest.sh が呼ばれる"
+# WHY(2026-09-12): プラグインとして配られると、登録は**プラグインの hooks.json** にあり、
+#      導入先の settings.json には無い。無いことを違反として読むと、
+#      正しく入れた導入先ほど赤くなる（E-086）。登録が無ければ対象なしとして黙る。
+REG="$(jq -r '.hooks.Setup[]? | select(.matcher == "maintenance") | .hooks[].command' "$SETTINGS" 2>/dev/null || true)"
+if [ -z "$REG" ]; then
+  ok "この導入先の settings.json には Setup(maintenance) の登録が無い（プラグイン側で登録される）ので対象なし"
 else
-  ng "settings.json が見つからない"
+  contains "$REG" "scripts/maintenance-digest.sh" "Setup(maintenance) から maintenance-digest.sh が呼ばれる"
 fi
 
 echo "=== scenario 7: 実態のランブック 7 本すべてから日付を読める（書式の回帰） ==="
+# WHY(2026-09-12): 配った先が定期作業のランブックを持っているとは限らない。
+#      持っていない導入先で「見つかりません」を違反として読むと、**持っていないだけで赤くなる**（E-086）。
+#      1 本も持っていなければ対象なしとして黙る（1 本でもあれば書式の回帰として見る）。
 REAL="$(MAINTENANCE_DIGEST_PLAIN=1 bash "$SCRIPT" < /dev/null)"
+# WHY(2026-09-12): docs/agents/ はあってもランブックを 1 本も持たない導入先がある
+#      （実測: 2 つの導入先とも docs/agents/ はあるがランブック 0 本）。
+#      ディレクトリの有無で分けると「持っていないだけ」で赤くなるので、ランブックの実数で分ける。
+RUNBOOK_N="$(find "$REPO_ROOT/docs/agents" -name '*runbook*.md' -type f 2>/dev/null | wc -l | tr -d ' ')"
+if [ "${RUNBOOK_N:-0}" -eq 0 ]; then
+  ok "この導入先は定期作業のランブックを 1 本も持たないのでランブックの検査は対象なし"
+else
 not_contains "$REAL" "読み取れません" "実態の 7 本は日付を読める"
 not_contains "$REAL" "見つかりません" "実態の 7 本は存在する"
 # WHY(#757-7): 定期作業を足したのに一覧へ出ていない、という抜けを検知する
@@ -94,6 +122,7 @@ contains "$REAL" "依存の月次棚卸し" "依存の棚卸しが実態のダ�
 contains "$REAL" "鍵・権限の四半期棚卸し" "鍵・権限の棚卸しが実態のダイジェストに出る"
 contains "$REAL" "テストの効き目の計測" "一覧にテストの効き目の計測が出る"
 contains "$REAL" "認可そのものの効き目の計測" "一覧に認可そのものの効き目の計測が出る"
+fi
 
 echo "=== scenario 8: hook 実走ドリルは期限のほかに**配線の版**でも見る（2026-09-11） ==="
 # WHY: ランブックは「hook を追加・変更したときに回す」と書いてあるのに、
@@ -104,6 +133,12 @@ if [ ! -f "$HASHER" ] || ! command -v node >/dev/null 2>&1; then
 else
   if CURRENT="$(node "$HASHER" --root "$REPO_ROOT" 2>/dev/null)"; then
     ok "実態の配線から版を出せる（${CURRENT}）"
+  elif ! grep -q 'scripts/' "$REPO_ROOT/.claude/settings.json" 2>/dev/null; then
+    # WHY(2026-09-12): プラグイン経由の導入先は hook を**プラグインの hooks.json** 側で登録する。
+    #      自分の settings.json に AIDD のスクリプトを書いていない導入先では版を出せなくて当然で、
+    #      それを違反として読むと持っていないだけで赤くなる（E-086）
+    CURRENT=""
+    ok "この導入先は settings.json に AIDD の hook を登録していない（プラグイン側で登録される）ので版は対象なし"
   else
     CURRENT=""
     ng "実態の配線から版を出せない"

@@ -16,8 +16,22 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# WHY(2026-09-12): 配られると、この検査は配布物の中にある。`$SCRIPT_DIR/..` を使うと
+#      **プラグイン自身**を導入先だと思い込む（E-086・E-087）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REPO_ROOT="$CLAUDE_PROJECT_DIR"
+else
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 ENGINE="$SCRIPT_DIR/lib/rehearse-merge.mjs"
+
+# 順番ファイル（合流の順番を書いた登録簿）は導入先のもの。無ければ見るものが無い
+if [ ! -f "$REPO_ROOT/scripts/lib/merge-queue.json" ]; then
+  echo "=== scenario 0: この導入先には順番ファイルが無い ==="
+  echo "  SKIP: scripts/lib/merge-queue.json が無いので対象なし"
+  echo "ALL PASSED"
+  exit 0
+fi
 
 fail=0
 assert_ok() { echo "  OK: $1"; }
