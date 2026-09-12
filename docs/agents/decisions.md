@@ -112,13 +112,19 @@ warning-only（人が読んで対応）のいずれか）も先に決める。�
 2026-08-01のmentor設計レビュー（ループ/ハーネスエンジニアリング観点）で、issue #339の3層
 （機械強制／機械検知（事後）／自然言語のみ）はセンサー側の分類であり、検知**後**の是正動作
 （アクチュエータ）については別軸で分類されていないことが指摘された。実際に棚卸しすると
-（[`actuator-inventory.md`](./actuator-inventory.md)参照）、`.claude/settings.json`に登録された
-検知hook約20件のうち、機械的にblock/askするものは2件（`check-direct-ddl-execution.sh`の
-deny、`check-skip-marker-write.sh`のask）、recovery-queueへ自動登録し次回セッションで
-自動的に目の前に出すものが2件（`check-workflow-interruption.sh`、`check-gap-check-state.sh`）
-のみで、残り約15件はすべて「systemMessageを人（またはセッション自身）が読んで判断する」
-warning-onlyだった。検知hookの本数だけを見るとループが充実しているように見えるが、実態は
-「センサーは多いがアクチュエータは少ない」という偏りがあった。
+（[`actuator-inventory.md`](./actuator-inventory.md)参照）、**2026-08-01 時点では**
+`.claude/settings.json`に登録された検知hook約20件のうち、機械的にblock/askするものは2件
+（`check-direct-ddl-execution.sh`のdeny、`check-skip-marker-write.sh`のask）、recovery-queueへ
+自動登録し次回セッションで自動的に目の前に出すものが2件（`check-workflow-interruption.sh`、
+`check-gap-check-state.sh`）のみで、残り約15件はすべて「systemMessageを人（またはセッション自身）が
+読んで判断する」warning-onlyだった。検知hookの本数だけを見るとループが充実しているように見えるが、
+実態は「センサーは多いがアクチュエータは少ない」という偏りがあった。
+
+**現在値は棚卸し表を正とする**（2026-09-12 に数え直して 30 件 / 止める側 6 件 / queue 2 件 /
+warning-only 24 件。偏りの傾向は変わっていない）。**ここに現在値を書かないのは意図的**で、
+同じ数字を 2 か所に置くと必ず片方が古くなる——実際この段落は 2026-08-01 の値を時点の明示なしに
+書いていたため、2026-09-12 まで「いまの数字」として読める状態だった。
+時点を明記し、現在値は表へのポインタに置き換えた。
 
 **原則:** 新しい検知メカニズムを追加する際は、issue #339の「検知手段を先に決める」に加えて
 「検知後、誰が・どう是正するか」も同時に決める。是正が機械（block/deny/自動復旧）でできない
