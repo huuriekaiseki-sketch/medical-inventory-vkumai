@@ -78,7 +78,7 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 
 | 項目 | 所在 | 論点 |
 |---|---|---|
-| `RISK_KEYWORDS`のうち`auth`/`rls`/`policy`と`facility`/`tenant`/`organization`/`inventory`の混在 | `.claude/workflows/lib/router-risk.js` | 前者はマルチテナントSaaS全般に通用しそうな汎用概念だが、後者はこのドメイン固有。同じ配列に混在しており、汎用部分だけ抽出する設計（例: ドメイン固有語彙を外部設定ファイル化）が必要かは未検証 |
+| ~~`RISK_KEYWORDS`のうち`auth`/`rls`/`policy`と`facility`/`tenant`/`organization`/`inventory`の混在~~ **（2026-09-05 に解消。2026-09-12 に訂正）** | `.claude/workflows/lib/router-risk.js` | **この行は 2026-09-12 まで「汎用部分だけ抽出する設計が必要かは未検証」と書いたまま残っていたが、既に片付いていた。** 実測: `DEFAULT_RISK_CONFIG` の `domainKeywords` は `auth` / `rls` / `policy` / `migration` の 4 語だけで、`facility`・`tenant`・`organization`・`inventory` は 1 つも含まれない（固有語は `aidd.config.json` へ移し、設定は既定値に「足す」だけで消せない）。**同じ文書の上の行（TRI/RISK分類エンジンの構造）が分離済みと正しく書いており、1 つの文書の中で 2 つの行が矛盾していた**——「未検証」を読んだ人は、既に終わっている設計課題に着手することになる。行を消さずに残すのは、同じ取り違えを繰り返さないため |
 | Workflow DSLの制約（filesystem API不可）への回避策群 | `docs/agents/tooling-decisions.md`「ツール制約回避のload-bearing workaround棚卸し」 | 制約自体はClaude Code側（ツール共通）だが、回避策の実装（bashスクリプトへの委譲パターン等）はこのリポジトリの実装に密結合しており、他リポジトリでも同じ回避策がそのまま使えるかは未検証 |
 | `~/write_aidd_stats.sh`・`~/.claude/pending_issues.jsonl`等、リポジトリ外（ホームディレクトリ）に置かれた個人スクリプト・設定 | ルート`CLAUDE.md`「AIDD stats 書き出しルール」等 | リポジトリに含まれないため「移植」の対象なのかどうか自体が論点（ユーザー個人の運用習慣なのか、フレームワークの一部なのか） |
 | sweep-db/sweep-ui/sweep-types/sweep-dataという4軸分類 | `.claude/agents/sweep-*.md` | 「UI/データ/DB/型」という軸自体はNext.js+Supabase構成に最適化されており、他スタック（例: モバイルアプリ、バッチ処理基盤）でも同じ4軸が意味を持つかは未検証 |
