@@ -495,6 +495,7 @@
     "snapshot-agent-baseline.test.sh": "同上（baselines の取り方がこのリポジトリの agents 構成に依存する）",
     "check-plugin-check-coverage.test.sh": "プラグインの層の表そのものを検査する。中心リポジトリだけが持つ（build-plugin.test.sh と同じ扱い）",
     "check-plugin-asset-coverage.test.sh": "同上。agent / skill / workflow の実体と層の表を両方向で突き合わせる。層の表を持つのは中心リポジトリだけ",
+    "check-actuator-inventory-coverage.test.sh": "同上。是正の棚卸し（docs/agents/actuator-inventory.md）と .claude/settings.json の hook 登録を突き合わせる。どちらも中心リポジトリのもので、導入先は自分の settings と自分の棚卸しを持つ",
     "check-fail-open.test.sh": "src/ の実コードと docs/agents/fail-open-inventory.md の実データを走査する。走査の型は汎用だが対象がこのリポジトリの構成",
     "check-flaky-tests.test.sh": "テスト実行コマンドと JSON レポートの形がこのスタック固有",
     "check-append-only-log-indexes.test.sh": "supabase/migrations/ の実データから append-only の記録表と索引を突合する。表の顔ぶれ（3 表）の期待値もこのリポジトリのもの",

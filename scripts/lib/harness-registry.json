@@ -119,6 +119,7 @@
       "checks": [
         "scripts/build-plugin.test.sh",
         "scripts/check-access-path-inventory.test.sh",
+        "scripts/check-actuator-inventory-coverage.test.sh",
         "scripts/check-aidd-config-schema.test.sh",
         "scripts/check-aidd-doctor.test.sh",
         "scripts/check-catalogs.test.sh",

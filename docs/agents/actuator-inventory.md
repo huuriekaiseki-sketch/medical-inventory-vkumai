@@ -64,6 +64,7 @@
 | SessionStart | `check-rls-mutation-freshness.sh` | warning-only | RLS 変異計測の打ち忘れを警告。H-06 の「打ち忘れは SessionStart hook が拾う」の実体。**2026-09-12 に表へ追加** |
 | SessionStart | `check-mutation-freshness.sh` | warning-only | 製品コードの変異計測（Stryker）の打ち忘れを警告。測る対象の一覧も見張る（対象を減らせばスコアは上がるため）。**2026-09-12 に表へ追加** |
 | Stop | `check-escape-ledger.sh` | warning-only | 落ちた検査の下書きがあるのに `escaped-defects.md` を触っていなければ聞く。台帳へ移す一歩そのものは止めない（止めると書く側が下書きを消す）。**2026-09-12 に表へ追加** |
+| Stop（Codex側） | `codex-ai-check-suggest.sh` | warning-only | Claude 側 `ai-check-suggest.sh` の Codex 版（2026-09-11 に派生先から逆輸入。Codex 側には Stop hook が 1 本も無かった）。同じく止めない。**2026-09-12 に表へ追加——しかもこの 1 本は、人が手で突き合わせたときには見落としており、`check-actuator-inventory-coverage.test.sh` が書いた直後に見つけた**（`.codex/hooks.json` 側の登録を目視で追い切れていなかった） |
 | （参考）per-edit | security-guidanceプラグイン（`possible_real_facility_name`等） | warning-only | issue #440。Claude Code公式プラグイン経由、上記`.claude/settings.json`のhooksとは別経路 |
 
 （`SubagentStart`/`SubagentStop`の`log-subagent-hook-skeleton.sh`、および`InstructionsLoaded`の
@@ -72,10 +73,13 @@
 
 ## 集計と評価
 
-（**2026-09-12 に数え直した**。それまでの「約23件」は表の抜け 7 件と deny 2 件を落としていた。
+（**2026-09-12 に数え直した**。それまでの「約23件」は表の抜け **8 件**と deny 2 件を落としていた。
 数え方: `.claude/settings.json` の `hooks` に登録された 43 本（`log-subagent-hook-skeleton.sh` の
-2 回登録を 1 本と数える）＋ `.codex/hooks.json` の deny 2 本から、記録専用の 3 本
-（`log-subagent-hook-skeleton.sh`・`log-instructions-loaded.sh`・`record-test-failure.sh`）を除く）
+2 回登録を 1 本と数える）＋ `.codex/hooks.json` の 3 本（deny 2 本と Stop hook 1 本）から、
+記録専用の 3 本（`log-subagent-hook-skeleton.sh`・`log-instructions-loaded.sh`・
+`record-test-failure.sh`）を除く。
+**この数え方は `scripts/check-actuator-inventory-coverage.test.sh` が毎回実測する**ので、
+ここの数字が古くなったら検査が落ちる——**人が手で数えた 1 回目は 8 本目を見落としていた**）
 
 - block: 3件（うち1件はretry上限付きエスケープあり。`check-readonly-bash.sh` は読み取り専用ロールのサブエージェント内のみ、issue #713）
 - ask: 1件
@@ -83,12 +87,12 @@
   Codex は ask 未対応のため Claude 側の ask を deny へ読み替える。**2026-09-12 まで集計に無かった**）
 - 自動復旧（queue、うち登録側）: 2件（`check-workflow-interruption.sh`・`check-gap-check-state.sh`）
 - 自動復旧（queue、表示側）: 1件（`check-recovery-queue.sh`）
-- warning-only: 24件
+- warning-only: 25件
 - context 注入（是正なし、compact 時のみ）: 1件（`reinject-aidd-run-state.sh`、issue #712）
 
-**30件**の検知hookのうち、機械的に実行を止める・確認を強制する（block/ask/deny）のは6件。
+**31件**の検知hookのうち、機械的に実行を止める・確認を強制する（block/ask/deny）のは6件。
 recovery-queue接続によって「次回セッション冒頭で機械的に目の前に出る」までは自動化されている
-ものが3件。残る24件はすべて、systemMessageが出力された後の是正判断・実行タイミングを完全に
+ものが3件。残る25件はすべて、systemMessageが出力された後の是正判断・実行タイミングを完全に
 人（またはそれを読んだセッション）に委ねている。
 
 （2026-08-10訂正: `verify-claims.sh`は当初この表でwarning-onlyと誤記されていたが、実装は
