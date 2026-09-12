@@ -36,6 +36,7 @@
         "scripts/check-handoff-format.test.sh",
         "scripts/check-local-main-freshness.test.sh",
         "scripts/check-readonly-bash.test.sh",
+        "scripts/check-rls-policy-count.test.sh",
         "scripts/check-run-manifest-presence.test.sh",
         "scripts/check-skip-marker-write.test.sh",
         "scripts/check-stale-worktrees.test.sh",

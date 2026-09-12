@@ -214,6 +214,7 @@
     "lib/integration-leak-baseline.json": "aidd-vkumai",
     "lib/scan-text-columns.mjs": "aidd-vkumai",
     "lib/scan-db-constraints.mjs": "aidd-vkumai",
+    "lib/replay-rls-policies.mjs": "aidd-vkumai",
     "lib/scan-rls-grant-gaps.mjs": "aidd-vkumai",
     "lib/check-write-path-gaps.mjs": "aidd-vkumai",
     "lib/check-operation-contracts.mjs": "aidd-vkumai",
@@ -570,7 +571,8 @@
     "lib/aidd-config.test.sh": "同上。実物の aidd.config.json の `.docs.domain` が `docs/agents/domain.md` であることを**値まで断定**する（部品そのものは配る）",
     "check-definer-authz-gaps.test.sh": "同上。`scripts/eval-fixtures/sweep-db` と `sweep-db-holdout` の実ケースを要求する（走査器は配る）",
     "check-suspense-gaps.test.sh": "同上。`scripts/eval-fixtures/sweep-ui` の実ケースを要求する（走査器は配る）",
-    "check-file-intake-paths.test.sh": "src/ の実コードと依存名を走査する（ファイル・アーカイブ受け取りが生えた瞬間に落とす ratchet）。走査する印が Next.js の route と Supabase Storage というこのスタック固有のもので、引き出しの行（security-test-catalog）も名指しで要求する"
+    "check-file-intake-paths.test.sh": "src/ の実コードと依存名を走査する（ファイル・アーカイブ受け取りが生えた瞬間に落とす ratchet）。走査する印が Next.js の route と Supabase Storage というこのスタック固有のもので、引き出しの行（security-test-catalog）も名指しで要求する",
+    "check-rls-policy-count.test.sh": "supabase/migrations/ を順に再生して現存ポリシー数を上限と突き合わせる。**再生器（lib/replay-rls-policies.mjs）は配る**が、上限の台帳（lib/rls-policy-budget.json）はこのリポジトリの実測値なので、検査ごとここに置く"
   },
   "checksSplittable": {
     "_comment": "**分ければ配れる**検査の層（2026-09-09 新設）。エンジンは汎用で、固有なのは対象・閾値・対応表だけ、というもの。`checksNotDistributed`（エンジン自体が固有で本当に配れない）とは別物で、ここは**返す当てのある借金**。増やさないことだけを機械で守る（減らすのは人が決める）。",
