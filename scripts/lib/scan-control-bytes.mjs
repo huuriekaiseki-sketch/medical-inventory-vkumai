@@ -162,7 +162,9 @@ if (process.argv[1] && process.argv[1].endsWith('scan-control-bytes.mjs')) {
       writeLine(`NG コミットメッセージに制御バイト: ${describe(hits)}`)
       process.exit(1)
     }
-    const root = flag('--root') ?? process.cwd()
+    // WHY(2026-09-12): 配られると、この走査器は配布物の中から呼ばれる。cwd 頼みだと
+    //      呼び出し方次第で**プラグイン自身**を走査する（E-087）。--root が来ればそれが勝つ。
+    const root = flag('--root') ?? process.env.CLAUDE_PROJECT_DIR ?? process.cwd()
     const allow = readAllow(flag('--allow'))
     const r = args.includes('--commits')
       ? scanCommitMessages(root, allow, flag('--rev') ?? 'HEAD')

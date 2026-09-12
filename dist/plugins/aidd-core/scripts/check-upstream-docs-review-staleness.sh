@@ -19,7 +19,14 @@ command -v jq >/dev/null 2>&1 || exit 0
 # 環境変数（テスト用の注入ポイント）:
 #   UPSTREAM_DOCS_REVIEW_DOC  対象ドキュメント（既定 docs/agents/upstream-docs-review.md）
 
-REVIEW_DOC="${UPSTREAM_DOCS_REVIEW_DOC:-docs/agents/upstream-docs-review.md}"
+# WHY(2026-09-12): 既定が相対パスなので、**cwd が導入先であること**に依存して成立していた。
+#      hook 経由では cwd が変わりうるし、配られるとこの検査は配布物の中から呼ばれる（E-086・E-087）。
+#      導入先のルートを明示できるときはそこを基準にする（環境変数での差し替えが最優先）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  REVIEW_DOC="${UPSTREAM_DOCS_REVIEW_DOC:-${CLAUDE_PROJECT_DIR}/docs/agents/upstream-docs-review.md}"
+else
+  REVIEW_DOC="${UPSTREAM_DOCS_REVIEW_DOC:-docs/agents/upstream-docs-review.md}"
+fi
 
 if [ ! -f "$REVIEW_DOC" ]; then
   exit 0

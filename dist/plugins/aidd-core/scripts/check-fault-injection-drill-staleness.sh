@@ -23,7 +23,14 @@ command -v jq >/dev/null 2>&1 || exit 0
 #
 # 日付抽出はmacOS/Linuxのdate非互換を避けるため他のスクリプトと同様にpython3に委ねる。
 
-DRILL_DOC="${FAULT_INJECTION_DRILL_DOC:-docs/agents/fault-injection-drill.md}"
+# WHY(2026-09-12): 既定が相対パスなので、**cwd が導入先であること**に依存して成立していた。
+#      hook 経由では cwd が変わりうるし、配られるとこの検査は配布物の中から呼ばれる（E-086・E-087）。
+#      導入先のルートを明示できるときはそこを基準にする（環境変数での差し替えが最優先）。
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}" ]; then
+  DRILL_DOC="${FAULT_INJECTION_DRILL_DOC:-${CLAUDE_PROJECT_DIR}/docs/agents/fault-injection-drill.md}"
+else
+  DRILL_DOC="${FAULT_INJECTION_DRILL_DOC:-docs/agents/fault-injection-drill.md}"
+fi
 
 if [ ! -f "$DRILL_DOC" ]; then
   exit 0

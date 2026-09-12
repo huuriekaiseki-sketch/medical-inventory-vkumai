@@ -125,7 +125,9 @@ export function scanStdoutExit(root, exemptions = {}) {
 }
 
 if (process.argv[1] && process.argv[1].endsWith('scan-stdout-exit.mjs')) {
-  const root = process.argv[2] ?? '.'
+  // WHY(2026-09-12): 配られると、この走査器は配布物の中から呼ばれる。'.' 頼みだと
+  //      呼び出し方次第で**プラグイン自身**を走査する（E-087）。引数が来ればそれが勝つ。
+  const root = process.argv[2] ?? process.env.CLAUDE_PROJECT_DIR ?? '.'
   let exemptions = {}
   if (process.argv[3]) {
     try {

@@ -134,7 +134,9 @@ export function scanWorkflowNesting(root) {
 
 function main() {
   const argv = process.argv.slice(2)
-  let root = process.cwd()
+  // WHY(2026-09-12): 配られると、この走査器は配布物の中から呼ばれる。cwd 頼みだと
+  //      呼び出し方次第で**プラグイン自身**を走査する（E-087）。--root が来ればそれが勝つ。
+  let root = process.env.CLAUDE_PROJECT_DIR ?? process.cwd()
   let asJson = false
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--root') {
