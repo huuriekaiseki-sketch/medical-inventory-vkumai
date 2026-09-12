@@ -10,9 +10,14 @@
 - **層の表（`plugin-layout.json`）に載っていないものは黙って同梱されない。** 生成器は表を回るだけで、
   表に無い実体はその視界に存在しない（型は [`check-design-pitfalls.md`](../agents/check-design-pitfalls.md) の C-047）。
   両方向で突き合わせているのは **hook（生成器の中）・検査 `*.test.sh`（`check-plugin-check-coverage.test.sh`）・
-  agent / skill / workflow（`check-plugin-asset-coverage.test.sh`、2026-09-11 に追加）** の 3 系統。
-  **`scripts/` の非テストスクリプトにはまだ門が無い**——表に無い支援スクリプトは
-  「配らない」と判断されたのか足し忘れなのか、記録から区別できない
+  agent / skill / workflow（`check-plugin-asset-coverage.test.sh`、2026-09-11 に追加）・
+  支援スクリプト（`check-support-script-coverage.test.sh`、2026-09-12 に追加）** の 4 系統。
+  支援スクリプトは長らく門が無く、「配らない」と判断されたのか足し忘れなのか記録から区別できなかった
+  ——**`checksNotDistributed` に当たる「配らないと決めた」表そのものが無かった**ため。
+  2026-09-12 に `supportScriptsNotDistributed`（理由必須）と `supportScriptsUnclassified`
+  （判断の保留。`unclassifiedMax` で件数を固定し、増やせないが減らせる）を新設した。
+  **いま未分類が 25 件ある**——Codex 用 4 本を配るか・ドリルと計測を含めるか・個人設定の
+  statusline をどう扱うかは製品の判断なので保留してある（理由は層の表の `_why_unresolved`）
 
 ## Claude Code の仕様による制約
 

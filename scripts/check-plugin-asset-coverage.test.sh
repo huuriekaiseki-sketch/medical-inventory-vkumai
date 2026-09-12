@@ -23,10 +23,13 @@
 # 限界:
 #   - **層の表に載っていること**しか見ない。載っている先のプラグイン名が妥当か（共通側に
 #     固有のものを入れていないか）は見ない——それは build-plugin の禁止語検査の担当。
-#   - 見るのは agent / skill / workflow の 3 種類だけ。**`scripts/` の非テストスクリプトには
-#     同じ門が無い**（`*.test.sh` は `check-plugin-check-coverage.test.sh` が見る）。
-#     支援スクリプトは「表に無い＝配らない」が既定で、その判断が記録に残らないまま増えている。
-#     数えるなら `hookScripts`+`supportScripts`+`bin`+`workflowLib` と実体の差を取る。
+#   - 見るのは agent / skill / workflow の 3 種類だけ。`*.test.sh` は
+#     `check-plugin-check-coverage.test.sh` が、**支援スクリプトは
+#     `check-support-script-coverage.test.sh` が見る**（2026-09-12 に追加。それまでは門が無く、
+#     「配らないと判断した」と書く表そのものが無かったので、足し忘れと区別できなかった）。
+#     **数え方の注意**: そのとき `hookScripts`+`supportScripts`+`bin`+`workflowLib` の
+#     4 キーを手で選んで数えたら 33 本という誤った答えが出た——`checks` にも非テストスクリプトが
+#     載っている。層の表は**全体を歩いて `.sh` のキーを拾う**（キーを手で選ぶと母集団を外す）。
 #   - skill は**ディレクトリの有無**しか見ない。中身（SKILL.md があるか）は見ない。
 #
 # 実行: bash scripts/check-plugin-asset-coverage.test.sh
