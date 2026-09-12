@@ -12,6 +12,16 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECK="$SCRIPT_DIR/check-rls-mutation-freshness.sh"
 
+# WHY(2026-09-12): 判定エンジンは python3、記録の読み出しは jq を使う。どちらかが無いと
+#      検査全体が赤くなっていた（E-090）。確かめられないだけなので、合格にも違反にも数えさせない。
+for rt in python3 jq; do
+  command -v "$rt" >/dev/null 2>&1 || {
+    echo "  SKIP: 確認不能（${rt} が無いので鮮度を判定できない。守られているかは分かりません）"
+    echo "ALL PASSED"
+    exit 0
+  }
+done
+
 fail=0
 pass_count=0
 
@@ -40,9 +50,14 @@ is_empty() {
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-SUPABASE_TREE="$(git rev-parse "HEAD:supabase" 2>/dev/null || echo unknown)"
+# WHY(2026-09-12): `--verify --quiet` が要る（本体と同じ理由）。コミットの無い木では
+#      `git rev-parse "HEAD:supabase"` が標準出力にも書いてから失敗し、値が 2 行になって
+#      「検査対象外」の早期 exit を素通りしていた（E-090 の続き）。
+SUPABASE_TREE="$(git rev-parse --verify --quiet "HEAD:supabase" 2>/dev/null || echo unknown)"
 if [ "$SUPABASE_TREE" = "unknown" ]; then
-  echo "supabase/ が無いので検査対象外（この検査自体をスキップ）"
+  # WHY(2026-09-12): 意味は正しいのに**印の語が無い**ため、入口（aidd-check）が
+  #      「合格」と区別できず「黙った」に分類されていた。印は「対象なし」で揃える（C-025）。
+  echo "  SKIP: 対象なし（この導入先は supabase/ を持たないので RLS 変異の鮮度は見ない）"
   exit 0
 fi
 

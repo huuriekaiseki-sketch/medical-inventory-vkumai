@@ -268,7 +268,11 @@ fi
 
 # supabase/ の木のハッシュを残す。次回、ここが変わっていれば「その記録はもう当てにならない」と分かる
 # （コミット ID だと無関係な変更でも古く見え、日付だけだと変更に反応しない）
-SUPABASE_TREE="$(git rev-parse "HEAD:supabase" 2>/dev/null || echo unknown)"
+# WHY(2026-09-12): `--verify --quiet` が要る。コミットが 1 つも無い木では
+#      `git rev-parse "HEAD:supabase"` が `HEAD:supabase` を**標準出力にも**書いてから失敗し、
+#      `|| echo unknown` と合わさって値が 2 行になる。記録へそのまま書くので、
+#      壊れた値が JSON に入る（E-090 の続き。実測: 旧は 2 行 / 新は 1 行）。
+SUPABASE_TREE="$(git rev-parse --verify --quiet "HEAD:supabase" 2>/dev/null || echo unknown)"
 COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 BRANCH="$(git branch --show-current 2>/dev/null || echo unknown)"
 DIRTY="false"

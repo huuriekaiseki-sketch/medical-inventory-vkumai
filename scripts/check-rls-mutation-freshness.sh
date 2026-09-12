@@ -33,7 +33,11 @@ source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
 source "$SCRIPT_DIR/lib/worktree-hash.sh"
 
 LOG_FILE="$(resolve_log_dir)/rls-mutation-runs.jsonl"
-SUPABASE_TREE="$(git rev-parse "HEAD:supabase" 2>/dev/null || echo unknown)"
+# WHY(2026-09-12): `--verify --quiet` が要る。コミットが 1 つも無い木では
+#      `git rev-parse "HEAD:supabase"` が `HEAD:supabase` を**標準出力にも**書いてから失敗し、
+#      `|| echo unknown` と合わさって値が 2 行になる。`= "unknown"` の比較が偽になり、
+#      「supabase/ を持たない導入先では黙る」が効かなかった（E-090 の続き）。
+SUPABASE_TREE="$(git rev-parse --verify --quiet "HEAD:supabase" 2>/dev/null || echo unknown)"
 # WHY(C-041、2026-09-10): HEAD の木だけでは**未コミットの変更**が見えない。
 #      記録側は最初から supabaseWorktree を残していたのに、判定側がそれを渡しておらず、
 #      「ポリシーを手元で書き換えて、計測は前のまま」という一番ありがちな終わり方を素通りさせていた。

@@ -53,6 +53,15 @@ fi
 # shellcheck source=lib/aidd-config.sh
 source "$SCRIPT_DIR/lib/aidd-config.sh"
 
+# WHY(2026-09-12): この検査は「出力してすぐ exit すると切れる」機序を**実際に node で再現**して
+#      確かめる。node が無いと再現そのものができず、「小さい出力すら出ない（前提が崩れている）」
+#      と報告して赤くなっていた（E-090）。確かめられないだけなので、合格にも違反にも数えさせない。
+command -v node >/dev/null 2>&1 || {
+  echo "  SKIP: 確認不能（node が無いので出力が切れる機序を再現できない。守られているかは分かりません）"
+  echo "ALL PASSED"
+  exit 0
+}
+
 fail=0
 assert_ok() { echo "  OK: $1"; }
 assert_fail() {

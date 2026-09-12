@@ -323,6 +323,42 @@ else
   assert_fail "emptyRepoExempt が実態と合っていない" "$GHOST"
 fi
 
+echo "=== scenario 5c: 実行系が無い導入先で、配る検査が「確認不能」と言う（嘘の違反を報告しない） ==="
+# WHY(2026-09-12): node が無い導入先で回すと、検査は「測れない」ではなく**存在しない違反**を
+#      報告していた——「2 段の入れ子がある」「実物に違反がある」と、実際には無いものを言う
+#      （走査器が 127 で落ちた結果を違反と読んだ）。導入先は無い問題を追いかけることになる。
+#      **確認不能を違反に混ぜるのは、対象なしを合格に混ぜるより悪い**（E-090）。
+#      PATH を絞って実行系を隠し、落ちるもの・印を出さないものを落とす。
+#      実測（2026-09-12）: 直す前は 36 本中 9 本が落ちた。直した後は 確認不能 11 / 対象なし 26。
+RUNTIME_REPO="$WORK/runtime-repo"
+git init -q "$RUNTIME_REPO"
+RT_BAD=""
+RT_RAN=0
+while IFS= read -r t; do
+  [ -n "$t" ] || continue
+  s="$REPO_ROOT/scripts/$t"
+  [ -f "$s" ] || continue
+  RT_RAN=$((RT_RAN + 1))
+  # PATH を /usr/bin:/bin に絞ると node が消える（jq・git・python3 は残るので、
+  # 「全部無い」ではなく「一部だけ欠けた」という現実的な条件になる）
+  out="$(cd "$RUNTIME_REPO" && PATH=/usr/bin:/bin CLAUDE_PROJECT_DIR="$RUNTIME_REPO" bash "$s" 2>&1)"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    RT_BAD="${RT_BAD}  落ちた: ${t}（実行系が無いだけで赤くなる）"$'\n'
+  elif ! grep -q -e '確認不能' -e '対象なし' <<<"$out"; then
+    RT_BAD="${RT_BAD}  印なし: ${t}（確認不能とも対象なしとも言わない）"$'\n'
+  fi
+done <<< "$SCOPED"
+if [ "$RT_RAN" -eq 0 ]; then
+  assert_fail "配る検査を 1 本も回せなかった（列挙が壊れている。C-044）"
+elif [ -z "$RT_BAD" ]; then
+  assert_ok "配る検査 ${RT_RAN} 本すべてが、実行系の欠けた木で「確認不能」か「対象なし」と言う"
+else
+  assert_fail "実行系が無いだけで赤くなる／黙る検査がある" "$RT_BAD
+      直し方: その検査の冒頭で command -v <実行系> を見て、無ければ
+      「確認不能」と言って exit 0 する（合格にも違反にも数えさせない）"
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

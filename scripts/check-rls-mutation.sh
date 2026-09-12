@@ -239,7 +239,7 @@ else
   mkdir -p "$RLS_LOG_DIR"
   python3 - "$RLS_LOG_DIR/rls-mutation-runs.jsonl" "$fail" "$killed" "$survived" "$errors" \
     "$apply_errors" "$baseline_red" "$TARGETED" \
-    "$(git rev-parse "HEAD:supabase" 2>/dev/null || echo unknown)" \
+    "$(git rev-parse --verify --quiet "HEAD:supabase" 2>/dev/null || echo unknown)" \
     "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
     "$(git branch --show-current 2>/dev/null || echo unknown)" \
     "$(git diff --quiet -- supabase 2>/dev/null && echo false || echo true)" \

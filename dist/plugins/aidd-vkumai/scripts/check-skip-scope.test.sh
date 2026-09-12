@@ -29,6 +29,14 @@ else
 fi
 SCAN="$SCRIPT_DIR/lib/scan-skip-scope.mjs"
 
+# WHY(2026-09-12): RED 方向の自己検証が node 不在で落ち、検査全体が赤くなっていた（E-090）。
+#      確かめられないだけなので、合格にも違反にも数えさせない。
+command -v node >/dev/null 2>&1 || {
+  echo "  SKIP: 確認不能（node が無いので spec を走査できない。守られているかは分かりません）"
+  echo "ALL PASSED"
+  exit 0
+}
+
 fail=0
 ok() { echo "  OK: $1"; }
 ng() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }

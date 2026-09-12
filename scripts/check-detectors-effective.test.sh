@@ -26,6 +26,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 ENGINE="$SCRIPT_DIR/lib/check-detectors-effective.mjs"
 
+# WHY(2026-09-12): 実態を見る場面は「対象なし」と言えるのに、**RED 方向の自己検証**
+#      （fixture を作ってエンジンを呼び、検知できることを確かめる部分）が node 不在で落ち、
+#      検査全体が赤くなっていた。「この導入先に違反があるか」ではなく「この検査が壊れて
+#      いないか」を確かめられないだけなので、合格にも違反にも数えさせない（E-090）。
+command -v node >/dev/null 2>&1 || {
+  echo "  SKIP: 確認不能（node が無いので壊し方を測れない。守られているかは分かりません）"
+  echo "ALL PASSED"
+  exit 0
+}
+
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"

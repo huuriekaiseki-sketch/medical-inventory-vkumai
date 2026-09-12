@@ -30,7 +30,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
 
 LOG_FILE="$(resolve_log_dir)/integration-runs.jsonl"
-SUPABASE_TREE="$(git rev-parse "HEAD:supabase" 2>/dev/null || echo unknown)"
+# WHY(2026-09-12): `git rev-parse "HEAD:supabase"` は**コミットが 1 つも無い木**で
+#      `HEAD:supabase` を**標準出力にも**書いてから失敗する。`2>/dev/null` では取りこぼし、
+#      `|| echo unknown` と合わさって値が 2 行になり、`= "unknown"` の比較が偽になる。
+#      その結果「supabase/ を持たない導入先では黙る」が効かず、赤くなっていた（E-090 の続き）。
+#      `--verify --quiet` なら失敗時に何も出さない。
+SUPABASE_TREE="$(git rev-parse --verify --quiet "HEAD:supabase" 2>/dev/null || echo unknown)"
 
 # supabase/ を持たないリポジトリ（プラグイン導入先など）では何も言わない
 if [ "$SUPABASE_TREE" = "unknown" ]; then
