@@ -19,17 +19,27 @@
 
 ## `.gitignore` に足すもの
 
-プラグインを入れて動かすと、導入先に次の 2 つが増える（2026-09-12 に導入先を模した
-リポジトリで実測。これ以外は増えない）:
+プラグインを入れて動かすと、導入先に次の 3 つが増える:
 
 ```
 .aidd/
 logs/
+.claude/.*-state/
 ```
 
-`.aidd/` は実行中の状態（run-manifest・警告を出したかの記録）、`logs/` は観測記録
-（進捗・骨格・journal）。**どちらも実行ごとに変わる作業ファイルなので追跡しない。**
-追跡すると、セッションのたびに差分が出てレビューの邪魔になる。
+`.aidd/` は実行中の状態（`run-manifest.json`・`recovery-queue.jsonl`・
+`gap-check-state.json`・各種「警告を出したか」の記録）、`logs/` は観測記録
+（進捗・骨格・journal）、`.claude/` 直下のドットディレクトリは hook ごとの間引き用の状態
+（`.verify-state` / `.verify-lock` / `.gate-effectiveness-state` /
+`.ai-check-suggest-state` / `.domain-decisions-suggest-state` の 5 種）。
+**どれも実行ごとに変わる作業ファイルなので追跡しない。** 追跡すると、セッションのたびに
+差分が出てレビューの邪魔になる。
+
+**どれが実際に出るかは実行経路によって変わる**（動かしていない hook のものは作られない）。
+この一覧は配布物の中身から取ったもので、「実測したらこれだけだった」ではない——
+2026-09-12 に導入先を模した 2 リポジトリで測ったとき、**片方にしか出ないものが両側にあった**
+（`.aidd/` と `.ai-check-suggest-state/` は一方だけ、`.domain-decisions-suggest-state/` は
+もう一方だけ）。1 つの木での実測を「これ以外は増えない」と書くと、条件の違う木で必ず外れる。
 
 **Workflow は置かない。** 入口は `aidd-vkumai:aidd-phase1-router` を**セッションから直接**呼び、
 `aidd.config.json` の `risk` を `args.riskConfig` として渡す（Workflow は導入先のファイルを読めないので、
