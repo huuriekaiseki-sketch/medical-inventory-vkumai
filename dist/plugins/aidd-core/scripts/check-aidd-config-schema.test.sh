@@ -60,15 +60,26 @@ CONFIG="$REPO_ROOT/aidd.config.json"
 if [ ! -f "$CONFIG" ]; then
   ok "対象なし（この導入先は aidd.config.json を持たない）"
 else
-  # WHY(2026-09-12): ここでも limits を外す。**入れたばかりの導入先は、ひな形をコピーした
-  #      ままの limits（TODO と 0）を持っている**のが普通で、それは「まだ人に聞いていない」
-  #      という正しい状態。そこを落とす役は check-design-answers.test.sh が持つ、と
-  #      scenario 2 のコメントに自分で書きながら、導入先側にだけ適用し忘れていた
-  #      （ひな形では外し、導入先では外さない、という不揃い。実測で両方の導入先が落ちて発覚）。
-  #      ここが見るのは型と未知キー——**スキーマからずれていないか**だけ。
-  OUT="$(node "$VALIDATOR" "$CONFIG" "$SCHEMA" --skip limits 2>&1)"
+  # WHY(2026-09-12): limits は「まだ人に聞いていない」間はひな形のまま（decidedOn が TODO）で、
+  #      その状態を違反として読むと**入れたばかりの導入先が必ず赤くなる**（実測で両方の導入先が落ちた）。
+  #      かといって一律に外すと、**limits を誰も見なくなる**——値の中身を見る
+  #      check-design-answers.test.sh は配っていない（checksNotDistributed。根が固定で、
+  #      配ってもプラグイン自身を見るため）ので、導入先では本当に誰も見ない。
+  #      一度「外して別の検査に任せた」と書いたが、その別の検査が配られていないことを
+  #      確かめていなかった。**役割を分けるときは、相手が配る側に居るかを見る。**
+  #      そこで「まだ聞いていない」と「埋めたが形が違う」を分ける:
+  #      decidedOn が TODO（または無し）のうちは limits を外し、埋まったらスキーマで見る。
+  DECIDED="$(node -e 'const fs=require("fs");const c=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(String(c.limits?.decidedOn ?? ""))' "$CONFIG" 2>/dev/null || true)"
+  if [ -z "$DECIDED" ] || [ "$DECIDED" = "TODO" ]; then
+    SKIP_ARGS=(--skip limits)
+    LABEL="適合している（limits はまだ人に聞いていない印なので外した。decidedOn=${DECIDED:-無し}）"
+  else
+    SKIP_ARGS=()
+    LABEL="適合している（limits の値も含めて。decidedOn=${DECIDED}）"
+  fi
+  OUT="$(node "$VALIDATOR" "$CONFIG" "$SCHEMA" ${SKIP_ARGS[@]+"${SKIP_ARGS[@]}"} 2>&1)"
   if [ "$(tail -n1 <<<"$OUT")" = "violations=0" ]; then
-    ok "適合している（型と項目名。limits の中身は check-design-answers.test.sh が見る）"
+    ok "$LABEL"
   else
     ng "スキーマに合わない項目がある" "$OUT"
   fi

@@ -26,7 +26,7 @@
     "scripts/check-access-review-staleness.sh": "4185028711c70e3d193ea43d1e54a07f22f90e1ef9e75da026814180e6dd72db",
     "scripts/check-access-review-staleness.test.sh": "5284958072ca48ef40a32c926da3bcbcf9044878b156bf7da99ef7442ed03def",
     "scripts/check-agent-output.test.sh": "ca359f7f245e6372ee6fffd4adfa16f33136c53da644fe127113ef5a81211a4b",
-    "scripts/check-aidd-config-schema.test.sh": "87644eb3a43766fa6536045a508b7a3c870aee7d88c67f4234401baa3ffd3371",
+    "scripts/check-aidd-config-schema.test.sh": "762ab6094abf9d82d7809382cc5410cef328106b8524a4454f1474bfd61f66dd",
     "scripts/check-aidd-doctor.test.sh": "03e208d6f241b79f64d294ad3e740c9c4344df58d52049d3be102cd9ecdf0fb2",
     "scripts/check-aidd-phase-stats-recorded.sh": "cc2752854718ec3b81c6ed7894c5c3649ddaee28e292afe633de66791df8949d",
     "scripts/check-aidd-phase-stats-recorded.test.sh": "14f8af4dac4b681326e94dca7c48a1ce69ef500b48e317ce42e33567fc2fe1a6",
