@@ -150,6 +150,10 @@
   },
   "supportScripts": {
     "aidd-check.sh": "aidd-vkumai",
+    "lib/validate-aidd-config.mjs": [
+      "aidd-core",
+      "aidd-vkumai"
+    ],
     "lib/resolve-log-dir.sh": [
       "aidd-core",
       "aidd-vkumai"
@@ -339,6 +343,7 @@
     "_why": "2026-09-12 に導入先を模した 2 リポジトリで実測したところ、配っている 92 本は**導入先ではなくプラグイン自身**を見ており、導入先に置いた違反 4 件のうち反応したのは 1 本だけだった（E-086）。層を宣言していなければ、入口は回しようがない。",
     "_limits": "**宣言であって、正しさは機械で判定していない**（他のルールブックと同じ）。both のうち、この製品の実データ（表名・閾値・色・ファイル名）を期待するものは導入先では必ず赤くなる——順次 checksNotDistributed へ移すか、閾値を設定・登録簿へ出す。",
     "check-access-review-staleness.test.sh": "both",
+    "check-aidd-config-schema.test.sh": "both",
     "check-agent-output.test.sh": "self",
     "check-aidd-doctor.test.sh": "both",
     "check-aidd-phase-stats-recorded.test.sh": "self",
@@ -412,6 +417,7 @@
   "checks": {
     "_comment": "検査（*.test.sh）の層。check-x.sh に対する check-x.test.sh は自動で対象と同じプラグインへ付いていくので、ここに書くのは (1) 対象スクリプトを持たない構造テスト (2) 自動判定を上書きしたいもの の 2 つだけ。上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙（高リスクパスの例・ドメイン語・スタック名）で書かれている検査で、共通側の禁止語検査に引っかかるもの。 層は 3 つある: ここ（配る）／checksNotDistributed（エンジン自体が固有で配れない）／checksSplittable（**対象・閾値だけが固有で、登録簿へ出せば配れる**＝返す当てのある借金。件数の上限を機械で見る）。",
     "check-session-start-matchers.test.sh": "aidd-core",
+    "check-aidd-config-schema.test.sh": "aidd-core",
     "check-hook-doc-pointers.test.sh": "aidd-core",
     "check-skill-size.test.sh": "aidd-core",
     "check-docs-issue-refs.test.sh": "aidd-core",

@@ -74,6 +74,7 @@
     "scripts/lib/stdout-sync.mjs": "813aa2a97ad006b7381ed440a9a341bec2e76535991ba50785ea5cd10efe4d79",
     "scripts/lib/table-duplicates-registry.json": "54f30f0fbfd7636f015fabe2503992e0df624e8528cc50d235ff31863e481278",
     "scripts/lib/table-row.sh": "a12af622cc5dda07888a9eb3e5bf1c585fe6afe3e86143b6416d9be656a415e4",
+    "scripts/lib/validate-aidd-config.mjs": "e7cd01b12656322f589469e960f33217ea1d0badef38f9a407c47864ff4da088",
     "scripts/lib/worktree-hash.sh": "a633830777c44fbe86c5c90a942d2e2b2e0f2449ddd2fd07e3d775b40e3278b4",
     "scripts/lib/write-path-registry.json": "2b67dac371b92308b7fc3781504d798e15bf36c6be8e771a304d039e29f6585d",
     "scripts/run-e2e-tests.sh": "0bb291c670a234da4a869e5a2586e572bbcd085d86273da9f193e7fe52e3cc33",

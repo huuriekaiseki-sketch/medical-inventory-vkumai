@@ -34,6 +34,7 @@
     "show-agent-status.test.sh": "self",
     "record-gap-check-state.test.sh": "self",
     "check-session-start-matchers.test.sh": "both",
+    "check-aidd-config-schema.test.sh": "both",
     "check-hook-doc-pointers.test.sh": "both",
     "check-skill-size.test.sh": "consumer",
     "check-docs-issue-refs.test.sh": "self",

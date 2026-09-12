@@ -64,6 +64,34 @@ done
 ok "両プラグインに 5 文書と evidence/ がある（欠落があれば上に NG）"
 [ -f "$WORK/a/aidd-core/schema/aidd-config.schema.json" ] && ok "設定スキーマが aidd-core/schema/ にある" || ng "スキーマが無い"
 [ -f "$WORK/a/aidd-core/templates/consumer/aidd.config.json" ] && ok "導入先ひな形が aidd-core/templates/ にある" || ng "ひな形が無い"
+# WHY(2026-09-12): ひな形の README は**表に 4 行しか無いのに実ファイルは 8 個**だった。
+#      説明の無いファイルを渡された導入先は、置き場も役割も分からない。逆に、表にあるのに
+#      実体が無い行（`.claude/rules/`）もあった。**どちらの向きもここまで誰も見ていなかった**
+#      （既存の門は agent / skill / workflow しか見ず、ひな形は aidd.config.json の存在 1 件だけ）。
+#      表と実体を両方向で突き合わせる（C-011: 宣言の検査が「実在するか」しか見ていない、の逆側）。
+TPL_DIR="$WORK/a/aidd-core/templates/consumer"
+TPL_README="$TPL_DIR/README.md"
+if [ ! -f "$TPL_README" ]; then
+  ng "ひな形に README が無い（渡されたファイルの役割を誰も説明できない）"
+else
+  TPL_MISSING_DOC=""
+  for f in "$TPL_DIR"/*; do
+    b="$(basename "$f")"
+    [ "$b" = "README.md" ] && continue
+    grep -qF -- "\`$b\`" "$TPL_README" || TPL_MISSING_DOC="${TPL_MISSING_DOC}${b} "
+  done
+  TPL_GHOST=""
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    [ -e "$TPL_DIR/$name" ] || TPL_GHOST="${TPL_GHOST}${name} "
+  done <<< "$(grep -o -E '^\| `[^`]+`' "$TPL_README" | tr -d '|` ' || true)"
+  if [ -z "$TPL_MISSING_DOC" ] && [ -z "$TPL_GHOST" ]; then
+    ok "ひな形の README が実ファイルを過不足なく説明している"
+  else
+    [ -n "$TPL_MISSING_DOC" ] && ng "README が説明していないひな形ファイルがある: $TPL_MISSING_DOC"
+    [ -n "$TPL_GHOST" ] && ng "README の表にあるのに実体が無い: $TPL_GHOST"
+  fi
+fi
 # COMPATIBILITY.md の版は docs/agents/upstream-docs-review.md「最後に確認した版」（正本）と一致する
 REVIEWED="$(grep -o -E 'Claude Code \| [0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/docs/agents/upstream-docs-review.md" | head -n1 | grep -o -E '[0-9]+\.[0-9]+\.[0-9]+' || true)"
 if [ -n "$REVIEWED" ] && grep -q "$REVIEWED" "$WORK/a/aidd-core/COMPATIBILITY.md"; then ok "COMPATIBILITY.md が docs 確認版 $REVIEWED を含む"; else ng "COMPATIBILITY.md の版が upstream-docs-review と食い違う（reviewed=${REVIEWED}）"; fi

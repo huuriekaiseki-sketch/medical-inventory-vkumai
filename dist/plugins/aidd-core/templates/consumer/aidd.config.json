@@ -31,6 +31,15 @@
     "domain": "docs/agents/domain.md",
     "decisions": "docs/agents/decisions.md"
   },
+  "errorResponse": {
+    "_comment": "入口（route）が catch したエラーの message をそのまま応答へ入れてよい条件。**翻訳済みだと分かっている型だけ**を挙げる（危ない語を弾くブラックリストは書かない——列挙から漏れたものが全部そのまま出るため）。この節ごと消せば検査は対象 0 件で黙って通る",
+    "translatedErrorTypes": [
+      "<利用者に見せてよい文言だけを持つエラー型の名前>"
+    ],
+    "scanDirs": [
+      "<入口のディレクトリ。例: src/app/api>"
+    ]
+  },
   "limits": {
     "decidedOn": "TODO",
     "decidedBy": "TODO",
