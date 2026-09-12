@@ -58,7 +58,10 @@ mkdir -p "$AIDD_JOURNAL_PROJECT_DIR"
 
 run_hook() {
   set +e
-  OUT="$(cd "$SANDBOX" && bash scripts/gate-effectiveness-monthly-check.sh < /dev/null)"
+  # WHY(2026-09-12): 本体は cd "${CLAUDE_PROJECT_DIR:-...}" するので cwd だけでは足りない。
+  #      外から環境変数が入ると状態ファイルが sandbox ではなくその木へ作られ、
+  #      中心リポジトリ（環境変数なし）では通るのに導入先では落ちる
+  OUT="$(cd "$SANDBOX" && CLAUDE_PROJECT_DIR="$SANDBOX" bash scripts/gate-effectiveness-monthly-check.sh < /dev/null)"
   EXIT_CODE=$?
   set -e
 }

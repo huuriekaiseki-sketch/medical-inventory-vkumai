@@ -52,7 +52,10 @@ if [ -f "$STATE_FILE" ]; then
   fi
 fi
 
-SUMMARY="$(bash scripts/summarize-loop-observability.sh --log-file "$LOG_FILE" 2>/dev/null || true)"
+# WHY(2026-09-12): 兄弟スクリプトは**自分の位置**から呼ぶ。上で cd しているので、相対パスだと
+#      導入先には scripts/ が無く、2>/dev/null || true と合わさって**黙って要約が消える**
+#      （隣の 2 行は最初から $SCRIPT_DIR を使っており、ここだけ書き漏れていた）
+SUMMARY="$(bash "$SCRIPT_DIR/summarize-loop-observability.sh" --log-file "$LOG_FILE" 2>/dev/null || true)"
 PASSFAIL_SUMMARY="$(bash "$SCRIPT_DIR/summarize-gate-passfail.sh" 2>/dev/null || true)"
 # issue #742: InstructionsLoaded hook の記録から「どの rules がどの頻度で読まれたか」を同じ月次で出す
 # （読まれない paths 付き rules は削除候補）。記録が無ければ「記録なし」の 1 行になる。fail-open

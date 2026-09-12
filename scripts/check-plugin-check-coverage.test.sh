@@ -359,6 +359,56 @@ else
       「確認不能」と言って exit 0 する（合格にも違反にも数えさせない）"
 fi
 
+echo "=== scenario 5d: cd で足元を変える本体が、兄弟スクリプトを相対パスで呼んでいない ==="
+# WHY(2026-09-12): 実測——本体は `cd "${CLAUDE_PROJECT_DIR:-...}"` で導入先へ移るのに、
+#      そのあと `bash scripts/xxx.sh` と**相対パス**で兄弟を呼ぶ本体が 3 本あった。
+#      導入先に scripts/ は無いので、`|| true` や `if` と合わさって**黙って機能が死ぬ**
+#      （中断のキュー登録・gap のキュー登録・月次サマリの本文）。中心リポジトリでは
+#      cwd がリポジトリなので通り、テストも緑のまま潜む。
+# 数えないもの: 文字列リテラルの中（案内文に書いたコマンド例）。ダブルクォート・
+#      バッククォート・**シングルクォート**の 3 つとも除く。
+#      最初に書いた走査器はここを除外しておらず **誤検出 3 本・本物 0 本**だった。
+#      さらに門へ書き写したときもシングルクォートだけ落とし、`maintenance-digest.sh:100` の
+#      `printf '... node scripts/lib/... が失敗 ...'` を誤検出した（**同じ間違いを 2 度**）。
+REL_BAD="$(node -e '
+const fs = require("fs")
+const path = require("path")
+const root = process.argv[1]
+const out = []
+const walk = (d) => {
+  for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+    const p = path.join(d, e.name)
+    if (e.isDirectory()) { walk(p); continue }
+    if (!/\.(sh|mjs)$/.test(e.name)) continue
+    if (e.name.endsWith(".test.sh")) continue
+    const text = fs.readFileSync(p, "utf8")
+    // 足元を変える本体だけが危ない（変えないなら cwd = リポジトリのまま）
+    if (!/cd\s+"\$\{CLAUDE_PROJECT_DIR/.test(text)) continue
+    text.split("\n").forEach((line, i) => {
+      if (line.trim().startsWith("#")) return
+      // シングルクォートは、この node -e の外側がシングルクォートなので文字として書けない。
+      // String.fromCharCode(39) で作って正規表現を組み立てる
+      const Q = String.fromCharCode(39)
+      const bare = line
+        .replace(/"[^"]*"/g, "")
+        .replace(/`[^`]*`/g, "")
+        .replace(new RegExp(Q + "[^" + Q + "]*" + Q, "g"), "")
+      const m = /\b(bash|sh|node)\s+(scripts\/[\w./-]+\.(?:sh|mjs))/.exec(bare)
+      if (m) out.push("  " + path.relative(root, p) + ":" + (i + 1) + " -> " + m[2])
+    })
+  }
+}
+walk(path.join(root, "scripts"))
+for (const line of out) console.log(line)
+' "$REPO_ROOT")"
+if [ -z "$REL_BAD" ]; then
+  assert_ok "足元を変える本体は、兄弟を自分の位置から呼んでいる"
+else
+  assert_fail "cd したあとに兄弟を相対パスで呼ぶ本体がある（導入先では黙って死ぬ）" "$REL_BAD
+      直し方: cd の**前**に SCRIPT_DIR を求め、\"\$SCRIPT_DIR/xxx.sh\" で呼ぶ
+      （cd 後に \$0 の相対は壊れるので、位置の計算は必ず cd より前に置く）"
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

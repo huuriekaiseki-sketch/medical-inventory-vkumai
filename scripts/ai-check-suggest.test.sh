@@ -65,7 +65,10 @@ run_hook() {
   input="$(jq -n --arg sid "$session_id" --arg tp "$transcript_path" '{session_id: $sid, transcript_path: $tp}')"
   (
     cd "$sandbox"
-    printf '%s' "$input" | bash "scripts/ai-check-suggest.sh"
+    # WHY(2026-09-12): 本体は cd "${CLAUDE_PROJECT_DIR:-...}" するので cwd だけでは足りない。
+    #      外から CLAUDE_PROJECT_DIR が入っていると fixture ではなくその木の設定を読み、
+    #      中心リポジトリ（環境変数なし）では通るのに導入先では落ちる
+    printf '%s' "$input" | CLAUDE_PROJECT_DIR="$sandbox" bash "scripts/ai-check-suggest.sh"
   )
 }
 

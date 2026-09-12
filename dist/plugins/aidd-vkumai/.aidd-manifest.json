@@ -18,7 +18,7 @@
     "evidence/vkumai-2026-09-05.md": "7962b68d469c89879f2efd4b162537b158c782ea6ea9f2d31996e22c624bbc4e",
     "hooks/hooks.json": "f3a9668d0a1bd7cfd42e9aee361d4854a133415a5dedab12966edf9a3f7a6086",
     "scripts/ai-check-suggest.sh": "1d98fda7baca951f8f1414b2a3a34b00435d2881af0f7b6da37ae09afb581577",
-    "scripts/ai-check-suggest.test.sh": "2e3af7700ee2475aeb92fa48976b683727b9bbb91b8efa10eae8f5a1597e63e3",
+    "scripts/ai-check-suggest.test.sh": "222804f233887d04cce6f916dbea60bc8f0e332c7101835d9999a072346e25d8",
     "scripts/aidd-check.sh": "6f42cb8a221524bebfb3c0fc3cc1c8c2f866dac46b1ba1a685ca45fafd99c4f7",
     "scripts/check-automode-config.sh": "fdd45e852da6ec777560a131221ee6c70a839caba96de38465c83f21b883e995",
     "scripts/check-automode-config.test.sh": "cd7e749d68525c1684a2343a0a7d54c134aafe782ffaea4e2e3a8467cd4e5e97",

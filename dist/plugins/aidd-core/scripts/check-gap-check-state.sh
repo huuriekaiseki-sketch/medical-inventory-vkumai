@@ -125,7 +125,9 @@ if [ -n "$GAP_WARNINGS" ]; then
   # issue #523: 検知して終わりにせず、次回SessionStart時に確実に思い出せるようキューへ
   # 登録する（scripts/check-recovery-queue.sh参照）。失敗してもこのhook自体の警告出力は
   # 継続する（fail-open。キュー登録はベストエフォート）
-  bash scripts/queue-recovery-task.sh --type "gap-check-followup" \
+  # WHY(2026-09-12): 兄弟は**自分の位置**から呼ぶ。上で cd するので相対パスでは
+  #      導入先に scripts/ が無く、|| true と合わさって**黙ってキュー登録が消える**
+  bash "$GAP_SCRIPT_DIR/queue-recovery-task.sh" --type "gap-check-followup" \
     --detail "$(jq -n --arg warnings "$GAP_WARNINGS" '{gapWarnings: $warnings}')" \
     >/dev/null 2>&1 || true
 fi

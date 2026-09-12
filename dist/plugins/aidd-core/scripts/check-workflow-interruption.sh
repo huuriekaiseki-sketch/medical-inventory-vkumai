@@ -50,6 +50,9 @@ command -v jq >/dev/null 2>&1 || exit 0
 #   WORKFLOW_INTERRUPTION_SEEN_MAX     seen fileの無制限肥大化を防ぐ保持件数上限（既定500）
 #   RECOVERY_QUEUE_FILE                queue-recovery-task.shへそのまま渡す
 
+# WHY(2026-09-12): 兄弟スクリプトの位置は cd の**前**に決める（cd 後に $0 の相対は壊れる）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
 cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
@@ -115,7 +118,9 @@ while IFS= read -r -d '' wf_file; do
     --arg runbook "docs/agents/workflow-resume-runbook.md" \
     '{runId: $runId, workflowName: $workflowName, status: $status, wfFile: $wfFile, runbook: $runbook}')"
 
-  if bash scripts/queue-recovery-task.sh --type "workflow-interrupted" --detail "$DETAIL" >/dev/null 2>&1; then
+  # WHY(2026-09-12): 相対パスだと導入先に scripts/ が無く、この if が**常に偽**になる。
+  #      その結果、中断を見つけても登録されず SEEN_FILE にも残らない（黙って何もしない）
+  if bash "$SCRIPT_DIR/queue-recovery-task.sh" --type "workflow-interrupted" --detail "$DETAIL" >/dev/null 2>&1; then
     echo "$RUN_ID" >> "$SEEN_FILE"
     # PRレビュー指摘: seen fileが無期限に追記され続けるとローテーションが無い。
     # 直近SEEN_MAX件のみ保持する（古いrunIdを忘れても実害は「稀に再登録される」程度で
