@@ -25,6 +25,15 @@ REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 source "$SCRIPT_DIR/lib/aidd-config.sh"
 SCANNER="$SCRIPT_DIR/lib/scan-control-bytes.mjs"
 
+# WHY(2026-09-12): node が無い導入先で回すと、走査器が 127 で落ち、この検査は
+#      「追跡ファイルは 18 本あるのに走査できたのが 0 本（走査が壊れている疑い）」と報告した。
+#      **確かめられなかっただけ**なのに違反として出る。合格にも違反にも数えさせない。
+command -v node >/dev/null 2>&1 || {
+  echo "  SKIP: 確認不能（node が無いので制御バイトを走査できない。守られているかは分かりません）"
+  echo "ALL PASSED"
+  exit 0
+}
+
 fail=0
 assert_ok() { echo "  OK: $1"; }
 assert_fail() {

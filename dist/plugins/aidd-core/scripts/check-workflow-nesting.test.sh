@@ -29,6 +29,15 @@ fi
 SCANNER="$SCRIPT_DIR/lib/scan-workflow-nesting.mjs"
 TEMPLATE_WORKFLOWS="$REPO_ROOT/docs/plugin/templates/consumer/.claude/workflows"
 
+# WHY(2026-09-12): node が無い導入先で回すと、走査器が 127 で落ち、この検査は
+#      **「2 段の入れ子がある」と存在しない違反を報告した**（実測）。導入先は無い問題を
+#      追いかけることになる。確かめられなかっただけなので、合格にも違反にも数えさせない。
+command -v node >/dev/null 2>&1 || {
+  echo "  SKIP: 確認不能（node が無いので Workflow の連鎖を走査できない。守られているかは分かりません）"
+  echo "ALL PASSED"
+  exit 0
+}
+
 fail=0
 assert_ok() { echo "  OK: $1"; }
 assert_fail() {

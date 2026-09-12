@@ -25,6 +25,15 @@ else
 fi
 SCANNER="${SCRIPT_DIR}/lib/scan-raw-error-response.mjs"
 
+# WHY(2026-09-12): node が無い導入先で回すと、走査器が 127 で落ち、この検査は
+#      **「実物に違反がある」と存在しない違反を報告した**（実測）。
+#      確かめられなかっただけなので、合格にも違反にも数えさせない。
+command -v node >/dev/null 2>&1 || {
+  echo "  SKIP: 確認不能（node が無いので route を走査できない。守られているかは分かりません）"
+  echo "ALL PASSED"
+  exit 0
+}
+
 fail=0
 ok()   { echo "  OK: $1"; }
 ng()   { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }

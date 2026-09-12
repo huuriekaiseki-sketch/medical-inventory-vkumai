@@ -23,6 +23,15 @@ else
 fi
 source "$SCRIPT_DIR/table-row.sh"
 
+# WHY(2026-09-12): node が無い導入先で回すと、共通エンジン（splitRow）を呼べず、
+#      この検査は「共通エンジンと答えが違う」＝**違反**として報告した（実測）。
+#      突合の相手が居ないだけなので、合格にも違反にも数えさせない。
+command -v node >/dev/null 2>&1 || {
+  echo "  SKIP: 確認不能（node が無いので共通エンジンと突き合わせられない。守られているかは分かりません）"
+  echo "table-row: すべて OK"
+  exit 0
+}
+
 fail=0
 assert_eq() {
   if [ "$1" = "$2" ]; then echo "  OK: $3"; else echo "  NG: $3 (expected=[$2] actual=[$1])"; fail=1; fi

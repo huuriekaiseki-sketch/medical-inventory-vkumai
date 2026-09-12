@@ -67,7 +67,13 @@ if [ ! -f "$SCOPES" ] && [ ! -f "$LAYOUT" ]; then
   echo "層の宣言が見つかりません: ${SCOPES}（正本の ${LAYOUT} もありません）"
   exit 2
 fi
-command -v node >/dev/null 2>&1 || { echo "node が無いので層の宣言を読めません"; exit 2; }
+# WHY(2026-09-12): node が無い導入先では**何も測れない**。実測すると、入口はここで止まり、
+#      導入先は「合格」も「対象なし」も見ないまま 1 行だけを受け取っていた。
+#      合格とも違反とも言わず「確認不能」と明示する（C-025: 3 つを 1 つに潰さない）。
+command -v node >/dev/null 2>&1 || {
+  echo "確認不能: node が無いので層の宣言を読めません（この導入先では検査を 1 本も回していません）"
+  exit 3
+}
 
 targets="$(node -e '
 const fs = require("fs")
@@ -106,10 +112,12 @@ fi
 #      配る検査は対象が無いとき出力に「対象なし」を含める決まりにし、ここで 4 値へ分ける。
 pass=0
 skipped=0
+unknown=0
 fail=0
 missing=0
 failed=""
 skipped_list=""
+unknown_list=""
 # 「対象なし」と言った検査を比べる相手（空の木）。要るときだけ作る
 EMPTY_ROOT=""
 while IFS= read -r name; do
@@ -122,7 +130,14 @@ while IFS= read -r name; do
   fi
   out="$(cd "$PROJECT_DIR" && CLAUDE_PROJECT_DIR="$PROJECT_DIR" bash "$script" 2>&1)"
   rc=$?
-  if [ "$rc" -ne 0 ]; then
+  # WHY(2026-09-12): 実行系（node / jq / python3）が無いとき、検査は「違反がある」と
+  #      言ってしまうことがある——実測では、node の無い導入先で「2 段の入れ子がある」
+  #      「実物に違反がある」と**存在しない違反を報告**した。確認できなかっただけなので、
+  #      合格にも違反にも数えない。「確認不能」は落ちたかどうかより先に見る。
+  if grep -q '確認不能' <<<"$out"; then
+    unknown=$((unknown + 1))
+    unknown_list="${unknown_list}  確認不能: ${name}"$'\n'
+  elif [ "$rc" -ne 0 ]; then
     fail=$((fail + 1))
     failed="${failed}  落ちた: ${name}"$'\n'
   elif grep -q '対象なし' <<<"$out"; then
@@ -148,7 +163,11 @@ while IFS= read -r name; do
 done <<< "$targets"
 [ -n "$EMPTY_ROOT" ] && rm -rf "$EMPTY_ROOT"
 
-echo "導入先 ${PROJECT_DIR}: 見た ${pass} / 対象なし ${skipped} / 落ちた ${fail} / 実体なし ${missing}"
+echo "導入先 ${PROJECT_DIR}: 見た ${pass} / 対象なし ${skipped} / 確認不能 ${unknown} / 落ちた ${fail} / 実体なし ${missing}"
+if [ "$unknown" -gt 0 ]; then
+  echo "この環境では確かめられなかったもの（守られているかどうか分かりません）:"
+  printf '%s' "$unknown_list"
+fi
 if [ "$skipped" -gt 0 ]; then
   echo "この導入先には対象が無いので何も見ていないもの（守られてはいません）:"
   printf '%s' "$skipped_list"
