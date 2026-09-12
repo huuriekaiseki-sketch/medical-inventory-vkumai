@@ -131,6 +131,7 @@
         "scripts/check-docs-integrity.test.sh",
         "scripts/check-docs-issue-refs.test.sh",
         "scripts/check-export-paths.test.sh",
+        "scripts/check-file-intake-paths.test.sh",
         "scripts/check-harness-map.test.sh",
         "scripts/check-hook-doc-pointers.test.sh",
         "scripts/check-human-bypass-inventory.test.sh",
