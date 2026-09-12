@@ -171,6 +171,12 @@
           "unit": "route",
           "file": "scripts/lib/query-validation-baseline.json",
           "path": "pending.length"
+        },
+        {
+          "name": "配る・配らないを決めていない支援スクリプト（上限）",
+          "unit": "本",
+          "file": "scripts/lib/plugin-layout.json",
+          "path": "supportScriptsUnclassified.unclassifiedMax"
         }
       ],
       "limitsDoc": "docs/agents/operation-contracts.md",

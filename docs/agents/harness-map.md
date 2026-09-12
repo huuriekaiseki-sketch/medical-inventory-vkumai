@@ -62,12 +62,13 @@
 | `integration-leak-baseline.json`#maxLeakedRows | 統合テストの消し残しの上限（H-02） | 緑の全件実行 1 回で業務表に残る行 | **0** |
 | `input-validation-baseline.json`#pending.length | 本文を検証せずに読む route（H-03） | route | **0** |
 | `query-validation-baseline.json`#pending.length | クエリを検証せずに読む route（H-03） | route | **0** |
+| `plugin-layout.json`#supportScriptsUnclassified.unclassifiedMax | 配る・配らないを決めていない支援スクリプト（上限）（H-03） | 本 | **25** |
 | `write-path-registry.json`#maxGaps | DB は書けるのにアプリに道が無い組み合わせ（H-05） | 組み合わせ | **0** |
 | `exemption-budget.json`#max.eslint-disable | 検査の逃がし口（上限。eslint-disable）（H-06） | 件 | **14** |
 | `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **88** |
 | `rls-mutants.json`#mutants.length | RLS・RPC の壊し方（H-06） | 件 | **20** |
 
-（ハーネス 8 件・検査 149 本・台帳 7 件。うち `scripts/**/*.test.sh` の 148 本は**この表で全数**——どこにも属さない検査があれば生成そのものが落ちる。残り 1 本は vitest 側から**手で足したもの**で、書き忘れは検知されない（限界の節））
+（ハーネス 8 件・検査 149 本・台帳 8 件。うち `scripts/**/*.test.sh` の 148 本は**この表で全数**——どこにも属さない検査があれば生成そのものが落ちる。残り 1 本は vitest 側から**手で足したもの**で、書き忘れは検知されない（限界の節））
 
 <!-- generated:harness-map end -->
 
