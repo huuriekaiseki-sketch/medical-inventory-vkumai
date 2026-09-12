@@ -19,7 +19,7 @@
     "hooks/hooks.json": "f3a9668d0a1bd7cfd42e9aee361d4854a133415a5dedab12966edf9a3f7a6086",
     "scripts/ai-check-suggest.sh": "1d98fda7baca951f8f1414b2a3a34b00435d2881af0f7b6da37ae09afb581577",
     "scripts/ai-check-suggest.test.sh": "222804f233887d04cce6f916dbea60bc8f0e332c7101835d9999a072346e25d8",
-    "scripts/aidd-check.sh": "6f42cb8a221524bebfb3c0fc3cc1c8c2f866dac46b1ba1a685ca45fafd99c4f7",
+    "scripts/aidd-check.sh": "3d05d698f73d6bb5c4f8f4147090ce4474a08697f5d4545fa7d823008c10db07",
     "scripts/check-automode-config.sh": "fdd45e852da6ec777560a131221ee6c70a839caba96de38465c83f21b883e995",
     "scripts/check-automode-config.test.sh": "cd7e749d68525c1684a2343a0a7d54c134aafe782ffaea4e2e3a8467cd4e5e97",
     "scripts/check-dependency-change.sh": "ac2884b6d52bff8d1f473bcde877831e67e210b01cb6188fb9f958d385049dd9",
