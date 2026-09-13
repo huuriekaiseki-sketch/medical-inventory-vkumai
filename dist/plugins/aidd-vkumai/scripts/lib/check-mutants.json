@@ -803,6 +803,15 @@
       "replace": "        if (c) continue",
       "expect": "scripts/check-workflow-nesting.test.sh",
       "guards": "E-085（導入先の入口が一度も動いていなかった。C-053）"
+    },
+    {
+      "id": "CM-089",
+      "breaks": "commit-msg hook が凍結中でも、製品に触れないコミットを止めない（決めた凍結が 2 日で消える元の姿）",
+      "file": "scripts/git-hooks/commit-msg",
+      "find": "  if ! printf '%s\\n' \"$staged\" | grep -qE '^(src|supabase|e2e)/'; then",
+      "replace": "  if false; then",
+      "expect": "scripts/check-git-hooks.test.sh",
+      "guards": "H-014（凍結決定後 48 コミット中、製品に触れたのは 1 件）"
     }
   ]
 }

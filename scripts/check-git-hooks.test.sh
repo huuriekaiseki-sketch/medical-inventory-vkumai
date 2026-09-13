@@ -8,6 +8,8 @@
 #       別の向き先・既存の有効な hook は壊さない
 #   (c) commit-msg: 制御バイトのあるメッセージは止め、ふつうの日本語は通す。判定できないときは止めない
 #   (d) pre-push: GitHub の main への直接 push（削除を含む）は止め、ブランチと GitLab の控えは通す（H-001）
+#   (e) commit-msg: HEAD に docs/agents/harness-freeze.md がある間、src/ supabase/ e2e/ に触れない
+#       コミットを止める。製品に触れる・マージ・空・マーカーを消す・凍結前は通す（H-014）
 #
 # 本物の git の中で動かす（一時リポジトリにコミットして確かめる）。このリポジトリの設定には触れない。
 #
@@ -228,6 +230,86 @@ if git -C "$R6" push -q fakegl main > "$WORK/push.out" 2>&1; then
   assert_ok "本物の push で GitLab の main へは入れられる（控え）"
 else
   assert_fail "GitLab へ入れられない" "$(cat "$WORK/push.out")"
+fi
+
+echo "=== scenario 8: commit-msg は凍結中、製品に触れないコミットを止める（H-014） ==="
+# WHY(2026-09-13): 凍結を決めた後の 48 コミット中、製品に触れたのは 1 件。決めごとを入口の機械に持たせる
+R7="$WORK/repo7"
+make_repo "$R7"
+install_in "$R7" > /dev/null 2>&1
+MARKER="docs/agents/harness-freeze.md"
+commit_files() {
+  # $1=repo $2=メッセージ $3...=作る（または更新する）ファイル。終了コードを返し、stderr は $WORK/f.err
+  local d="$1" msg="$2" f
+  shift 2
+  for f in "$@"; do
+    mkdir -p "$d/$(dirname "$f")"
+    printf 'x %s\n' "$RANDOM" >> "$d/$f"
+    git -C "$d" add "$f"
+  done
+  git -C "$d" commit -q -m "$msg" 2> "$WORK/f.err"
+}
+if commit_files "$R7" 'docs only before freeze' docs/agents/notes.md; then
+  assert_ok "凍結前は docs だけのコミットも通す"
+else
+  assert_fail "凍結前に止めた" "$(cat "$WORK/f.err")"
+fi
+if commit_files "$R7" 'start freeze' "$MARKER"; then
+  assert_ok "マーカーを入れるコミット自身は通る（HEAD を見るので）"
+else
+  assert_fail "マーカーを入れるコミットを止めた" "$(cat "$WORK/f.err")"
+fi
+BEFORE="$(git -C "$R7" rev-parse HEAD)"
+if commit_files "$R7" 'docs only during freeze' docs/agents/notes.md; then
+  assert_fail "凍結中に docs だけのコミットを通した"
+elif grep -qF 'H-014' "$WORK/f.err"; then
+  assert_ok "凍結中は docs だけのコミットを止め、理由（H-014）を言う"
+else
+  assert_fail "止まったが理由を言わない" "$(cat "$WORK/f.err")"
+fi
+git -C "$R7" reset -q
+if commit_files "$R7" 'scripts only during freeze' scripts/check-something.test.sh; then
+  assert_fail "凍結中に scripts だけのコミットを通した"
+else
+  assert_ok "凍結中は scripts だけのコミットも止める"
+fi
+git -C "$R7" reset -q
+if [ "$(git -C "$R7" rev-parse HEAD)" = "$BEFORE" ]; then
+  assert_ok "止めたコミットは履歴に入っていない"
+else
+  assert_fail "止めたはずのコミットが履歴に入った"
+fi
+for dir in src supabase e2e; do
+  if commit_files "$R7" "touches ${dir}" "${dir}/thing.ts" docs/agents/notes.md; then
+    assert_ok "${dir}/ に触れれば docs を一緒に変えても通す"
+  else
+    assert_fail "${dir}/ に触れたのに止めた" "$(cat "$WORK/f.err")"
+  fi
+done
+if git -C "$R7" commit -q --allow-empty -m 'empty during freeze' 2> "$WORK/f.err"; then
+  assert_ok "空コミットは通す"
+else
+  assert_fail "空コミットを止めた" "$(cat "$WORK/f.err")"
+fi
+git -C "$R7" checkout -q -b side
+commit_files "$R7" 'side: product' src/side.ts > /dev/null
+git -C "$R7" checkout -q -
+commit_files "$R7" 'main: product' src/main-side.ts > /dev/null
+if git -C "$R7" merge -q --no-ff -m 'merge side' side 2> "$WORK/f.err"; then
+  assert_ok "マージコミットは通す（合流を邪魔しない）"
+else
+  assert_fail "マージコミットを止めた" "$(cat "$WORK/f.err")"
+fi
+git -C "$R7" rm -q "$MARKER"
+if git -C "$R7" commit -q -m 'end freeze' 2> "$WORK/f.err"; then
+  assert_ok "マーカーを消すコミットは通る（凍結の解除）"
+else
+  assert_fail "凍結を解くコミットを止めた" "$(cat "$WORK/f.err")"
+fi
+if commit_files "$R7" 'docs only after freeze' docs/agents/notes.md; then
+  assert_ok "解除後は docs だけのコミットも通す"
+else
+  assert_fail "解除後に止めた" "$(cat "$WORK/f.err")"
 fi
 
 if [ "$fail" -ne 0 ]; then

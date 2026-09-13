@@ -43,6 +43,7 @@
 | H-011 | 秘密情報の手渡し | service role key・token を chat・AI・メモに貼る | リポジトリに入れば秘密情報の走査が止める。chat・AI の transcript・メモに貼った場合は残らない（D-041） | 貼らない。貼ったらローテーション（#757-29） | 記録されない |
 | H-012 | テストを黙らせる | `it.only` / `describe.only` を残して他を回さない、unit テストに無条件の `.skip` を足す | `scripts/check-human-bypass-inventory.test.sh`（CI `hooks-test`）が `.only` を 0 件、`src/` と `supabase/` の無条件 `.skip` を 0 件で固定する。e2e の条件付き `test.skip(条件, 理由)` は許す | 一時的に skip するなら理由付きの issue を作り、`it.skip` ではなく `it.todo` か条件付き skip にする | 不可 |
 | H-013 | AI の「検証済み」を信じて確認を省く | 完了報告の証跡を見ずにマージする | CLAUDE.md「完了報告の監査指示」で AI 側の断定を抑える。人側の省略は記録されない | 04 表の ✅ には証跡（件数・コマンド）が付いていることを見る。証跡を見ずにマージしたと分かったら `--safeguard H-013` で残す（#757-39 の「検知までの時間」の材料） | 記録されない |
+| H-014 | ハーネス凍結の commit-msg hook（`scripts/git-hooks/commit-msg`。HEAD に [`harness-freeze.md`](./harness-freeze.md) がある間、src/ supabase/ e2e/ に触れないコミットを止める） | `git commit --no-verify`。hook を入れていない clone。src/ に 1 行だけ触れて通す | git 履歴に「製品に触れていないコミット」として残る（見れば分かるが、理由は残らない） | `--no-verify` で通したら `--safeguard H-014 --reason` で残す。凍結を解くときはマーカーを消すコミットを入れる（`--no-verify` は使わない） | 一部 |
 
 ## 迂回した事実の記録
 

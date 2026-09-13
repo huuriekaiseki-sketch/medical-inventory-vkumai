@@ -47,7 +47,7 @@
     "scripts/lib/aidd-config.sh": "602a4dbea32a067cf69ea486f41bfc354c380f5fe5dbb47e667eecb7417bc6c0",
     "scripts/lib/catalog-registry.json": "79c56c03f72c11df6fd24bc43e54c7276632ed5e525196338bf2c7e897cac743",
     "scripts/lib/check-catalog.mjs": "f653862d9980068ac5e56e37c39cf913dad8dc0d9cf0c040cd62be5194e8c6e7",
-    "scripts/lib/check-mutants.json": "9a9c6b56777658aac4fbeeae1eb9918f51f69e9ba80004e27121fc2fbd08742b",
+    "scripts/lib/check-mutants.json": "4d20ee1ea1aa85506e6dd328d2fee156fabd9079b0bca719db70c343b96466d2",
     "scripts/lib/check-operation-contracts.mjs": "99a7c46c4235bee5601d748695d1198a493776adbc61918fc54bb7ebf64c57f8",
     "scripts/lib/check-scopes.json": "bac8eebbf731ec51b4579e56925110a644ebe97b5c2bd6b676b01525536c3aff",
     "scripts/lib/check-write-path-gaps.mjs": "e1fbe805d3d5de11c85f29ae1675c53861741b82f823c1c288c8d1bc6059ed50",
