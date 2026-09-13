@@ -87,3 +87,35 @@ describe('DELETE /api/facilities/[id] は無い（E-055）', () => {
     expect(Object.keys(route).sort()).toEqual(['GET', 'PUT'])
   })
 })
+
+// WHY(#757-24 の残り、2026-09-13): RLS で見えない行は 404 のままだが、存在するなら拒否として残す。
+//      route が固定するのは「0 件のときだけヘルパーを呼ぶ」「応答は 404 のまま」の 2 点
+const { mockRecordHiddenRowDenial } = vi.hoisted(() => ({ mockRecordHiddenRowDenial: vi.fn() }))
+vi.mock('@/lib/security/hidden-row-denial', () => ({
+  recordHiddenRowDenial: (...args: unknown[]) => mockRecordHiddenRowDenial(...args),
+}))
+
+describe('GET /api/facilities/[id]: RLS で 0 件のとき [P-063]', () => {
+  it('0 件なら 404 のまま、存在確認と記録のヘルパーを要求 ID と本人 ID で呼ぶ', async () => {
+    authenticated()
+    mockGetFacility.mockResolvedValue(null)
+    const res = await GET(new Request('http://localhost') as never, context)
+    expect(res.status).toBe(404)
+    expect(mockRecordHiddenRowDenial).toHaveBeenCalledWith({ table: 'facilities', id: 'f1', actorId: 'u1' })
+  })
+
+  it('見つかればヘルパーは呼ばない', async () => {
+    authenticated()
+    mockGetFacility.mockResolvedValue({ id: 'f1', name: '施設' })
+    const res = await GET(new Request('http://localhost') as never, context)
+    expect(res.status).toBe(200)
+    expect(mockRecordHiddenRowDenial).not.toHaveBeenCalled()
+  })
+
+  it('未認証ならヘルパーを呼ばない（誰の拒否か分からない記録を作らない）', async () => {
+    unauthenticated()
+    const res = await GET(new Request('http://localhost') as never, context)
+    expect(res.status).toBe(401)
+    expect(mockRecordHiddenRowDenial).not.toHaveBeenCalled()
+  })
+})

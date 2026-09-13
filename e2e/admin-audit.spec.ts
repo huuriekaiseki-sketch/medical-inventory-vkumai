@@ -288,3 +288,76 @@ test.describe('proxy の admin 拒否が access_denials に記録される [#757
     await userB.close()
   })
 })
+
+// WHY(#757-24 の残り「RLS が黙って 0 件を返す拒否」): ID 指定の 1 件取得は RLS で見えない行を
+//      「存在しない」と区別できず 404 を返すだけだった。存在するなら service role で確かめて
+//      拒否として残す（応答は 404 のまま）。単体はモックなので、実 RLS × 実 service role の越境をここで通す。
+test.describe('RLS で見えない 1 件取得が access_denials に残る [P-063]', () => {
+  test.skip(!fixtures?.facilityAId, 'cross-facility フィクスチャが生成されていない')
+
+  function serviceRoleClient() {
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+  }
+
+  async function countHiddenDenials(route: string, facilityId: string): Promise<number> {
+    const { count, error } = await serviceRoleClient()
+      .from('access_denials')
+      .select('id', { count: 'exact', head: true })
+      .eq('guard', 'facility')
+      .eq('reason', 'forbidden')
+      .eq('route', route)
+      .eq('facility_id', facilityId)
+    expect(error, `access_denials の集計に失敗: ${error?.message}`).toBeNull()
+    return count ?? 0
+  }
+
+  test('施設 B の利用者が施設 A の ID を直接指定すると 404 のまま、施設 A への拒否として 1 件残る', async ({ browser }) => {
+    const userB = await browser.newContext({ storageState: CROSS_FACILITY_USER_B_AUTH_PATH })
+    const route = `/api/facilities/${fixtures!.facilityAId}`
+    const before = await countHiddenDenials(route, fixtures!.facilityAId)
+
+    const res = await userB.request.get(route)
+    expect(res.status(), '施設 B の利用者が施設 A を読めてしまった').toBe(404)
+    // 存在の有無を本文で漏らさない（本当に無いときと同じ文言）
+    expect(await res.text()).toContain('施設が見つかりません')
+
+    await expect
+      .poll(() => countHiddenDenials(route, fixtures!.facilityAId), { message: '見えなかった施設の拒否が記録されない' })
+      .toBe(before + 1)
+    await userB.close()
+  })
+
+  test('施設 B の利用者が施設 A の院内価格 ID を直接指定すると 404 のまま、施設 A への拒否として 1 件残る', async ({ browser }) => {
+    const userB = await browser.newContext({ storageState: CROSS_FACILITY_USER_B_AUTH_PATH })
+    const route = `/api/hospital-prices/${fixtures!.facilityAHospitalPriceId}`
+    const before = await countHiddenDenials(route, fixtures!.facilityAId)
+
+    const res = await userB.request.get(route)
+    expect(res.status(), '施設 B の利用者が施設 A の院内価格を読めてしまった').toBe(404)
+
+    await expect
+      .poll(() => countHiddenDenials(route, fixtures!.facilityAId), { message: '見えなかった院内価格の拒否が記録されない' })
+      .toBe(before + 1)
+    await userB.close()
+  })
+
+  test('存在しない ID は 404 で、記録は増えない（本当に無いものは拒否ではない）', async ({ browser }) => {
+    const userB = await browser.newContext({ storageState: CROSS_FACILITY_USER_B_AUTH_PATH })
+    const nobody = '00000000-0000-4000-8000-000000000000'
+    const db = serviceRoleClient()
+    const { count: before } = await db
+      .from('access_denials').select('id', { count: 'exact', head: true }).eq('route', `/api/facilities/${nobody}`)
+
+    const res = await userB.request.get(`/api/facilities/${nobody}`)
+    expect(res.status()).toBe(404)
+    await new Promise(r => setTimeout(r, 1500))
+    const { count: after } = await db
+      .from('access_denials').select('id', { count: 'exact', head: true }).eq('route', `/api/facilities/${nobody}`)
+    expect(after ?? 0, '存在しない ID の 404 が拒否として記録された').toBe(before ?? 0)
+    await userB.close()
+  })
+})

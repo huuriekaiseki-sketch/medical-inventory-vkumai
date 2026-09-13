@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
+import { recordHiddenRowDenial } from '@/lib/security/hidden-row-denial'
 import { getFacility, updateFacility } from '@/lib/facilities/repository'
 import { authGuardError, apiError } from '@/lib/api-error'
 import type { RouteContext } from '@/types/route'
@@ -19,9 +20,13 @@ import { facilityInputSchema } from '@/lib/validation/schemas'
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   const db = await createServerSupabase()
-  try { await requireAuth(db) } catch (e) { return authGuardError(e) }
+  let user
+  try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
   const facility = await getFacility(db, id)
   if (!facility) {
+    // WHY(#757-24 の残り): RLS で見えなかっただけなら「拒否」として access_denials に残す。
+    //      応答は 404 のまま（存在の有無を漏らさない）。記録の失敗は応答を変えない
+    await recordHiddenRowDenial({ table: 'facilities', id, actorId: user.id })
     return NextResponse.json({ error: '施設が見つかりません' }, { status: 404 })
   }
   return NextResponse.json({ facility })

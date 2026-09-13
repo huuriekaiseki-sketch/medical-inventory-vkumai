@@ -118,6 +118,29 @@
   service role で存在確認して既存語彙で記録」なら可。読み取り監査は DB 側不可（述語が STABLE）・アプリ側は量と
   レイテンシで破綻・ログ側は pgaudit / PostgREST 未設定かつ保持期間未確認で、引き金付きへ落とす
 
+## 追記（同日）: 候補 A の縮小版 — RLS で見えない ID 指定の 1 件取得を拒否として残す
+
+- **対象**: `/api/facilities/[id]` と `/api/hospital-prices/[id]` の GET。読み取り経路の棚卸しで、RLS の 0 件が
+  そのまま 404 になる route はこの 2 本だけだった（一覧は `requireFacilityAccess` が先に 403 を記録。マスタは
+  `USING(true)`）
+- **仕組み**: 0 件だったときだけ、service_role で「行があるか」を 1 回だけ読み（読むのは facility_id のみ）、
+  あれば既存語彙 `guard='facility', reason='forbidden'` で記録する。応答は 404 のまま、文言も本当に無いときと
+  同じ（存在の有無を漏らさない）。`src/lib/security/hidden-row-denial.ts`（W-023 として宣言）
+- **なぜ DB 側でやらないか**: RLS の述語関数（`is_facility_member` 等）は STABLE で INSERT できず、「0 件になった」
+  という結果は述語からは見えない。VOLATILE にすると行ごと評価になり、記録の粒度も性能も壊れる
+- **reason を forbidden に固定できる根拠**: aal1 の利用者は proxy の MFA ガードが /api に届く前に止めるので、
+  この route で隠れる理由は「所属なし」か「非 admin」に限られる。PostgREST 直叩き（X-0xx）は対象外のまま
+- **fail-open**: 存在確認の失敗・タイムアウト・環境変数なしでは記録せず例外も投げない（誤記録より漏れを選ぶ）
+- **TDD**: ヘルパー 7 件・route 5 件を先に書き、E2E 3 件（施設 B → 施設 A の施設 ID / 院内価格 ID で 404 のまま記録 +1、
+  存在しない ID は増えない）を実 RLS × 実 service_role で通す
+- **AIDD フローを通さなかった**: 範囲がヘルパー 1＋route 2＋テスト・docs で、深掘りの費用に見合わないと判断し
+  H-005 として記録。値は既存語彙のみで新設なし
+- **候補 B（読み取りの監査）は着手しない**: 検査カタログ「監査証跡の完全性」の残りを「一覧の空配列と PostgREST
+  直叩きは未記録（pgaudit・log_statement 未設定、保持期間は D-022 で未確認）」に書き換えた
+- **検証（この変更分）**: tsc 0 / lint 0 / `npm test` 246 files 2,265 件 / `test:integration` 373 件（pass 記録。
+  追記専用表の積み上がり警告 855 行が出たので直後に `db reset`）/ `test:e2e` 80 件（新規 3 件、pass 記録）/
+  docs 整合性・約束カタログ・制御バイト・fail-open の各検査 ALL PASSED。CI は GitHub 停止中で未実施
+
 ## 後任AIへの注意
 - この実装で壊してはいけない前提: `/login` の Server Component は **cookie ではなくヘッダ** `x-aidd-denial` を読む。proxy が `/login` で cookie を消す限り、`cookies()` には削除が先回りする
 - 似ているが別物の用語: `DENIAL_ROUTE_HEADER` / `DENIAL_METHOD_HEADER`（Route Handler 用。転送リクエストに毎回付く）と `DENIAL_COOKIE_NAME` / `DENIAL_PAYLOAD_HEADER`（proxy の転送用。admin 拒否のときだけ）

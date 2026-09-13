@@ -56,7 +56,7 @@
 |---|---|---|---|
 | 検知そのもののテスト（カナリア操作） | 攻撃が起きたときアラートが発火するか | 計画 #757-8 の受け入れ条件 | 本番監視を入れるとき、拒否 N 回でアラートが出ることを実演 |
 | 安全性のモニタリング | 拒否率・権限エラー・再試行・データ取得量の異常 | 計画 #757-8 | 同上 |
-| 監査証跡の完全性 | 拒否・権限変更・admin 操作の記録、append-only | 実装済み（一部） | 変更の記録は audit_log（P-060〜P-062）。拒否の記録は `access_denials`（P-063、2026-09-07）。proxy が /login へ返す admin 経路は 2026-09-13 に記録を追加（印は偽造可能だが actor_id はセッション由来。MFA 未昇格の非 admin は未記録）。残り: RLS が黙って 0 件を返す拒否は未記録（PostgREST / Supabase のログ側） |
+| 監査証跡の完全性 | 拒否・権限変更・admin 操作の記録、append-only | 実装済み（一部） | 変更の記録は audit_log（P-060〜P-062）。拒否の記録は `access_denials`（P-063、2026-09-07）。proxy が /login へ返す admin 経路は 2026-09-13 に記録を追加（印は偽造可能だが actor_id はセッション由来。MFA 未昇格の非 admin は未記録）。RLS が黙って 0 件を返す拒否は、ID 指定の 1 件取得 2 route だけ 2026-09-13 に service_role の存在確認で記録（W-023）。残り: 一覧の空配列と PostgREST 直叩きは未記録（PostgREST / Supabase のログ側。pgaudit・log_statement は未設定、保持期間は D-022 で未確認） |
 | 設定ドリフト検知 | staging と production の RLS・環境変数・Storage policy・GitHub 権限の定期比較 | 計画 #757-35 | スキーマドリフト検知の型 |
 | データ境界の可視化・PII 流出 | ログ・エラー・分析・メール本文に個人情報が流れないか | 実装済み（一部） | サーバー側ログは `log-safe.ts` で伏せ、eslint no-console で出口を 1 つに（2026-09-06、#757-5）。リポジトリ側はメールの許可ドメイン走査。残存先の全体は `data-lifecycle-inventory.md`（D-xxx、2026-09-06、#757-28）。未確認 4 件（Vercel / Supabase のログ保持期間、バックアップ、AI 観測ログの中身）はダッシュボード確認待ち |
 | 秘密情報の誤出力 | AI・hook・CI・エラーログに秘密らしい文字列を渡してマスクされるか | 実装済み（一部） | リポジトリ側は `scripts/check-secret-leak.test.sh`（JWT・秘密鍵・各種トークン、service role の参照場所、.env の gitignore。2026-09-06、#757-10）。エラーログの伏せ字は上と同じ経路。残り: git 履歴の走査、AI / hook の出力側のマスク |

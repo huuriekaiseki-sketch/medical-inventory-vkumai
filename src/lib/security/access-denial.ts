@@ -25,7 +25,9 @@ import { withJudgmentTimeout } from '@/lib/security/judgment-timeout'
 //     読んで行う（#757-24）。印は偽造できるが、actor_id は `/login` 側がそのリクエストの
 //     セッションから取るため、他人に濡れ衣を着せることはできない。MFA 未昇格の非 admin は
 //     admin 判定より先に MFA ガードで /mfa-challenge へ送られるため、この経路は未記録
-//   - RLS が黙って 0 件を返す拒否はアプリから見えない
+//   - RLS が黙って 0 件を返す拒否はアプリから見えない。ID 指定の 1 件取得（facilities /
+//     hospital_prices）だけは hidden-row-denial.ts が service_role で存在を確かめて記録する
+//     （2026-09-13、W-023）。一覧の空配列と PostgREST 直叩きは今も見えない
 //   - route / method は proxy が転送リクエストへ付けたヘッダ、または `/login` が印から
 //     直接渡した値から取る。どちらも通らない呼び出し（テスト・スクリプト）では null のまま
 
