@@ -530,6 +530,158 @@ describe('proxy', () => {
     })
   })
 
+  // WHY(#757-24): admin パスへの未認可アクセスを /login へ跳ね返す際、access_denials への
+  //      記録に使う印（httpOnly cookie）を proxy が載せる。/login 到達時は proxy が消す
+  describe('拒否記録用の印（httpOnly cookie） [P-063]', () => {
+    it('未ログインで /admin にアクセス → 印が付く（reason=unauthenticated, route=/admin）', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: null } }),
+        },
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const request = new NextRequest(new URL('http://localhost:3000/admin'))
+      const response = await proxy(request)
+
+      expect(response?.status).toBe(307)
+      const setCookie = response?.headers.get('set-cookie') ?? ''
+      expect(setCookie).toContain('aidd-denial=')
+      expect(setCookie).toContain('HttpOnly')
+      expect(setCookie).toContain('Path=/login')
+
+      const { parseProxyDenial } = await import('@/lib/security/denial-headers')
+      const match = setCookie.match(/aidd-denial=([^;]+)/)
+      const payload = parseProxyDenial(decodeURIComponent(match![1]))
+      expect(payload).toEqual({ reason: 'unauthenticated', route: '/admin', method: 'GET' })
+    })
+
+    it('未ログインで /api/admin/users にPOST → route/methodが実際の値になる', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: null } }),
+        },
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const request = new NextRequest(new URL('http://localhost:3000/api/admin/users'), {
+        method: 'POST',
+      })
+      const response = await proxy(request)
+
+      const { parseProxyDenial } = await import('@/lib/security/denial-headers')
+      const setCookie = response?.headers.get('set-cookie') ?? ''
+      const match = setCookie.match(/aidd-denial=([^;]+)/)
+      const payload = parseProxyDenial(decodeURIComponent(match![1]))
+      expect(payload).toEqual({ reason: 'unauthenticated', route: '/api/admin/users', method: 'POST' })
+    })
+
+    it('ログイン済み非adminで /admin/settings → 印が付く（reason=not_admin）', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'user-1', email: 'user@example.com' },
+          false,
+          false
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
+
+      const request = new NextRequest(new URL('http://localhost:3000/admin/settings'))
+      const response = await proxy(request)
+
+      const { parseProxyDenial } = await import('@/lib/security/denial-headers')
+      const setCookie = response?.headers.get('set-cookie') ?? ''
+      const match = setCookie.match(/aidd-denial=([^;]+)/)
+      const payload = parseProxyDenial(decodeURIComponent(match![1]))
+      expect(payload).toEqual({ reason: 'not_admin', route: '/admin/settings', method: 'GET' })
+    })
+
+    it('未ログインで admin 以外（/facilities）にアクセス → 印は付かない（回帰）', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: null } }),
+        },
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const request = new NextRequest(new URL('http://localhost:3000/facilities'))
+      const response = await proxy(request)
+
+      expect(response?.status).toBe(307)
+      expect(response?.headers.get('set-cookie') ?? '').not.toContain('aidd-denial=')
+    })
+
+    it('DBにrole=adminがあるユーザーが /admin にアクセス → 印は付かない', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'admin-2', email: 'admin@example.com' },
+          true,
+          true
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
+
+      const request = new NextRequest(new URL('http://localhost:3000/admin'))
+      const response = await proxy(request)
+
+      expect(response?.status).not.toBe(307)
+      expect(response?.headers.get('set-cookie') ?? '').not.toContain('aidd-denial=')
+    })
+
+    it('印付きで /login に来ると通し、応答で印を消す（Max-Age=0）', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: null } }),
+        },
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const request = new NextRequest(new URL('http://localhost:3000/login'))
+      request.cookies.set('aidd-denial', 'dummy')
+
+      const response = await proxy(request)
+
+      expect(response?.status).not.toBe(307)
+      const setCookie = response?.headers.get('set-cookie') ?? ''
+      expect(setCookie).toContain('aidd-denial=')
+      expect(setCookie).toContain('Max-Age=0')
+      // WHY: 応答で cookie を消すと Server Component の cookies() にも削除が先回りするので、
+      //      中身は転送リクエストのヘッダで渡す（E2E で発覚した記録 0 件の再発防止）
+      expect(response?.headers.get('x-middleware-request-x-aidd-denial')).toBe('dummy')
+    })
+
+    it('/login でクライアントが x-aidd-denial ヘッダを偽装しても、印が無ければ削除される', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: null } }),
+        },
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const request = new NextRequest(new URL('http://localhost:3000/login'), {
+        headers: { 'x-aidd-denial': '{"reason":"not_admin","route":"/admin","method":"GET"}' },
+      })
+      const response = await proxy(request)
+
+      expect(response?.headers.get('x-middleware-request-x-aidd-denial')).toBeNull()
+    })
+
+    it('印なしで /login に来ると、削除の set-cookie は出ない', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: null } }),
+        },
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const request = new NextRequest(new URL('http://localhost:3000/login'))
+      const response = await proxy(request)
+
+      const setCookie = response?.headers.get('set-cookie') ?? ''
+      expect(setCookie).not.toContain('aidd-denial=')
+    })
+  })
+
   describe('パスマッチング（admin パス）', () => {
     it('名前空間の誤マッチを避ける（/adminfoo は admin パスではない）', async () => {
       // /admin のみ、または /admin/ 配下が正しい admin パス
