@@ -96,6 +96,28 @@
 | 邪魔した | `.env.local` を読む dev サーバー（preview）はリモート向きで、直接攻撃の 1 回目が別 DB に対して走った（PGRST202 で気づいた）。ローカル向けの起動は launch.json への一時追記で行った |
 | 費用 | Phase 1: 72 エージェント・30 分・543 万トークン。Phase 2: 13 エージェント・16.5 分・85 万トークン（＋blocked の 1 回 30 秒） |
 
+## 追記（同日）: 2 本目の候補調査で見つけた実害 — admin × facility_id 省略で一覧 5 route が 500
+
+- **見つけ方**: 残り 2 候補（RLS の黙った 0 件・読み取り監査）の可否調査で読み取り経路を棚卸しした際、
+  一覧 GET の `requireFacilityAccess` が admin を通した後に `facilityId` が undefined のまま repository へ渡る
+  形を発見。一時 spec で実測し、case-orders / loan-orders / consumable-orders / loan-returns / consumables が
+  **500**（`invalid input syntax for type uuid: "undefined"`）、/api/orders は 400、hospital-prices / news は
+  200（全施設）と、同じ状況で 3 通りだった
+- **直し方（人間判断: 1）**: `requireFacilityAccess` に `facilityIdRequired` オプションを足し、admin でも
+  `facility_id` 無しは `FACILITY_ID_REQUIRED`（既存の catch で 400）。5 route がそれを渡す。判定は 1 か所。
+  admin の付け忘れは拒否ではないので access_denials には残さない。hospital-prices / news は変更なし（P-002 の
+  「admin は施設指定なしでも通る」はそちらの契約として残す）
+- **TDD**: 6 ファイルに RED を先に書き（ヘルパー 4 件・route 5 件）、6 本落ちるのを見てから実装 → 81 件緑。
+  実機の再測定で 5 route とも 400、/api/orders 400、hospital-prices / news 200 のまま
+- **AIDD フローを通さなかった**: 1 ヘルパー＋同型 1 行 × 5 route の範囲に対し深掘り（72 エージェント・30 分）は
+  見合わないと判断し、H-005 として `logs/manual-overrides.jsonl` に理由を記録した
+- **検証（この修正分）**: tsc 0 / lint 0 / `npm test` 245 files 2,253 件 / `test:integration` 373 件（1 skip、pass 記録）/
+  `test:e2e` 77 件（pass 記録）/ docs 整合性・約束カタログ・引き継ぎ形式・制御バイト・fail-open の各検査 ALL PASSED。
+  CI は GitHub 停止中で未実施
+- **候補 2 本の可否（別途報告済み）**: RLS の黙った 0 件は「ID 指定 1 件取得 2 route に限り、0 件時だけ
+  service role で存在確認して既存語彙で記録」なら可。読み取り監査は DB 側不可（述語が STABLE）・アプリ側は量と
+  レイテンシで破綻・ログ側は pgaudit / PostgREST 未設定かつ保持期間未確認で、引き金付きへ落とす
+
 ## 後任AIへの注意
 - この実装で壊してはいけない前提: `/login` の Server Component は **cookie ではなくヘッダ** `x-aidd-denial` を読む。proxy が `/login` で cookie を消す限り、`cookies()` には削除が先回りする
 - 似ているが別物の用語: `DENIAL_ROUTE_HEADER` / `DENIAL_METHOD_HEADER`（Route Handler 用。転送リクエストに毎回付く）と `DENIAL_COOKIE_NAME` / `DENIAL_PAYLOAD_HEADER`（proxy の転送用。admin 拒否のときだけ）

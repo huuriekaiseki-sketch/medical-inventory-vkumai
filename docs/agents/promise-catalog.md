@@ -25,7 +25,7 @@ UI や取込などそれ以外の層は [テスト一覧](./test-matrix.md) の�
 | ID | 約束 | Arrange | Act | Assert（肯定） | Assert（否定） | 境界値 | 守るテスト | 実施タイミング |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | P-001 | 未認証の呼び出しは `requireAuth` が `UNAUTHORIZED` で止め、ハンドラ本体へ進まない | Supabase クライアントの `getUser` を差し替え | `requireAuth()` | 認証済みなら user を返す | user が null、または error ありなら `UNAUTHORIZED` を throw | error と user が両方ある場合は error 優先（未テスト） | `src/lib/supabase/__tests__/require-auth.test.ts` | 毎回 |
-| P-002 | 施設に所属しない利用者は `requireFacilityAccess` が `FORBIDDEN` で止める。admin は施設指定なしでも通る | `is_facility_member` RPC と admin 判定（DB ロール / `ADMIN_EMAILS`）を差し替え | `requireFacilityAccess(user, facilityId)` | メンバーなら facilityId を返す。admin は `facilityId=null` でも通り RPC を呼ばない | 非メンバー・RPC error は `FORBIDDEN`。非 admin の `facilityId=null` は `FACILITY_ID_REQUIRED` | `facilityId=null`、RPC error | `src/lib/supabase/__tests__/require-facility-access.test.ts` | 毎回 |
+| P-002 | 施設に所属しない利用者は `requireFacilityAccess` が `FORBIDDEN` で止める。admin は施設指定なしでも通る（施設で絞ることが前提の一覧 route 5 本は `facilityIdRequired` で admin にも `facility_id` を必須にし 400。2026-09-13 に admin × 省略が 500 だった実測を受けて） | `is_facility_member` RPC と admin 判定（DB ロール / `ADMIN_EMAILS`）を差し替え | `requireFacilityAccess(user, facilityId)` | メンバーなら facilityId を返す。admin は `facilityId=null` でも通り RPC を呼ばない | 非メンバー・RPC error は `FORBIDDEN`。非 admin の `facilityId=null` は `FACILITY_ID_REQUIRED` | `facilityId=null`、RPC error | `src/lib/supabase/__tests__/require-facility-access.test.ts` | 毎回 |
 
 ## 施設境界（RLS / IDOR）
 

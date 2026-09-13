@@ -125,3 +125,19 @@ describe('GET /api/case-orders', () => {
     expect(res.status).toBe(500)
   })
 })
+
+// WHY(2026-09-13 の実測): admin が facility_id を付けずに呼ぶと requireFacilityAccess は通り、
+//      repository が `.eq('facility_id', undefined)` を組み立てて 500 になっていた。
+//      判定は requireFacilityAccess の facilityIdRequired に寄せ、route はそれを渡すことだけを固定する
+describe('GET /api/case-orders: admin × facility_id 省略', () => {
+  it('requireFacilityAccess に facilityIdRequired を渡し、admin でも 400 で止める', async () => {
+    authenticated()
+    mockRequireFacilityAccess.mockRejectedValue(new Error('FACILITY_ID_REQUIRED'))
+    const res = await GET(new NextRequest('http://localhost/api/case-orders'))
+    expect(res.status).toBe(400)
+    expect(mockRequireFacilityAccess).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), null, { facilityIdRequired: true }
+    )
+    expect(mockListCaseOrders).not.toHaveBeenCalled()
+  })
+})
