@@ -226,6 +226,38 @@ unit テストを走らせる）、`src/lib/__tests__/format-date.test.ts`（UTC
 渡ると不可解な500エラーや想定外の挙動になる。素の `Number(...)` 変換を見たら、
 上記3点を満たすガード節があるか必ず確認する。
 
+
+### admin の横断分岐で施設 ID が undefined のまま repository へ渡る（2026-09-13、E-014）
+
+**チェック内容:** `requireFacilityAccess(db, user, facilityId ?? null)` の後に `facilityId!` を repository へ渡している
+route を見たら、admin（施設指定なしで通る側）で `facilityId` が undefined のまま `.eq('facility_id', …)` に
+届かないかを確認する。届くと PostgREST が `invalid input syntax for type uuid: "undefined"` を返し 500 になる。
+
+**なぜ再発するか:** 非 admin の 400（`FACILITY_ID_REQUIRED`）と 403 は route テストに必ずあるが、
+admin × 省略は「通る側」なのでテストが書かれない。5 route が同じ形で 500 だった。
+
+**直し方:** 判定を route に散らさず `requireFacilityAccess(…, { facilityIdRequired: true })` を渡す
+（admin でも省略は FACILITY_ID_REQUIRED → 既存の catch で 400。拒否ではないので記録しない）。
+admin の全施設一覧が本当に要る route（hospital-prices / news）は `grantedFacilityId`（null）を受ける形にする。
+
+**機械検知:** 各 route のテストが「オプションを渡すこと」を固定する（`toHaveBeenCalledWith(…, { facilityIdRequired: true })`）。
+`facilityId!` の非 null アサーションを新しい route に書くときは、admin × 省略のテストを先に書く。
+
+### proxy（middleware）で応答 cookie を消すと、同じリクエストの Server Component の `cookies()` にも削除が反映される（2026-09-13、E-026）
+
+**チェック内容:** proxy で `response.cookies.set(name, '', { maxAge: 0 })` のように cookie を消しつつ、
+その値を同じリクエストの Server Component / Route Handler が `cookies()` で読む設計になっていないかを見る。
+Next.js は middleware の Set-Cookie を `x-middleware-set-cookie` 経由で request store に反映するので、
+**読む側には削除後の（空の）値が見える**。単体テストは `cookies()` をモックするので緑のまま。
+
+**なぜ再発するか:** 「応答で消す」と「要求から読む」は別物に見えるが、Next.js では同じ要求の中で繋がっている。
+モックはこの副作用を再現しない。4 観点レビューも設計どおりと読んで通した。
+
+**直し方:** proxy が値を転送リクエストのヘッダ（`x-aidd-denial` の型。同名ヘッダは必ず上書き・無ければ削除）に
+載せ替え、読む側は `headers()` を読む。cookie の削除はそのまま応答で行う。
+
+**機械検知:** 単体では捕まらない。実 Next.js を立てる E2E（`e2e/admin-audit.spec.ts` の「記録が 1 件増える」）
+だけが捕まえる。proxy と Server Component をまたぐ変更は、単体が緑でも E2E を本走してから完了報告する。
 ## エージェント/hook運用層
 
 ### CI・hook が npm レジストリに毎回依存する（`npm install` / `npx -y tsx`）
