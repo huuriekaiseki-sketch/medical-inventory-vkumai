@@ -211,6 +211,7 @@
     "lib/catalog-registry.json": "aidd-vkumai",
     "lib/render-harness-map.mjs": "aidd-core",
     "render-harness-map.sh": "aidd-core",
+    "lib/check-harness-score.mjs": "aidd-core",
     "lib/integration-leak-baseline.json": "aidd-vkumai",
     "lib/scan-text-columns.mjs": "aidd-vkumai",
     "lib/scan-db-constraints.mjs": "aidd-vkumai",

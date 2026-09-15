@@ -361,6 +361,7 @@
         "scripts/check-e2e-freshness.test.sh",
         "scripts/check-empty-session-report.test.sh",
         "scripts/check-escape-ledger.test.sh",
+        "scripts/lib/__tests__/harness-score.test.ts",
         "scripts/check-eval-runs-freshness.test.sh",
         "scripts/lib/judge-sweep-recall.test.sh",
         "scripts/check-precision-metrics.test.sh",

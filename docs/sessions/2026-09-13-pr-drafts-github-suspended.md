@@ -57,7 +57,7 @@ git push origin feat/record-proxy-admin-denial
 ## PR 2: `feat/record-proxy-admin-denial` → `main`（証明フェーズ vkumai 3 本）
 
 ## 30秒サマリー
-- 変更概要: (1) proxy が /admin を弾いた拒否を access_denials に残す (2) admin × facility_id 省略で一覧 5 route が 500 → 400 (3) RLS で見えない ID 指定 1 件取得を存在確認で拒否として残す。ほかに凍結 hook（H-014）と aal2_required ラベル
+- 変更概要: (1) proxy が /admin を弾いた拒否を access_denials に残す (2) admin × facility_id 省略で一覧 5 route が 500 → 400 (3) RLS で見えない ID 指定 1 件取得を存在確認で拒否として残す。ほかに凍結 hook（H-014）、aal2_required ラベル、取りこぼし台帳 3 行、ハーネスの成績の書式（`docs/agents/harness-score.md` / `.jsonl`、エンジンは aidd-core へ配る）
 - リスク: 高（proxy.ts・auth 境界・拒否の証跡・service_role の新経路 W-023）
 - 変更領域: ロジック / テスト / docs。DB・RLS・migration は無変更
 - 証拠状態: 実測 14 件 / 未検証 1 件（CI）
