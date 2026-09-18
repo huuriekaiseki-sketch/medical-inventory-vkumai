@@ -65,6 +65,54 @@ status と detail を返すこと。
 - status: "pass"=批評を完了した(追加調査の要否は問わない) / "blocked"=Sweep結果が空で批評に着手できなかった
 - detail: 批評の本文。追加調査が必要な場合は「追加調査対象:」に続けて記述すること`
 
+// ─── 記録漏れ検知のための期待件数（issue #797） ─────────────────────
+// WHY: このワークフローは戻り値に stats を持っておらず、**gap check の期待件数を記録できなかった**。
+//      CLAUDE.md の「gap check state 記録ルール」は各フェーズ完了後に
+//      `scripts/record-gap-check-state.sh expected --agent-progress N` を呼べと言うが、
+//      N を返す者が居なかったので呼びようがなく、**記録漏れ検知そのものが機能していなかった**。
+//      しかも「呼び忘れ」と「呼べない」を区別する手段が無いので、警告が出ないことを
+//      「漏れが無い」と読んでしまう（C-025 の型）。
+//
+// WHY(手で数えずラッパーで数える): aidd-phase2.js は呼び出しの各所で countProgressLoggable() を
+//      手で呼んでいるが、この workflow は**ラウンド数と fan-out が動的**（Sweep のラウンド、
+//      指摘の件数ぶんの verify、案の数 × 観点の score）で、手で数えると必ずどこかで漏れる。
+//      agent() を包んで**呼んだら必ず数える**形にする。包み忘れは
+//      scripts/check-workflow-agent-type.test.sh が落とす（issue #791 で全呼び出しに
+//      agentType を付けたので、型から機械的に数えられるようになった）。
+//
+// 一覧は .claude/workflows/lib/agent-progress-expectation.js が正本。Workflow DSL は require が
+// 使えないのでインライン複製している。ずれたら中心リポジトリ側の検査
+// （進捗記録の指示と一覧を突き合わせるもの。導入先には配っていない）が落とす。
+const LOGGABLE_AGENT_TYPES = new Set(['reviewer', 'implementer', 'judge-panel'])
+const PROGRESS_LOGGABLE_AGENT_TYPES = new Set([
+  'sweep-db', 'sweep-ui', 'sweep-types', 'sweep-data', 'implementer', 'reviewer',
+  'integrator', 'judge-panel', 'proposer', 'adversarial-verify', 'completeness-critic', 'contract-writer',
+  'spec-drafter',
+])
+let loggableAgentCount = 0
+let progressLoggableAgentCount = 0
+
+// WHY(別名で持つ): このワークフローでは素の `agent(` を書いてはいけない（数から漏れるため）。
+//      検査（scripts/lib/scan-workflow-agent-type.mjs --require-wrapper）が素の呼び出しを落とすので、
+//      ラッパー自身の中でだけ使う参照は別名にしておく。
+const rawAgent = agent
+
+/** agent() の代わりに呼ぶ。起動した数をそのまま期待件数として数える */
+function trackedAgent(prompt, opts) {
+  const t = opts?.agentType
+  if (LOGGABLE_AGENT_TYPES.has(t)) loggableAgentCount++
+  if (PROGRESS_LOGGABLE_AGENT_TYPES.has(t)) progressLoggableAgentCount++
+  return rawAgent(prompt, opts)
+}
+
+/** 戻り値に載せる stats。早期 return でもここを通す（途中まで起動した分は期待件数に入る） */
+const buildStats = (extra = {}) => ({
+  phase: 'phase1-deep',
+  expectedLoopObservabilityRecords: loggableAgentCount,
+  expectedAgentProgressRecords: progressLoggableAgentCount,
+  ...extra,
+})
+
 // budgetガード（issue #442）。正本・単体テストは .claude/workflows/lib/budget-guard.js。
 // Workflow DSLはrequire不可のためインライン複製している（judge-panel.js等と同一パターン）。
 // budget.totalが未設定(null)なら常にfalseを返し、既存動作を完全に維持する（後方互換）。
@@ -118,7 +166,7 @@ const TREE_STATE_SCHEMA = {
   required: ['head', 'dirty'],
 }
 const captureTreeState = (label) =>
-  agent(
+  trackedAgent(
     'リポジトリのルートで次の 2 つをそのまま実行し、結果だけを返してください。解釈や要約はしないこと。\n' +
       '1. `git rev-parse HEAD` の出力（コミット SHA）を head に入れる\n' +
       '2. `git status --porcelain` の出力全文を dirty に入れる（変更が無ければ空文字）',
@@ -152,10 +200,10 @@ while (shouldContinueSweepLoop(dryRounds, round, maxRounds, MIN_BUDGET_FOR_SWEEP
     : `タスク: ${taskDescription}`) + SCOPE_LINE_FOCUSED + SWEEP_GUIDE
 
   const [uiResult, dataResult, dbResult, typesResult] = await parallel([
-    () => agent(sweepPrompt, { label: `sweep-ui:R${round}`,    agentType: 'sweep-ui',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
-    () => agent(sweepPrompt, { label: `sweep-data:R${round}`,  agentType: 'sweep-data',  phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
-    () => agent(sweepPrompt, { label: `sweep-db:R${round}`,    agentType: 'sweep-db',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
-    () => agent(sweepPrompt, { label: `sweep-types:R${round}`, agentType: 'sweep-types', phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
+    () => trackedAgent(sweepPrompt, { label: `sweep-ui:R${round}`,    agentType: 'sweep-ui',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
+    () => trackedAgent(sweepPrompt, { label: `sweep-data:R${round}`,  agentType: 'sweep-data',  phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
+    () => trackedAgent(sweepPrompt, { label: `sweep-db:R${round}`,    agentType: 'sweep-db',    phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
+    () => trackedAgent(sweepPrompt, { label: `sweep-types:R${round}`, agentType: 'sweep-types', phase: 'Sweep', schema: AGENT_RESULT_SCHEMA_PB, effort: 'low' }),
   ])
   const axisResults = { ui: uiResult, data: dataResult, db: dbResult, types: typesResult }
 
@@ -194,7 +242,7 @@ while (shouldContinueSweepLoop(dryRounds, round, maxRounds, MIN_BUDGET_FOR_SWEEP
   ].join('\n\n')
 
   phase('Completeness Critic')
-  const criticResult = await agent(
+  const criticResult = await trackedAgent(
     `タスク: ${taskDescription}\n\n## 今ラウンドのSweep結果\n${roundSummary}\n\n## 累積発見\nUI: ${allFindings.ui.join('\n')}\nData: ${allFindings.data.join('\n')}\nDB: ${allFindings.db.join('\n')}\nTypes: ${allFindings.types.join('\n')}${CRITIC_GUIDE}`,
     { label: `critic:R${round}`, agentType: 'completeness-critic', phase: 'Completeness Critic', schema: AGENT_RESULT_SCHEMA_PB }
   )
@@ -242,7 +290,7 @@ if (lastRoundBlockedAxes.length > 0) {
 // ─── Phase 3: 仕様書ドラフト生成 ──────────────────────────────────────
 phase('Draft Spec')
 
-const draftSpec = await agent(
+const draftSpec = await trackedAgent(
   `以下の調査結果をもとに、機能仕様書ドラフトを生成してください。\n\nタスク: ${taskDescription}\n\n## 調査結果\n${sweepSummary}\n\n## 出力形式\n### Part 1 — 仕様（人間レビュー用）\n- 何ができるようになるか（利用者目線）\n- 操作の流れ・受け入れ条件（チェックリスト）\n\n### Part 2 — 実装計画（AI用）\n- 実装セット一覧（依存順）\n- 各セットのテスト観点・型・データアクセス層の方針\n- 並列グループ宣言（触るファイルを明記）${''}
 
 ## status/detail
@@ -268,6 +316,7 @@ if (draftSpec?.status !== 'pass') {
     draftSpec,
     blocked: true,
     blockedAt: 'Draft Spec',
+    stats: buildStats(),
   }
 }
 
@@ -285,6 +334,7 @@ if (isDefaultCapExceeded(budget, DEFAULT_TOKEN_CAP)) {
     blocked: true,
     blockedAt: 'Token Cap (before Find)',
     tokenCapExceeded: true,
+    stats: buildStats(),
   }
 }
 
@@ -322,7 +372,7 @@ const FINDERS = [
 ]
 
 const findResults = await parallel(
-  FINDERS.map(f => () => agent(
+  FINDERS.map(f => () => trackedAgent(
     `${f.prompt}、以下の仕様書ドラフトの問題点を列挙せよ。\n\n${draftSpec?.detail}`,
     // WHY(agentType、issue #791): 付けないと「既定のワークフロー用サブエージェント」＝**全ツール持ち**
     //      になり、`.claude/agents/*.md` の tools も PreToolUse の読み取り専用ガードも効かない。
@@ -360,6 +410,7 @@ if (isDefaultCapExceeded(budget, DEFAULT_TOKEN_CAP)) {
     blocked: true,
     blockedAt: 'Token Cap (before Adversarial Verify)',
     tokenCapExceeded: true,
+    stats: buildStats(),
   }
 }
 
@@ -382,7 +433,7 @@ if (autoSurvivedMinor.length > 0) {
 }
 
 const verdicts = await parallel(
-  toVerify.map((f, i) => () => agent(
+  toVerify.map((f, i) => () => trackedAgent(
     `次の仕様指摘を反証しようとせよ。仕様書のどこかで既に対処されているか、問題が成立しない理由があれば refuted=true にせよ。不確かなら refuted=false にせよ（疑わしいものは生存させる）。\n\nタイトル: ${f.title}\n説明: ${f.description}\n\n仕様書ドラフト:\n${draftSpec?.detail}`,
     { label: `verify:${i}`, agentType: 'adversarial-verify', phase: 'Adversarial Verify', schema: VERDICT_SCHEMA, model: 'opus', effort: 'medium' }
   ))
@@ -442,7 +493,7 @@ const CRITIC_SCHEMA = {
   required: ['gaps'],
 }
 
-const criticResult2 = await agent(
+const criticResult2 = await trackedAgent(
   `以下の仕様書ドラフトと生存した指摘リストを見て、まだ検証されていない領域・抜け漏れ・未回答の設計判断を指摘せよ。\n\n## 仕様書ドラフト\n${draftSpec?.detail}\n\n## 生存した指摘\n${survived.map(f => `- [${f.severity}] ${f.title}: ${f.description}`).join('\n')}`,
   { label: 'completeness-critic-2', agentType: 'completeness-critic', phase: 'Completeness Critic', schema: CRITIC_SCHEMA, model: 'sonnet', effort: 'medium' }
 )
@@ -484,7 +535,7 @@ const PROPOSERS = [
 ]
 
 const proposals = await parallel(
-  PROPOSERS.map(p => () => agent(
+  PROPOSERS.map(p => () => trackedAgent(
     `${p.prompt}\n\n## 仕様書ドラフト\n${draftSpec?.detail}\n\n## 生存した問題点\n${survived.map(f => `- [${f.severity}] ${f.title}`).join('\n')}\n\n## ギャップ\n${gaps.map(g => `- ${g.area}: ${g.description}`).join('\n')}`,
     { label: `propose:${p.stance}`, agentType: 'proposer', phase: 'Judge Panel', schema: PROPOSAL_SCHEMA, model: 'sonnet', effort: 'medium' }
   ))
@@ -540,7 +591,7 @@ if (hasDivergence) {
   const scoredProposals = await parallel(
     validProposals.map((proposal, pi) => () =>
       parallel(
-        ['correctness', 'security', 'ux'].map(lens => () => agent(
+        ['correctness', 'security', 'ux'].map(lens => () => trackedAgent(
           `次の設計案を「${lens}」の視点で採点せよ（各項目0-100、totalは加重平均）。\n\n## 案名: ${proposal.name}\n${proposal.description}\n\n主要判断:\n${proposal.keyDecisions.join('\n')}\n\nトレードオフ: ${proposal.tradeoffs}`,
           // WHY(agentType、issue #791): **この呼び出しが 2026-09-18 の事故の当事者**。
           //      agentType が無いため採点役が全ツールを持ち、「その2経路を直して」という
@@ -575,7 +626,7 @@ log(`Judge Panel完了: 最高スコア案 "${winner?.proposal?.name}" (${winner
 // ─── Phase 8: Synthesize ──────────────────────────────────────────────
 phase('Synthesize')
 
-const synthesis = await agent(
+const synthesis = await trackedAgent(
   `以下の全検証結果を統合して、仕様書ドラフトへの具体的な修正提案を出力せよ。\n\n## 元の仕様書ドラフト\n${draftSpec?.detail}\n\n## 生存した問題点 (${survived.length}件)\n${survived.map(f => `- [${f.severity}][${f.category}] ${f.title}: ${f.description}`).join('\n')}\n\n## ギャップ (${gaps.length}件)\n${gaps.map(g => `- [${g.area}] ${g.description} → 提案: ${g.suggestion}`).join('\n')}\n\n## Judge Panel結果\n### 採用推奨案: ${winner?.proposal?.name} (スコア: ${Math.round(winner?.avgScore ?? 0)})\n${winner?.proposal?.description}\n主要判断: ${winner?.proposal?.keyDecisions?.join(' / ')}\n\n### 他案のグラフト候補\n${runnerUps.map(r => `- ${r.proposal?.name}: ${r.proposal?.keyDecisions?.join(' / ')}`).join('\n')}\n\n## 出力形式\n1. **必須修正** (critical/important の問題点)\n2. **推奨修正** (minor・ギャップ)\n3. **設計判断** (採用推奨アプローチとその理由)\n4. **未解決事項** (人間が判断すべきポイント)\n\n## status/detail\n上記の統合提案本文は detail に格納し、status も返すこと。\n- pass: 統合提案を生成できた\n- fail: 生成されたが必須修正等のセクションが欠落するなど明らかに不完全\n- blocked: survived/gaps/winnerのいずれかが揃わず統合に着手できなかった`,
   { label: 'synthesize', agentType: 'judge-panel', phase: 'Synthesize', model: 'sonnet', effort: 'high', schema: AGENT_RESULT_SCHEMA_PFB }
 )
@@ -619,6 +670,7 @@ if (treeGuard.status === 'violated') {
     nextAction:
       '**このワークフローの成果物をそのまま使わないこと。** 停止①（仕様レビュー）より前に木が変わっています。' +
       '`git log` と `git status` で何が入ったかを確かめ、意図しない変更なら巻き戻してから、人に報告してください（issue #791）。',
+    stats: buildStats(),
   }
 }
 
@@ -635,4 +687,5 @@ return {
   synthesis,
   findAvPrecision,
   treeGuard,
+  stats: buildStats(),
 }

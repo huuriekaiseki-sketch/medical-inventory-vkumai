@@ -76,18 +76,31 @@ export function stripCommentsAndStrings(src) {
   return out
 }
 
-/** agent( の呼び出しを、対応する閉じ括弧まで括弧の数で切り出す */
+/**
+ * agent( の呼び出しを、対応する閉じ括弧まで括弧の数で切り出す。
+ *
+ * WHY(包んだ呼び出しも拾う、issue #797): `agent(` を単語境界つきで探すので、
+ *      期待件数を数えるために `trackedAgent(...)` と包むと、**この走査から丸ごと消える**。
+ *      そうなると issue #791 で入れた agentType の検査が deep-task を一切見なくなり、
+ *      「違反 0 件」が「見ていない」に化ける（C-044）。包んだ形も呼び出しとして数える。
+ */
+const CALL_NAMES = ['agent(', 'trackedAgent(']
+
 export function extractAgentCalls(rawSrc) {
   // WHY: opts の中身（label / agentType）は文字列なので、**潰す前の原文**から読む必要がある。
   //      位置合わせのため、潰した側で「どこが呼び出しか」を決め、切り出しは原文から行う。
   const src = stripCommentsAndStrings(rawSrc)
   const calls = []
   for (let i = 0; i < src.length; i++) {
-    if (!src.startsWith('agent(', i)) continue
+    const name = CALL_NAMES.find((n) => src.startsWith(n, i))
+    if (!name) continue
     // 単語境界。parallel( や myAgent( を拾わない
     if (i > 0 && /[A-Za-z0-9_$.]/.test(src[i - 1])) continue
+    // WHY(定義は呼び出しではない): `function trackedAgent(prompt, opts)` の定義行を
+    //      呼び出しとして数えると、opts がリテラルでないので「agentType が無い」と出る（自家中毒）
+    if (/function\s+$/.test(src.slice(Math.max(0, i - 12), i))) continue
     let depth = 0
-    let j = i + 'agent'.length
+    let j = i + name.length - 1 // 開き括弧そのものから数え始める
     for (; j < src.length; j++) {
       if (src[j] === '(') depth++
       else if (src[j] === ')') {
@@ -99,6 +112,7 @@ export function extractAgentCalls(rawSrc) {
     const text = rawSrc.slice(i, j + 1) // opts の文字列を読むので原文から切る
     calls.push({
       line: src.slice(0, i).split('\n').length,
+      callee: name.slice(0, -1), // 'agent' か 'trackedAgent'
       label: (text.match(/label:\s*[`'"]([^`'"]*)/) ?? [])[1] ?? '(label なし)',
       agentType: (text.match(/agentType:\s*['"]([^'"]+)['"]/) ?? [])[1] ?? null,
     })
@@ -139,10 +153,22 @@ try {
     }
   }
 
+  // WHY(--require-wrapper、issue #797): 期待件数は `trackedAgent()` が数える。
+  //      素の `agent()` で呼ぶと**その 1 体だけ数から漏れ**、gap check が黙って過小評価になる
+  //      （漏れているのに「期待どおり」と出るので、記録漏れ検知そのものが嘘をつく）。
+  const requireWrapper = process.argv.includes('--require-wrapper')
+
   let missing = 0
   let unknown = 0
   let notReadonly = 0
+  let unwrapped = 0
   for (const c of calls) {
+    if (requireWrapper && c.callee === 'agent') {
+      unwrapped++
+      writeLine(
+        `NG ${path.basename(file)}:${c.line} [${c.label}] 素の agent() で呼んでいる（trackedAgent() で包まないと期待件数から漏れる）`,
+      )
+    }
     if (!c.agentType) {
       missing++
       writeLine(`NG ${path.basename(file)}:${c.line} [${c.label}] agentType が無い（全ツール持ちで起動する）`)
@@ -166,8 +192,10 @@ try {
     process.exit(2)
   }
 
-  writeLine(`calls=${calls.length} missing=${missing} unknown=${unknown} notReadonly=${notReadonly}`)
-  process.exit(missing + unknown + notReadonly > 0 ? 1 : 0)
+  writeLine(
+    `calls=${calls.length} missing=${missing} unknown=${unknown} notReadonly=${notReadonly} unwrapped=${unwrapped}`,
+  )
+  process.exit(missing + unknown + notReadonly + unwrapped > 0 ? 1 : 0)
 } catch (e) {
   console.error(`scan-workflow-agent-type: 走査できない（${e.message}）`)
   process.exit(2)

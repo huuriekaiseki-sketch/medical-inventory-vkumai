@@ -56,14 +56,15 @@ echo "=== scenario 1: 停止①より前のワークフローの agent() が全�
 if [ ! -f "$TARGET" ]; then
   assert_ok "対象なし: この導入先に aidd-1-1-deep-task.js が無い"
 else
-  if OUT="$(node "$SCANNER" --file "$TARGET" --agents "$AGENTS" --config "$CONFIG" 2>&1)"; then
+  # --require-wrapper: 素の agent() は期待件数から漏れるので落とす（issue #797）
+  if OUT="$(node "$SCANNER" --file "$TARGET" --agents "$AGENTS" --config "$CONFIG" --require-wrapper 2>&1)"; then
     RC=0
   else
     RC=$?
   fi
   CALLS="$(sed -n 's/.*calls=\([0-9]*\).*/\1/p' <<<"$OUT")"
   if [ "$RC" -eq 0 ]; then
-    assert_ok "agent() ${CALLS} 件すべてが agentType を持ち、定義があり、readonlyAgentTypes に載っている"
+    assert_ok "agent() ${CALLS} 件すべてが trackedAgent() で包まれ、agentType を持ち、定義があり、readonlyAgentTypes に載っている"
   elif [ "$RC" -eq 1 ]; then
     assert_fail "守られていない呼び出しがある" "$(grep '^NG ' <<<"$OUT")
       直し方: agent() の opts に agentType を足す。対応する定義が無ければ .claude/agents/ に作り、
@@ -109,6 +110,34 @@ if grep -q 'readonlyAgentTypes に無い' <<<"$OUT"; then
   assert_ok "readonlyAgentTypes に無い agentType を検知（片方だけでは効かない）"
 else
   assert_fail "ガードの対象外なのに通す" "$OUT"
+fi
+
+# WHY(issue #797): 期待件数は trackedAgent() が数える。素の agent() で 1 体でも呼ぶと、
+#      **その分だけ黙って数から漏れ**、gap check が「期待どおり」と嘘をつく
+printf "const a = await agent('x', { label: 'bare-call', agentType: 'ok-role' })\n" > "$WORK/unwrapped.js"
+OUT="$(node "$SCANNER" --file "$WORK/unwrapped.js" --agents "$WORK/agents" --config "$WORK/config.json" --require-wrapper 2>&1)"
+if grep -q '素の agent() で呼んでいる' <<<"$OUT"; then
+  assert_ok "包み忘れ（素の agent()）を検知（issue #797）"
+else
+  assert_fail "包み忘れを見逃す（期待件数が黙って過小になる）" "$OUT"
+fi
+
+printf "const a = await trackedAgent('x', { label: 'wrapped', agentType: 'ok-role' })\n" > "$WORK/wrapped.js"
+if node "$SCANNER" --file "$WORK/wrapped.js" --agents "$WORK/agents" --config "$WORK/config.json" --require-wrapper > /dev/null 2>&1; then
+  assert_ok "包んだ呼び出しは通る（対照）"
+else
+  assert_fail "包んだ呼び出しで落ちた（誤検知）" \
+    "$(node "$SCANNER" --file "$WORK/wrapped.js" --agents "$WORK/agents" --config "$WORK/config.json" --require-wrapper 2>&1)"
+fi
+
+# WHY(C-044 の対): 包んだ呼び出しが走査から**消えない**こと。消えると agentType の検査ごと
+#      deep-task を見なくなり、「違反 0 件」が「見ていない」に化ける
+printf "const a = await trackedAgent('x', { label: 'ghost-wrapped', agentType: 'no-such-role' })\n" > "$WORK/wrapped-ghost.js"
+OUT="$(node "$SCANNER" --file "$WORK/wrapped-ghost.js" --agents "$WORK/agents" --config "$WORK/config.json" 2>&1)"
+if grep -q '対応する定義が無い' <<<"$OUT"; then
+  assert_ok "包んだ呼び出しも agentType の検査対象のまま"
+else
+  assert_fail "包むと走査から消える（検査が空振りになる）" "$OUT"
 fi
 
 echo "=== scenario 3: コメント・文字列の中の agent() を数えない（C-011 の 4 度目） ==="
