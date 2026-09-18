@@ -219,6 +219,93 @@ describe('業務不変条件（DB 制約・トリガー） [I-010 I-011 I-012 I-
     })
   })
 
+  // WHY(2026-09-18): I-021 も I-062 と同じ穴だった。カタログの 1 行が
+  //      「発注 3 種・返却・返却明細・消耗品」の**6 表ぶんの CHECK をまとめて宣言**しているのに、
+  //      実際に測っていたのは消耗品発注と消耗品の 2 表だけで、残り 4 表は
+  //      「同じ形の CHECK だから大丈夫」という**推測のまま**だった（カタログの証拠欄にもそう書いてある）。
+  //      表ごとに許す語彙が違う（発注は draft/submitted/cancelled、返却は draft/returned/cancelled、
+  //      返却明細は active/cancelled）ので、1 表で測っても他の表の語彙が正しい保証にはならない。
+  //
+  // WHY(**UPDATE でなく INSERT で測る**、2026-09-18 の実測): 最初は既存行を未知の status へ
+  //      UPDATE する形で書いたが、**CHECK を DROP しても 4 件とも緑のまま**だった。
+  //      `<表>_status_forward_only`（BEFORE UPDATE OF status）が先に 23514 を返すためで、
+  //      あの形は I-021（語彙の CHECK）ではなく **I-020（前進のみのトリガー）を測っていた**。
+  //      トリガーは UPDATE にしか付かないので、未知の語彙を持つ行を直接 INSERT すれば CHECK に届く。
+  //      この経路は「service_role の直接 INSERT でも止まる」を見る I-012 と同じ型。
+  //      **対照（決めてある語彙なら INSERT が通る）を必ず置く**。片側だけだと
+  //      「何も通さない CHECK」や「別の理由で失敗しているだけ」でも緑になる。
+  describe('I-021 状態の語彙は決めた値だけ（残り 4 表。CHECK に届く INSERT 経路で測る）', () => {
+    const caseOrderRow = (status: string) => ({
+      facility_id: fx.facilityA.id,
+      case_datetime: new Date().toISOString(),
+      procedure_name: '状態語彙テスト',
+      patient_id: 'PT-INV-STATUS',
+      patient_initials: 'S.T.',
+      gender: 'other',
+      doctor_name: 'テスト医師',
+      status,
+    })
+
+    it('症例発注: 未知の語彙は 23514、決めてある語彙は通る', async () => {
+      const { error } = await serviceClient.from('case_orders').insert(caseOrderRow('shipped'))
+      expect(error?.code).toBe(CHECK_VIOLATION)
+
+      const { error: allowed } = await serviceClient.from('case_orders').insert(caseOrderRow('cancelled'))
+      expect(allowed, '決めてある語彙が拒否された').toBeNull()
+    })
+
+    it('短貸発注: 未知の語彙は 23514、決めてある語彙は通る', async () => {
+      const row = (status: string) => ({
+        facility_id: fx.facilityA.id,
+        procedure_name: '状態語彙テスト',
+        maker: 'テストメーカー',
+        status,
+      })
+      const { error } = await serviceClient.from('loan_orders').insert(row('shipped'))
+      expect(error?.code).toBe(CHECK_VIOLATION)
+
+      const { error: allowed } = await serviceClient.from('loan_orders').insert(row('cancelled'))
+      expect(allowed, '決めてある語彙が拒否された').toBeNull()
+    })
+
+    // WHY(語彙が発注と違う): 返却は submitted を持たず returned を使う。
+    //      「発注 3 種と同じ語彙だろう」という推測が誤りであることを実測で示す
+    it('短貸返却: 未知の語彙は 23514。発注の submitted も返却では通らない', async () => {
+      const row = (status: string) => ({
+        facility_id: fx.facilityA.id,
+        return_datetime: new Date().toISOString(),
+        status,
+      })
+      const { error } = await serviceClient.from('loan_returns').insert(row('shipped'))
+      expect(error?.code).toBe(CHECK_VIOLATION)
+
+      const { error: orderWord } = await serviceClient.from('loan_returns').insert(row('submitted'))
+      expect(orderWord?.code, '発注の語彙が返却で通ってしまった').toBe(CHECK_VIOLATION)
+
+      const { error: allowed } = await serviceClient.from('loan_returns').insert(row('returned'))
+      expect(allowed, '決めてある語彙が拒否された').toBeNull()
+    })
+
+    it('返却明細: 語彙は active / cancelled の 2 語だけ（発注の draft も通らない）', async () => {
+      const { data: ret, error: retError } = await fx.userA.client.rpc('create_loan_return_atomic', {
+        p_header: { facility_id: fx.facilityA.id, return_datetime: new Date().toISOString(), loan_order_id: null },
+        p_items: [{ jan, lot: null, ubd: null, quantity: 1 }],
+      })
+      expect(retError).toBeNull()
+      const returnId = (ret as { id: string }).id
+      const row = (status: string) => ({ loan_return_id: returnId, jan, quantity: 1, status })
+
+      const { error } = await serviceClient.from('loan_return_items').insert(row('returned'))
+      expect(error?.code).toBe(CHECK_VIOLATION)
+
+      const { error: draftWord } = await serviceClient.from('loan_return_items').insert(row('draft'))
+      expect(draftWord?.code, '発注の語彙が返却明細で通ってしまった').toBe(CHECK_VIOLATION)
+
+      const { error: allowed } = await serviceClient.from('loan_return_items').insert(row('cancelled'))
+      expect(allowed, '決めてある語彙が拒否された').toBeNull()
+    })
+  })
+
   // WHY(2026-09-08 の棚卸しで見つけた): I-062 は
   //      `case_order_items` / `loan_order_items` / `loan_return_items` の 3 つの CHECK を
   //      **1 行にまとめて宣言している**が、実際に測っていたのは `case_order_items` だけだった。
