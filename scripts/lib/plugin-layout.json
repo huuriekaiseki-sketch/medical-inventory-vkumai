@@ -273,7 +273,8 @@
   },
   "supportScriptsNotDistributed": {
     "_comment": "**配らないと判断した**支援スクリプト（2026-09-12 新設）。値は配らない理由。検査（*.test.sh）には checksNotDistributed があったのに、支援スクリプトには「配らないと決めた」と書く場所そのものが無かった——そのため表に無いものが『判断した』のか『足し忘れた』のか区別できなかった（KNOWN-LIMITS.md と check-plugin-asset-coverage.test.sh の限界の、2 か所で申告されていた穴）。",
-    "_howto": "理由は「なぜ導入先に要らないか」を具体的に書く。中心リポジトリの運用だけに要るもの（生成器・worktree 作成・git hook の入れ方）、個人環境のもの、外部サービス前提のものが典型。空文字は `check-support-script-coverage.test.sh` が落とす。"
+    "_howto": "理由は「なぜ導入先に要らないか」を具体的に書く。中心リポジトリの運用だけに要るもの（生成器・worktree 作成・git hook の入れ方）、個人環境のもの、外部サービス前提のものが典型。空文字は `check-support-script-coverage.test.sh` が落とす。",
+    "measure-ddl-lock.sh": "ローカルのデータベースが PostgreSQL であること・それが `supabase_db_` で始まる名前のコンテナで動いていることを前提に、その中の psql を docker exec で叩く。測る DDL の顔ぶれもこのスタックの migration の書き方に合わせてある"
   },
   "supportScriptsUnclassified": {
     "_comment": "**まだ配る・配らないを決めていない**支援スクリプト（2026-09-12 新設）。値は空でよい——ここは判断を保留する場所で、理由を書けるなら supportScriptsNotDistributed か supportScripts へ移すべきだから。`unclassifiedMax` で件数を固定し、**増やせないが減らせる**（checksSplittable と同じ「返す当てのある借金」の形）。",
