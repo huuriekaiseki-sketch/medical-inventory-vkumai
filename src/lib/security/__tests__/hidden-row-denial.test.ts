@@ -94,6 +94,24 @@ describe('RLS で見えない 1 件取得の記録（recordHiddenRowDenial） [P
     expect(recordAccessDenial).not.toHaveBeenCalled()
   })
 
+  // WHY(issue #793): ここは 2026-09-19 まで**黙って落ちていた**。上の「何もしない」だけを
+  //      固定していたので、ログが無いことに誰も気づけなかった。
+  //      本番の設定漏れでも同じ経路を通るので、「記録が全部消えている」ことに気づく口がここ。
+  //      「何もしない」と「黙らない」を対で固定する。
+  it('env 未設定時は初回だけ警告ログが出る（黙って落とさない。issue #793）', async () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+    const m = await loadModule()
+
+    await m.recordHiddenRowDenial({ table: 'facilities', id: 'fac-A', actorId: 'u-B' })
+    expect(logServerError).toHaveBeenCalledTimes(1)
+    expect(logServerError).toHaveBeenCalledWith('hidden_row_denial_client_unavailable', expect.any(Error))
+
+    // 2 回目は出ない（拒否のたびにログが溢れない）
+    logServerError.mockClear()
+    await m.recordHiddenRowDenial({ table: 'facilities', id: 'fac-B', actorId: 'u-B' })
+    expect(logServerError).not.toHaveBeenCalled()
+  })
+
   it('記録側（recordAccessDenial）が throw しても飲み込む', async () => {
     maybeSingle.mockResolvedValue({ data: { id: 'fac-A' }, error: null })
     recordAccessDenial.mockRejectedValue(new Error('rpc down'))

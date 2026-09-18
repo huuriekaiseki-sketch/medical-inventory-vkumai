@@ -1,9 +1,8 @@
 import { headers } from 'next/headers'
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database.generated'
 import { DENIAL_METHOD_HEADER, DENIAL_ROUTE_HEADER } from '@/lib/security/denial-headers'
 import { logServerError } from '@/lib/log-safe'
 import { withJudgmentTimeout } from '@/lib/security/judgment-timeout'
+import { createServiceRoleClientAccessor } from '@/lib/security/service-role-client'
 
 // WHY: issue #757 の 24・39。特権書き込みルールブック W-011 の限界のうち
 //      「auth.users の作成・削除が監査ログに残らない」を塞ぐ。
@@ -62,22 +61,20 @@ export function toOperationErrorCode(error: { code?: string; status?: number } |
   return code.slice(0, ERROR_CODE_MAX)
 }
 
-// access-denial.ts と同じ理由で使い回す（毎回 createClient すると内部の fetch 設定を組み立て直す）
-let cached: ReturnType<typeof createClient<Database>> | null | undefined
+// WHY(共有ヘルパー、issue #793): ここも 2026-09-19 まで**env 未設定時に黙って null を返して**
+//      いた。特権操作（招待・削除）の記録が、設定漏れのときは痕跡を残さず消えていた。
+//      同じコピペが 4 ファイルにあったので service-role-client.ts へ一本化した。
+//
+const client = createServiceRoleClientAccessor('privileged_operation_client_unavailable')
 
-function serviceRoleClient() {
-  if (cached !== undefined) return cached
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  cached = url && key
-    ? createClient<Database>(url, key, { auth: { autoRefreshToken: false, persistSession: false } })
-    : null
-  return cached
-}
-
-/** テスト用。モジュールキャッシュを跨いでクライアントを作り直す */
+// WHY(この reset は残す、issue #793): 2026-09-19 の調査は「呼び出し元ゼロのデッドコード」と
+//      判定したが、**それは `grep ... src` の結果で、`supabase/__tests__/` を見ていなかった**。
+//      実際には privileged-operations-rls-idor.integration.test.ts:272,279 が呼んでいる。
+//      あちらは単体テストと違い `vi.resetModules()` を使わず `import()` するので、
+//      env を差し替えたあとキャッシュを捨てる口がここに無いと測れない。
+//      **走査範囲を src に絞ったせいの誤判定**（C-040）で、型検査が捕まえた。
 export function resetPrivilegedOperationClientForTests(): void {
-  cached = undefined
+  client.resetForTests()
 }
 
 async function routeFromHeaders(): Promise<{ route: string | null; method: string | null }> {
@@ -92,7 +89,7 @@ async function routeFromHeaders(): Promise<{ route: string | null; method: strin
 /** 特権操作の記録。成功・失敗の両方を残す（失敗だけだと乗っ取り後の被害範囲が分からない） */
 export async function recordPrivilegedOperation(record: PrivilegedOperationRecord): Promise<void> {
   try {
-    const db = serviceRoleClient()
+    const db = client.get()
     if (!db) return
     const ctx = await routeFromHeaders()
     // WHY(#757-31): access-denial.ts と同じ。記録は特権操作の道の途中にあるので、

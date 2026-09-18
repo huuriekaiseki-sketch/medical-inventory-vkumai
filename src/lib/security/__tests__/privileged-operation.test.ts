@@ -104,6 +104,28 @@ describe('特権操作の記録ヘルパー（recordPrivilegedOperation） [P-06
     expect(rpc).not.toHaveBeenCalled()
   })
 
+  // WHY(issue #793): ここは 2026-09-19 まで**黙って落ちていた**。上の「記録しない」だけを
+  //      固定していたので、ログが無いことに誰も気づけなかった。特権操作（招待・削除）の記録が
+  //      設定漏れのときは痕跡を残さず消える状態だった。「記録しない」と「黙らない」を対で固定する。
+  it('env 未設定時は初回だけ警告ログが出る（黙って落とさない。issue #793）', async () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const m = await loadModule()
+
+      await m.recordPrivilegedOperation({ operation: 'user_delete', succeeded: true, actorId: 'a' })
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(String(spy.mock.calls[0][0])).toContain('privileged_operation_client_unavailable')
+
+      // 2 回目は出ない
+      spy.mockClear()
+      await m.recordPrivilegedOperation({ operation: 'user_delete', succeeded: true, actorId: 'a' })
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('RPC が例外を投げても特権操作を止めないが、黙りもしない', async () => {
     // WHY(2026-09-08 の変異計測): catch の中身を空にしても緑だった＝**例外経路だけ無音**にできた。
     //      記録の失敗で操作は止めない設計なので、ログが唯一の手がかりになる
