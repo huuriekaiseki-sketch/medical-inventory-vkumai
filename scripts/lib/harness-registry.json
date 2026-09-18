@@ -359,6 +359,7 @@
         "scripts/check-agent-baseline-freshness.test.sh",
         "scripts/check-agent-progress-instructions.test.sh",
         "scripts/check-blocked-issues-staleness.test.sh",
+        "scripts/check-ci-path-filter.test.sh",
         "scripts/check-config-drift.test.sh",
         "scripts/check-dependency-update-staleness.test.sh",
         "scripts/check-e2e-freshness.test.sh",
