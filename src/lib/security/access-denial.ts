@@ -57,6 +57,11 @@ export interface AccessDenial {
 //      クライアントはセッションを持たない（persistSession: false）ので使い回して問題ない。
 let cached: ReturnType<typeof createClient<Database>> | null | undefined
 
+// WHY: env 未設定時は初回だけ警告をログに残す。同一プロセス内で複数回呼ばれても
+//      2 回目以降は出力しない。テスト環境では vi.resetModules() によりテストケースごとに
+//      フラグがリセットされる前提でアサーションを書く
+let warnedMissingEnv = false
+
 function serviceRoleClient() {
   if (cached !== undefined) return cached
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -65,6 +70,11 @@ function serviceRoleClient() {
   cached = url && key
     ? createClient<Database>(url, key, { auth: { autoRefreshToken: false, persistSession: false } })
     : null
+  // 初回だけ警告ログを出す（SPEC part 1、受け入れ条件1）
+  if (!cached && !warnedMissingEnv) {
+    warnedMissingEnv = true
+    logServerError('access_denial_client_unavailable', new Error('SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL is not set'))
+  }
   return cached
 }
 
@@ -111,8 +121,11 @@ export async function recordAccessDenial(denial: AccessDenial): Promise<void> {
       () => ({ error: null }),
     )
     if (error) logServerError('record_access_denial', error)
-  } catch {
+  } catch (error) {
     // WHY: 記録の失敗は握りつぶす（上のコメント参照）。ここで throw すると
-    //      「記録できないと拒否できない」になり、可用性の穴になる
+    //      「記録できないと拒否できない」になり、可用性の穴になる。
+    //      ただし想定外の例外は（プロセス再起動の前兆の可能性があるため）ログに残す
+    //      （SPEC part 1、受け入れ条件3）
+    logServerError('record_access_denial_unexpected', error)
   }
 }

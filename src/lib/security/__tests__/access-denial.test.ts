@@ -108,6 +108,25 @@ describe('拒否された操作の記録（recordAccessDenial） [P-063]', () =>
     expect(rpc).not.toHaveBeenCalled()
   })
 
+  it('env 未設定時は初回だけ警告ログが出る（SPEC part 1、受け入れ条件1）', async () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const m = await loadModule()
+      // 1回目：警告ログが出る
+      await m.recordAccessDenial({ guard: 'auth', reason: 'unauthenticated' })
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(String(spy.mock.calls[0][0])).toContain('access_denial_client_unavailable')
+
+      // 2回目：警告ログが出ない（同一プロセス内で重複しない）
+      spy.mockClear()
+      await m.recordAccessDenial({ guard: 'auth', reason: 'unauthenticated' })
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('URL が無い場合も同じ（両方揃って初めて記録する）', async () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL
     const m = await loadModule()

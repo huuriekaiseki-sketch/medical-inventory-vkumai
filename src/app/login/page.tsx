@@ -69,7 +69,9 @@ async function recordProxyAdminDenialIfPresent(): Promise<void> {
       method: payload.method,
       actorId,
     })
-  } catch {
-    // WHY: recordAccessDenial は内部で握りつぶす設計だが、ここでの追加の catch は保険
+  } catch (error) {
+    // WHY: recordAccessDenial は内部で握りつぶす設計だが、ここでの追加の catch は保険。
+    //      内部で想定外の例外が起きた場合はログに残す（SPEC part 1、受け入れ条件4）
+    logServerError('proxy_admin_denial_record_failed', error)
   }
 }
