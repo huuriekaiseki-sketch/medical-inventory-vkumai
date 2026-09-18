@@ -1,19 +1,14 @@
 name: CI
 
+# WHY(paths-ignore をやめた、2026-09-18・issue #783): 以前はここで docs/** 等を除外していたが、
+# **workflow ごと起動しない**ので docs だけの PR では 1 ジョブも回らなかった。ところが docs を読む
+# 検査は多い——hooks-test の check-catalogs / check-session-handoff-format 等に加え、vitest 側も
+# escaped-defects・privileged-writes・table_registry・role_registry が docs をルールブックとして
+# 実際に読む。結果、PR #781（docs のみ）が違反 2 件を main へ通した。**検査は在ったが起動しなかった。**
+# いまは workflow は必ず起動し、**重いジョブだけ** changes の判定で省く（無料枠の狙いは維持）。
+# 判定の正本は scripts/lib/classify-changed-paths.mjs（ここに条件を書き写さない）。
 on:
   pull_request:
-    # WHY: ドキュメントのみの変更でも5ジョブ(runner 5台)が起動しActions無料枠を消費して
-    # いたため、CIのテスト対象に影響しないパスを除外する(2026-08-25、無料枠枯渇対応)。
-    # .claude/workflows/(vitestのsync test対象)・.claude/settings.jsonとscripts/
-    # (hooks-test対象)・.claude/agents/と.codex/(baseline・設定分離のtest.shが参照)は
-    # テストが参照するため除外しない。
-    paths-ignore:
-      - 'docs/**'
-      - '.claude/skills/**'
-      - '.claude/rules/**'
-      - 'CLAUDE.md'
-      - 'AGENTS.md'
-      - 'README.md'
   workflow_dispatch:
 
 permissions:
@@ -24,16 +19,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # WHY(issue #783): 「この PR は重いジョブを省いてよいか」だけを答える軽量ジョブ。
+  # 判定そのものは scripts/lib/classify-changed-paths.mjs が持ち、hooks-test で守られている
+  # （scripts/check-ci-path-filter.test.sh）。判定できないときは code=true に倒す＝全部回す。
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # base...head の diff を取るため
+      - id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # WHY: pull_request 以外（workflow_dispatch）は base が無いので、判定せず全部回す
+          if [ -z "${BASE_SHA:-}" ] || [ -z "${HEAD_SHA:-}" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "base/head が無いので全ジョブを回します"
+            exit 0
+          fi
+          git diff --name-only "$BASE_SHA...$HEAD_SHA" > /tmp/changed.txt || true
+          node scripts/lib/classify-changed-paths.mjs --files /tmp/changed.txt | tee /tmp/classified.txt
+          grep '^code=' /tmp/classified.txt >> "$GITHUB_OUTPUT"
+
   typecheck:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/node-check.yml
     with:
       run-script: typecheck
 
   lint:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/node-check.yml
     with:
       run-script: lint
 
+  # WHY(条件を付けない、issue #783): vitest は docs をルールブックとして**実際に読む**
+  # （escaped-defects.test.ts / privileged-writes.test.ts / table_registry / role_registry）。
+  # docs だけの PR でこれを省くと、台帳の未処理・棚卸しのずれがそのまま main へ入る。
   test:
     uses: ./.github/workflows/node-check.yml
     with:
@@ -44,6 +72,8 @@ jobs:
   # buildジョブが標準構成のため、本家にも同じ検知を持たせる。
   # ローカル検証済み: env無し(.env.local不在)でも next build は成功する。
   build:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/node-check.yml
     with:
       run-script: build
@@ -60,6 +90,8 @@ jobs:
   # 公開済み脆弱性に当たっていないことの確認に過ぎない。依存追加の理由は PreToolUse hook
   # （check-dependency-change.sh）と引き継ぎメモ 00「依存の変更」が別途担う。
   dependency-audit:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -72,6 +104,9 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+  # WHY(条件を付けない、issue #783): docs を見る検査がこのジョブに集まっている
+  # （check-catalogs・check-session-handoff-format・棚卸し系・check-harness-map 等）。
+  # ここを省いた結果が PR #781 の違反 2 件だったので、changes の判定に**かけない**。
   hooks-test:
     runs-on: ubuntu-latest
     steps:
