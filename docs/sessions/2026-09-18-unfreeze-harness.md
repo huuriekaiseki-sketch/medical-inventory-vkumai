@@ -3,6 +3,33 @@
 `docs/agents/harness-freeze.md` を削除し、commit-msg hook の凍結判定を無効にした。
 **この文書が凍結の顛末の正本**（マーカーを消した以上、元ファイルは HEAD に無い）。
 
+## 30秒サマリー
+- 変更概要: 製品 issue 3 本の記録が揃ったので、ハーネス凍結（H-014）のマーカーを削除して解除する
+- リスク: 低（docs のみ。hook 側の判定は残すので、マーカーを作れば再び効く）
+- 変更領域: docs
+- 証拠状態: 実測 3 件（git hook 検査・docs 整合性・人間迂回棚卸し）/ 未検証 0 件
+- 影響範囲: `scripts/` `docs/` だけのコミットが通るようになる
+- ロールバック可能性: 高（マーカーを作り直すだけ）
+
+レビューしてほしい点:
+1. 3 本で仕分けを確定させない判断（下記「この数字で v1.x の削除を決めない」）
+
+## どう確認したか
+
+| 種別 | 状態 | 結果・証跡 |
+| --- | --- | --- |
+| hook 回帰 | ✅ 実施（自動テスト: パス） | `bash scripts/check-git-hooks.test.sh` ALL PASSED。scenario 8 の 12 項目（「マーカーを消すコミットは通る」「解除後は docs だけのコミットも通す」を含む）が緑 |
+| docs 整合性 | ✅ 実施（自動テスト: パス） | `bash scripts/check-docs-integrity.test.sh` ALL PASSED（削除で参照が壊れていないこと） |
+| 棚卸し表の構造 | ✅ 実施（自動テスト: パス） | `bash scripts/check-human-bypass-inventory.test.sh` ALL PASSED |
+| 解除の実証 | ✅ 実施（手動） | docs だけのコミットが通った（解除前なら H-014 で止まる） |
+| CI | ➖ 今回不要 | `ci.yml` の `paths-ignore` に `docs/**` があるため docs だけの PR では `docs-integrity` しか回らない。**この前提のせいで見落としが出た**（下記） |
+
+**この PR が残した見落とし（2026-09-18 に別ブランチで発見・修正）**: `docs/agents/escaped-defects.md` の
+E-092 の「再発防止」欄が、削除した `harness-freeze.md` を指したままだった。`check-docs-integrity` は
+歴史的マーカーで通るが、`check-catalogs` はパスの実在を別に見るため違反になる。
+**docs だけの PR は CI が `docs-integrity` しか回らないので、この違反は素通りした。**
+docs だけの変更でも `hooks-test` 相当をローカルで回す必要がある。
+
 ## 何だったか
 
 2026-09-11 の外部レビューで「ハーネスの育成は終わり、製品 issue で『止めた / 見逃した / 邪魔した』を

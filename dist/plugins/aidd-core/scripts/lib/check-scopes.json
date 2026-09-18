@@ -3,6 +3,7 @@
   "checks": {
     "check-branch-pr-status.test.sh": "self",
     "check-local-main-freshness.test.sh": "self",
+    "check-hooks-path-alive.test.sh": "self",
     "check-otel-collector-status.test.sh": "self",
     "check-blocked-issues-staleness.test.sh": "self",
     "check-fault-injection-drill-staleness.test.sh": "both",

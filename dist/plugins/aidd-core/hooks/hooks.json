@@ -18,6 +18,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-hooks-path-alive.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-branch-pr-status.sh",
             "timeout": 15
           },
