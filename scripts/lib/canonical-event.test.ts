@@ -6,8 +6,9 @@ import { buildEventId, extractAgentType, resolveAgentTypes, KNOWN_AGENT_TYPES, s
 import type { CanonicalEvent } from './canonical-event'
 
 describe('KNOWN_AGENT_TYPES', () => {
-  it('12種類のagentTypeを含む', () => {
-    expect(KNOWN_AGENT_TYPES).toHaveLength(12)
+  it('13種類のagentTypeを含む', () => {
+    // spec-drafter は issue #791 で追加（停止①より前の Draft Spec 役を読み取り専用にするため）
+    expect(KNOWN_AGENT_TYPES).toHaveLength(13)
     expect(KNOWN_AGENT_TYPES).toContain('sweep-ui')
     expect(KNOWN_AGENT_TYPES).toContain('implementer')
   })

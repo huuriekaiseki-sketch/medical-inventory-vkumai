@@ -72,6 +72,7 @@ flowchart TD
   sweep-types["Sweep: sweep-types"]
   critic["Completeness Critic: critic"]
   loop{{"Completeness Critic: loop"}}
+  tree-before["Sweep: tree-before"]
   draft["Draft Spec: draft"]
   draft-gate{{"Draft Spec: draft-gate"}}
   find["Find: find"]
@@ -81,10 +82,13 @@ flowchart TD
   divergence[["Judge Panel: divergence"]]
   score["Judge Panel: score"]
   synthesize["Synthesize: synthesize"]
+  tree-after["Synthesize: tree-after"]
+  tree-guard{{"Synthesize: tree-guard"}}
   end_(["Synthesize: end"])
   sweep-ui -->|"always"| critic
   sweep-data -->|"always"| critic
   sweep-db -->|"always"| critic
+  tree-before -->|"always"| sweep-ui
   sweep-types -->|"always"| critic
   critic -->|"always"| loop
   loop -->|"loop"| sweep-ui
@@ -101,7 +105,10 @@ flowchart TD
   divergence -->|"pass"| score
   divergence -->|"fail"| synthesize
   score -->|"always"| synthesize
-  synthesize -->|"always"| end_
+  synthesize -->|"always"| tree-after
+  tree-after -->|"always"| tree-guard
+  tree-guard -->|"pass"| end_
+  tree-guard -->|"blocked: Tree Guard → human"| end_
 ```
 
 blocked / token-cap の復帰先:
@@ -111,6 +118,7 @@ blocked / token-cap の復帰先:
 | `Draft Spec` | 人間（オーケストレーターが detail を読んで判断） | fail / blocked / null はすべて中断。taskDescription・maxRounds を見直して再実行 |
 | `Token Cap (before Find)` | resumeFromRunId（docs/agents/workflow-resume-runbook.md） |  |
 | `Token Cap (before Adversarial Verify)` | resumeFromRunId（docs/agents/workflow-resume-runbook.md） |  |
+| `Tree Guard` | 人間（オーケストレーターが detail を読んで判断） | 停止①より前なのに木が変わっている。git log / git status で何が入ったかを確かめ、意図しない変更なら巻き戻してから人に報告する（issue #791） |
 
 ## aidd-phase2（`aidd-phase2.js`）
 

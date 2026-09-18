@@ -15,6 +15,7 @@ const PROGRESS_LOGGABLE_AGENT_TYPES = new Set([
   'adversarial-verify',
   'completeness-critic',
   'contract-writer',
+  'spec-drafter',
 ])
 
 export function isProgressLoggableAgentType(agentType) {
