@@ -711,4 +711,52 @@ describe('proxy', () => {
       expect(response).toBeInstanceOf(NextResponse)
     })
   })
+
+  // WHY(#757 の 16 の残り): proxy は 6 か所から応答を返す。CSP を載せるのは唯一の入口
+  //      （proxy() が handleRequest の戻りに付ける）1 か所だけなので、**どの経路でも付く**ことを
+  //      経路ごとに測る。返り口を足した人が忘れても、ここが落ちる。
+  describe('CSP（#757 の 16）', () => {
+    async function responseFor(path: string, user: { id: string; email: string } | null, isAdmin = false) {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(user, isAdmin, true) as unknown as ReturnType<typeof createServerClient>
+      )
+      return proxy(new NextRequest(new URL(`http://localhost:3000${path}`)))
+    }
+
+    const USER = { id: 'u1', email: 'user@example.com' }
+
+    it.each([
+      ['未認証リダイレクト', '/facilities', null, false],
+      ['admin 拒否リダイレクト', '/admin', USER, false],
+      ['admin 通過', '/admin', USER, true],
+      ['通常ページ', '/facilities', USER, false],
+      ['/login', '/login', null, false],
+    ])('%s の応答にも CSP が付く', async (_name, path, user, isAdmin) => {
+      const response = await responseFor(path, user, isAdmin)
+      const csp = response.headers.get('Content-Security-Policy')
+      expect(csp).toBeTruthy()
+      expect(csp).toContain("script-src 'self' 'nonce-")
+    })
+
+    it('nonce はリクエストごとに変わる', async () => {
+      const a = await responseFor('/facilities', USER)
+      const b = await responseFor('/facilities', USER)
+      const nonceOf = (r: NextResponse) =>
+        /'nonce-([^']+)'/.exec(r.headers.get('Content-Security-Policy') ?? '')?.[1]
+      expect(nonceOf(a)).toBeTruthy()
+      expect(nonceOf(a)).not.toBe(nonceOf(b))
+    })
+
+    it('応答と転送リクエストで同じ nonce を使う（ずれると Next.js がタグに付けられない）', async () => {
+      const response = await responseFor('/facilities', USER)
+      const responseNonce = /'nonce-([^']+)'/.exec(
+        response.headers.get('Content-Security-Policy') ?? ''
+      )?.[1]
+      // NextResponse.next({request:{headers}}) の中身はこのヘッダに畳まれる
+      const forwarded = response.headers.get('x-middleware-override-headers')
+      expect(forwarded).toContain('x-nonce')
+      expect(response.headers.get('x-middleware-request-x-nonce')).toBe(responseNonce)
+    })
+  })
 })

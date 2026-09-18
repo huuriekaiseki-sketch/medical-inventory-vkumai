@@ -34,10 +34,11 @@ describe('セキュリティヘッダ（next.config.ts）', () => {
     expect(hsts).not.toContain('preload')
   })
 
-  it("CSP は frame-ancestors 'none' を含み、'unsafe-inline' 付きの script-src で防御を偽装しない", () => {
-    const csp = byKey['content-security-policy']
-    expect(csp).toContain("frame-ancestors 'none'")
-    expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/)
+  // WHY(2026-09-18、#757 の 16 の残り): CSP は nonce がリクエストごとに変わるので静的な設定には書けない。
+  //      出所を src/lib/security/csp.ts + src/proxy.ts の 1 か所にしたので、ここに戻ってきたら
+  //      二重定義（どちらが効いているか読めない状態）になる。**戻ってきたら落とす**。
+  it('CSP は next.config に置かない（出所は proxy 側の 1 か所だけ）', () => {
+    expect(byKey['content-security-policy']).toBeUndefined()
   })
 
   it('Permissions-Policy はカメラ・マイク・位置情報を無効にする', () => {

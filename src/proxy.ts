@@ -17,6 +17,11 @@ import {
   DENIAL_ROUTE_HEADER,
   encodeProxyDenial,
 } from '@/lib/security/denial-headers'
+import { buildCsp, generateNonce } from '@/lib/security/csp'
+
+export const CSP_HEADER = 'Content-Security-Policy'
+/** Next.js がレンダリング時に読む nonce の受け渡し口（ドキュメント既定の名前） */
+export const NONCE_HEADER = 'x-nonce'
 
 const PUBLIC_PATHS = ['/login', '/auth/callback']
 
@@ -29,10 +34,16 @@ const MFA_CHALLENGE_PATH = '/mfa-challenge'
 //      （access_denials）に経路を残すには proxy が転送リクエストへ付けるしかない。
 //      クライアントが同じ名前で送ってきても必ず上書きし、証跡に偽の経路を書かせない。
 //      cookie を差し替えた後の request から作るので、Supabase の セッション更新とも両立する。
-function forwardedHeaders(request: NextRequest): Headers {
+function forwardedHeaders(request: NextRequest, csp: Csp): Headers {
   const headers = new Headers(request.headers)
   headers.set(DENIAL_ROUTE_HEADER, request.nextUrl.pathname)
   headers.set(DENIAL_METHOD_HEADER, request.method)
+  // WHY(#757-16): Next.js は**転送リクエストの** Content-Security-Policy を読んで nonce を取り出し、
+  //      フレームワークのスクリプトに自動で付ける（node_modules/next/dist/docs/01-app/02-guides/
+  //      content-security-policy.md）。応答側だけに付けても nonce はタグに載らないので、
+  //      両方に同じ値を載せる。x-nonce は Server Component が headers() で読むための口。
+  headers.set(NONCE_HEADER, csp.nonce)
+  headers.set(CSP_HEADER, csp.value)
   // WHY(#757-24): /login に印（cookie）が付いて来たときだけ、その中身をヘッダで Server Component へ
   //      渡す。応答で cookie を消すと Next.js が同じリクエストの cookies() にも削除を反映するので、
   //      cookie を直接読ませると記録が 0 件になる（E2E で発覚）。クライアントが同名ヘッダを
@@ -80,8 +91,32 @@ function redirectWithDenial(
   return response
 }
 
+/** 1 リクエストで使い回す nonce と、そこから作った CSP の値 */
+type Csp = { nonce: string; value: string }
+
+/**
+ * WHY(唯一の入口、#757-16): proxy は 6 か所から応答を返す（未認証・MFA・admin 拒否・admin 通過・
+ *      /login・通常）。各所で CSP を付ける形にすると、**返り口を 1 つ足した人が忘れた瞬間に
+ *      その経路だけ CSP 無しになる**（docs/agents/check-design-pitfalls.md「間違えられる道を無くす」）。
+ *      判定は handleRequest に閉じ込め、CSP を載せるのはここ 1 か所だけにする。
+ */
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders(request) } })
+  const nonce = generateNonce()
+  const csp: Csp = {
+    nonce,
+    value: buildCsp(nonce, {
+      isDev: process.env.NODE_ENV === 'development',
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    }),
+  }
+
+  const response = await handleRequest(request, csp)
+  response.headers.set(CSP_HEADER, csp.value)
+  return response
+}
+
+async function handleRequest(request: NextRequest, csp: Csp) {
+  let supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders(request, csp) } })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -93,7 +128,7 @@ export async function proxy(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders(request) } })
+          supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders(request, csp) } })
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )
