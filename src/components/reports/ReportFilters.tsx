@@ -12,7 +12,7 @@ type Props = {
 }
 
 const labelClass = 'text-xs font-semibold uppercase tracking-widest mb-1 block'
-const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
 const inputClass = 'rounded border px-3 py-2 text-sm'
 const inputStyle = { borderColor: '#072C2C33', color: '#072C2C' }
 
@@ -61,7 +61,7 @@ export function ReportFilters({ dateFrom, dateTo, onSubmit }: Props) {
           type="button"
           onClick={handleSubmit}
           className="px-4 py-2 text-sm font-semibold text-white rounded"
-          style={{ backgroundColor: '#FF5F03' }}
+          style={{ backgroundColor: '#B03F00' }}
         >
           集計する
         </button>

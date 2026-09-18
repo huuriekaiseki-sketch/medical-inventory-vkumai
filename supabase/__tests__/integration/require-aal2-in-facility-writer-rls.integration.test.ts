@@ -15,6 +15,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { assertTestSupabaseEnv } from '../../../e2e/env-guard'
 import { enrollAndVerifyTotp, signInAtAal1 as signInClientAtAal1, stepUpToAal2 } from './helpers/mfa-totp'
+import { describeDenial, isPermissionDenied } from './helpers/pg-error'
 
 const TEST_USER_PASSWORD = 'require-aal2-facility-writer-rls-test-0000'
 
@@ -95,10 +96,19 @@ describe('facility_writer_or_adminポリシーはRPCを経由しない直接書�
   afterAll(async () => {
     await serviceClient.auth.admin.deleteUser(userId)
     await serviceClient.from('facilities').delete().eq('id', facilityId)
-    await serviceClient
+    // WHY(`888` と カテゴリも消す、2026-09-09): 価格の直接 INSERT を測る it が
+    //      製品・カテゴリ・代理店商品をその場で作っていたのに、後片付けの一覧に入っていなかった。
+    //      緑の実行のたびに 3 行ずつ残っていた（distributor_products は products の CASCADE で消える）。
+    const { error: productError } = await serviceClient
       .from('products')
       .delete()
-      .in('jan', [`999${runId}-1`, `999${runId}-2`, `111${runId}`, `222${runId}`, `333${runId}`])
+      .in('jan', [`999${runId}-1`, `999${runId}-2`, `111${runId}`, `222${runId}`, `333${runId}`, `888${runId}`])
+    if (productError) throw new Error(`[aal2-rls] products の後片付けに失敗: ${productError.message}`)
+    const { error: categoryError } = await serviceClient
+      .from('categories')
+      .delete()
+      .like('name', `%${runId}%`)
+    if (categoryError) throw new Error(`[aal2-rls] categories の後片付けに失敗: ${categoryError.message}`)
   })
 
   async function signInAtAal1(): Promise<SupabaseClient> {
@@ -107,23 +117,11 @@ describe('facility_writer_or_adminポリシーはRPCを経由しない直接書�
     return client
   }
 
-  it('MFA登録済みだがaal1のセッションでは、case_ordersへの直接INSERT(RPC非経由)がRLSで拒否される', async () => {
-    const client = await signInAtAal1()
-
-    const { error } = await client.from('case_orders').insert({
-      facility_id: facilityId,
-      case_datetime: new Date().toISOString(),
-      procedure_name: 'RLS直接書き込みテスト(aal1)',
-      patient_id: 'PT-RLS-1',
-      patient_initials: 'R.L.',
-      gender: 'other',
-      doctor_name: 'RLSテスト医師',
-    })
-
-    expect(error).not.toBeNull()
-  })
-
-  it('aal2まで昇格したセッションでは、case_ordersへの直接INSERT(RPC非経由)が成功する', async () => {
+  // WHY(2026-09-09 に約束が変わった): 発注 3 種・返却とその明細への**直接 INSERT の道は無くなった**
+  //      （20260909040000 で権限ごと剥がした）。作成は SECURITY DEFINER の RPC だけが行う。
+  //      aal2 の要求はこれらの表では **UPDATE（取り消し）側**で測る（下の describe）。
+  //      RPC 側の has_aal2() は require-aal2-for-order-rpcs.integration.test.ts が測る。
+  it('aal2まで昇格しても、case_ordersへの直接INSERTはできない(作成の道はRPCだけ)', async () => {
     const client = await signInAtAal1()
     await stepUpToAal2(client, factorId, secret)
 
@@ -137,7 +135,7 @@ describe('facility_writer_or_adminポリシーはRPCを経由しない直接書�
       doctor_name: 'RLSテスト医師',
     })
 
-    expect(error).toBeNull()
+    expect(isPermissionDenied(error), `INSERT の権限が戻っている（20260909040000 で剥がしたはず）: ${describeDenial(error)}`).toBe(true)
   })
 
   it('MFA登録済みだがaal1のセッションでは、hospital_pricesへの直接INSERTもRLSで拒否される(issue #619の判断: 価格改定も対象)', async () => {
@@ -187,36 +185,16 @@ describe('facility_writer_or_adminポリシーはRPCを経由しない直接書�
     expect(error).toBeNull()
   })
 
-  it('MFA登録済みだがaal1のセッションでは、consumable_ordersへの直接INSERT(RPC非経由)がRLSで拒否される(issue #684)', async () => {
-    const client = await signInAtAal1()
-
-    const { error } = await client.from('consumable_orders').insert({ facility_id: facilityId })
-
-    expect(error).not.toBeNull()
-  })
-
-  it('aal2まで昇格したセッションでは、consumable_ordersへの直接INSERT(RPC非経由)が成功する(issue #684)', async () => {
+  it('aal2まで昇格しても、consumable_ordersへの直接INSERTはできない(作成の道はRPCだけ)', async () => {
     const client = await signInAtAal1()
     await stepUpToAal2(client, factorId, secret)
 
     const { error } = await client.from('consumable_orders').insert({ facility_id: facilityId })
 
-    expect(error).toBeNull()
+    expect(isPermissionDenied(error), `INSERT の権限が戻っている: ${describeDenial(error)}`).toBe(true)
   })
 
-  it('MFA登録済みだがaal1のセッションでは、loan_ordersへの直接INSERT(RPC非経由)がRLSで拒否される(issue #684)', async () => {
-    const client = await signInAtAal1()
-
-    const { error } = await client.from('loan_orders').insert({
-      facility_id: facilityId,
-      procedure_name: 'RLS直接書き込みテスト(aal1)',
-      maker: 'テストメーカー',
-    })
-
-    expect(error).not.toBeNull()
-  })
-
-  it('aal2まで昇格したセッションでは、loan_ordersへの直接INSERT(RPC非経由)が成功する(issue #684)', async () => {
+  it('aal2まで昇格しても、loan_ordersへの直接INSERTはできない(作成の道はRPCだけ)', async () => {
     const client = await signInAtAal1()
     await stepUpToAal2(client, factorId, secret)
 
@@ -226,21 +204,10 @@ describe('facility_writer_or_adminポリシーはRPCを経由しない直接書�
       maker: 'テストメーカー',
     })
 
-    expect(error).toBeNull()
+    expect(isPermissionDenied(error), `INSERT の権限が戻っている: ${describeDenial(error)}`).toBe(true)
   })
 
-  it('MFA登録済みだがaal1のセッションでは、loan_returnsへの直接INSERT(RPC非経由)がRLSで拒否される(issue #684)', async () => {
-    const client = await signInAtAal1()
-
-    const { error } = await client.from('loan_returns').insert({
-      facility_id: facilityId,
-      return_datetime: new Date().toISOString(),
-    })
-
-    expect(error).not.toBeNull()
-  })
-
-  it('aal2まで昇格したセッションでは、loan_returnsへの直接INSERT(RPC非経由)が成功する(issue #684)', async () => {
+  it('aal2まで昇格しても、loan_returnsへの直接INSERTはできない(作成の道はRPCだけ)', async () => {
     const client = await signInAtAal1()
     await stepUpToAal2(client, factorId, secret)
 
@@ -249,7 +216,7 @@ describe('facility_writer_or_adminポリシーはRPCを経由しない直接書�
       return_datetime: new Date().toISOString(),
     })
 
-    expect(error).toBeNull()
+    expect(isPermissionDenied(error), `INSERT の権限が戻っている: ${describeDenial(error)}`).toBe(true)
   })
 
   it('MFA登録済みだがaal1のセッションでは、consumablesへの直接INSERT(RPC非経由)がRLSで拒否される(issue #684)', async () => {
@@ -279,111 +246,92 @@ describe('facility_writer_or_adminポリシーはRPCを経由しない直接書�
     expect(error).toBeNull()
   })
 
-  describe('明細4テーブルへの直接INSERT(親経由のEXISTS+has_aal2()判定、issue #684)', () => {
-    it('case_order_itemsはaal1で拒否・aal2で成功する', async () => {
-      const { data: parent } = await serviceClient
-        .from('case_orders')
-        .insert({
-          facility_id: facilityId,
-          case_datetime: new Date().toISOString(),
-          procedure_name: '明細RLSテスト術式',
-          patient_id: 'PT-ITEM-1',
-          patient_initials: 'I.T.',
-          gender: 'other',
-          doctor_name: 'RLSテスト医師',
-        })
-        .select('id')
-        .single()
+  describe('明細 4 表への直接 INSERT（2026-09-09 に道ごと無くした）', () => {
+    // WHY(約束が変わった): 明細も RPC の中でだけ入る。クライアントの INSERT 権限は
+    //      20260909040000 で剥がしたので、**aal2 まで昇格しても入れられない**。
+    //      これで case_order_items / consumable_order_items / loan_order_items は
+    //      クライアントから書く道が 1 つも無くなった（読みだけ）。
+    const itemTables = ['case_order_items', 'consumable_order_items', 'loan_order_items', 'loan_return_items'] as const
 
-      const aal1Client = await signInAtAal1()
-      const { error: aal1Error } = await aal1Client
-        .from('case_order_items')
-        .insert({ case_order_id: parent!.id, jan: `111${runId}`, quantity: 1 })
-      expect(aal1Error).not.toBeNull()
+    it.each(itemTables)('%s は aal2 でも直接 INSERT できない', async (table) => {
+      const client = await signInAtAal1()
+      await stepUpToAal2(client, factorId, secret)
 
-      const aal2Client = await signInAtAal1()
-      await stepUpToAal2(aal2Client, factorId, secret)
-      const { error: aal2Error } = await aal2Client
-        .from('case_order_items')
-        .insert({ case_order_id: parent!.id, jan: `111${runId}`, quantity: 1 })
-      expect(aal2Error).toBeNull()
+      // 親の id は要らない（権限が無いので、行の中身を組み立てる前に弾かれる）
+      const { error } = await client.from(table).insert({ quantity: 1 })
+      expect(isPermissionDenied(error), `${table} の INSERT 権限が戻っている: ${describeDenial(error)}`).toBe(true)
     })
+  })
 
-    it('consumable_order_itemsはaal1で拒否・aal2で成功する', async () => {
-      const { data: consumable } = await serviceClient
-        .from('consumables')
-        .insert({
-          facility_id: facilityId,
-          name: '明細RLSテスト消耗品',
-          jan: `222${runId}`,
-          purpose: 'テスト用途',
-        })
-        .select('id')
-        .single()
-      const { data: parent } = await serviceClient
-        .from('consumable_orders')
-        .insert({ facility_id: facilityId })
-        .select('id')
-        .single()
+  // WHY(aal2 の測り場所を移した): 直接 INSERT の道が無くなったので、
+  //      取り消しのポリシーの `has_aal2()` を**取り消し（UPDATE）側**で測る。
+  //      ここが無いと、発注・返却の表で aal2 の判定を一度も測らないまま緑になる（C-021）。
+  //
+  // WHY(4 表すべてを回す、2026-09-10): 2026-09-09 まで `loan_orders` 1 表だけを測っていた。
+  //      **ポリシーは表ごとに別物**なので、1 表で測っても他の 3 表は何も守られていない。
+  //      RLS の変異計測（RM-002: `case_orders` の書き込みから aal2 を外す）が
+  //      **生き残り**として実測で見つけた——直接 INSERT のテストは権限の層で先に止まるため、
+  //      ポリシーを壊しても気づけなくなっていた（C-023: 探りが別の防御に依存）。
+  //      表を足したら行を足す（C-011: 1 表だけの検査を「守っている」と読まない）。
+  const cancellable: Array<{ table: string; row: () => Record<string, unknown> }> = [
+    {
+      table: 'case_orders',
+      row: () => ({
+        facility_id: facilityId,
+        case_datetime: new Date().toISOString(),
+        procedure_name: '取り消しaal2テスト',
+        patient_id: 'AAL2-CANCEL',
+        patient_initials: 'テ',
+        gender: 'other',
+        doctor_name: '取り消しaal2テスト医師',
+      }),
+    },
+    { table: 'consumable_orders', row: () => ({ facility_id: facilityId }) },
+    {
+      table: 'loan_orders',
+      row: () => ({ facility_id: facilityId, procedure_name: '取り消しaal2テスト', maker: 'テストメーカー' }),
+    },
+    {
+      table: 'loan_returns',
+      row: () => ({ facility_id: facilityId, return_datetime: new Date().toISOString() }),
+    },
+  ]
 
-      const aal1Client = await signInAtAal1()
-      const { error: aal1Error } = await aal1Client
-        .from('consumable_order_items')
-        .insert({ consumable_order_id: parent!.id, consumable_id: consumable!.id, quantity: 1 })
-      expect(aal1Error).not.toBeNull()
+  describe('取り消し（UPDATE）には引き続き aal2 が要る', () => {
+    it.each(cancellable)(
+      '$table: aal1 では取り消せず、aal2 まで昇格すると取り消せる',
+      async ({ table, row }) => {
+        const { data: created, error: seedError } = await serviceClient
+          .from(table)
+          .insert(row())
+          .select('id')
+          .single()
+        if (seedError || !created) throw new Error(`[aal2-cancel] ${table} のシード失敗: ${seedError?.message}`)
 
-      const aal2Client = await signInAtAal1()
-      await stepUpToAal2(aal2Client, factorId, secret)
-      const { error: aal2Error } = await aal2Client
-        .from('consumable_order_items')
-        .insert({ consumable_order_id: parent!.id, consumable_id: consumable!.id, quantity: 1 })
-      expect(aal2Error).toBeNull()
-    })
+        const aal1Client = await signInAtAal1()
+        const { data: aal1Updated, error: aal1Error } = await aal1Client
+          .from(table)
+          .update({ status: 'cancelled' })
+          .eq('id', created.id)
+          .select('id')
+        // 権限はあるのでエラーにはならない。**RLS が 0 行にする**（aal2 を満たさないため）
+        expect(aal1Error).toBeNull()
+        expect(aal1Updated ?? [], `${table} を aal1 のセッションで取り消せてしまった`).toEqual([])
 
-    it('loan_order_itemsはaal1で拒否・aal2で成功する', async () => {
-      const { data: parent } = await serviceClient
-        .from('loan_orders')
-        .insert({
-          facility_id: facilityId,
-          procedure_name: '明細RLSテスト術式',
-          maker: 'テストメーカー',
-        })
-        .select('id')
-        .single()
-
-      const aal1Client = await signInAtAal1()
-      const { error: aal1Error } = await aal1Client
-        .from('loan_order_items')
-        .insert({ loan_order_id: parent!.id, name: '明細RLSテスト器械', quantity: 1 })
-      expect(aal1Error).not.toBeNull()
-
-      const aal2Client = await signInAtAal1()
-      await stepUpToAal2(aal2Client, factorId, secret)
-      const { error: aal2Error } = await aal2Client
-        .from('loan_order_items')
-        .insert({ loan_order_id: parent!.id, name: '明細RLSテスト器械', quantity: 1 })
-      expect(aal2Error).toBeNull()
-    })
-
-    it('loan_return_itemsはaal1で拒否・aal2で成功する', async () => {
-      const { data: parent } = await serviceClient
-        .from('loan_returns')
-        .insert({ facility_id: facilityId, return_datetime: new Date().toISOString() })
-        .select('id')
-        .single()
-
-      const aal1Client = await signInAtAal1()
-      const { error: aal1Error } = await aal1Client
-        .from('loan_return_items')
-        .insert({ loan_return_id: parent!.id, jan: `333${runId}`, quantity: 1 })
-      expect(aal1Error).not.toBeNull()
-
-      const aal2Client = await signInAtAal1()
-      await stepUpToAal2(aal2Client, factorId, secret)
-      const { error: aal2Error } = await aal2Client
-        .from('loan_return_items')
-        .insert({ loan_return_id: parent!.id, jan: `333${runId}`, quantity: 1 })
-      expect(aal2Error).toBeNull()
-    })
+        const aal2Client = await signInAtAal1()
+        await stepUpToAal2(aal2Client, factorId, secret)
+        const { data: aal2Updated, error: aal2Error } = await aal2Client
+          .from(table)
+          .update({ status: 'cancelled' })
+          .eq('id', created.id)
+          .select('id')
+        // 対照: aal2 なら通る。これが無いと「常に 0 行」でも緑になる（C-021）
+        expect(aal2Error).toBeNull()
+        expect(aal2Updated ?? [], `${table} は aal2 でも取り消せない（UPDATE の道まで塞がっている）`).toHaveLength(1)
+        // 後片付けはしない（施設スコープの行なので、afterAll の施設削除で連鎖して消える）。
+        // ここで消すと**戻り値を見ない削除**が 1 つ増えるだけで、消し残しの計測が拾う話でもない（E-065）
+      },
+      60_000
+    )
   })
 })

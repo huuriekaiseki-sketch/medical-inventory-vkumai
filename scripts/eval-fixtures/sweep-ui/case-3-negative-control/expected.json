@@ -1,0 +1,11 @@
+{
+  "expectNoFinding": true,
+  "expectedFilePathContains": [
+    "ward-supplies/page.tsx",
+    "ward-supplies/filter.tsx"
+  ],
+  "expectedKeywords": [
+    "Suspense",
+    "useSearchParams"
+  ]
+}

@@ -1,0 +1,817 @@
+{
+  "_comment": "C-022「壊して落ちることを確かめずに、緑だけを見て終える」の機械化（2026-09-09）。**検知そのものが効いているか**を、判定エンジンを 1 か所だけ壊して、対応する検査が本当に落ちるかで測る。落ちなければ、その検査は何も守っていない（緑であることと守っていることは別）。RLS に対する `rls-mutants.json` と同じ形を、ハーネス側へ向けたもの。",
+  "_howto": "bash scripts/check-detectors-effective.test.sh で回す（CI hooks-test が scripts/*.test.sh を全部走らせる）。1 件あたり「素で通ることを確かめる → 壊す → 落ちることを確かめる → バイト列のまま戻す」の 1 巡。**素で通ることを先に見る**のは、落ちた理由が壊したせいだと言えるようにするため（C-021）。",
+  "_design": "`find` は**ちょうど 1 回だけ現れる文字列**でなければならない。0 回なら壊し方が陳腐化していて、2 回以上ならどこを壊したか言えない。どちらも「壊したつもりで壊せていない」ので違反として落とす（C-010）。",
+  "_survivors": "初回の計測で 5 件が生き残り、**すべて本物の穴だった**（CM-006 外す理由の下限・CM-007 詰まった表の名指し・CM-008 認可の語彙・CM-015 赤いままの記録・CM-016 未コミットのまま通した記録）。それぞれ検査側に RED 方向を足して倒し、ここに壊し方を残してある。",
+  "_limits": "ここに書いた壊し方しか試さない。**別の壊し方なら生き残る**かもしれない。判定エンジンを足したとき、壊し方を足すのは人がやる（minMutants が減るのを止めるだけ）。生き残りが常に穴とは限らない（別の道で落ちるだけの「同じ意味の変異」もある。CM-007 はそれで、落ちる文言まで見るように検査を強くして倒した）。",
+  "minMutants": 88,
+  "mutants": [
+    {
+      "id": "CM-001",
+      "breaks": "「DB は書けるのにアプリに道が無い」の判定から、宣言されていない隙間の報告を外す",
+      "file": "scripts/lib/check-write-path-gaps.mjs",
+      "find": "      if (reason === undefined) {",
+      "replace": "      if (false) {",
+      "expect": "scripts/check-write-path-gaps.test.sh",
+      "guards": "E-056 / E-057（層の食い違いの逆向き）"
+    },
+    {
+      "id": "CM-002",
+      "breaks": "隙間の ratchet（上限を超えたら落とす）を外す",
+      "file": "scripts/lib/check-write-path-gaps.mjs",
+      "find": "  } else if (gapCount > max) {",
+      "replace": "  } else if (false) {",
+      "expect": "scripts/check-write-path-gaps.test.sh",
+      "guards": "借金を増やせないこと"
+    },
+    {
+      "id": "CM-003",
+      "breaks": "隙間の fail-open 防止（DB 側を 1 表も読めなかった）を外す",
+      "file": "scripts/lib/check-write-path-gaps.mjs",
+      "find": "  if (dbVerbs.size === 0) {",
+      "replace": "  if (false) {",
+      "expect": "scripts/check-write-path-gaps.test.sh",
+      "guards": "C-021（走査が壊れたら違反 0 件で合格に見える）"
+    },
+    {
+      "id": "CM-004",
+      "breaks": "「宣言だけ残った隙間」（道ができたのに登録簿に残っている）の報告を外す",
+      "file": "scripts/lib/check-write-path-gaps.mjs",
+      "find": "    if (!stillOpen) {",
+      "replace": "    if (false) {",
+      "expect": "scripts/check-write-path-gaps.test.sh",
+      "guards": "C-010（印が実態とずれたまま残る）"
+    },
+    {
+      "id": "CM-005",
+      "breaks": "操作の契約から、「禁止と宣言したのに DB が許している」の報告を外す",
+      "file": "scripts/lib/check-operation-contracts.mjs",
+      "find": "    if (r.directWrite === '禁止' && granted) {",
+      "replace": "    if (false && granted) {",
+      "expect": "scripts/check-operation-contracts.test.sh",
+      "guards": "O-xxx（発注は RPC からしか作れない、という約束）"
+    },
+    {
+      "id": "CM-006",
+      "breaks": "契約の認可の語彙（4 語）の検査を外す",
+      "file": "scripts/lib/check-operation-contracts.mjs",
+      "find": "      v.push(`bad-authorization: ${r.id} ${r.authorization}",
+      "replace": "      if (false) v.push(`bad-authorization: ${r.id} ${r.authorization}",
+      "expect": "scripts/check-operation-contracts.test.sh",
+      "guards": "掃き側（6 立場 × 35 操作）が期待値を導ける語だけを使うこと",
+      "note": "初回の計測で**生き残り**。語彙の検査は直接書き込みと危険度しか測っていなかった。認可・操作・状態を足して倒した"
+    },
+    {
+      "id": "CM-007",
+      "breaks": "契約の「route が攻撃表に載っていない」の報告を外す",
+      "file": "scripts/lib/check-operation-contracts.mjs",
+      "find": "    v.push(`not-in-attack-matrix:",
+      "replace": "    if (false) v.push(`not-in-attack-matrix:",
+      "expect": "scripts/check-operation-contracts.test.sh",
+      "guards": "P-017（入口を作ったら攻撃表に載せる）"
+    },
+    {
+      "id": "CM-008",
+      "breaks": "契約の「同じ操作が 2 行ある」の検査を外す",
+      "file": "scripts/lib/check-operation-contracts.mjs",
+      "find": "    if (seen.has(key)) v.push(`duplicate:",
+      "replace": "    if (false) v.push(`duplicate:",
+      "expect": "scripts/check-operation-contracts.test.sh",
+      "guards": "C-031（数える単位が違うまま数える）"
+    },
+    {
+      "id": "CM-009",
+      "breaks": "「権限はあるが規則が無い」＝触れるが何も起きない道の報告を外す",
+      "file": "scripts/lib/scan-rls-grant-gaps.mjs",
+      "find": "        if (granted && !covered) {",
+      "replace": "        if (false) {",
+      "expect": "scripts/check-rls-grant-gaps.test.sh",
+      "guards": "E-055 / C-032"
+    },
+    {
+      "id": "CM-010",
+      "breaks": "「規則はあるが権限が無い」＝誰にも届かない規則の報告を外す（逆向き）",
+      "file": "scripts/lib/scan-rls-grant-gaps.mjs",
+      "find": "        if (!granted && covered) {",
+      "replace": "        if (false) {",
+      "expect": "scripts/check-rls-grant-gaps.test.sh",
+      "guards": "E-055 の逆向き（書いたのに効いていない規則）"
+    },
+    {
+      "id": "CM-011",
+      "breaks": "後片付けの見張りから、消えた行の報告を外す",
+      "file": "scripts/lib/fixture-guard.mjs",
+      "find": "      if (!now.has(key)) gone.push(",
+      "replace": "      if (false && !now.has(key)) gone.push(",
+      "expect": "scripts/check-fixture-guard.test.sh",
+      "guards": "C-030（後片付けの範囲が広すぎる）"
+    },
+    {
+      "id": "CM-012",
+      "breaks": "「外す理由」の下限を 20 文字から 1 文字へ緩める（境界）",
+      "file": "scripts/lib/fixture-guard.mjs",
+      "find": ".trim().length < MIN_REASON_LENGTH)",
+      "replace": ".trim().length < 1)",
+      "expect": "scripts/check-fixture-guard.test.sh",
+      "guards": "「あとで」「不要」で外した判断を残させないこと",
+      "note": "初回の計測で**生き残り**。下限そのものはどこも測っていなかった。判定を `reasonsTooShort` に切り出し、境界 19 / 20 文字を固定して倒した"
+    },
+    {
+      "id": "CM-013",
+      "breaks": "控えていない表を鍵にしたとき、どの表で詰まったかの名指しを外す",
+      "file": "scripts/lib/fixture-guard.mjs",
+      "find": "  if (!columns) throw new Error(",
+      "replace": "  if (false) throw new Error(",
+      "expect": "scripts/check-fixture-guard.test.sh",
+      "guards": "E2E の途中で詰まったとき、どの表かが読めること",
+      "note": "初回の計測で**生き残り**。名指しを外しても素の TypeError で落ちるので「落ちた」だけでは差が出なかった（同じ意味の変異）。文言まで見るように検査を強くして倒した"
+    },
+    {
+      "id": "CM-014",
+      "breaks": "鮮度の判定から、「いまの姿では全件を通していない」の報告を外す",
+      "file": "scripts/lib/run-freshness.py",
+      "find": "        if recorded != value:",
+      "replace": "        if False:",
+      "expect": "scripts/check-full-run-before-finish.test.sh",
+      "guards": "C-041（単体で緑にして終える）"
+    },
+    {
+      "id": "CM-015",
+      "breaks": "鮮度の判定から、「直近の実行が失敗のまま」の報告を外す",
+      "file": "scripts/lib/run-freshness.py",
+      "find": "    if last.get(\"result\") != \"pass\":",
+      "replace": "    if False:",
+      "expect": "scripts/check-full-run-before-finish.test.sh",
+      "guards": "赤を残したまま終えないこと",
+      "note": "初回の計測で**生き残り**。記録が赤いままの場合をどこも測っていなかった（scenario 7 を足して倒した）"
+    },
+    {
+      "id": "CM-016",
+      "breaks": "鮮度の判定から、「未コミットのまま通した記録」の報告を外す",
+      "file": "scripts/lib/run-freshness.py",
+      "find": "        if last.get(f\"{name}Dirty\"):",
+      "replace": "        if False:",
+      "expect": "scripts/check-full-run-before-finish.test.sh",
+      "guards": "「その木で通した」と言えない記録を証拠に使わないこと",
+      "note": "初回の計測で**生き残り**。古い記録へ落ちたときの道が測られていなかった（scenario 8 を足して倒した）"
+    },
+    {
+      "id": "CM-017",
+      "breaks": "クエリ文字列の検証を通さない新しい route の報告を外す",
+      "file": "scripts/check-query-validation-coverage.test.sh",
+      "find": "  if (rawReads && !pending.has(rel)) console.log(\"new \" + rel)",
+      "replace": "  if (false) console.log(\"new \" + rel)",
+      "expect": "scripts/check-query-validation-coverage.test.sh",
+      "guards": "E-053（同じ問いの答えが 2 か所にあって食い違う）を、クエリ文字列の入口で止める"
+    },
+    {
+      "id": "CM-018",
+      "breaks": "後片付けの見張りから、**消し残し**（増えて残った行）の報告を外す",
+      "file": "scripts/lib/fixture-guard.mjs",
+      "find": "      if (!before.has(key)) leaked.push(",
+      "replace": "      if (false && !before.has(key)) leaked.push(",
+      "expect": "scripts/check-fixture-guard.test.sh",
+      "guards": "消し残し（緑の全件実行 1 回につき 41 行が積み上がっていた実害。E-022 / E-023 へ育つ）",
+      "note": "CM-011 が『消しすぎ』の側で、これは**逆向き**。判定を取り違えると常に 0 件で緑になるので、両方を別々に壊して測る"
+    },
+    {
+      "id": "CM-019",
+      "breaks": "ハーネスの地図から、「宣言した検査が実在しない」の報告を外す",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "    for (const c of h.checks ?? []) {",
+      "replace": "    for (const c of []) {",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "地図に書いてあるのに無い（事故のとき最初に開く 1 枚が嘘をつく）"
+    },
+    {
+      "id": "CM-020",
+      "breaks": "ハーネスの地図から、台帳の数字が読めているかの検査を外す",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "      if (typeof value !== 'number') {",
+      "replace": "      if (false) {",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "台帳の数字を手で書かないこと（2026-09-09 に 2 回取り違えた）"
+    },
+    {
+      "id": "CM-021",
+      "breaks": "ハーネスの地図から、「どのハーネスにも属していない検査」の報告を外す",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "    if (!declared.has(c)) violations.push(`unassigned-check: ",
+      "replace": "    if (false) violations.push(`unassigned-check: ",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "新しい検査を足したときに「どの役割を守るのか」を 1 回決めさせること（逆向きの ratchet）"
+    },
+    {
+      "id": "CM-022",
+      "breaks": "RLS 変異の計測から、「対照が赤いテストは計測不能」の分岐を外す（壊す前から赤いテストを撃破に数える元の姿）",
+      "file": "scripts/check-rls-mutation.sh",
+      "find": "    *\" $EXPECT \"*)",
+      "replace": "    *\"__never_matches__\"*)",
+      "expect": "scripts/check-rls-mutation.test.sh",
+      "guards": "C-020（「何かが起きた」を成功と読む）／ C-022（壊して落ちることを確かめる）"
+    },
+    {
+      "id": "CM-023",
+      "breaks": "RLS 変異の計測から、「計測不能があれば全体を失敗にする」を外す（errors がどこにも効いていなかった元の姿）",
+      "file": "scripts/check-rls-mutation.sh",
+      "find": "if [ \"$errors\" -gt 0 ]; then",
+      "replace": "if [ \"$errors\" -gt 999999 ]; then",
+      "expect": "scripts/check-rls-mutation.test.sh",
+      "guards": "「テスト失敗」「検査不能」を同じ真偽値に潰さないこと"
+    },
+    {
+      "id": "CM-024",
+      "breaks": "統合テストの記録から、データ検査（後片付けの漏れ）の結果を総合結果へ反映しない",
+      "file": "scripts/run-integration-tests.sh",
+      "find": "  OVERALL_RESULT=\"fail\"",
+      "replace": "  OVERALL_RESULT=\"$TEST_RESULT\"",
+      "expect": "scripts/run-integration-tests.test.sh",
+      "guards": "漏れがあった実行を鮮度の hook が「良い実行」として信じないこと"
+    },
+    {
+      "id": "CM-025",
+      "breaks": "操作の契約から、「状態は計画・対象外だが DB は許している」の報告を外す（状態を書き換えるだけで違反を消せた元の姿）",
+      "file": "scripts/lib/check-operation-contracts.mjs",
+      "find": "        v.push(`unimplemented-but-granted:",
+      "replace": "        if (false) v.push(`unimplemented-but-granted:",
+      "expect": "scripts/check-operation-contracts.test.sh",
+      "guards": "状態は宣言であって実態ではない（E-056 / E-057 の同型）"
+    },
+    {
+      "id": "CM-026",
+      "breaks": "操作の契約から、「状態は計画・対象外だが入口が公開されている」の報告を外す",
+      "file": "scripts/lib/check-operation-contracts.mjs",
+      "find": "        v.push(`unimplemented-but-live:",
+      "replace": "        if (false) v.push(`unimplemented-but-live:",
+      "expect": "scripts/check-operation-contracts.test.sh",
+      "guards": "状態を「計画」にしても道は閉じない（P-017 の入口が攻撃表から漏れる）"
+    },
+    {
+      "id": "CM-027",
+      "breaks": "RLS 変異の鮮度から、未コミットの書き換えを見る指定（--worktree）を外す",
+      "file": "scripts/check-rls-mutation-freshness.sh",
+      "find": "  --worktree \"supabase=$SUPABASE_WORKTREE\" \\",
+      "replace": "  --tree \"supabase=$SUPABASE_TREE\" \\",
+      "expect": "scripts/check-rls-mutation-freshness.test.sh",
+      "guards": "C-041（単体だけ緑にして終える形を止める）"
+    },
+    {
+      "id": "CM-028",
+      "breaks": "製品コードの変異計測の鮮度から、未コミットの書き換えを見る指定（--worktree）を外す",
+      "file": "scripts/check-mutation-freshness.sh",
+      "find": "  --worktree \"src=$SRC_WORKTREE\" \\",
+      "replace": "  --tree \"src=$SRC_TREE\" \\",
+      "expect": "scripts/check-mutation-freshness.test.sh",
+      "guards": "C-041（手元で認可の判断を書き換えたまま「前に測ったから大丈夫」と読まない）"
+    },
+    {
+      "id": "CM-029",
+      "breaks": "ハーネスの契約から、「守る対象の ID が台帳に実在するか」の突合を外す",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "        if (!catalogIds.has(gid)) violations.push(",
+      "replace": "        if (false) violations.push(",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "「何を守るか」を文章だけにしないこと（機械で追える宣言を要求する）"
+    },
+    {
+      "id": "CM-030",
+      "breaks": "ハーネスの契約から、「実測の記録も理由も無い」の検知を外す（黙って空欄にできる元の姿）",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "      if (!h.unmeasuredReason) {",
+      "replace": "      if (false) {",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "測っていないことを、測ったことと同じ見た目にしない"
+    },
+    {
+      "id": "CM-031",
+      "breaks": "証拠の状態から「最新かどうか」の判定を外し、合格だけを見る",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "      if (recorded !== tree(root, w)) stale.push(w)",
+      "replace": "      if (false) stale.push(w)",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "C-025（合格・検査不能・古い結果を 1 つの真偽値に潰さない）"
+    },
+    {
+      "id": "CM-032",
+      "breaks": "精度指標から「測れなかった件数」を分母に残すのをやめる（18/18 に見せる元の姿）",
+      "file": "scripts/lib/precision-metrics.mjs",
+      "find": "      denominator = measured + un",
+      "replace": "      denominator = measured",
+      "expect": "scripts/check-precision-metrics.test.sh",
+      "guards": "実行不能を分母から黙って消さないこと（レビューの設計提案 3）"
+    },
+    {
+      "id": "CM-033",
+      "breaks": "精度指標から、同条件のばらつきの判定を外す（いつも安定に見える）",
+      "file": "scripts/lib/precision-metrics.mjs",
+      "find": "  return { runs: values.length, min, max, spread: max - min, flaky: values.length > 1 && min !== max }",
+      "replace": "  return { runs: values.length, min, max, spread: max - min, flaky: false }",
+      "expect": "scripts/check-precision-metrics.test.sh",
+      "guards": "1 回の実行を合否に使わないこと（モデルの揺れを仕組みの劣化と読み違えない）"
+    },
+    {
+      "id": "CM-034",
+      "breaks": "精度指標のばらつきから、条件の分離を外す（違う木の回を同じばらつきに混ぜる）",
+      "file": "scripts/lib/precision-metrics.mjs",
+      "find": "  const kept = records.filter((r) => known.every((f) => r[f] !== undefined && r[f] === latest[f]))",
+      "replace": "  const kept = records",
+      "expect": "scripts/check-precision-metrics.test.sh",
+      "guards": "モデルの揺れと『その間にコードが変わっただけ』を区別できる形を保つこと（設計提案 3）"
+    },
+    {
+      "id": "CM-035",
+      "breaks": "精度指標から「費用は取れなかった」の報告を外す（黙って何も出さない）",
+      "file": "scripts/lib/precision-metrics.mjs",
+      "find": "  if (g.usageMissing !== null && g.usageMissing > 0) {",
+      "replace": "  if (false) {",
+      "expect": "scripts/check-precision-metrics.test.sh",
+      "guards": "C-025（取れなかったことと 0 円だったことを 1 つに潰さない）"
+    },
+    {
+      "id": "CM-036",
+      "breaks": "使用量の足し上げから「取れなかった回」の分岐を外す（0 円として積む）",
+      "file": "scripts/lib/record-eval-run.sh",
+      "find": "  if [ \"$kind\" = \"missing\" ]; then",
+      "replace": "  if false; then",
+      "expect": "scripts/check-agent-output.test.sh",
+      "guards": "取れなかった回を 0 円として足さないこと（費用が実際より安く見える）"
+    },
+    {
+      "id": "CM-037",
+      "breaks": "包み判定から `type === 'result'` を外す（包みが無いモックの出力まで剥がしにかかる）",
+      "file": "scripts/lib/agent-output.mjs",
+      "find": "  const isWrapped = top && typeof top === 'object' && top.type === 'result'",
+      "replace": "  const isWrapped = top && typeof top === 'object'",
+      "expect": "scripts/check-agent-output.test.sh",
+      "guards": "C-023（測る道が実利用と同じであること。モックの素の出力が通らなくなると eval が全件 MISS になる）"
+    },
+    {
+      "id": "CM-038",
+      "breaks": "費用の欄が無いときに null ではなく 0 を返す（取れなかったのを 0 円と言う）",
+      "file": "scripts/lib/agent-output.mjs",
+      "find": "      costUsd: typeof top.total_cost_usd === 'number' ? top.total_cost_usd : null,",
+      "replace": "      costUsd: typeof top.total_cost_usd === 'number' ? top.total_cost_usd : 0,",
+      "expect": "scripts/check-agent-output.test.sh",
+      "guards": "C-025（取れなかったことと 0 だったことを 1 つに潰さない）"
+    },
+    {
+      "id": "CM-039",
+      "breaks": "費用の表示から「うちキャッシュ読み」を外す（入力がプロンプト全体の大きさに読める）",
+      "file": "scripts/lib/precision-metrics.mjs",
+      "find": "      const cached = g.cacheReadTokens ? `（うちキャッシュ読み ${g.cacheReadTokens}）` : ''",
+      "replace": "      const cached = ''",
+      "expect": "scripts/check-precision-metrics.test.sh",
+      "guards": "`input_tokens` はキャッシュから読んだ分を含まない。並べないと 3 桁小さく見える"
+    },
+    {
+      "id": "CM-040",
+      "breaks": "キャッシュから読んだ入力を入力トークンに合算する（価格が違うのに足す）",
+      "file": "scripts/lib/record-eval-run.sh",
+      "find": "  EVAL_CACHE_READ_TOKENS=$((EVAL_CACHE_READ_TOKENS + cached))",
+      "replace": "  EVAL_INPUT_TOKENS=$((EVAL_INPUT_TOKENS + cached))",
+      "expect": "scripts/check-agent-output.test.sh",
+      "guards": "C-031（数える単位が違うものを同じ数に足さない）"
+    },
+    {
+      "id": "CM-041",
+      "breaks": "費用の幅を 1 回でも出す（1 回の金額を「幅」と呼ぶ）",
+      "file": "scripts/lib/precision-metrics.mjs",
+      "find": "  if (costs.length < 2) return null",
+      "replace": "  if (costs.length < 1) return null",
+      "expect": "scripts/check-precision-metrics.test.sh",
+      "guards": "1 回の実行を合否にも予算にも使わないこと（実測で同条件・同結果のまま費用が約 3 倍振れた）"
+    },
+    {
+      "id": "CM-042",
+      "breaks": "マージ予行から「起点が遅れている」の判定を外す（凍った起点でも合否を出す）",
+      "file": "scripts/lib/rehearse-merge.mjs",
+      "find": "if (staleBase && !o.allowStaleBase) {",
+      "replace": "if (false) {",
+      "expect": "scripts/rehearse-merge.test.sh",
+      "guards": "C-025（誰も聞いていない問いへの答えを合否に混ぜない。2026-09-10 に実在しない衝突 10 件が出た）"
+    },
+    {
+      "id": "CM-043",
+      "breaks": "マージ予行から「順番が空」の判定を外す（0 本を合格と読む）",
+      "file": "scripts/lib/rehearse-merge.mjs",
+      "find": "if (queue.length === 0) {",
+      "replace": "if (false) {",
+      "expect": "scripts/rehearse-merge.test.sh",
+      "guards": "C-021（走査が空でも違反 0 件で合格に見える）"
+    },
+    {
+      "id": "CM-044",
+      "breaks": "状態の語の指標で、回ごとの点を取るのをやめる（回数を数え間違える元の姿）",
+      "file": "scripts/lib/precision-metrics.mjs",
+      "find": "          if ((metric.measuredStates ?? []).includes(r[metric.stateField])) return 100",
+      "replace": "          if ((metric.measuredStates ?? []).includes(r[metric.stateField])) return null",
+      "expect": "scripts/check-precision-metrics.test.sh",
+      "guards": "記録が 2 回あるのに「1 回」と言わないこと（2026-09-10 に実測で発覚）"
+    },
+    {
+      "id": "CM-045",
+      "breaks": "eval の記録から「fixture が未コミット」の判定を外す（いつも きれい と言う）",
+      "file": "scripts/lib/record-eval-run.sh",
+      "find": "  fixtures_dirty=\"$(dirty_of \"scripts/eval-fixtures\")\"",
+      "replace": "  fixtures_dirty=\"false\"",
+      "expect": "scripts/check-agent-output.test.sh",
+      "guards": "記録の木のハッシュが実際に測ったものを表すか（fixture は作業ツリーから読むので、未コミットだとずれる）"
+    },
+    {
+      "id": "CM-046",
+      "breaks": "SECURITY DEFINER の認可検査から違反の報告を外す（無防備な関数を通す）",
+      "file": "scripts/lib/scan-definer-authz-gaps.mjs",
+      "find": "    if (info.guards.length > 0) continue",
+      "replace": "    if (true) continue",
+      "expect": "scripts/check-definer-authz-gaps.test.sh",
+      "guards": "client から呼べる SECURITY DEFINER に呼び出し元の判定が要ること（2026-09-10 に LLM が 5 回見逃した欠陥）"
+    },
+    {
+      "id": "CM-047",
+      "breaks": "認可チェックの一覧に `user_facilities` を足す（「誰かが所属」を認可と読む）",
+      "file": "scripts/lib/scan-definer-authz-gaps.mjs",
+      "find": "  { name: 'auth.uid()', re: /\\bauth\\.uid\\s*\\(/i },",
+      "replace": "  { name: 'auth.uid()', re: /\\bauth\\.uid\\s*\\(|\\buser_facilities\\b/i },",
+      "expect": "scripts/check-definer-authz-gaps.test.sh",
+      "guards": "「**呼び出し元が**属するか」と「**誰かが**属するか」を混ぜないこと（held-out fixture の形）"
+    },
+    {
+      "id": "CM-048",
+      "breaks": "SECURITY DEFINER の認可検査から、走査の空振り防止を外す",
+      "file": "scripts/lib/scan-definer-authz-gaps.mjs",
+      "find": "  if (latest.size === 0) {\n    console.error('scan-definer-authz-gaps: 関数を 1 つも見つけられなかった（走査が壊れている）')",
+      "replace": "  if (false) {\n    console.error('scan-definer-authz-gaps: 関数を 1 つも見つけられなかった（走査が壊れている）')",
+      "expect": "scripts/check-definer-authz-gaps.test.sh",
+      "guards": "C-021（走査が壊れたら違反 0 件で合格に見える）"
+    },
+    {
+      "id": "CM-049",
+      "breaks": "証拠の鮮度から「コミットが進んだか」の判定を外す（いつも最新に見せる）",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "      else if (recorded !== now) stale.push('HEAD のコミット')",
+      "replace": "      else if (false) stale.push('HEAD のコミット')",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "C-010（木で表せない結果を「変わっていないのに最新」と言わない）"
+    },
+    {
+      "id": "CM-050",
+      "breaks": "見張る先が無い証拠を登録できるようにする（最新かを永久に判定できない証拠を通す）",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "      if ((e.watch ?? []).length === 0 && e.watchCommit !== true) {",
+      "replace": "      if (false) {",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "測っただけで終わる証拠を登録させないこと（設計提案 4）"
+    },
+    {
+      "id": "CM-051",
+      "breaks": "採点器の件数の口から「読めなかった」を 0 件にする",
+      "file": "scripts/lib/judge-sweep-recall.py",
+      "find": "    if any(_squash(p) in summary for p in NO_FINDING_PHRASES):\n        return 0\n    return -1",
+      "replace": "    if any(_squash(p) in summary for p in NO_FINDING_PHRASES):\n        return 0\n    return 0",
+      "expect": "scripts/lib/judge-sweep-recall.test.sh",
+      "guards": "C-025（「指摘 0 件」と「件数が読めなかった」を混ぜない）"
+    },
+    {
+      "id": "CM-052",
+      "breaks": "Suspense の検査から違反の報告を外す（包まれていない useSearchParams を通す）",
+      "file": "scripts/lib/scan-suspense-gaps.mjs",
+      "find": "    if (SUSPENSE_OPEN_RE.test(src)) continue",
+      "replace": "    if (true) continue",
+      "expect": "scripts/check-suspense-gaps.test.sh",
+      "guards": "LLM もフレームワークも外した欠陥（2026-09-10 実測: next build は落ちなかった）"
+    },
+    {
+      "id": "CM-053",
+      "breaks": "「import 元に Suspense があるか」だけで通す（内側で使っているかを見ない）",
+      "file": "scripts/lib/scan-suspense-gaps.mjs",
+      "find": "      if (names.some((n) => usedInsideSuspense(otherSrc, n))) {",
+      "replace": "      if (true) {",
+      "expect": "scripts/check-suspense-gaps.test.sh",
+      "guards": "別の場所の Suspense で通してしまわないこと（C-011: パスの実在しか見ない型）"
+    },
+    {
+      "id": "CM-054",
+      "breaks": "件数の指標を割合として扱う（1 件 / 1 回 = 100% と読む元の姿）",
+      "file": "scripts/lib/precision-metrics.mjs",
+      "find": "      rates = recent.map((r) => num(r[metric.numerator])).filter((v) => v !== null)",
+      "replace": "      rates = recent.map((r) => (num(r[metric.numerator]) !== null ? 100 : null)).filter((v) => v !== null)",
+      "expect": "scripts/check-precision-metrics.test.sh",
+      "guards": "C-031（数える単位が違うものを同じ数として扱わない。意味のないばらつき警告が出た）"
+    },
+    {
+      "id": "CM-055",
+      "breaks": "その条件に記録が無い群へ数字を出す（`null%` と書いていた元の姿）",
+      "file": "scripts/lib/precision-metrics.mjs",
+      "find": "        if (g.value === null) {",
+      "replace": "        if (false) {",
+      "expect": "scripts/check-precision-metrics.test.sh",
+      "guards": "測っていないものを数字にしないこと（この道具自身の原則）"
+    },
+    {
+      "id": "CM-056",
+      "breaks": "前提に巻き込まれた同期テストの報告を外す（巻き込みを見逃す元の姿）",
+      "file": "scripts/lib/scan-skip-scope.mjs",
+      "find": "      if (!SYNC_TEST_RE.test(line)) continue",
+      "replace": "      if (true) continue",
+      "expect": "scripts/check-skip-scope.test.sh",
+      "guards": "C-033。E-068 で実際にすり抜けた形（ファイルを読むだけの ratchet が DB の前提でスキップされていた）"
+    },
+    {
+      "id": "CM-057",
+      "breaks": "前提の無い describe の同期テストまで違反にする（過検知側へ倒す）",
+      "file": "scripts/lib/scan-skip-scope.mjs",
+      "find": "    if (skips.length === 0) continue",
+      "replace": "    if (false) continue",
+      "expect": "scripts/check-skip-scope.test.sh",
+      "guards": "過検知で信用を失わないこと（C-024 の型: 通したい向きも一緒に拒まない）"
+    },
+    {
+      "id": "CM-058",
+      "breaks": "spec を 1 本も見つけられなくても合格にする（走査の空振りを緑と読む）",
+      "file": "scripts/lib/scan-skip-scope.mjs",
+      "find": "  if (files === 0) {",
+      "replace": "  if (false) {",
+      "expect": "scripts/check-skip-scope.test.sh",
+      "guards": "C-040（0 件は「無い」と「探せていない」の両方で出る）"
+    },
+    {
+      "id": "CM-059",
+      "breaks": "採点を本文全体で見る（別々の指摘に分散していても HIT にする元の姿）",
+      "file": "scripts/lib/judge-sweep-recall.py",
+      "find": "    reported_about_fixture = has_finding and matched_in_same_finding(detail, paths_lower, keywords_lower)",
+      "replace": "    reported_about_fixture = has_finding and any(p in detail for p in paths_lower) and any(k in detail for k in keywords_lower)",
+      "expect": "scripts/lib/judge-sweep-recall.test.sh",
+      "guards": "レビュー指摘 R11 の後段。**欠陥を外していても満点**が付く形（Sweep は全体を掃くので無関係な指摘が並ぶ）"
+    },
+    {
+      "id": "CM-060",
+      "breaks": "指摘の区切りを見ない（報告全体を 1 つの指摘として扱う）",
+      "file": "scripts/lib/judge-sweep-recall.py",
+      "find": "        if current and NEW_FINDING_RE.match(line):",
+      "replace": "        if False:",
+      "expect": "scripts/lib/judge-sweep-recall.test.sh",
+      "guards": "切らなければ分散も 1 つの指摘に見える（CM-059 と同じ穴への別の道）"
+    },
+    {
+      "id": "CM-061",
+      "breaks": "eval の鮮度を「ファイルに差分があるか」だけで見る（古い記録を 1 行足せば通る元の姿）",
+      "file": "scripts/check-eval-runs-freshness.sh",
+      "find": "  if [ \"${FRESH_COUNT:-0}\" -gt 0 ]; then",
+      "replace": "  if true; then",
+      "expect": "scripts/check-eval-runs-freshness.test.sh",
+      "guards": "C-010。ここでの「印」は**ファイルが変わったという事実**で、実態（いまの木で測ったか）と突き合わせていなかった"
+    },
+    {
+      "id": "CM-062",
+      "breaks": "held-out の名前がプロンプト側に出ていても見逃す",
+      "file": "scripts/lib/scan-holdout-isolation.mjs",
+      "find": "      if (text.includes(name)) {",
+      "replace": "      if (false) {",
+      "expect": "scripts/check-holdout-isolation.test.sh",
+      "guards": "C-010。`heldOut: true` の印を読むコードが 1 つも無かった（印だけがあった）"
+    },
+    {
+      "id": "CM-063",
+      "breaks": "*-holdout の印の付け忘れを見逃す",
+      "file": "scripts/lib/scan-holdout-isolation.mjs",
+      "find": "        if (!marked) {",
+      "replace": "        if (false) {",
+      "expect": "scripts/check-holdout-isolation.test.sh",
+      "guards": "印と実態の突合（付け忘れた case は普通のセットと区別が付かなくなる）"
+    },
+    {
+      "id": "CM-064",
+      "breaks": "逃がし口の上限を見ない（いくつでも増やせる元の姿）",
+      "file": "scripts/lib/scan-exemptions.mjs",
+      "find": "    if (counts[m.name] > limit) {",
+      "replace": "    if (false) {",
+      "expect": "scripts/check-exemptions.test.sh",
+      "guards": "逃がし口は 1 件ずつは正当でも、増えれば検査が形骸化する"
+    },
+    {
+      "id": "CM-065",
+      "breaks": "逃がし口に理由が無くても通す",
+      "file": "scripts/lib/scan-exemptions.mjs",
+      "find": "        if (m.withReason.test(lines[i])) continue",
+      "replace": "        continue",
+      "expect": "scripts/check-exemptions.test.sh",
+      "guards": "2026-09-10 実測で 9 件が理由なしだった（うち 8 件は本物）"
+    },
+    {
+      "id": "CM-066",
+      "breaks": "held-out の名前を「印の付いた名前」だけで絞る（改名した瞬間に空振りする元の姿）",
+      "file": "scripts/lib/scan-holdout-isolation.mjs",
+      "find": "  const distinctive = [...holdoutNames].filter((n) => n.length >= 12 && !sharedNames.has(n))",
+      "replace": "  const distinctive = [...holdoutNames].filter((n) => n.length >= 12 && /holdout/i.test(n))",
+      "expect": "scripts/check-holdout-isolation.test.sh",
+      "guards": "C-011。E-070 で fixture を業務らしい名前へ変えたとき、印で絞る判定は**何も見張らなくなった**"
+    },
+    {
+      "id": "CM-067",
+      "breaks": "逃がし口（同梱しない参照の免除）のうち、一度も当たらないものを落とす判定を外す",
+      "file": "scripts/lib/build-plugin.mjs",
+      "find": "    if (!allowedUsed.has(key)) {",
+      "replace": "    if (false) {",
+      "expect": "scripts/build-plugin.test.sh",
+      "guards": "E-045（死んだ免除が、同じ参照が戻ったとき別の文脈の理由で黙って通す）"
+    },
+    {
+      "id": "CM-068",
+      "breaks": "逃がし口の件数の上限（ratchet）を外す",
+      "file": "scripts/lib/build-plugin.mjs",
+      "find": "  } else if (typeof allowMax === 'number' && allowCount > allowMax) {",
+      "replace": "  } else if (false) {",
+      "expect": "scripts/build-plugin.test.sh",
+      "guards": "E-045（逃がし口は放っておくと増える）"
+    },
+    {
+      "id": "CM-069",
+      "breaks": "hook に登録されているのに実体が無いスクリプトの報告を外す",
+      "file": "scripts/lib/aidd-doctor.mjs",
+      "find": "  if (r.unresolved > 0) {",
+      "replace": "  if (false) {",
+      "expect": "scripts/check-aidd-doctor.test.sh",
+      "guards": "E-046（呼ばれても何も起きない hook を黙って見逃す）"
+    },
+    {
+      "id": "CM-070",
+      "breaks": "実体の無いものまで「実体」に数える（数える単位を壊す。C-031）",
+      "file": "scripts/lib/aidd-doctor.mjs",
+      "find": "    scripts: scripts.size - unresolved,",
+      "replace": "    scripts: scripts.size,",
+      "expect": "scripts/check-aidd-doctor.test.sh",
+      "guards": "E-046（表示が嘘をつき、実体 0 本でも fail-open 防止が発火しない）"
+    },
+    {
+      "id": "CM-071",
+      "breaks": "門のマーカーが 2 回以上出るときに落とす判定を外す（別の門を数えても通す）",
+      "file": "scripts/lib/gate-prompt-hash.mjs",
+      "find": "  if (occurrences > 1) {",
+      "replace": "  if (false) {",
+      "expect": "scripts/check-fault-injection-drill-staleness.test.sh",
+      "guards": "E-048（「版が一致した」が「正しい門を見た」を意味しなくなる。C-040）"
+    },
+    {
+      "id": "CM-072",
+      "breaks": "訓練した版といまの版の突合を外す（門の文言が変わっても黙る）",
+      "file": "scripts/check-fault-injection-drill-staleness.sh",
+      "find": "  [ \"$recorded\" = \"$current\" ] && return 0",
+      "replace": "  return 0",
+      "expect": "scripts/check-fault-injection-drill-staleness.test.sh",
+      "guards": "E-048（deny-by-default の門が変わったのに訓練していない）"
+    },
+    {
+      "id": "CM-073",
+      "breaks": "tools から sandbox_mode を決める規則を外し、常に read-only にする",
+      "file": "scripts/lib/generate-codex-agents.mjs",
+      "find": "  return /\\b(Edit|Write|MultiEdit)\\b/.test(tools ?? '') ? 'workspace-write' : 'read-only'",
+      "replace": "  return 'read-only'",
+      "expect": "scripts/check-codex-agents-generated.test.sh",
+      "guards": "書き込みロールの権限が実態とずれる（E-042 の写像）"
+    },
+    {
+      "id": "CM-074",
+      "breaks": "退避をやめて素の行をそのまま割る（エスケープしたパイプが区切りに戻る）",
+      "file": "scripts/lib/table-row.sh",
+      "find": "table_mask() { printf '%s' \"${1//\\\\|/$TABLE_ROW_SENTINEL}\"; }",
+      "replace": "table_mask() { printf '%s' \"$1\"; }",
+      "expect": "scripts/lib/table-row.test.sh",
+      "guards": "E-081（shell 側の入口が共通エンジンと違う答えを返す）"
+    },
+    {
+      "id": "CM-075",
+      "breaks": "自前の区切りを見つける走査を空にする（違反があっても 0 件と言う）",
+      "file": "scripts/check-table-row-parsing.test.sh",
+      "find": "      cur ~ /awk[ \\t]+-F.?\\|/ || cur ~ /cut[ \\t]+-d.?\\|/ || cur ~ /\\.split\\(.\\|.\\)/ {",
+      "replace": "      0 {",
+      "expect": "scripts/check-table-row-parsing.test.sh",
+      "guards": "E-081（門が何も見つけられなくなっても緑のまま。C-022 の RED 方向）"
+    },
+    {
+      "id": "CM-076",
+      "breaks": "共通エンジンの分け方からエスケープの例外を外す（素の split に戻す）",
+      "file": "scripts/lib/check-catalog.mjs",
+      "find": "  const cells = line.split(/(?<!\\\\)\\|/)",
+      "replace": "  const cells = line.split('|')",
+      "expect": "scripts/check-catalogs.test.sh",
+      "guards": "E-081 / E-049（正しい表を違反と報告する側へ倒れる）"
+    },
+    {
+      "id": "CM-077",
+      "breaks": "出力してから exit する箇所の報告を外す（増えても 0 件と言う）",
+      "file": "scripts/lib/scan-stdout-exit.mjs",
+      "find": "    violations.push({ file: rel, writeLine: firstWrite + 1, exitLine: exitLine + 1 })",
+      "replace": "    void rel",
+      "expect": "scripts/check-stdout-truncation.test.sh",
+      "guards": "E-080（直した日がいちばん綺麗で、あとは劣化する。C-051 の ratchet）"
+    },
+    {
+      "id": "CM-078",
+      "breaks": "一度も当たらない免除を見逃す（腐った宣言を残せる）",
+      "file": "scripts/lib/scan-stdout-exit.mjs",
+      "find": "    unusedExemptions: declared.filter((k) => !hitExemptions.has(k)),",
+      "replace": "    unusedExemptions: [],",
+      "expect": "scripts/check-stdout-truncation.test.sh",
+      "guards": "C-049（逃がし口を作ったが、まだ要るかを誰も確かめない）"
+    },
+    {
+      "id": "CM-079",
+      "breaks": "生成物の見出しが無い HTML を通す（手で作ったその日の姿を置ける元の姿）",
+      "file": "scripts/check-committed-html-generated.test.sh",
+      "find": "    if ! grep -qF \"$HEADER\" \"$root/$rel\" 2>/dev/null; then",
+      "replace": "    if false; then",
+      "expect": "scripts/check-committed-html-generated.test.sh",
+      "guards": "レビュー artifact の鮮度（2026-09-11 に消した docs/aidd-status.html の再発）"
+    },
+    {
+      "id": "CM-080",
+      "breaks": "生成器が --check を持たなくても通す（生成物を名乗るだけで古びる元の姿）",
+      "file": "scripts/check-committed-html-generated.test.sh",
+      "find": "    elif ! grep -q -- '--check' \"$root/$regen\"; then",
+      "replace": "    elif false; then",
+      "expect": "scripts/check-committed-html-generated.test.sh",
+      "guards": "生成物が最新かを誰も確かめられない（C-022）"
+    },
+    {
+      "id": "CM-081",
+      "breaks": "NUL を制御バイトと数えない（今日の事故そのものを見逃す元の姿）",
+      "file": "scripts/lib/scan-control-bytes.mjs",
+      "find": "  return b !== 0x09 && b !== 0x0a && b !== 0x0d",
+      "replace": "  return b !== 0x00 && b !== 0x09 && b !== 0x0a && b !== 0x0d",
+      "expect": "scripts/check-control-bytes.test.sh",
+      "guards": "E-082（生の NUL が入っても検査 142 本のどれにも掛からなかった）"
+    },
+    {
+      "id": "CM-082",
+      "breaks": "コミットメッセージの走査で、見つけても通す",
+      "file": "scripts/lib/scan-control-bytes.mjs",
+      "find": "      if (hits.length === 0) process.exit(0)",
+      "replace": "      process.exit(0)",
+      "expect": "scripts/check-control-bytes.test.sh",
+      "guards": "C-052（git は ESC / BS / DEL をメッセージに通して記録する）"
+    },
+    {
+      "id": "CM-083",
+      "breaks": "commit-msg hook が制御バイトを見つけても止めない",
+      "file": "scripts/git-hooks/commit-msg",
+      "find": "if [ \"$rc\" -eq 1 ]; then",
+      "replace": "if false; then",
+      "expect": "scripts/check-git-hooks.test.sh",
+      "guards": "C-052（履歴に入ったメッセージは後から直せない）"
+    },
+    {
+      "id": "CM-084",
+      "breaks": "マージ予行で、合流させた本数 0 を「対象なし」にしない（全部が済みでも合格を記録する元の姿）",
+      "file": "scripts/lib/rehearse-merge.mjs",
+      "find": "if (rehearsed === 0) process.exit(4)",
+      "replace": "void rehearsed",
+      "expect": "scripts/rehearse-merge.test.sh",
+      "guards": "E-083（次に本当の衝突が出るまで緑が続く。C-021）"
+    },
+    {
+      "id": "CM-085",
+      "breaks": "証拠の欄で、対象なし・判定できなかったを赤として出す（直すものが無いのに赤のまま放置に見える元の姿）",
+      "file": "scripts/lib/render-harness-map.mjs",
+      "find": "    const passed = neutral ? null : record[passField] === passValue",
+      "replace": "    const passed = record[passField] === passValue",
+      "expect": "scripts/check-harness-map.test.sh",
+      "guards": "C-025（測れなかったを合格にも不合格にも数えない）"
+    },
+    {
+      "id": "CM-086",
+      "breaks": "記録係で終了コードを受けずに node を素のまま呼ぶ（合格以外は記録の前に終わる元の姿）",
+      "file": "scripts/rehearse-merge.sh",
+      "find": "node \"$SCRIPT_DIR/lib/rehearse-merge.mjs\" \"$@\" || REHEARSE_EXIT=$?",
+      "replace": "node \"$SCRIPT_DIR/lib/rehearse-merge.mjs\" \"$@\"",
+      "expect": "scripts/rehearse-merge.test.sh",
+      "guards": "E-084（衝突が出ても証拠の欄が緑のまま。C-044）"
+    },
+    {
+      "id": "CM-087",
+      "breaks": "pre-push hook が GitHub の main への push を止めない（CI を通さずに正本へ入る元の姿）",
+      "file": "scripts/git-hooks/pre-push",
+      "find": "    blocked=\"yes\"",
+      "replace": "    :",
+      "expect": "scripts/check-git-hooks.test.sh",
+      "guards": "H-001（main へ直接 push もできる。GitHub 側でブランチ保護を掛けられない）"
+    },
+    {
+      "id": "CM-088",
+      "breaks": "Workflow の連鎖の走査で、2 段目を数えない（配布物の入口が動かないことに気づけない元の姿）",
+      "file": "scripts/lib/scan-workflow-nesting.mjs",
+      "find": "        if (!c || c.file === b.file) continue",
+      "replace": "        if (c) continue",
+      "expect": "scripts/check-workflow-nesting.test.sh",
+      "guards": "E-085（導入先の入口が一度も動いていなかった。C-053）"
+    },
+    {
+      "id": "CM-089",
+      "breaks": "commit-msg hook が凍結中でも、製品に触れないコミットを止めない（決めた凍結が 2 日で消える元の姿）",
+      "file": "scripts/git-hooks/commit-msg",
+      "find": "  if ! printf '%s\\n' \"$staged\" | grep -qE '^(src|supabase|e2e)/'; then",
+      "replace": "  if false; then",
+      "expect": "scripts/check-git-hooks.test.sh",
+      "guards": "H-014（凍結決定後 48 コミット中、製品に触れたのは 1 件）"
+    }
+  ]
+}

@@ -26,6 +26,7 @@ set -euo pipefail
 #   EVAL_SWEEP_RECALL_TIMEOUT_SECONDS - 1caseあたりのタイムアウト秒数（省略時は900。sweep-dataは
 #     全リポジトリのAPIルート・data層を走査するため実測で数分〜30分近くかかることがある）
 #   EVAL_SWEEP_RECALL_AGENT_CMD     - 実際の`claude -p`呼び出しの代わりに使うコマンド
+#   EVAL_SWEEP_RECALL_MODEL     - manifest のモデルを上書きする（同じ fixture を別モデルで測る）
 #   EVAL_SWEEP_RECALL_DEBUG_DIR     - 指定すると各caseの生出力(JSON)を<case名>.jsonとして保存する
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,7 +50,10 @@ if [ ! -f "$MANIFEST_FILE" ]; then
 fi
 
 AGENT_TYPE="$(jq -r '.agentType' "$MANIFEST_FILE")"
-MODEL="$(jq -r '.model' "$MANIFEST_FILE")"
+# モデルは manifest の値が既定。**実行時に差し替えられる**（2026-09-10）——
+# 「指示が悪いのか、モデルの容量が足りないのか」を分けて測るための口。
+# 差し替えた回は記録の `model` も変わるので、条件が違う回として扱われ混ざらない。
+MODEL="${EVAL_SWEEP_RECALL_MODEL:-$(jq -r '.model' "$MANIFEST_FILE")}"
 
 # docs/agents/agent-result-schema.md参照。aidd-phase1.jsのAGENT_RESULT_SCHEMAと同一。
 JSON_SCHEMA='{"type":"object","properties":{"status":{"type":"string","enum":["pass","blocked"]},"detail":{"type":"string"}},"required":["status","detail"]}'
@@ -86,11 +90,14 @@ run_agent() {
   local agent_md="$PWD/.claude/agents/${AGENT_TYPE}.md"
   local agents_json
   agents_json="$(node "$SCRIPT_DIR/lib/build-eval-agent-json.mjs" "$agent_md" "$AGENT_TYPE")"
+  # --output-format json: 使用量（トークン数・費用）を返させる（2026-09-10、設計提案 3「費用」）。
+  # --json-schema と併用できることは実測済み。包みは scripts/lib/agent-output.mjs が剥がす
   printf '%s' "$prompt" | claude -p --agent "$AGENT_TYPE" --model "$MODEL" \
     --json-schema "$JSON_SCHEMA" \
     --agents "$agents_json" \
     --setting-sources "" \
     --permission-mode bypassPermissions \
+    --output-format json \
     --no-session-persistence
 }
 
@@ -121,9 +128,37 @@ run_agent_with_timeout() {
   return "$status"
 }
 
+# 記録と使用量の足し上げは共通（scripts/lib/record-eval-run.sh）。
+# **ループより前に読み込む**——accumulate_usage をループの中で呼ぶため
+# shellcheck source=lib/record-eval-run.sh
+source "$SCRIPT_DIR/lib/record-eval-run.sh"
+# 回答本文の保存先を決めるため（worktree をまたいで共有される logs/）
+# shellcheck source=lib/resolve-log-dir.sh
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+
+# 未コミットの変更があると「測ったつもり」がずれる。**走らせる前に言う**（判定は記録と共有）
+warn_if_dirty "$REPO_DIR"
+
+# 所要時間を測る起点（設計提案 3「再現性と費用」のうち時間の側）
+RUN_STARTED_AT="$(date +%s)"
+# 実コードへの指摘の多さ（2026-09-10）。読めなかった回は 0 と混ぜず別に数える
+FINDINGS_REPORTED=0
+FINDINGS_SAMPLES=0
+FINDINGS_UNREADABLE=0
 TOTAL=0
 HIT_COUNT=0
+# 従来の判定（本文全体）での合格数。**判定を切り替えた影響を測るためだけに数える**（R11 の後段）
+LOOSE_HIT_COUNT=0
 MISS_LINES=""
+
+# 判定に使った回答本文の保存先。**採点器を直したとき、過去の回を測り直すために要る**。
+# 2026-09-10 まで判定後に捨てていたので、それ以前の回は永久に測り直せない。
+# logs/ は git 管理外（機械ローカル）。書けなくても本題は止めない
+DETAILS_DIR=""
+if _details_root="$(resolve_log_dir 2>/dev/null)"; then
+  DETAILS_DIR="$_details_root/eval-details/$(date -u +%Y%m%dT%H%M%SZ)-${LAYER}"
+  mkdir -p "$DETAILS_DIR" 2>/dev/null || DETAILS_DIR=""
+fi
 
 for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
   [ -d "$case_dir" ] || continue
@@ -135,7 +170,9 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
     continue
   fi
   TOTAL=$((TOTAL + 1))
-  EXPECTED_PATH="$(jq -r '.expectedFilePathContains' "$expected_file")"
+  # WHY(配列をそのまま出さない、2026-09-10): expectedFilePathContains は文字列か配列。
+  #      `jq -r` に配列を渡すと JSON のまま複数行で出て、MISS の理由が読めなくなる（実測）
+  EXPECTED_PATH="$(jq -r '.expectedFilePathContains | if type == "array" then join(" / ") else . end' "$expected_file")"
 
   CLONE_DIR="$(mktemp -d)"
   CLONE_EXIT=0
@@ -178,19 +215,54 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
   #      いても MISS になっていた（2026-09-05 実測: 生出力に期待パスとキーワードの両方があるのに 0/1）。
   #      JSON として読めなければ生出力全体を判定対象にする（判定は部分文字列一致なので過検出は
   #      増えない。status の取得は諦める）
-  if ! printf '%s' "$AGENT_OUTPUT" | jq -r '.detail // ""' > "$DETAIL_FILE" 2>/dev/null; then
-    printf '%s' "$AGENT_OUTPUT" > "$DETAIL_FILE"
+  # `claude -p --output-format json` の包みを剥がす。**包みが無い（モック）出力もそのまま通る**
+  AGENT_PAYLOAD="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --payload 2>/dev/null || printf '%s' "$AGENT_OUTPUT")"
+  # 使用量を足し上げる（設計提案 3「費用」）
+  USAGE_JSON="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --usage 2>/dev/null || echo '{}')"
+  accumulate_usage "$USAGE_JSON"
+
+  if ! printf '%s' "$AGENT_PAYLOAD" | jq -r '.detail // ""' > "$DETAIL_FILE" 2>/dev/null; then
+    printf '%s' "$AGENT_PAYLOAD" > "$DETAIL_FILE"
     echo "[$case_name] 注意: エージェント出力が JSON ではないため生出力全体を判定対象にしました" >&2
   fi
   IS_HIT="$(EXPECTED_FILE="$expected_file" DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py")"
+  # 従来の判定（本文全体で見る）も併せて取る。2026-09-10 に判定を「**同じ指摘の中で**
+  # そろっているか」へ変えたので、**切り替えの影響を測れるように両方を残す**（R11 の後段）
+  IS_HIT_LOOSE="$(EXPECTED_FILE="$expected_file" DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py" --loose 2>/dev/null || echo "$IS_HIT")"
+  [ "$IS_HIT_LOOSE" = "true" ] && LOOSE_HIT_COUNT=$((LOOSE_HIT_COUNT + 1))
+  # 判定に使った本文を残す。**採点器を直したときに過去の回を測り直すために要る**——
+  # 2026-09-10 まで捨てていたので、それ以前の回は測り直せない
+  if [ -n "$DETAILS_DIR" ]; then
+    cp "$DETAIL_FILE" "$DETAILS_DIR/${case_name}.txt" 2>/dev/null || true
+  fi
+  # 実コードへの指摘の多さを追う（2026-09-10）。**本物か誤りかは分けない**——
+  # 分けるのは人の仕事で、ここで測れるのは「増えた／減った」だけ。
+  # 読めなかった回（-1）は 0 と混ぜず、別に数える。
+  CASE_FINDINGS="$(DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py" --count 2>/dev/null || echo -1)"
+  if [ "$CASE_FINDINGS" -ge 0 ] 2>/dev/null; then
+    FINDINGS_REPORTED=$((FINDINGS_REPORTED + CASE_FINDINGS))
+    FINDINGS_SAMPLES=$((FINDINGS_SAMPLES + 1))
+  else
+    FINDINGS_UNREADABLE=$((FINDINGS_UNREADABLE + 1))
+  fi
   rm -f "$DETAIL_FILE"
 
+  # 陰性対照（欠陥の無い fixture）は逆向きに採点する。HIT/MISS の文言もそれに合わせる
+  # （2026-09-10・レビュー指摘 R11。陽性だけを測ると「全部に指摘を出す」エージェントが満点になる）
+  EXPECT_NO_FINDING="$(jq -r '.expectNoFinding // false' "$expected_file")"
   if [ "$IS_HIT" = "true" ]; then
     HIT_COUNT=$((HIT_COUNT + 1))
-    echo "[$case_name] HIT: 期待ファイル($EXPECTED_PATH)とキーワードの両方を検出"
+    if [ "$EXPECT_NO_FINDING" = "true" ]; then
+      echo "[${case_name}] HIT（陰性対照）: 欠陥の無いコードに指摘を出さなかった"
+    else
+      echo "[${case_name}] HIT: 期待ファイル(${EXPECTED_PATH})とキーワードの両方を、指摘として報告した"
+    fi
+  elif [ "$EXPECT_NO_FINDING" = "true" ]; then
+    MISS_LINES="$MISS_LINES
+- [${case_name}] MISS（陰性対照）: 欠陥の無いコードに指摘を出した（過検出）"
   else
     MISS_LINES="$MISS_LINES
-- [$case_name] MISS: 期待ファイル($EXPECTED_PATH)またはキーワードを検出できず"
+- [${case_name}] MISS: 期待ファイル(${EXPECTED_PATH})かキーワードが無い、または「指摘なし」と報告した"
   fi
 done
 
@@ -202,11 +274,23 @@ fi
 echo ""
 echo "=== eval-sweep-recall: $LAYER ==="
 echo "recall: $HIT_COUNT / $TOTAL"
+# 判定を切り替えた影響をその場でも見せる（2026-09-10・R11 の後段）。
+# 差があるということは、パスとキーワードが**別々の指摘に分散**していた回があったということ
+if [ "$LOOSE_HIT_COUNT" -ne "$HIT_COUNT" ]; then
+  echo "（従来の判定＝本文全体で見ると ${LOOSE_HIT_COUNT} / ${TOTAL}。差の分は、期待パスと期待キーワードが別々の指摘に分かれていた）"
+fi
+[ -n "$DETAILS_DIR" ] && echo "回答本文: $DETAILS_DIR"
 
-EVAL_RUNS_FILE="$REPO_DIR/docs/agents/eval-runs.jsonl"
-mkdir -p "$(dirname "$EVAL_RUNS_FILE")"
-printf '{"timestamp":"%s","script":"eval-sweep-recall","fixtureSet":"%s","pass":%d,"total":%d}\n' \
-  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$LAYER" "$HIT_COUNT" "$TOTAL" >> "$EVAL_RUNS_FILE"
+# 条件（木のハッシュ・モデル）・所要時間・費用も一緒に残す
+# ——**同じ条件の回どうしでしかばらつきは比べられない**（設計提案 3）
+EVAL_RUNS_REPO_DIR="$REPO_DIR" \
+EVAL_FINDINGS_REPORTED="$FINDINGS_REPORTED" \
+EVAL_FINDINGS_SAMPLES="$FINDINGS_SAMPLES" \
+EVAL_FINDINGS_UNREADABLE="$FINDINGS_UNREADABLE" \
+EVAL_LOOSE_PASS="$LOOSE_HIT_COUNT" \
+EVAL_DETAILS_DIR="$DETAILS_DIR" \
+record_eval_run \
+  "eval-sweep-recall" "$LAYER" "$HIT_COUNT" "$TOTAL" "$RUN_STARTED_AT" "$MODEL"
 
 if [ -n "$MISS_LINES" ]; then
   echo "$MISS_LINES"

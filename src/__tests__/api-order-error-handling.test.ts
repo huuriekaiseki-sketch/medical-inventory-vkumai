@@ -34,7 +34,7 @@ describe('consumable-orders エラーハンドリング', () => {
     const res = await consumableOrderPOST(
       makeRequest('/api/consumable-orders', {
         facilityId: 'f1',
-        items: [{ name: 'A', quantity: 1 }],
+        items: [{ consumableId: 'c1', quantity: 1 }],
       })
     )
     expect(res.status).toBe(500)
@@ -49,7 +49,7 @@ describe('consumable-orders エラーハンドリング', () => {
     const res = await consumableOrderPOST(
       makeRequest('/api/consumable-orders', {
         facilityId: 'f1',
-        items: [{ name: 'A', quantity: 1 }],
+        items: [{ consumableId: 'c1', quantity: 1 }],
       })
     )
     expect(res.status).toBe(500)
@@ -92,8 +92,13 @@ describe('loan-returns エラーハンドリング', () => {
   })
 })
 
-describe('quantity: 0 は有効データとして処理される', () => {
-  it('case-orders: quantity 0 のアイテムでも 400 にならない', async () => {
+// WHY(#757-20 / I-010): このテストはもともと「0 は falsy なので素朴な検証だと弾かれる」という
+//      罠を守るためのものだった。その後 2026-09-06 に不変条件 I-010（数量は 1 以上）が DB の
+//      CHECK として入り、**0 は業務として無効**になった。API が 0 を通すと DB で 23514 になり、
+//      利用者には何が悪いか伝わらない。入口で 400 にするのが正しい。
+//      falsy の罠は「1 は通る」側で守る。
+describe('数量は 1 以上（I-010 を入口でも守る）', () => {
+  it('case-orders: quantity 0 は 400 で、何が悪いか文言に出る', async () => {
     vi.mocked(createCaseOrder).mockResolvedValue({
       id: 'o1',
       facilityId: 'f1',
@@ -118,6 +123,25 @@ describe('quantity: 0 は有効データとして処理される', () => {
         gender: 'male',
         doctorName: 'Dr',
         items: [{ jan: '4901234567890', quantity: 0 }],
+      })
+    )
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toContain('数量')
+    expect(createCaseOrder).not.toHaveBeenCalled()
+  })
+
+  it('case-orders: quantity 1 は通る（0 が falsy であることに引きずられない）', async () => {
+    const res = await caseOrderPOST(
+      makeRequest('/api/case-orders', {
+        facilityId: 'f1',
+        caseDatetime: '2026-06-25T00:00:00Z',
+        procedureName: 'PCI',
+        patientId: 'p1',
+        patientInitials: 'AB',
+        gender: 'male',
+        doctorName: 'Dr',
+        items: [{ jan: '4901234567890', quantity: 1 }],
       })
     )
     expect(res.status).toBe(201)

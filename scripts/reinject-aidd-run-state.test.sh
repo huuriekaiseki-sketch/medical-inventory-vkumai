@@ -15,10 +15,10 @@ assert_empty() {
   if [ -z "$1" ]; then echo "  OK: $2"; else echo "  NG: $2 (actual=$1)"; fail=1; fi
 }
 assert_contains() {
-  if printf '%s' "$1" | grep -qF -- "$2"; then echo "  OK: $3"; else echo "  NG: $3"; echo "      expected: $2"; echo "      actual: $1"; fail=1; fi
+  if grep -qF -- "$2" <<<"$1"; then echo "  OK: $3"; else echo "  NG: $3"; echo "      expected: $2"; echo "      actual: $1"; fail=1; fi
 }
 assert_not_contains() {
-  if printf '%s' "$1" | grep -qF -- "$2"; then echo "  NG: $3 (unexpected: $2)"; fail=1; else echo "  OK: $3"; fi
+  if grep -qF -- "$2" <<<"$1"; then echo "  NG: $3 (unexpected: $2)"; fail=1; else echo "  OK: $3"; fi
 }
 
 WORK="$(mktemp -d)"
@@ -75,8 +75,15 @@ assert_not_contains "$OUT" "id=r3" "resolved は出さない"
 assert_contains "$OUT" "resolve-recovery-task.sh" "解決手順へのポインタ"
 
 echo "=== scenario 5: 進捗ログがある → show-agent-status.sh の出力を含める ==="
-cat > "$WORK/progress.jsonl" <<'EOF'
-{"timestamp":"2026-09-05T00:00:00Z","agent":"implementer-ui","feature":"example","status":"running","note":"UI実装中"}
+# WHY(2026-09-12): 以前は固定日付（2026-09-05）を書いていたが、show-agent-status.sh は
+#      既定で「7 日より古い報告は件数だけ」に落とす。日付を跨いだだけでエージェント名が消え、
+#      **誰も何も変えていないのにテストが赤くなる**（時限爆弾）。いまの時刻から作る。
+NOW_ISO="$(python3 -c "
+from datetime import datetime, timezone
+print(datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
+")"
+cat > "$WORK/progress.jsonl" <<EOF
+{"timestamp":"${NOW_ISO}","agent":"implementer-ui","feature":"example","status":"running","note":"UI実装中"}
 EOF
 OUT="$(run compact "$EMPTY_MANIFEST" "$EMPTY_QUEUE" "$WORK/progress.jsonl")"
 assert_contains "$OUT" "implementer-ui" "エージェント名が入る"

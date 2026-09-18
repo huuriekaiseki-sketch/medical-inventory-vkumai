@@ -17,6 +17,7 @@
 //      SQLを読むだけでは「DROPが書いてある」ことしか分からないので、実DBで確かめる。
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createClient } from '@supabase/supabase-js'
 import {
   cleanupPriceHistoriesFixtures,
   createServiceRoleClient,
@@ -72,6 +73,73 @@ describe('price_histories RLS/IDOR・DB制約 [P-010 P-015 P-051 I-041]', () => 
 
       expect(error).toBeNull()
       expect(data).toHaveLength(1)
+    })
+  })
+
+  describe('未ログイン（anon）からの読み取り', () => {
+    // WHY(2026-09-11): 「価格の履歴はテナント非分離が設計」と書いてある表が、実際には
+    //      **未認証にも**開いていた。RLS ポリシーは `TO anon, authenticated USING (true)`、
+    //      GRANT も `TO anon`（20260622000000_add_price_histories.sql:22,28）。
+    //      Supabase の REST は公開 URL と anon key だけで叩けるので、アプリの入口
+    //      （`requireAuth` がある）を通らずに**ログインせず全施設の価格変更履歴が読めた**。
+    //      台帳 TB-040 の「読み手」は `authenticated / service_role` で anon を含まないのに、
+    //      実態と食い違っていた（C-010: 印を実態と突き合わせない）。
+    //      掃き（table-boundary-sweep）の (A) は**その表に行が無ければ「読めなかった」と読む**ので、
+    //      餌の無い実行では気づけなかった（C-021: 不在判定に対を置かない）。
+    //      2026-09-11 に anon を締めた（20260911000000_revoke_price_history_anon_access.sql）。
+    const anonClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+
+    it('施設スコープの履歴は読めない', async () => {
+      const { data } = await anonClient
+        .from('price_histories')
+        .select('id')
+        .eq('id', fixtures.facilityScopedHistory.id)
+
+      expect(data ?? []).toEqual([])
+    })
+
+    it('マスタの履歴（テナント非分離が設計）も読めない', async () => {
+      // WHY: 締める前はここが 1 行返っていた（2026-09-11 実測）。
+      //      施設で絞れないマスタであることと、未認証に開くことは別の話。
+      const { data } = await anonClient
+        .from('price_histories')
+        .select('id')
+        .eq('id', fixtures.masterHistory.id)
+
+      expect(data ?? []).toEqual([])
+    })
+
+    it('価格履歴の RPC も呼べない', async () => {
+      // WHY: 表を締めても RPC は SECURITY DEFINER で RLS を通らない。
+      //      `GRANT EXECUTE ... TO anon`（同 migration:117）が残っていれば同じものが読める
+      const { data, error } = await anonClient.rpc('get_distributor_product_price_history', {
+        p_distributor_product_id: fixtures.distributorProduct.id,
+      })
+
+      expect(error, '未ログインで価格履歴の RPC が呼べてしまう').not.toBeNull()
+      expect(data ?? []).toEqual([])
+    })
+
+    it('対照: 同じ行と同じ RPC を認証済みの利用者は使える（「全部拒否」で通っていない）', async () => {
+      // WHY(C-021): 上の 3 つは「締まっている」場合と「そもそも誰にも返らない」場合の
+      //      両方で成り立つ。同じ呼び出しがログイン済みで通ることを見て初めて意味が出る
+      const { data: rows, error: rowsError } = await fixtures.userA.client
+        .from('price_histories')
+        .select('id')
+        .eq('id', fixtures.masterHistory.id)
+      expect(rowsError).toBeNull()
+      expect(rows, '認証済みでもマスタの履歴が読めない').toHaveLength(1)
+
+      const { data: rpcRows, error: rpcError } = await fixtures.userA.client.rpc(
+        'get_distributor_product_price_history',
+        { p_distributor_product_id: fixtures.distributorProduct.id }
+      )
+      expect(rpcError, '認証済みでも価格履歴の RPC が呼べない').toBeNull()
+      expect((rpcRows ?? []).length, '認証済みでも RPC が空を返す（上の空に意味が無い）').toBeGreaterThan(0)
     })
   })
 

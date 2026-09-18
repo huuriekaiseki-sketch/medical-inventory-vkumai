@@ -7,8 +7,12 @@
 //      引き続き呼べることを確かめる。static テスト（migration の文字列）だけでは「効いている」は
 //      証明できない（feedback: green でも修正が効いていない型）ので、拒否コードまで見る。
 //
-// 注意: drift 記録テーブル名をこのファイルに書かない（constraint_coverage_ratchet の
-//       「制約 migration の統合テスト対応」判定はテーブル名の登場で決まり、ここでは制約を試していない）。
+// 注意（2026-09-07 更新）: 元々「drift 記録テーブル名をこのファイルに書かない」としていた。
+//       constraint_coverage_ratchet の「制約 migration の統合テスト対応」判定はテーブル名の登場で
+//       決まるためで、制約を試していないのに covered と読まれるのを避ける意図だった。
+//       末尾に読み取り権限のテスト（20260907010000）を足したため両テーブル名が登場するが、
+//       この 2 表は同判定の対象になる制約を持たないことを `scripts/check-constraint-coverage.sh`
+//       で実測して確認した（穴 0 のまま変わらない）。制約を足すときはここを見直すこと。
 
 import { randomUUID } from 'crypto'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
@@ -85,5 +89,27 @@ describe('schema drift 系 RPC は anon / authenticated から呼べない [P-04
   it('service_role: check_schema_drift() は引き続き呼べる（REVOKE ALL FROM PUBLIC で巻き添えにしていない）', async () => {
     const { error } = await serviceClient.rpc('check_schema_drift')
     expect(error).toBeNull()
+  })
+
+  // WHY: 2026-09-07 まで、監視の記録テーブルは **service_role でも読めなかった**
+  //      （GRANT が 1 行も書かれていなかった。permission denied for table schema_drift_log）。
+  //      そのせいで夜間の不変条件検査を守るテストが「記録されたか」を確かめられず、
+  //      ずっと落ちたままだった（記録そのものは動いていた）。20260907010000 で service_role
+  //      にだけ SELECT を与えた。読める側と読めない側の両方を測って固定する。
+  describe.each(['schema_drift_log', 'schema_baseline_snapshots'])('%s の読み取り権限', (table) => {
+    it('service_role は読める', async () => {
+      const { error } = await serviceClient.from(table).select('*').limit(1)
+      expect(error, `${table} を service_role が読めない: ${error?.message}`).toBeNull()
+    })
+
+    it('anon は読めない', async () => {
+      const { error } = await createAnonClient().from(table).select('*').limit(1)
+      expect(error, `${table} が anon から読めてしまった`).not.toBeNull()
+    })
+
+    it('authenticated は読めない', async () => {
+      const { error } = await authenticatedClient.from(table).select('*').limit(1)
+      expect(error, `${table} が authenticated から読めてしまった`).not.toBeNull()
+    })
   })
 })

@@ -34,7 +34,7 @@ if [ "$CURRENT_HASH" = "$PREV_HASH" ]; then
 fi
 
 # ソースコード変更（ドキュメント・設定のみの変更は対象外）がなければチェック不要
-if ! printf '%s' "$CHANGED_FILES" | grep -qE '\.(ts|tsx|sql)$'; then
+if ! grep -qE '\.(ts|tsx|sql)$' <<<"$CHANGED_FILES"; then
   :  # 報告事項なし。公式仕様では表示しないなら systemMessage を省略する（issue #737。以前は空文字を出していた）
   exit 0
 fi
@@ -62,7 +62,7 @@ else
 fi
 DEFAULT_CHECK_PATTERN='npm run (ai:check|typecheck|lint|test)\b'
 CHECK_PATTERN="$(aidd_config_query '
-  def esc: gsub("[.^$*+?()\\[\\]{}|\\\\]"; "\\\\" + .);
+  def esc: gsub("(?<c>[.^$*+?()\\[\\]{}|\\\\])"; "\\" + .c);
   def variants: if test("^npm run ") then [., sub("^npm run "; "npm ")]
                 elif test("^npm ") then [., sub("^npm "; "npm run ")]
                 else [.] end;
@@ -75,7 +75,7 @@ else
 fi
 CHECK_LABEL="$(aidd_config_query '.commands.check // empty' 'npm run ai:check')"
 
-if printf '%s' "$EXECUTED_COMMANDS" | grep -qE "$CHECK_PATTERN"; then
+if grep -qE "$CHECK_PATTERN" <<<"$EXECUTED_COMMANDS"; then
   # WHY: 状態ハッシュは「実行済みと確認できた場合のみ」書き込む（issue #635）。
   # 未実行のまま書き込むと、同一diff状態での再Stopが30行目の早期returnで
   # 無条件にスキップされ、警告が最大1回しか出なくなってしまう。

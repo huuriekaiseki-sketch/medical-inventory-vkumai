@@ -62,6 +62,7 @@ session-report-*.html
 
 # Stop hookのセッション内重複提案抑止用の一時状態（ローカル専用）
 /.claude/.ai-check-suggest-state/
+/.codex/.ai-check-suggest-state/
 /.claude/.domain-decisions-suggest-state/
 /.claude/.verify-state/
 /.claude/.gate-effectiveness-state/
@@ -77,3 +78,10 @@ session-report-*.html
 # pooler接続文字列（パスワードは含まないが本番プロジェクトの識別情報）を含むため常に除外する。
 # 2026-08-26時点で過去に誤ってコミットされていたことが判明（履歴には残るが今後の再混入を防ぐ）
 /supabase/.temp/
+
+# ミューテーションテストの生成物（issue #757 の 7）。スコアは docs/agents/mutation-testing.md に残す
+/reports/mutation
+/.stryker-tmp
+
+# 層の突合が一時的に書き出す API 側の規則（issue #757 の 20）
+/.api-rules.json

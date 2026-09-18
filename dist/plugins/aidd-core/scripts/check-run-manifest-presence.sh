@@ -43,7 +43,7 @@ build_high_risk_pattern() {
   local root_hint="$1" extra
   # pathPrefixes は (^|/)接頭辞、domainKeywords は語の部分一致。正規表現の特殊文字はエスケープする
   extra="$(aidd_config_query '
-    def esc: gsub("[.^$*+?()\\[\\]{}|\\\\]"; "\\\\" + .);
+    def esc: gsub("(?<c>[.^$*+?()\\[\\]{}|\\\\])"; "\\" + .c);
     [ ((.risk.pathPrefixes // [])[] | "(^|/)" + esc),
       ((.risk.domainKeywords // [])[] | esc) ]
     | join("|")' '' "$root_hint")"
@@ -104,7 +104,7 @@ print(rel)
 fi
 
 HIGH_RISK_PATTERN="$(build_high_risk_pattern "$REPO_ROOT")"
-if ! printf '%s' "$RELATIVE_TARGET" | grep -qiE "$HIGH_RISK_PATTERN"; then
+if ! grep -qiE "$HIGH_RISK_PATTERN" <<<"$RELATIVE_TARGET"; then
   exit 0
 fi
 

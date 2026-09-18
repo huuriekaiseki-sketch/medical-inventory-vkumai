@@ -1,0 +1,143 @@
+#!/usr/bin/env node
+// hook の**登録とその実体**から版（ハッシュ）を出す。両ツール（Claude / Codex）をまとめて見る。
+//
+// WHY(2026-09-11): 実走ドリル（`docs/agents/hook-live-drill.md`）は
+//      「hook を追加・変更したときに回す」と書いてあるが、**変わったかどうかを誰も見ていない**。
+//      期限（四半期）だけが `maintenance-digest.sh` に載っていて、変更に対する再実施は人の記憶だった。
+//      fault injection 訓練の門（`gate-prompt-hash.mjs`）と同じ形で、版で見る。
+//
+//      ドリルの対象は Claude 側だけ書かれていたが、`.codex/hooks.json` にも 8 本の hook があり、
+//      そのうち 3 本は deny（DDL 実行・依存追加・skip marker）。**止める側が黙って死ぬ**ほうが危ない。
+//      だから版は両方の登録から作る（C-047: 同じ形の門を隣へ広げる）。
+//
+// 注意（どこまでが新しいか）: 「登録されているのに実体が見つからない」は
+//      `scripts/lib/aidd-doctor.mjs` が**既に両ツール分を見ている**（E-046）。
+//      ここが足すのは **(a) 版**（変わったら実走をやり直す合図）と
+//      **(b) `.codex/hooks.json` が書いたそのパスに実体があり、実行ビットが立っているか**。
+//      Codex はコマンドをそのまま起動するので、名前が同じ別の場所のファイルでは動かず、
+//      実行ビットが無ければ起動もできない（診断器は**名前**で探すのでそこは見ない）。
+//
+// 出力: 版のハッシュ（12 桁）を 1 行。
+// 終了コード:
+//   0 … 出せた
+//   1 … 走査が壊れている（設定が読めない / 登録を 1 本も取り出せない）。**黙って 0 を返さない**
+//   2 … この導入先は hook の登録を持たない
+//
+// 限界:
+//   - 版に入れるのは**配線**（どの hook が・どのイベントに・どのコマンドで登録されているか）だけ。
+//     **スクリプトの中身が変わっても版は動かない**（毎回鳴らさないための割り切り。下の WHY を参照）。
+//     ある hook のロジックを書き換えたときは、目安どおり**その hook を自分で実走**すること。
+//   - 実機で本当に発火するかは測れない（それが実走ドリルの役目）。版は「やり直す合図」まで。
+//   - Codex 側のコマンドからパスを取り出すのは、テンプレートが決めた
+//     `"$(git rev-parse --show-toplevel)"/<相対パス>` の形に対する近似（`--codex-list` で確かめられる）。
+import { createHash } from 'node:crypto'
+import { existsSync, statSync } from 'node:fs'
+import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
+import { collectHookCommands, scriptNameOf } from './aidd-doctor.mjs'
+
+const CODEX_HOOKS = '.codex/hooks.json'
+const CLAUDE_SETTINGS = '.claude/settings.json'
+
+/** Codex のコマンド文字列から、リポジトリ相対のスクリプトパスを取り出す（取れなければ null） */
+export function codexScriptPathOf(command) {
+  if (typeof command !== 'string') return null
+  // `"$(git rev-parse --show-toplevel)"/<相対パス> <引数>` から <相対パス> を取る
+  // （ここに本物らしいパスを例として書くと、配布物の参照検査がそれを実在する参照と読む）
+  const m = command.match(/"\s*\/([^"\s]+)/)
+  if (m) return m[1]
+  const bare = command.trim().split(/\s+/)[0]
+  return /^[\w./-]+\.(sh|mjs|js|py)$/.test(bare) ? bare.replace(/^\.\//, '') : null
+}
+
+/**
+ * Codex 側の登録を、**書かれたそのパス**で確かめる。
+ * @returns {{status:0|1|2, scripts:string[], missing:string[], notExecutable:string[], error?:string}}
+ */
+export function codexHookState(root) {
+  const file = path.join(root, CODEX_HOOKS)
+  if (!existsSync(file)) return { status: 2, scripts: [], missing: [], notExecutable: [] }
+
+  const commands = collectHookCommands(file)
+  const scripts = []
+  const seen = new Set()
+  for (const { command } of commands) {
+    const rel = codexScriptPathOf(command)
+    if (!rel || seen.has(rel)) continue
+    seen.add(rel)
+    scripts.push(rel)
+  }
+  if (scripts.length === 0) {
+    // 登録が 1 本も取れないのは、走査が壊れているか書き方が変わったか。**黙って通さない**（C-044）
+    return { status: 1, scripts, missing: [], notExecutable: [], error: '登録されたスクリプトを 1 本も取り出せない' }
+  }
+
+  const missing = []
+  const notExecutable = []
+  for (const rel of scripts) {
+    const abs = path.join(root, rel)
+    if (!existsSync(abs)) {
+      missing.push(rel)
+      continue
+    }
+    if ((statSync(abs).mode & 0o111) === 0) notExecutable.push(rel)
+  }
+  const broken = missing.length > 0 || notExecutable.length > 0
+  return { status: broken ? 1 : 0, scripts, missing, notExecutable }
+}
+
+/** 両ツールの登録と実体から版を作る。@returns {{status:0|1|2, version?:string, counted:number, error?:string}} */
+export function hookRegistryVersion(root) {
+  const files = [path.join(root, CLAUDE_SETTINGS), path.join(root, CODEX_HOOKS)].filter((f) => existsSync(f))
+  if (files.length === 0) return { status: 2, counted: 0 }
+
+  const hash = createHash('sha256')
+  let counted = 0
+  const names = new Set()
+  for (const file of files) {
+    const commands = collectHookCommands(file)
+    for (const { event, command } of commands) {
+      counted += 1
+      hash.update(`${path.basename(file)}\u0000${event}\u0000${command}\n`)
+      const name = scriptNameOf(command)
+      if (name) names.add(name)
+    }
+  }
+  if (counted === 0) {
+    return { status: 1, counted, error: '登録された hook を 1 本も取り出せない' }
+  }
+  // WHY(中身は入れない。2026-09-11 に実測して決めた): 最初は登録されたスクリプトの**中身**も
+  //      版に入れたが、`maintenance-digest.sh` 自身が登録された hook なので、
+  //      **この仕組みを書いている最中に版が変わった**。hook はふだんの開発でよく触るので、
+  //      中身まで入れると毎回鳴る——**毎回鳴る警告は読まれなくなる**
+  //      （fault injection 訓練の門を「門の文言だけ」に絞ったのと同じ理由）。
+  //      だから見るのは**配線**（どの hook が・どのイベントに・どのコマンドで登録されているか）。
+  //      止める側（deny）が外された・付け替えられたのはここで分かる。
+  void names
+  return { status: 0, version: hash.digest('hex').slice(0, 12), counted }
+}
+
+if (process.argv[1] && process.argv[1].endsWith('hook-registry-hash.mjs')) {
+  const rootIdx = process.argv.indexOf('--root')
+  const root = rootIdx >= 0 ? process.argv[rootIdx + 1] : process.cwd()
+
+  if (process.argv.includes('--codex-list')) {
+    const r = codexHookState(root)
+    for (const s of r.scripts) writeLine(s)
+    for (const m of r.missing) console.error(`実体なし: ${m}`)
+    for (const n of r.notExecutable) console.error(`実行できない: ${n}`)
+    process.exit(r.status === 1 ? 1 : 0)
+  }
+
+  const r = hookRegistryVersion(root)
+  if (r.status === 2) {
+    console.error('hook の登録が無い（この導入先はこの仕組みを持たない）')
+    process.exit(2)
+  }
+  if (r.status === 1) {
+    console.error(r.error)
+    process.exit(1)
+  }
+  writeLine(r.version)
+  process.exit(0)
+}

@@ -1,0 +1,33 @@
+{
+  "_comment": "「merge=union の表に同じ行が二重に残っていないか」を見るエンジン（aidd-core が配る scripts/lib/check-table-row-duplicates.mjs）の登録簿。エンジンは共通側が配り、**この登録簿は導入先のもの**（配ると導入先が足した分が上書きで消える）。",
+  "_howto": "tables: ファイルごとに、行を一意にする列（1 始まり）と、その列の呼び名。`.gitattributes` の merge=union 対象のうち、ID の重複検査を別に持たない表を並べる。**表を足したらここにも足す（足し忘れは検知できない）**。",
+  "_limits": "1 ファイルに表が複数あっても鍵は共通に見る。別の表に同じ名前の行があると誤検知するので、そのときは鍵の列を分ける設計に直すこと。",
+  "tables": [
+    {
+      "file": "docs/agents/security-test-catalog.md",
+      "keyColumn": 1,
+      "keyName": "観点"
+    },
+    {
+      "file": "docs/agents/test-matrix.md",
+      "keyColumn": 1,
+      "keyName": "種別"
+    },
+    {
+      "file": "docs/agents/actuator-inventory.md",
+      "keyColumn": 2,
+      "keyName": "スクリプト",
+      "_why": "1 列目は hook イベント名で、同じイベントに複数の hook がぶら下がるのが正常。一意なのはスクリプト名"
+    },
+    {
+      "file": "docs/agents/portability-inventory.md",
+      "keyColumn": 1,
+      "keyName": "対象"
+    },
+    {
+      "file": "docs/agents/undetectable-rules-inventory.md",
+      "keyColumn": 1,
+      "keyName": "ルール"
+    }
+  ]
+}

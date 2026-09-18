@@ -11,6 +11,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { assertTestSupabaseEnv } from '../../../e2e/env-guard'
 import { enrollAndVerifyTotp, signInAtAal1, stepUpToAal2 } from './helpers/mfa-totp'
+import { describeDenial, isPermissionDenied } from './helpers/pg-error'
 
 const TEST_USER_PASSWORD = 'require-aal2-order-rpcs-test-0000'
 
@@ -129,6 +130,76 @@ describe('発注RPCはMFA登録済みユーザーのaal2昇格を要求する(is
       p_items: [],
     })
     expect(error).toBeNull()
+  })
+
+  // WHY(#757-7, RM-002): 2026-09-07 に RLS を壊して測ったところ、
+  //      **facility_writer_or_admin から has_aal2() を外しても、このファイルは 1 つも落ちなかった**。
+  //      理由は、ここが RPC 経由しか見ていなかったから。RPC は関数の中にも aal2 の判定を持つので、
+  //      RLS 側を外しても RPC の挙動は変わらない。
+  //      **表を直接叩く経路は RLS だけが守る。**ここを見ていないと、RLS の aal2 は
+  //      いつ消えても誰も気づかない。
+  // WHY(2026-09-09 に測る対象を移した): 発注の表への**直接 INSERT の道そのものを無くした**
+  //      （20260909040000）。以前はここで「aal1 は拒否・aal2 なら通る」を測って
+  //      「拒否が aal2 由来である」ことの対照にしていたが、いまの拒否は**権限由来**なので
+  //      同じ書き方では対照にならない（C-023: 手前の防御が止めていて狙った防御を測れない）。
+  //
+  //      対照は `consumables` へ移す。この表は**アプリが直接書く**ので INSERT の権限が残っており、
+  //      `facility_writer_or_admin` の `has_aal2()` を独立に測れる。
+  describe('表への直接書き込みも aal2 を要求する（RPC を通らない経路）', () => {
+    it('発注の表へは aal2 でも直接 INSERT できない（作成の道は RPC だけ）', async () => {
+      const client = createAnonClient()
+      await signInAtAal1(client, email, TEST_USER_PASSWORD)
+      await stepUpToAal2(client, factorId, secret)
+
+      const { error } = await client.from('case_orders').insert({
+        facility_id: facilityId,
+        case_datetime: new Date().toISOString(),
+        procedure_name: 'aal2で直接INSERT',
+        patient_id: 'P-AAL2',
+        patient_initials: 'ZZ',
+        gender: 'other',
+        doctor_name: 'テスト医師',
+      })
+      expect(isPermissionDenied(error), `INSERT の権限が戻っている（20260909040000 で剥がしたはず）: ${describeDenial(error)}`).toBe(true)
+    })
+
+    it('MFA登録済み・aal1のセッションでは consumables へ直接 INSERT できない', async () => {
+      const client = createAnonClient()
+      await signInAtAal1(client, email, TEST_USER_PASSWORD)
+
+      const { error } = await client.from('consumables').insert({
+        facility_id: facilityId,
+        name: 'aal1で直接INSERT',
+        purpose: 'テスト用途',
+      })
+      expect(error, 'aal1 で書けてしまった').not.toBeNull()
+      // WHY(コードではなく文言で層を見分ける、2026-09-09 実測): PostgREST は
+      //      **権限が無い場合も RLS の WITH CHECK に落ちた場合も 42501** を返す。
+      //      層を見分けられるのは文言だけ（`permission denied for table` か
+      //      `violates row-level security policy` か）。コードだけで判定すると、
+      //      権限を剥がしただけの変更を「RLS が守っている」と読み違える（C-023 の形）
+      expect(error?.message, '権限ではなく RLS（aal2）で止まっていること').toContain(
+        'violates row-level security policy'
+      )
+    })
+
+    it('aal2まで昇格すれば consumables へ直接 INSERT できる（拒否が aal2 由来であることの対照）', async () => {
+      const client = createAnonClient()
+      await signInAtAal1(client, email, TEST_USER_PASSWORD)
+      await stepUpToAal2(client, factorId, secret)
+
+      const { data, error } = await client
+        .from('consumables')
+        .insert({
+          facility_id: facilityId,
+          name: 'aal2で直接INSERT',
+          purpose: 'テスト用途',
+        })
+        .select('id')
+        .single()
+      expect(error).toBeNull()
+      if (data) await serviceClient.from('consumables').delete().eq('id', data.id)
+    }, 30_000)
   })
 
   describe('残りの発注・返却RPC(create_case_order_atomic/create_consumable_order_atomic/create_loan_return_atomic、issue #684)', () => {

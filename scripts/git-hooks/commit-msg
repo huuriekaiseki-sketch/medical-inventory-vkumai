@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# git の commit-msg hook。メッセージに制御バイト（TAB・LF・CR 以外の C0 制御文字と DEL）があれば止める。
+#
+# WHY(2026-09-11): 書き出しの経路で、エスケープのつもりの文字が実バイトになる事故が起きた
+#      （docs/agents/check-design-pitfalls.md の C-052）。コミットメッセージの下書きでも 1 バイト起きた。
+#      git 自身は NUL だけは拒むが、ESC / BS / DEL などは**通して履歴に残す**（git 2.50.1 で実測）。
+#      履歴に入ったメッセージは後から直せないので、**入る前**に止める。
+#
+# 止めるのは確実に見つけたときだけ。判定に使う node や走査器が無い・読めない、のときは止めない
+# （壊れた hook が全 worktree のコミットを止めるほうが害が大きい）。
+# その間の取りこぼしは hooks-test の走査（scripts/check-control-bytes.test.sh が HEAD から辿れる
+# 全メッセージを見る）が後から拾う。
+#
+# 入れ方: bash scripts/install-git-hooks.sh（git の core.hooksPath をこのディレクトリへ向ける）
+set -u
+
+msg_file="${1:-}"
+if [ -z "$msg_file" ] || [ ! -f "$msg_file" ]; then
+  exit 0
+fi
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+scanner="$root/scripts/lib/scan-control-bytes.mjs"
+if [ ! -f "$scanner" ]; then
+  exit 0
+fi
+if ! command -v node > /dev/null 2>&1; then
+  echo "[commit-msg] node が無いので、メッセージの制御バイトを確かめていません" >&2
+  exit 0
+fi
+
+node "$scanner" --message "$msg_file"
+rc=$?
+if [ "$rc" -eq 1 ]; then
+  echo "[commit-msg] メッセージに制御バイトがあります（上の位置）。書き出しの道具が、エスケープのつもりの文字を実バイトにした可能性があります（C-052）。" >&2
+  echo "[commit-msg] 直してからコミットしてください（エスケープは文字で説明するか、16 進の形で書く）。" >&2
+  exit 1
+fi
+
+# ---- ハーネス凍結（H-014）----------------------------------------------------------------
+# WHY(2026-09-13): 2026-09-11 に「ハーネスの育成は凍結し、製品 issue で証明する」と決めたのに、
+#      その後の 48 コミットのうち製品コード（src/ supabase/ e2e/）に触れたのは 1 件だった。
+#      人の決意は 2 日で消えたので、決めごとをコミットの入口で機械に持たせる。
+#      凍結中かどうかは HEAD に docs/agents/harness-freeze.md があるかで決まる（作業ツリーではなく
+#      HEAD を見るので、マーカーを入れるコミット自身は通り、消すコミットは下で通す）。
+#
+# 止める: 凍結中に、staged のどのファイルも src/ supabase/ e2e/ に無いコミット
+# 通す:   マージコミット・staged が空（--allow-empty）・マーカーを消すコミット・凍結前
+# 横を通る道は 1 つ: git commit --no-verify のあと
+#   bash scripts/log-manual-override.sh --safeguard H-014 --actor <名前> --reason "<理由>"
+FREEZE_MARKER="docs/agents/harness-freeze.md"
+if git cat-file -e "HEAD:$FREEZE_MARKER" 2>/dev/null; then
+  if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+    exit 0
+  fi
+  staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+  if [ -z "$staged" ]; then
+    exit 0
+  fi
+  if git diff --cached --name-only --diff-filter=D | grep -qx "$FREEZE_MARKER"; then
+    exit 0
+  fi
+  if ! printf '%s\n' "$staged" | grep -qE '^(src|supabase|e2e)/'; then
+    echo "[commit-msg] ハーネス凍結中です（H-014）。このコミットは src/ supabase/ e2e/ に 1 ファイルも触れていません。" >&2
+    echo "[commit-msg] 製品の変更と一緒にコミットするか、凍結を解くなら ${FREEZE_MARKER} を消すコミットを先に入れてください。" >&2
+    echo "[commit-msg] 緊急で横を通るなら --no-verify。そのときは scripts/log-manual-override.sh --safeguard H-014 で理由を残す" >&2
+    exit 1
+  fi
+fi
+exit 0

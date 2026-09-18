@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { asString, asOptionalString } from '@/lib/mapping'
+import { asString, asOptionalString, asNumber } from '@/lib/mapping'
 import { jstDayStart, jstDayEnd } from '@/lib/jst-date-range'
 import type { OrderListItem, OrderListFilter, OrderKind } from '@/types/order'
 import { formatJstDate } from '@/lib/format-date'
@@ -51,8 +51,14 @@ interface LoanOrderRow {
   maker?: unknown
   status?: unknown
   created_at?: unknown
-  loan_order_items?: { name?: unknown }[]
-  loan_returns?: { id?: unknown }[]
+  // WHY(2026-09-08): 分割返却を表せるようにしたので、明細ごとの数量と、
+  //      その明細に紐付いた返却の数量が要る（20260908030000）
+  loan_order_items?: {
+    name?: unknown
+    quantity?: unknown
+    // WHY(2026-09-08・E-056): 取り消した返却は残数に数えない。親の状態が要るので一緒に取る
+    loan_return_items?: { quantity?: unknown; status?: unknown; loan_returns?: { status?: unknown } | null }[]
+  }[]
 }
 
 interface LoanReturnRow {
@@ -142,11 +148,16 @@ async function fetchConsumableOrderItems(db: SupabaseClient, facilityId: string,
 }
 
 async function fetchLoanOrderItems(db: SupabaseClient, facilityId: string, filter: OrderListFilter, effectiveLimit: number): Promise<OrderListItem[]> {
-  // WHY: 「未返却」判定のため loan_returns を LEFT JOIN で埋め込み取得する
-  //      （loan_returns.loan_order_id -> loan_orders.id の逆方向embed）
+  // WHY(2026-09-08 に数え方を変えた): 以前は「対応する返却が 0 件か」で見ていたが、
+  //      分割返却を表せるようにした（20260908030000）ので、**明細ごとの残数**で見る。
+  //      発注明細 → その明細に紐付いた返却明細、の順に埋め込んで数量を取る。
+  //      「返却が 1 件でもあれば返却済み」だと、一部だけ返した発注が消えてしまう。
   let query = db
     .from('loan_orders')
-    .select('*, loan_order_items(name), loan_returns!left(id)')
+    // WHY(loan_returns(status) まで取る、2026-09-08・E-056): 取り消した返却は残数に数えない。
+    //      DB 側（loan_outstanding_count・過剰返却トリガー）も同じ条件で数えている。
+    //      **同じ問いの答えを揃える**（E-053 で 2 か所が食い違った）
+    .select('*, loan_order_items(name, quantity, loan_return_items(quantity, status, loan_returns(status)))')
     .eq('facility_id', facilityId)
     .order('created_at', { ascending: false })
 
@@ -168,8 +179,18 @@ async function fetchLoanOrderItems(db: SupabaseClient, facilityId: string, filte
     })
     .map(o => {
       const status = asString(o.status)
-      const returns = o.loan_returns ?? []
-      const unreturned = status === 'submitted' && returns.length === 0
+      // 明細ごとに「借りた数 − 紐付いた返却の合計」を足し合わせる。負にはしない（過剰返却は DB が拒否する）
+      const outstandingQuantity = (o.loan_order_items ?? []).reduce((sum, item) => {
+        const ordered = asNumber(item.quantity)
+        // WHY(明細の取り消しも除く、2026-09-09): 返却は**回ごと**にも**品目ごとにも**取り消せる。
+        //      どちらか一方だけを除くと、残数が実態と食い違う（E-053 と同じ形）
+        const returned = (item.loan_return_items ?? [])
+          .filter(r => asString(r.loan_returns?.status) !== 'cancelled')
+          .filter(r => asString(r.status) !== 'cancelled')
+          .reduce((n, r) => n + asNumber(r.quantity), 0)
+        return sum + Math.max(ordered - returned, 0)
+      }, 0)
+      const unreturned = status === 'submitted' && outstandingQuantity > 0
       return {
         id: asString(o.id),
         kind: 'loan_order' as const,
@@ -178,6 +199,7 @@ async function fetchLoanOrderItems(db: SupabaseClient, facilityId: string, filte
         summary: `${asString(o.procedure_name)}（${asString(o.maker)}）`,
         createdAt: asString(o.created_at),
         unreturned,
+        outstandingQuantity,
       }
     })
 }

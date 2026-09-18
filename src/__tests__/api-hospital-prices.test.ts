@@ -159,6 +159,8 @@ describe('POST /api/hospital-prices', () => {
     const res = await POST(req)
     expect(res.status).toBe(400)
     const body = await res.json()
-    expect(body.error).toBe('必須項目が未入力です')
+    // WHY(#757-20): 入口の検証を parseBody に寄せたので、どの項目が欠けているかが文言に出る
+    //      （以前は「必須項目が未入力です」で、どれを直せばよいか分からなかった）
+    expect(body.error).toContain('納品価格')
   })
 })

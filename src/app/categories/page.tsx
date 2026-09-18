@@ -40,7 +40,7 @@ export default function CategoriesPage() {
     <div className="mx-auto max-w-6xl px-6 py-10">
       <div className="mb-8 flex items-end justify-between border-b pb-4" style={{ borderColor: '#072C2C33' }}>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#FF5F03', fontFamily: 'var(--font-oswald), sans-serif' }}>
+          <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#B03F00', fontFamily: 'var(--font-oswald), sans-serif' }}>
             Category Management
           </p>
           <h1 className="text-3xl font-bold" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif', letterSpacing: '0.04em' }}>
@@ -50,7 +50,7 @@ export default function CategoriesPage() {
         <button
           onClick={() => router.push('/categories/new')}
           className="px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-          style={{ backgroundColor: '#FF5F03', fontFamily: 'var(--font-ubuntu), sans-serif', borderRadius: '2px' }}
+          style={{ backgroundColor: '#B03F00', fontFamily: 'var(--font-ubuntu), sans-serif', borderRadius: '2px' }}
         >
           + 新規登録
         </button>

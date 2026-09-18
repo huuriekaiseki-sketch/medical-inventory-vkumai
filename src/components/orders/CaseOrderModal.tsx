@@ -80,7 +80,7 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
   }
 
   const labelClass = 'block text-xs font-semibold uppercase tracking-widest mb-1'
-  const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+  const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
   const inputClass = 'border rounded px-3 py-2 text-sm w-full'
   const inputStyle = { borderColor: '#E5E7EB' }
 
@@ -89,7 +89,7 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
       <div className="bg-white rounded shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6" style={{ border: '1px solid #E5E7EB' }}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold" role="heading" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif' }}>症例発注</h2>
-          <button type="button" onClick={handleClose} style={{ color: '#6B7280' }}>✕</button>
+          <button type="button" onClick={handleClose} style={{ color: '#4B5563' }}>✕</button>
         </div>
 
         {error && (
@@ -130,8 +130,8 @@ export function CaseOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
             <ItemRowInput rows={items} onChange={setItems} />
           </div>
           <div className="flex justify-end gap-3">
-            <button type="button" onClick={handleClose} className="px-4 py-2 text-sm rounded border" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>キャンセル</button>
-            <button type="submit" disabled={submitting} className="px-4 py-2 text-sm rounded text-white" style={{ backgroundColor: '#FF5F03' }}>
+            <button type="button" onClick={handleClose} className="px-4 py-2 text-sm rounded border" style={{ borderColor: '#E5E7EB', color: '#4B5563' }}>キャンセル</button>
+            <button type="submit" disabled={submitting} className="px-4 py-2 text-sm rounded text-white" style={{ backgroundColor: '#B03F00' }}>
               {submitting ? '送信中...' : '発注する'}
             </button>
           </div>

@@ -34,6 +34,7 @@ set -euo pipefail
 #                                         domain.md・既存migration一覧を読み込んで判断するため300秒では
 #                                         実測でタイムアウトすることがあった。issue #401）
 #   EVAL_WORKFLOW_PROMPTS_AGENT_CMD     - 実際の`claude -p`呼び出しの代わりに使うコマンド
+#   EVAL_WORKFLOW_PROMPTS_MODEL     - manifest のモデルを上書きする（同じ fixture を別モデルで測る）
 #   EVAL_WORKFLOW_PROMPTS_DEBUG_DIR     - 指定すると各caseの生出力を<case名>.raw.txtとして保存
 #                                         する（status不一致の原因調査用。issue #401）
 
@@ -60,7 +61,10 @@ fi
 AGENT_TYPE="$(jq -r '.agentType' "$MANIFEST_FILE")"
 PROMPT_MODULE="$(jq -r '.promptModule' "$MANIFEST_FILE")"
 PROMPT_FN="$(jq -r '.promptFn' "$MANIFEST_FILE")"
-MODEL="$(jq -r '.model' "$MANIFEST_FILE")"
+# モデルは manifest の値が既定。**実行時に差し替えられる**（2026-09-10）——
+# 「指示が悪いのか、モデルの容量が足りないのか」を分けて測るための口。
+# 差し替えた回は記録の `model` も変わるので、条件が違う回として扱われ混ざらない。
+MODEL="${EVAL_WORKFLOW_PROMPTS_MODEL:-$(jq -r '.model' "$MANIFEST_FILE")}"
 JSON_SCHEMA="$(jq -c '.jsonSchema' "$MANIFEST_FILE")"
 
 mkdir -p "$LOCK_DIR"
@@ -107,11 +111,15 @@ run_agent() {
   # 記録されていたものを実機確認・解消）。呼び出し先は必ず使い捨てのgit clone
   # ($CLONE_DIR/repo、eval-workflow-prompts.sh本体側で用意)であり実リポジトリは汚さないため、
   # 全権限の自動承認は許容する。
+  # --output-format json: 使用量（トークン数・費用）を返させる（2026-09-10、設計提案 3「費用」）。
+  # 2026-09-10 に実測して --json-schema と併用できることを確認した。中身は structured_output に入る。
+  # 包みは scripts/lib/agent-output.mjs が剥がす（**モックが返す素の形も通す**）。
   printf '%s' "$prompt" | claude -p --agent "$AGENT_TYPE" --model "$MODEL" \
     --json-schema "$JSON_SCHEMA" \
     --agents "$agents_json" \
     --setting-sources "" \
     --permission-mode bypassPermissions \
+    --output-format json \
     --no-session-persistence
 }
 
@@ -152,6 +160,16 @@ run_agent_with_timeout() {
   return "$status"
 }
 
+# 記録と使用量の足し上げは共通（scripts/lib/record-eval-run.sh）。
+# **ループより前に読み込む**——accumulate_usage をループの中で呼ぶため
+# shellcheck source=lib/record-eval-run.sh
+source "$SCRIPT_DIR/lib/record-eval-run.sh"
+
+# 未コミットの変更があると「測ったつもり」がずれる。**走らせる前に言う**（判定は記録と共有）
+warn_if_dirty "$REPO_DIR"
+
+# 所要時間を測る起点（設計提案 3「再現性と費用」のうち時間の側）
+RUN_STARTED_AT="$(date +%s)"
 TOTAL=0
 PASS_COUNT=0
 FAIL_LINES=""
@@ -206,7 +224,13 @@ for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
     continue
   fi
 
-  ACTUAL_STATUS="$(printf '%s' "$AGENT_OUTPUT" | jq -r '.status' 2>/dev/null || echo "")"
+  # `claude -p --output-format json` の包みを剥がす。**包みが無い（モック）出力もそのまま通る**
+  AGENT_PAYLOAD="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --payload 2>/dev/null || printf '%s' "$AGENT_OUTPUT")"
+  # 使用量を足し上げる（設計提案 3「費用」）。取れなければ 0 のまま
+  USAGE_JSON="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --usage 2>/dev/null || echo '{}')"
+  accumulate_usage "$USAGE_JSON"
+
+  ACTUAL_STATUS="$(printf '%s' "$AGENT_PAYLOAD" | jq -r '.status' 2>/dev/null || echo "")"
   if [ "$ACTUAL_STATUS" = "$EXPECTED_STATUS" ]; then
     PASS_COUNT=$((PASS_COUNT + 1))
     echo "[$case_name] OK: status=$ACTUAL_STATUS (期待通り)"
@@ -231,10 +255,10 @@ echo "$PASS_COUNT / $TOTAL 件 合格"
 # issue #496: 実行完了の痕跡をgit管理下のJSONLへ残す。実行有無の機械検知
 # (scripts/check-eval-runs-freshness.sh)がこのファイルの更新有無を見るため、
 # pass/fail問わず(=ループが最後まで到達した場合は常に)1行追記する。
-EVAL_RUNS_FILE="$REPO_DIR/docs/agents/eval-runs.jsonl"
-mkdir -p "$(dirname "$EVAL_RUNS_FILE")"
-printf '{"timestamp":"%s","script":"eval-workflow-prompts","fixtureSet":"%s","pass":%d,"total":%d}\n' \
-  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FIXTURE_SET" "$PASS_COUNT" "$TOTAL" >> "$EVAL_RUNS_FILE"
+# 条件（木のハッシュ・モデル）・所要時間・費用も一緒に残す
+# ——**同じ条件の回どうしでしかばらつきは比べられない**（設計提案 3）
+EVAL_RUNS_REPO_DIR="$REPO_DIR" record_eval_run \
+  "eval-workflow-prompts" "$FIXTURE_SET" "$PASS_COUNT" "$TOTAL" "$RUN_STARTED_AT" "$MODEL"
 
 if [ -n "$FAIL_LINES" ]; then
   echo "$FAIL_LINES"

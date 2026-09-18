@@ -1,0 +1,4 @@
+{
+  "_comment": "マージする順番（bash scripts/rehearse-merge.sh --base main で衝突を先に調べる）。2026-09-06 の GitHub アカウント停止で溜まった 37 本は、すべて main に入ったことを実測したので2026-09-11 に --prune-merged で外した（空の順番は「対象なし」で、合格にはならない）。新しく溜まったブランチは、依存があるものを後ろにしてここに足す。GitHub 復旧時の入れ方（main を直接 push しない）は docs/agents/merge-rehearsal.md を参照",
+  "queue": []
+}

@@ -3,25 +3,27 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listConsumableOrders, createConsumableOrder } from '@/lib/consumable-orders/repository'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
-import { parsePagination } from '@/lib/api-pagination'
-import { validateClientRequestId } from '@/lib/client-request-id'
-import type { ConsumableOrderInput } from '@/types/order'
+import { apiError, authGuardError, repositoryError, toClientErrorMessage } from '@/lib/api-error'
+import { parseQuery } from '@/lib/validation/parse-query'
+import { orderListQuerySchema } from '@/lib/orders/list-filter'
+import { parseBody } from '@/lib/validation/parse-body'
+import { consumableOrderInputSchema } from '@/lib/validation/schemas'
 
 export async function GET(request: NextRequest) {
   const db = await createServerSupabase()
   let user
-  try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
-  const facilityId = request.nextUrl.searchParams.get('facility_id')
+  try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
+  // WHY(2026-09-09): クエリを読むのは parseQuery だけ。4 つの一覧 route が同じ形を
+  //      別々に書いていたので、形（orderListQuerySchema）も 1 か所へ寄せた
+  const parsed = parseQuery(request, orderListQuerySchema)
+  if (!parsed.ok) return parsed.response
+  const { facility_id: facilityId, limit, offset } = parsed.data
   try {
-    await requireFacilityAccess(db, user, facilityId)
+    await requireFacilityAccess(db, user, facilityId ?? null)
   } catch (e) {
     if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('facility_id は必須です', 400)
     return apiError('アクセス権限がありません', 403)
   }
-  const pagination = parsePagination(request.nextUrl.searchParams)
-  if (!pagination.ok) return pagination.response
-  const { limit, offset } = pagination
   try {
     const orders = await listConsumableOrders(db, facilityId!, limit, offset)
     return NextResponse.json({ orders })
@@ -31,30 +33,25 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  let body: { facilityId?: string } & Partial<ConsumableOrderInput>
-  try {
-    body = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-  if (!body.facilityId) return apiError('施設IDは必須です', 400)
-  if (!body.items?.length) return apiError('発注物品を1つ以上選択してください', 400)
-  const clientRequestId = validateClientRequestId(body.clientRequestId)
-  if (!clientRequestId.ok) return apiError(clientRequestId.message, 400)
+  const parsed = await parseBody(request, consumableOrderInputSchema)
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
+  // WHY: 「1 つ以上」は業務の条件（空の発注に意味が無い）。形の検証とは別なのでここに残す
+  if (body.items.length === 0) return apiError('発注物品を1つ以上選択してください', 400)
 
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     try {
       await requireFacilityAccess(db, user, body.facilityId)
     } catch (e) {
       if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('施設IDは必須です', 400)
       return apiError('アクセス権限がありません', 403)
     }
-    const order = await createConsumableOrder(db, body.facilityId, { items: body.items, clientRequestId: clientRequestId.value })
+    const order = await createConsumableOrder(db, body.facilityId, { items: body.items, clientRequestId: body.clientRequestId })
     return NextResponse.json({ order }, { status: 201 })
   } catch (error) {
-    return apiError(toClientErrorMessage(error, '発注に失敗しました'))
+    return repositoryError(error, '発注に失敗しました')
   }
 }

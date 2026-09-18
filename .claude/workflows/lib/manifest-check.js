@@ -8,6 +8,14 @@
 // 判定テーブル・更新ロジックを「文書化かつテスト可能な形」で保持するためのものである。
 // プロンプト文言（aidd-phase2.js内の該当箇所）を変更した場合、このファイルとテストも
 // 手動で追従させる必要がある（自動では同期されない）。
+//
+// ただし 2026-09-11 に、**プロンプト文言そのものの複製**は機械同期するようにした:
+// 正本は .claude/workflows/lib/prompts/manifest-check.js、突合は
+// .claude/workflows/lib/__tests__/manifest-check-prompt-sync.test.js（npm test で毎回）。
+// それまでは Spec Check にだけ同期テストがあり、ここは「自動では同期されない」と書いたまま
+// 放置されていた（docs/agents/check-design-pitfalls.md の C-047）。
+// **この判定表（下の純粋関数）とプロンプトの一致は、いまも機械では見ていない**——
+// 同期しているのは文言の 2 つの複製どうしであって、文言と判定表の意味ではない。
 
 // manifest: .aidd/run-manifest.json の内容（存在しなければnull）
 // actualSpecHash: 現在のSPEC.md内容から再計算したsha256ハッシュ
@@ -35,4 +43,20 @@ export function classifyManifestCheck(manifest, actualSpecHash) {
 // 戻り値: changedFilesのみを上書きした新しいmanifestオブジェクト（他フィールドは維持）
 export function applyChangedFiles(manifest, changedFiles) {
   return { ...manifest, changedFiles: [...changedFiles] }
+}
+
+// issue R04: `git diff --name-only <baseCommit>` は**追跡されているファイルの差分しか出さない**。
+// 新しく作ったファイルは追跡されていないので 1 件も出てこない。
+// AIDD が作るものの中で最も高リスクな成果物——**新しい migration**——はまさにこれに当たり、
+// changedFiles から丸ごと抜けていた。抜けると TRI/RISK 判定（router-risk）も
+// 「高リスクパスが 1 件も無い」と読む（実測: 新しい supabase/migrations/*.sql が出てこない）。
+//
+// trackedDiff: `git diff --name-only <baseCommit>` の出力行
+// untracked:   `git ls-files --others --exclude-standard` の出力行
+// 戻り値: 空行を除き、重複を除き、並びを安定させた 1 つの一覧
+export function mergeChangedFiles(trackedDiff, untracked) {
+  const lines = [...(trackedDiff ?? []), ...(untracked ?? [])]
+    .map(line => String(line).trim())
+    .filter(line => line !== '')
+  return [...new Set(lines)].sort()
 }

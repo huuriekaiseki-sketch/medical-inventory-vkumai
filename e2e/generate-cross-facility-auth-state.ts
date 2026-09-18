@@ -25,6 +25,78 @@ export interface CrossFacilityFixtures {
   loanOrderProcedureName: string
   /** 施設 A にシードした短貸発注の ID（api-cross-facility-attack.spec.ts が path / body に入れて攻撃する。P-017） */
   loanOrderId?: string
+  /**
+   * 明細に入れられる、実在する製品の JAN。
+   *
+   * WHY(2026-09-08 追加): `case_order_items` / `loan_order_items` / `loan_return_items` の
+   *      `jan` は `products.jan` への外部キー（`*_jan_fkey`）。**未登録の JAN では明細を作れない**
+   *      ので、発注・返却の正常系を画面から測るには実在する製品が要る。
+   *      既存の製品を探して使うと DB の中身にテストが依存するため、実行ごとに 1 件作る。
+   */
+  productJan?: string
+  /** 施設 A の名前。ダッシュボードで「その施設の行」を特定するために使う */
+  facilityAName?: string
+  /**
+   * 代理店商品の名前と ID。
+   *
+   * WHY(2026-09-08 追加): 院内価格は「施設 × 代理店商品」に付ける値なので、
+   *      画面から登録するには代理店商品が 1 件以上要る（無いとフォームの送信ボタンが押せない）。
+   *      既存のものを探して使うと DB の中身にテストが依存するため、実行ごとに 1 件作る。
+   */
+  distributorProductName?: string
+  distributorProductId?: string
+  /**
+   * 施設 A の院内価格と、その**改定後**の仕切値（2026-09-09 追加）。
+   *
+   * WHY: 価格履歴の route（`/api/distributor-products/[id]/price-history`）は
+   *      攻撃表で **weak**（存在しない UUID を渡すので 404 止まり）だった。
+   *      施設 A の履歴を実際に作ることで、施設 B の利用者で叩いたときに
+   *      「他施設の価格・施設名が本文に出ないか」を本当に測れるようになる。
+   *      `facilityAPurchasePrice` は漏洩の目印に使うので、他と衝突しない値にしてある。
+   */
+  facilityAHospitalPriceId?: string
+  facilityAPurchasePrice?: number
+  /**
+   * 攻撃の総当たり（P-017）が `[id]` に入れる、**実在するマスタの行**（2026-09-09 追加）。
+   *
+   * WHY: 攻撃表は長らく多くの route を **weak**（存在しない UUID を渡すので 404 止まり、
+   *      あるいは本文が入口の検証に落ちて 400 止まり）として扱っており、
+   *      **認可の判定に一度も到達していなかった**。実在する行を渡して初めて
+   *      「施設 B の staff はマスタを読めるが変えられない」を実際に測れる（P-021 / P-033）。
+   */
+  productId?: string
+  secondProductId?: string
+  categoryId?: string
+  compatibilityId?: string
+  /**
+   * 施設 A の返却と、その明細（2026-09-09 追加）。
+   *
+   * WHY: 品目ごとの取り消し（`/api/loan-returns/[id]/items/[itemId]`）を攻撃表で測るには、
+   *      **実在する返却と明細**が要る。存在しない UUID では 404 で止まり、
+   *      認可の判定に一度も届かない（weak）。
+   *      紐付け（`loan_order_item_id`）は付けないので、他の spec の残数・未返却には影響しない。
+   */
+  loanReturnId?: string
+  loanReturnItemId?: string
+  /**
+   * 施設 A の消耗品（2026-09-09 追加）。
+   *
+   * WHY: 消耗品を直す・止める・消す道（`/api/consumables/[id]`）を攻撃表で測るには、
+   *      **実在する行**が要る。存在しない UUID では 404 で止まり、認可に届かない（weak）。
+   *      品名は漏洩の目印に使う（施設の運用が見える情報）。
+   */
+  consumableId?: string
+  consumableName?: string
+  /**
+   * `hospital-prices.spec.ts` 専用の代理店商品（2026-09-09 追加）。**院内価格は付けない**。
+   *
+   * WHY: あの spec は自分が使う組み合わせの院内価格を beforeEach で消す。
+   *      フィクスチャの代理店商品を共用していたため、**フィクスチャの院内価格と改定履歴まで
+   *      巻き添えで消えていた**（C-030。fixture-guard が実測して発覚）。
+   *      消す範囲が他人に届かないよう、spec ごとに専用の商品を持たせる。
+   */
+  hospitalPricesDistributorProductId?: string
+  hospitalPricesDistributorProductName?: string
 }
 
 export const CROSS_FACILITY_FIXTURES_PATH = path.join(process.cwd(), 'e2e', '.auth', 'cross-facility-fixtures.json')
@@ -54,9 +126,10 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
   const supabase = createClient(supabaseUrl, serviceRoleKey)
   const runId = randomUUID()
 
+  const facilityAName = `テスト施設A-${runId}`
   const { data: facilityA, error: facilityAError } = await supabase
     .from('facilities')
-    .insert({ name: `テスト施設A-${runId}` })
+    .insert({ name: facilityAName })
     .select('id')
     .single()
   if (facilityAError || !facilityA) {
@@ -120,6 +193,161 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     throw new Error(`[E2E cross-facility auth] loan_ordersシード失敗: ${loanOrderError?.message}`)
   }
 
+  // 明細に入れる製品を 1 件作る（products はマスタなので施設に属さない）
+  const productJan = `e2e-jan-${runId}`
+  const { data: product, error: productError } = await supabase
+    .from('products')
+    .insert({ jan: productJan, ref: `e2e-ref-${runId}` })
+    .select('id')
+    .single()
+  if (productError || !product) {
+    throw new Error(`[E2E cross-facility auth] products シード失敗: ${productError?.message}`)
+  }
+
+  // 代理店商品を 1 件作る（カテゴリ → 代理店商品の順。どちらもマスタなので施設に属さない）
+  const { data: category, error: categoryError } = await supabase
+    .from('categories')
+    .insert({ name: `E2Eカテゴリ-${runId}` })
+    .select('id')
+    .single()
+  if (categoryError || !category) {
+    throw new Error(`[E2E cross-facility auth] categories シード失敗: ${categoryError?.message}`)
+  }
+
+  // 施設 A の返却を 1 件（明細つき）作る。品目ごとの取り消しの攻撃で叩く実物
+  const { data: loanReturn, error: loanReturnError } = await supabase
+    .from('loan_returns')
+    .insert({ facility_id: facilityA.id, return_datetime: new Date().toISOString() })
+    .select('id')
+    .single()
+  if (loanReturnError || !loanReturn) {
+    throw new Error(`[E2E cross-facility auth] loan_returns シード失敗: ${loanReturnError?.message}`)
+  }
+  const { data: loanReturnItem, error: loanReturnItemError } = await supabase
+    .from('loan_return_items')
+    .insert({ loan_return_id: loanReturn.id, jan: productJan, quantity: 1 })
+    .select('id')
+    .single()
+  if (loanReturnItemError || !loanReturnItem) {
+    throw new Error(`[E2E cross-facility auth] loan_return_items シード失敗: ${loanReturnItemError?.message}`)
+  }
+
+  // 互換ペア（product_compatibilities）を 1 件作るには製品が 2 つ要る。
+  // `ordered_pair` の CHECK（product_id_1 < product_id_2）があるので、UUID の辞書順に並べて入れる
+  const { data: secondProduct, error: secondProductError } = await supabase
+    .from('products')
+    .insert({ jan: `e2e-jan2-${runId}`, ref: `e2e-ref2-${runId}` })
+    .select('id')
+    .single()
+  if (secondProductError || !secondProduct) {
+    throw new Error(`[E2E cross-facility auth] 2 件目の products シード失敗: ${secondProductError?.message}`)
+  }
+  const [pair1, pair2] = [product.id as string, secondProduct.id as string].sort()
+  const { data: compatibility, error: compatibilityError } = await supabase
+    .from('product_compatibilities')
+    .insert({ category_id: category.id, product_id_1: pair1, product_id_2: pair2 })
+    .select('id')
+    .single()
+  if (compatibilityError || !compatibility) {
+    throw new Error(`[E2E cross-facility auth] product_compatibilities シード失敗: ${compatibilityError?.message}`)
+  }
+
+  const distributorProductName = `E2E代理店商品-${runId}`
+  const { data: distributorProduct, error: dpError } = await supabase
+    .from('distributor_products')
+    .insert({
+      product_id: product.id,
+      category_id: category.id,
+      maker: `E2Eメーカー-${runId}`,
+      supplier: `E2E卸-${runId}`,
+      name: distributorProductName,
+      quantity: 1,
+    })
+    .select('id')
+    .single()
+  if (dpError || !distributorProduct) {
+    throw new Error(`[E2E cross-facility auth] distributor_products シード失敗: ${dpError?.message}`)
+  }
+
+  // 施設 A の院内価格を 1 件作り、**値を変えて価格履歴を 1 行残す**。
+  //
+  // WHY(2026-09-09 追加): `/api/distributor-products/[id]/price-history` は
+  //      施設スコープの履歴（entity_type = 'hospital_price'）を
+  //      `is_facility_member(hp.facility_id) OR is_admin()` で絞る SECURITY DEFINER の RPC を叩く。
+  //      ところが攻撃表（P-017）はこの route を **weak**（存在しない UUID を渡すので 404 止まり）
+  //      として扱っており、**境界に一度も届いていなかった**。
+  //      施設 A の履歴を実際に作れば、施設 B の利用者で叩いたときに
+  //      「他施設の価格が本文に出ないか」を本当に測れる。
+  //      価格は施設ごとの商談条件（脅威モデルの資産 A-02）で、漏れると実害が大きい。
+  const facilityAPurchasePrice = 918273
+  const { data: hospitalPrice, error: hpError } = await supabase
+    .from('hospital_prices')
+    .insert({
+      distributor_product_id: distributorProduct.id,
+      facility_id: facilityA.id,
+      purchase_price: 111111,
+      delivery_price: 222222,
+    })
+    .select('id')
+    .single()
+  if (hpError || !hospitalPrice) {
+    throw new Error(`[E2E cross-facility auth] hospital_prices シード失敗: ${hpError?.message}`)
+  }
+  // WHY(作るだけでなく変える): 価格履歴は**値が変わったときだけ**トリガーが 1 行残す（I-041）。
+  //      INSERT しただけでは履歴が生まれないので、ここで 1 回だけ改定する。
+  const { error: priceUpdateError } = await supabase
+    .from('hospital_prices')
+    .update({ purchase_price: facilityAPurchasePrice })
+    .eq('id', hospitalPrice.id)
+  if (priceUpdateError) {
+    throw new Error(`[E2E cross-facility auth] 価格改定シード失敗: ${priceUpdateError.message}`)
+  }
+
+  // 施設 A の消耗品を 1 件作る。
+  //
+  // WHY(2026-09-09 追加): `/api/consumables/[id]` の PUT / PATCH / DELETE を、
+  //      **実在する行**に対して測るため。存在しない UUID を渡すと 404 で止まり、
+  //      認可の境界に一度も届かない（攻撃表の weak になる）。
+  //      消耗品の品名・用途は施設の運用が見える情報なので、他施設から読めないことを実際に測る。
+  // hospital-prices.spec.ts 専用の代理店商品（**院内価格を付けない**）。
+  //
+  // WHY(2026-09-09 に足した): あの spec は beforeEach で「自分が使う組み合わせの院内価格」を消すが、
+  //      使っていたのが**フィクスチャの代理店商品**だったので、
+  //      フィクスチャ自身の院内価格と、その改定履歴まで一緒に消えていた（fixture-guard が実測して発覚）。
+  //      価格を消すと履歴が連鎖で消える（20260906000007）ので、消した本人は履歴を触ったつもりがない。
+  //      **spec ごとに専用の代理店商品を持たせて、消す範囲が他人に届かないようにする。**
+  const hospitalPricesDistributorProductName = `E2E院内価格用代理店商品-${runId}`
+  const { data: hpDistributorProduct, error: hpDpError } = await supabase
+    .from('distributor_products')
+    .insert({
+      product_id: secondProduct.id,
+      category_id: category.id,
+      name: hospitalPricesDistributorProductName,
+      maker: `E2Eメーカー-${runId}`,
+      supplier: `E2E卸-${runId}`,
+      quantity: 1,
+      reimbursement_price: 1000,
+    })
+    .select('id')
+    .single()
+  if (hpDpError || !hpDistributorProduct) {
+    throw new Error(`[E2E cross-facility auth] 院内価格 spec 用の distributor_products シード失敗: ${hpDpError?.message}`)
+  }
+
+  const consumableName = `E2E消耗品-${runId}`
+  const { data: consumable, error: consumableError } = await supabase
+    .from('consumables')
+    .insert({
+      facility_id: facilityA.id,
+      name: consumableName,
+      purpose: 'クロス施設境界テスト',
+    })
+    .select('id')
+    .single()
+  if (consumableError || !consumable) {
+    throw new Error(`[E2E cross-facility auth] consumables シード失敗: ${consumableError?.message}`)
+  }
+
   await signInAndSaveStorageState(supabase, emailA, CROSS_FACILITY_USER_A_AUTH_PATH)
   await signInAndSaveStorageState(supabase, emailB, CROSS_FACILITY_USER_B_AUTH_PATH)
 
@@ -128,6 +356,22 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     facilityBId: facilityB.id as string,
     loanOrderProcedureName,
     loanOrderId: loanOrder.id as string,
+    productJan,
+    facilityAName,
+    distributorProductName,
+    distributorProductId: distributorProduct.id as string,
+    facilityAHospitalPriceId: hospitalPrice.id as string,
+    facilityAPurchasePrice,
+    productId: product.id as string,
+    secondProductId: secondProduct.id as string,
+    categoryId: category.id as string,
+    compatibilityId: compatibility.id as string,
+    loanReturnId: loanReturn.id as string,
+    loanReturnItemId: loanReturnItem.id as string,
+    consumableId: consumable.id as string,
+    consumableName,
+    hospitalPricesDistributorProductId: hpDistributorProduct.id as string,
+    hospitalPricesDistributorProductName,
   }
   fs.writeFileSync(CROSS_FACILITY_FIXTURES_PATH, JSON.stringify(fixtures))
   console.log(`[E2E cross-facility auth] フィクスチャを書き出しました: ${CROSS_FACILITY_FIXTURES_PATH}`)

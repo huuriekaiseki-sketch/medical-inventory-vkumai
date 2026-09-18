@@ -254,8 +254,11 @@ if (shouldBlock([specCheck])) {
 // issue #316: 下記プロンプトの1〜4の判定テーブルは .claude/workflows/lib/manifest-check.js の
 // classifyManifestCheck にテスト可能な形で文書化している。ただし実行パス自体はプロンプト依存の
 // ままであり（Workflow DSLの制約上、実際のmanifest読込・ハッシュ計算はエージェントに委譲する
-// 必要がある）、このプロンプト文言を変更した場合はmanifest-check.js側も手動で追従させること
-// （自動では同期されない）。
+// 必要がある）、このプロンプト文言を変更した場合はmanifest-check.js側の**判定表**も手動で
+// 追従させること（そちらの一致は機械では見ていない）。
+// 2026-09-11: **プロンプト文言そのもの**の正本は .claude/workflows/lib/prompts/manifest-check.js
+// に置き、同期は manifest-check-prompt-sync.test.js が検証する（Spec Check と同じ形）。
+// 下のテンプレートリテラルを変えたら、正本も一字一句同じに更新すること。
 phase('Manifest Check')
 
 const MANIFEST_CHECK_SCHEMA = {
@@ -416,18 +419,39 @@ logMinorOnlyPassThrough('Implement', [dataResult, apiResult, uiResult])
 // 不能として何もせず従来通りIntegrateへ進む（false positiveでIntegrateを阻害しない）。
 phase('Coverage Check')
 
+// issue R03: hasChanges を「1 件でもファイルが変わったか」で決めていたため、
+// **SPEC.md や .aidd/run-manifest.json しか変わっていない実行でも hasChanges: true** になり、
+// 「実装が 1 行も無いのに実装済み」として先へ進めた。
+// 実装物と、実装物でないもの（仕様書・実行の記録）を分けて数え、
+// さらに SPEC Part 2 の実装項目ごとに「どのファイルで実装され、何で検証されるか」を対応させる。
 const COVERAGE_CHECK_SCHEMA = {
   type: 'object',
   properties: {
     status: { type: 'string', enum: ['pass', 'blocked'] },
     detail: { type: 'string' },
+    // 実装物（仕様書・実行の記録を除く）に変更があったか
     hasChanges: { type: 'boolean' },
+    // SPEC Part 2 の実装項目ごとの対応。実装物が無い項目は files を空にする
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          item: { type: 'string' },
+          files: { type: 'array', items: { type: 'string' } },
+          verification: { type: 'string' },
+        },
+        required: ['item', 'files'],
+      },
+    },
+    // 対応する実装物が1件も無かった項目の名前
+    unmatchedItems: { type: 'array', items: { type: 'string' } },
   },
   required: ['status', 'detail'],
 }
 
 const coverageCheck = await agent(
-  withIntent('coverage-check', `まず .aidd/run-manifest.json をReadツールで読み、baseCommitフィールドを確認してください。\n\nbaseCommitが取得できない場合: status: blocked、detailに「baseCommit不明のため判定不可」と書いて終了してください（これは異常事態ではなく、単に本チェックをスキップする合図です）。\n\nbaseCommitが取得できた場合: Bashツールで \`git status --porcelain\` と \`git diff --name-only ${'${baseCommit}'}\`（baseCommitは実際の値に置き換える）の両方を実行し、直前のContract + DB / Implementフェーズが起動してからリポジトリに1件でもファイル変更（新規・変更・削除）があったか確認してください。\n\n1件でも変更があれば status: pass、hasChanges: true、detailに変更ファイル数を書いてください。\n1件も変更が無ければ status: pass、hasChanges: false、detailに「変更ファイルなし」と書いてください。これはエラーではなく、SPEC.mdの実装対象が既存5ロールのどの担当パスにも該当しなかった場合に起こり得る正常系です。${guide(
+  withIntent('coverage-check', `まず .aidd/run-manifest.json をReadツールで読み、baseCommitフィールドを確認してください。\n\nbaseCommitが取得できない場合: status: blocked、detailに「baseCommit不明のため判定不可」と書いて終了してください（これは異常事態ではなく、単に本チェックをスキップする合図です）。\n\nbaseCommitが取得できた場合、以下を順に行ってください。\n\n1. Bashツールで \`git status --porcelain\` と \`git diff --name-only ${'${baseCommit}'}\`（baseCommitは実際の値に置き換える）の両方を実行し、変更ファイル一覧を得る。\n\n2. その一覧から **実装物でないもの** を除く。除くのは次の3種類だけです:\n   - 仕様書そのもの（${specPath}）\n   - 実行の記録（.aidd/ 配下）\n   - ログ（logs/ 配下）\n   **これらしか変わっていない場合、実装は 1 行も行われていません。**「仕様書を書いたこと」を「実装したこと」と読まないための除外です。\n\n3. ${specPath} を Read ツールで読み、Part 2（実装計画）の実装項目を1つずつ取り出す。実装項目ごとに、2 で残った変更ファイルのうち**その項目を実装しているファイル**を対応させ、あわせて**その項目が何で検証されるか**（テストファイル名など。無ければ「検証なし」）を書く。これを items 配列に入れる（item / files / verification）。\n\n4. items のうち files が空のもの（対応する実装物が1件も無い項目）の名前を unmatchedItems に入れる。\n\n5. 2 で残った変更ファイルが1件でもあれば status: pass、hasChanges: true。1件も無ければ status: pass、hasChanges: false、detailに「実装物の変更なし（仕様書・記録のみ）」と書く。これはエラーではなく、SPEC.mdの実装対象が既存5ロールのどの担当パスにも該当しなかった場合に起こり得る正常系です。\n\ndetailには「実装物の変更ファイル数」「除外したファイル数」「実装項目のうち対応が付かなかった数」を必ず書いてください。${guide(
     '判定できた（hasChangesの値に関わらずpass）',
     '（未使用: このエージェントはpass/blockedの2値のみ返す）',
     'baseCommitが不明で判定できない'
@@ -437,7 +461,17 @@ const coverageCheck = await agent(
 
 countLoggable('reviewer')
 countProgressLoggable('reviewer')
-log(`Coverage Check完了: status=${coverageCheck?.status ?? 'なし'}, hasChanges=${coverageCheck?.hasChanges ?? '不明'}`)
+const unmatchedSpecItems = coverageCheck?.unmatchedItems ?? []
+log(`Coverage Check完了: status=${coverageCheck?.status ?? 'なし'}, hasChanges=${coverageCheck?.hasChanges ?? '不明'}, 対応の付かない実装項目=${unmatchedSpecItems.length}`)
+// issue R03: 対応が付かなかった実装項目を黙って捨てない。ここで止めはしない
+// （プロンプトの読み取り精度に完了判定を預けない）が、統合エージェントとレビューへ渡して
+// 「その項目は本当に不要だったのか」を必ず見させる。
+if (unmatchedSpecItems.length > 0) {
+  log(`実装物が対応しないSPEC項目: ${unmatchedSpecItems.join(' / ')}`)
+}
+const unmatchedItemsSection = unmatchedSpecItems.length > 0
+  ? `\n\n## 実装物が対応していないSPEC項目（Coverage Check の報告）\n${unmatchedSpecItems.map(item => `- ${item}`).join('\n')}\nこれらは実装漏れの可能性があります。既に他の変更で満たされているなら、その根拠を報告に書いてください。満たされていないなら実装してください。`
+  : ''
 
 let groupImplResult = null
 const needsGroupImplementer = coverageCheck?.status === 'pass' && coverageCheck?.hasChanges === false
@@ -482,8 +516,10 @@ if (needsGroupImplementer) {
 // 文書化している。こちらもプロンプト依存の実行パス自体は変わらない（上記Manifest Check参照）。
 phase('Integrate')
 
-const integrationResult = await agent(
-  withIntent('integrator', `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用なら\`supabase db push --local\`で適用する）。\`supabase db push\`は\`--local\`を付けないとデフォルトでリモート（本番）データベースが対象になるため、\`--local\`を必ず明示すること。\`--linked\`・\`--db-url\`等でリモート・本番Supabaseに適用することは絶対にしないこと。ローカル以外への適用が必要だと判断した場合は、何も実行せずstatus: blockedで報告して止まること。\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. npx tsc --noEmit を実行 → 型エラーがあれば修正（3回まで。issue #46のDONE基準に型検査を含める）\n6. 全テスト・lint・tsc緑を確認して報告\n7. .aidd/run-manifest.json をReadツールで読み、manifest.baseCommitを取得する（無ければこのステップはスキップしてよい）。取得できた場合、Bashツールで \`git diff --name-only \${baseCommit}\`（baseCommitはmanifestの値に置き換える）を実行し、変更されたファイル一覧を取得する。取得できたら .aidd/run-manifest.json の changedFiles フィールドをその一覧で上書きし、Writeツールで保存する（docs/agents/run-manifest.md 参照。他フィールドは変更しないこと）。\n\n## 各完了報告\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${groupImplResult ? `\n### group-implementer（5ロール全員が担当外だったため追加起動）\n${groupImplResult.detail}` : ''}${guide(
+// letなのは、Reviewの差し戻しでコードが変わったあとに取り直した結果でここを上書きするため
+// （issue R01。取り直さないまま古い結果をDONE判定に使っていた）
+let integrationResult = await agent(
+  withIntent('integrator', `並列実装が完了しました。以下の順で作業してください。\n0. まずReadツールで ${specPath} が存在するか確認する。存在しない場合、または下記の完了報告のいずれかに「仕様書が見つからない」「作業を開始できない」等の記述がある場合は、それを最優先の異常事態として報告の先頭に明記すること（該当implエージェントは未着手として扱い、テスト・lintが緑でも全体を正常完了と報告しないこと）。\n1. マイグレーションが適用済みか確認する（未適用なら\`supabase db push --local\`で適用する）。\`supabase db push\`は\`--local\`を付けないとデフォルトでリモート（本番）データベースが対象になるため、\`--local\`を必ず明示すること。\`--linked\`・\`--db-url\`等でリモート・本番Supabaseに適用することは絶対にしないこと。ローカル以外への適用が必要だと判断した場合は、何も実行せずstatus: blockedで報告して止まること。\n2. 各implementerの成果を結線し、共有ファイルを編集する\n3. npm test を実行 → 失敗があれば修正（3回まで）\n4. npm run lint を実行 → 失敗があれば修正\n5. npx tsc --noEmit を実行 → 型エラーがあれば修正（3回まで。issue #46のDONE基準に型検査を含める）\n6. 全テスト・lint・tsc緑を確認して報告\n7. .aidd/run-manifest.json をReadツールで読み、manifest.baseCommitを取得する（無ければこのステップはスキップしてよい）。取得できた場合、Bashツールで **2 つ**のコマンドを実行する: \`git diff --name-only \${baseCommit}\`（baseCommitはmanifestの値に置き換える）と \`git ls-files --others --exclude-standard\`。前者は**追跡済みファイルの差分だけ**を返すので、**新しく作ったファイル（新規の supabase/migrations/*.sql など）は 1 件も出てこない**。後者が未追跡の新規ファイルを返すので、**両方を合わせ、重複を除いた一覧**を changedFiles とすること。この 2 つを合わせないと、いちばん高リスクな成果物が証跡から丸ごと抜ける。合わせた一覧で .aidd/run-manifest.json の changedFiles フィールドを上書きし、Writeツールで保存する（docs/agents/run-manifest.md 参照。他フィールドは変更しないこと）。このステップは**他の全ステップが終わったあと最後に**行うこと（途中で実行すると、その後の修正で増えたファイルが記録から漏れる）。\n\n## 各完了報告${unmatchedItemsSection}\n### contract-writer\n${contractResult?.detail}\n### db-impl\n${dbResult?.detail}\n### data-impl\n${dataResult?.detail}\n### api-impl\n${apiResult?.detail}\n### ui-impl\n${uiResult?.detail}${groupImplResult ? `\n### group-implementer（5ロール全員が担当外だったため追加起動）\n${groupImplResult.detail}` : ''}${guide(
     'npm test・npm run lint・npx tsc --noEmitが最終的に全て緑で統合完了',
     '3回の修正試行後もtest/lint/tscのいずれかが赤のまま',
     'SPEC.mdが見つからない、またはいずれかのimplエージェントの完了報告に「仕様書が見つからない」「作業を開始できない」旨の記述がある。または、マイグレーションの適用先がローカルSupabase以外（リモート・本番）である必要があると判断した'
@@ -599,6 +635,15 @@ let reviewAttempt = 0
 let reviewRetryAgentCount = 0
 const retryHistory = []
 
+// ── 証拠の鮮度（issue R01）────────────────────────────────────────────
+// 差し戻しでImplementerがコードを直すと、その手前で取った統合ゲート(test/lint/tsc)の
+// 結果は「別の木に対する結果」になる。合否に使えるのは最後の変更より後に取った結果だけ
+// なので、修正が入った時点でfalseにし、取り直してpassしたときだけtrueに戻す。
+// lastRetryResultは最後の差し戻し修正そのものの成否（nullは「差し戻しが起きなかった」）。
+let integrationFresh = true
+let lastRetryResult = null
+let integrationRecheckCount = 0
+
 while (true) {
   // サーキットブレーカー: Review差し戻しループはこのworkflow内で唯一の反復構造のため、
   // ラウンドごとに累計量を確認する（MAX_REVIEW_RETRIESの回数上限とは独立した量ベースの保険）
@@ -620,7 +665,7 @@ while (true) {
 
   reviewResults = await parallel(
     REVIEW_DIMENSIONS.map(dim => () => agent(
-      withIntent(`review:${dim.key}:R${reviewAttempt}`, `まず ${specPath} を Read ツールで読んでください。\n観点「${dim.label}」の視点のみでレビューしてください。\n指摘のみを箇条書きで返す。修正はしない。問題なければ「指摘なし」と返す。${reviewGuide}`),
+      withIntent(`review:${dim.key}:R${reviewAttempt}`, `まず ${specPath} を Read ツールで読んでください。\n観点「${dim.label}」の視点のみでレビューしてください。\n指摘のみを箇条書きで返す。修正はしない。問題なければ「指摘なし」と返す。${unmatchedItemsSection}${reviewGuide}`),
       { label: `review:${dim.key}:R${reviewAttempt}`, agentType: 'reviewer', phase: 'Review', schema: AGENT_RESULT_SCHEMA }
     ))
   )
@@ -690,24 +735,133 @@ while (true) {
   countProgressLoggable('implementer')
   reviewRetryAgentCount++
   retryHistory.push({ attempt: reviewAttempt, findings: retryFindings, detail: retryResult?.detail })
+
+  // ここでコードが変わった。手前で取った統合ゲートの結果は「別の木に対する結果」になるので、
+  // 取り直すまで合否に使わない（issue R01）
+  lastRetryResult = retryResult
+  integrationFresh = false
+
+  // 修正そのものがpassでなければ次のラウンドへ進まない（deny-by-default）。
+  // 従来はretryResultのstatusを一切見ずdetailだけをretryHistoryへ積んでおり、
+  // 「修正対象が特定できない(blocked)」という報告のまま次のレビューを回していた。
+  if (shouldBlock([retryResult])) {
+    log('品質ゲート: Review差し戻しの修正がpassしなかったため中断（blockedとして人間に引き渡します）')
+    return {
+      done: false,
+      manifestCheck,
+      contractResult,
+      dbResult,
+      dataResult,
+      apiResult,
+      uiResult,
+      coverageCheck,
+      groupImplResult,
+      integration: integrationResult,
+      reviewFindings: REVIEW_DIMENSIONS.map((dim, i) => ({
+        dimension: dim.label,
+        findings:  describeReviewResult(reviewResults[i]),
+      })),
+      blocked: true,
+      blockedAt: 'Review Retry',
+      stats: {
+        phase: 'phase2',
+        done: false,
+        blocked: true,
+        blockedAt: 'Review Retry',
+        reviewRetries: reviewRetryAgentCount,
+        integrationRechecks: integrationRecheckCount,
+        expectedLoopObservabilityRecords: loggableAgentCount,
+        expectedAgentProgressRecords: progressLoggableAgentCount,
+      },
+    }
+  }
+  logMinorOnlyPassThrough('Review Retry', [retryResult])
+
+  // 修正後の木で統合ゲートを取り直す（issue R01）。
+  // SPEC.mdのハッシュもここで再突合する（修正中にSPEC.mdが書き換わると、
+  // Manifest Checkで一度合わせたハッシュが実態と合わなくなるため）。
+  const recheckResult = await agent(
+    withIntent(`integration-recheck:R${reviewAttempt}`, `直前のレビュー差し戻しでコードが修正されました。修正後の状態で以下を確認してください。\n1. npm test を実行 → 失敗があれば修正（3回まで）\n2. npm run lint を実行 → 失敗があれば修正\n3. npx tsc --noEmit を実行 → 型エラーがあれば修正（3回まで）\n4. .aidd/run-manifest.json をReadツールで読み、manifest.specHash を取得する（manifestもspecHashも無ければこのステップはスキップしてよい）。取得できた場合、Bashツールで \`shasum -a 256 ${specPath}\` を実行し、manifest.specHash と一致するか確認する。\n5. manifest.baseCommit が取得できた場合、Bashツールで \`git diff --name-only \${baseCommit}\`（baseCommitはmanifestの値に置き換える）と \`git ls-files --others --exclude-standard\` の**両方**を実行し、重複を除いて合わせた一覧で .aidd/run-manifest.json の changedFiles フィールドを上書きし、Writeツールで保存する（他フィールドは変更しないこと）。前者は追跡済みファイルの差分しか返さないので、**新しく作ったファイルは後者を合わせないと抜ける**。修正でファイルが増えているはずなので、このステップは必ず 1〜3 のあとに行う。\n\n修正前の結果は使いません。**今の状態で実際にコマンドを実行した結果**のみを報告してください。${guide(
+      'npm test・npm run lint・npx tsc --noEmitが全て緑で、specHashも一致した（またはmanifestが無くハッシュ突合は対象外だった）',
+      '3回の修正試行後もtest/lint/tscのいずれかが赤のまま',
+      'specHashが不一致（修正中にSPEC.mdが変更された）、またはコマンドを実行できずtest/lint/tscの結果が得られなかった'
+    )}`),
+    { label: `integration-recheck:R${reviewAttempt}`, phase: 'Review', agentType: 'integrator', schema: AGENT_RESULT_SCHEMA }
+  )
+  countLoggable('integrator')
+  countProgressLoggable('integrator')
+  integrationRecheckCount++
+  integrationResult = recheckResult
+
+  if (shouldBlock([recheckResult])) {
+    log('品質ゲート: 修正後の統合ゲート再実行がpassしなかったため中断（blockedとして人間に引き渡します）')
+    return {
+      done: false,
+      manifestCheck,
+      contractResult,
+      dbResult,
+      dataResult,
+      apiResult,
+      uiResult,
+      coverageCheck,
+      groupImplResult,
+      integration: integrationResult,
+      reviewFindings: REVIEW_DIMENSIONS.map((dim, i) => ({
+        dimension: dim.label,
+        findings:  describeReviewResult(reviewResults[i]),
+      })),
+      blocked: true,
+      blockedAt: 'Integrate Recheck',
+      stats: {
+        phase: 'phase2',
+        done: false,
+        blocked: true,
+        blockedAt: 'Integrate Recheck',
+        reviewRetries: reviewRetryAgentCount,
+        integrationRechecks: integrationRecheckCount,
+        expectedLoopObservabilityRecords: loggableAgentCount,
+        expectedAgentProgressRecords: progressLoggableAgentCount,
+      },
+    }
+  }
+  logMinorOnlyPassThrough('Integrate Recheck', [recheckResult])
+  integrationFresh = true
+  log(`統合ゲートを修正後の状態で取り直しました（R${reviewAttempt}）`)
 }
 
 const implResults = [contractResult, dbResult, dataResult, apiResult, uiResult, ...(groupImplResult ? [groupImplResult] : [])]
 
 // DONE判定: .claude/workflows/lib/phase2-done.js の computeDone と同一ロジック
-// （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側）
+// （Workflow DSLはrequire不可のためインライン複製。ロジックの正本・テストはlib側。
+// 一致は phase2-done-sync.test.js が検証する）
 // issue #46: 修正ループ（Review差し戻し等）を実装しても、最終的な完了条件(DONE)が
 // 明示されていないと「いつ止まっていいか」が曖昧になる。DONE = 全実装がpass（またはfindings
 // 全件minorのfail） AND 統合ゲート(test/lint/tsc)がpass AND 全観点Reviewがpass AND
 // specHashが一致、のすべてを満たした場合のみtrueにする。
+// issue R01: これに「その統合ゲートの結果が最後にコードが変わったあとに取られたものか」
+// （evidence.integrationFresh）を足した。緑であることだけでなく、どの木に対して緑かを見る。
 function allPass(results) {
   return results.length > 0 && results.every(r => r?.status === 'pass' || isMinorOnlyFailure(r))
 }
-const done =
-  allPass(implResults) &&
-  integrationResult?.status === 'pass' &&
-  allPass(reviewResults) &&
-  manifestCheck?.status === 'pass'
+function lastRetryAccepted(result) {
+  if (result === null) return true
+  if (result === undefined) return false
+  return result.status === 'pass' || isMinorOnlyFailure(result)
+}
+function computeDone(implResults, integrationResult, reviewResults, manifestCheck, evidence) {
+  return (
+    allPass(implResults) &&
+    integrationResult?.status === 'pass' &&
+    allPass(reviewResults) &&
+    manifestCheck?.status === 'pass' &&
+    evidence?.integrationFresh === true &&
+    lastRetryAccepted(evidence?.lastRetryResult)
+  )
+}
+const done = computeDone(implResults, integrationResult, reviewResults, manifestCheck, {
+  integrationFresh,
+  lastRetryResult,
+})
 
 log(`検証完了（DONE=${done}）。/structured-review でレビュー結果を確認してください。`)
 
@@ -733,7 +887,8 @@ return {
     groupImplementerTriggered: Boolean(groupImplResult),
     reviewAgents: REVIEW_DIMENSIONS.length,
     reviewRetries: reviewRetryAgentCount,
-    totalAgents: 1 + 5 + 1 + (groupImplResult ? 1 : 0) + 1 + REVIEW_DIMENSIONS.length + reviewRetryAgentCount,
+    integrationRechecks: integrationRecheckCount,
+    totalAgents: 1 + 5 + 1 + (groupImplResult ? 1 : 0) + 1 + REVIEW_DIMENSIONS.length + reviewRetryAgentCount + integrationRecheckCount,
     implSuccessCount: implResults.filter(r => r?.status === 'pass').length,
     implBlockedCount: implResults.filter(r => r?.status === 'blocked').length,
     expectedLoopObservabilityRecords: loggableAgentCount,

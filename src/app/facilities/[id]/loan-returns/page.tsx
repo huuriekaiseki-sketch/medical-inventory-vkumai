@@ -1,13 +1,14 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { Fragment, use, useEffect, useState } from 'react'
 import Link from 'next/link'
-import type { LoanReturn } from '@/types/order'
+import type { LoanReturn, LoanReturnItem } from '@/types/order'
 import { formatJstDate, formatJstDateTime } from '@/lib/format-date'
 
 const STATUS_LABEL: Record<string, string> = {
   draft: '下書き',
   returned: '返却済',
+  cancelled: '取り消し済',
 }
 
 export default function LoanReturnsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -15,6 +16,8 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
   const [returns, setReturns] = useState<LoanReturn[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [cancellingItemId, setCancellingItemId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -28,12 +31,72 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
     }
   }, [id])
 
-  const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+  // WHY(E-056): 間違えて登録した返却を、製品の中で直せるようにする。
+  //      **行は消さず取り消し状態にする**ので、一覧には「取り消し済」として残り、
+  //      誰がいつ取り消したかは監査ログに残る。残数と未返却の件数からは除かれる。
+  const handleCancel = async (ret: LoanReturn) => {
+    if (!confirm('この返却を取り消しますか？（取り消すと元に戻せません）')) return
+    setCancellingId(ret.id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/loan-returns/${ret.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ facilityId: id, action: 'cancel' }),
+      })
+      if (!res.ok) {
+        const { error: message } = await res.json().catch(() => ({ error: '取り消しに失敗しました' }))
+        setError(message ?? '取り消しに失敗しました')
+        return
+      }
+      setReturns(prev => prev.map(r => (r.id === ret.id ? { ...r, status: 'cancelled' } : r)))
+    } catch {
+      setError('取り消しに失敗しました')
+    } finally {
+      setCancellingId(null)
+    }
+  }
+
+  // WHY(E-056 の残り、2026-09-09): 1 回の返却で複数の品目を返したとき、そのうち 1 品目だけが
+  //      間違いということが起きる。回ごと取り消して全部入れ直すと、正しく返した品目まで
+  //      記録を作り直すことになるので、**その品目だけ**を取り消せるようにする。
+  //      数量を書き換えるのではなく取り消し状態にするのは、親の返却と同じ考え方
+  //      （元は何本だったかが一覧から追える）。
+  const handleCancelItem = async (ret: LoanReturn, item: LoanReturnItem) => {
+    if (!confirm('この品目の返却を取り消しますか？（取り消すと元に戻せません）')) return
+    setCancellingItemId(item.id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/loan-returns/${ret.id}/items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ facilityId: id, action: 'cancel' }),
+      })
+      if (!res.ok) {
+        const { error: message } = await res.json().catch(() => ({ error: '取り消しに失敗しました' }))
+        setError(message ?? '取り消しに失敗しました')
+        return
+      }
+      setReturns(prev =>
+        prev.map(r =>
+          r.id === ret.id
+            ? { ...r, items: r.items.map(i => (i.id === item.id ? { ...i, status: 'cancelled' as const } : i)) }
+            : r
+        )
+      )
+    } catch {
+      setError('取り消しに失敗しました')
+    } finally {
+      setCancellingItemId(null)
+    }
+  }
+
+  const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <div className="mb-6">
-        <Link href={`/facilities/${id}`} className="text-sm hover:underline" style={{ color: '#6B7280' }}>
+        <Link href={`/facilities/${id}`} className="text-sm hover:underline" style={{ color: '#4B5563' }}>
           ← 施設に戻る
         </Link>
       </div>
@@ -59,9 +122,9 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
       )}
 
       {loading ? (
-        <p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>読み込み中...</p>
       ) : returns.length === 0 ? (
-        <p className="text-sm" style={{ color: '#6B7280' }}>返却履歴がありません。</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>返却履歴がありません。</p>
       ) : (
         <div className="rounded bg-white shadow-sm overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
           <table className="min-w-full">
@@ -70,19 +133,69 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>返却日時</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>ステータス</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>作成日</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>操作</th>
               </tr>
             </thead>
             <tbody>
               {returns.map(ret => (
-                <tr key={ret.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
-                  <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+                <Fragment key={ret.id}>
+                <tr style={{ borderBottom: '1px solid #E5E7EB' }}>
+                  <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                     {ret.returnDatetime ? formatJstDateTime(ret.returnDatetime) : '-'}
                   </td>
-                  <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>{STATUS_LABEL[ret.status] ?? ret.status}</td>
-                  <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+                  <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>{STATUS_LABEL[ret.status] ?? ret.status}</td>
+                  <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                     {formatJstDate(ret.createdAt)}
                   </td>
+                  <td className="px-6 py-4 text-sm">
+                    {ret.status === 'cancelled' ? (
+                      <span style={{ color: '#6B7280' }}>—</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleCancel(ret)}
+                        disabled={cancellingId === ret.id}
+                        className="text-sm hover:underline disabled:opacity-50"
+                        style={{ color: '#B91C1C' }}
+                      >
+                        {cancellingId === ret.id ? '取り消し中…' : '取り消す'}
+                      </button>
+                    )}
+                  </td>
                 </tr>
+                {/* WHY(明細を一覧に出す、2026-09-09): 品目ごとに取り消せるようにしたので、
+                    どの品目を何本返したかが見えないと選べない。返却は品目数が少ないので
+                    折りたたまず常に出す（開く操作を挟むと「取り消せることに気づかない」） */}
+                {ret.items.length > 0 && (
+                  <tr style={{ borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
+                    <td colSpan={4} className="px-6 py-3">
+                      <ul className="space-y-1">
+                        {ret.items.map(item => (
+                          <li key={item.id} className="flex items-center gap-4 text-sm" style={{ color: '#4B5563' }}>
+                            <span style={{ fontFamily: 'var(--font-ubuntu-mono), monospace' }}>{item.jan}</span>
+                            <span>{item.quantity} 個</span>
+                            {item.status === 'cancelled' ? (
+                              <span style={{ color: '#6B7280' }}>取り消し済</span>
+                            ) : ret.status === 'cancelled' ? (
+                              <span style={{ color: '#6B7280' }}>—</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleCancelItem(ret, item)}
+                                disabled={cancellingItemId === item.id}
+                                className="text-sm hover:underline disabled:opacity-50"
+                                style={{ color: '#B91C1C' }}
+                              >
+                                {cancellingItemId === item.id ? '取り消し中…' : 'この品目を取り消す'}
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

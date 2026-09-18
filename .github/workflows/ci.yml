@@ -75,7 +75,24 @@ jobs:
   hooks-test:
     runs-on: ubuntu-latest
     steps:
+      # WHY(fetch-depth: 0): scripts/check-secret-leak-history.test.sh は git のオブジェクト全部を
+      # 走査して「一度でも秘密をコミットしていないか」を見る。既定の浅い clone（depth 1）では
+      # 走査対象がほぼ無く、**0 件だから安全**と読める緑になってしまう。
+      # 検査自体も浅い clone を検知して落ちるので、ここで深さを指定しないと CI が止まる。
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # WHY(node と依存を入れる、2026-09-18): scripts/check-fixture-guard.test.sh は
+      # 「teardown の throw で実行が落ちるか」を思い込みで書かないため、vitest と playwright を
+      # 実際に起動して測る（node_modules/.bin/ を直接呼ぶ）。依存が無ければ黙って飛ばさず
+      # 「前提を測れない」と言って落ちる設計なので、このジョブにも npm ci が要る。
+      # ブラウザ本体は不要（プローブは page を使わない spec）。
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
       # 認証ファイル漏洩チェック（BSGではなくCI側で行う方針）。e2e.ymlがPR自動実行を
       # やめた(2026-08-25、無料枠対応)ため、PRごとに回る本ジョブへ移設した(軽量・数秒)
       - name: Check auth state files are not committed
@@ -85,7 +102,16 @@ jobs:
             echo "::error::e2e/.auth 配下に認証ファイルがコミットされています: $leaked"
             exit 1
           fi
+      # WHY(ロケールを明示する、2026-09-10・レビュー指摘 R12): 検査は日本語でメッセージを出すのに、
+      # 実行ロケールを誰も決めていなかった。bash 3.2 + UTF-8 では `"$VAR）"` の全角文字の
+      # 先頭バイトを変数名の一部と読んで `set -u` で落ちるため、**C ロケールで回すと 117/0、
+      # ja_JP.UTF-8 で回すと 101/16** という差が出ていた（2026-09-10 実測）。
+      # 開発者の手元は UTF-8 なので、CI もそちらに合わせる。
+      # 書き方そのものの検査は scripts/check-shell-locale-safety.test.sh。
       - name: Run hook script regression tests
+        env:
+          LC_ALL: C.UTF-8
+          LANG: C.UTF-8
         run: |
           for t in scripts/*.test.sh scripts/lib/*.test.sh; do
             echo "::group::$t"

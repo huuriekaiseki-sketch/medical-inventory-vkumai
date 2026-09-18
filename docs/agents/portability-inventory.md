@@ -7,6 +7,25 @@ issue #535「AIDDフレームワークの多リポジトリ展開に向けた棚
 「1週間ほど棚卸しした後にレビューし、汎用プラグイン化に着手する価値があるか判断する」という
 issue本文の進め方は変えていない。本ファイルはその判断材料を溜める置き場。
 
+## 層は 3 値で持つ（2026-09-09）
+
+**「配る／配らない」の 2 値だと、性質の違う 2 つが混ざる。**
+`scripts/lib/plugin-layout.json` の検査の層は 3 つに分けてある:
+
+| 層 | 意味 | 機械で見ていること |
+| --- | --- | --- |
+| `checks` | 配る | 共通側なら固有語ゼロ・参照先が同梱されている |
+| `checksNotDistributed` | **エンジン自体が固有**で配れない | 理由が空でない |
+| `checksSplittable` | **対象・閾値だけが固有**で、登録簿へ出せば配れる | 「何を出せば配れるか」が書いてある・**件数の上限を超えない** |
+
+3 つ目は**返す当てのある借金**。増やさないことだけを機械で守り（`splittableMax`）、
+減らすのは人が決める。2 値のままだと、この違いは理由欄の文章にしか無く、
+書き方を変えると数えられなくなる（`check-design-pitfalls.md` の C-010 の形）。
+
+**分け方の目安**: エンジンから対象・閾値・対応表を抜いたとき、残りが
+「どのリポジトリでも同じ判断」なら `checksSplittable`。
+抜いても特定のスタック（DB・言語・道具）の知識が残るなら `checksNotDistributed`。
+
 ## ドメイン非依存と考えられる部分
 
 構造・パターンそのものは他リポジトリでも再利用できそうな部分。
@@ -34,6 +53,8 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 | 読み取り専用ロールの Bash ガード（settings.json の PreToolUse で `agent_type` を見て書き込み系コマンドを deny） | `scripts/check-readonly-bash.sh`、`READONLY_AGENT_TYPES` | issue #713。「ロール名の集合 × コマンド分類」で deny する方式は汎用。ロール名一覧（sweep-* / reviewer 等）はエージェント構成に依存 |
 | docs 整合性検査（相対リンク・見出しアンカー・パス言及の実在、歴史的マーカー付きは免除） | `scripts/lib/check-docs-integrity.mjs`、`.github/workflows/docs-integrity-check.yml` | issue #714。検査の 3 種と GitHub の slug 規則は汎用。`PATH_MENTION_PREFIXES`（`scripts/` `supabase/` 等）と歴史的マーカー語（削除済み・廃止済み等）はリポジトリ固有 |
 | eval fixture の中立性検査（fixture コードに「ベンチマーク用・意図的」等の自己申告語を書かせない）と、recall 判定器の「非 JSON 応答は生出力で判定」「期待パスの配列（いずれか一致）」 | `scripts/check-eval-fixtures-neutral.test.sh`、`scripts/eval-sweep-recall.sh`、`scripts/lib/judge-sweep-recall.py` | issue #731。「評価対象に正解を教えない」「MISS = 見落としではない、判定器・fixture・エージェントを生出力で切り分ける」という原則は LLM 評価一般に通用する。禁止語の一覧は日本語運用固有 |
+| 検査そのものを配る仕組み（検査は対象スクリプトと同じ層に自動で付いていく／対象を持たない構造テストだけを層の表に書く／配らないものは理由を書く／未分類があれば落とす） | `scripts/lib/plugin-layout.json` の `checks` `checksNotDistributed`、`scripts/lib/build-plugin.mjs`、`scripts/check-plugin-check-coverage.test.sh` | 2026-09-07。「ルールを配るなら、そのルールの検査も一緒に配る」という原則と、層を決めるまで通さないゲートは汎用。どの検査がどちらの層かはリポジトリ固有 |
+| 配る資産（agent / skill / workflow）の網羅を**両方向**で見る門（実体があって表に無ければ「配らない」と理由つきで宣言させる／表にあって実体が無ければ落とす／走査が空振りしても落ちる） | `scripts/check-plugin-asset-coverage.test.sh`、`scripts/lib/plugin-layout.json` の `agents` `skills` `workflows` | 2026-09-11。**生成器は表を回るだけなので、表に載せ忘れた実体は生成物の差分にすら出ない**（型は [`check-design-pitfalls.md`](./check-design-pitfalls.md) の C-047）。両方向で突き合わせる原則は汎用。どの資産がどちらの層かはリポジトリ固有 |
 | 実行痕跡の鮮度チェックを warning でなく失敗にし、免除は PR 本文の申告（`eval-skip: <理由>`）に限定する運用 | `scripts/check-eval-runs-freshness.sh`、`.github/workflows/eval-runs-freshness-check.yml` | issue #496。「`::warning::` は run を開かないと見えず 3 PR で無視された」という教訓と、本文申告による免除の形は汎用 |
 
 ## このリポジトリ・スタック固有と考えられる部分
@@ -57,7 +78,7 @@ issue本文の進め方は変えていない。本ファイルはその判断材
 
 | 項目 | 所在 | 論点 |
 |---|---|---|
-| `RISK_KEYWORDS`のうち`auth`/`rls`/`policy`と`facility`/`tenant`/`organization`/`inventory`の混在 | `.claude/workflows/lib/router-risk.js` | 前者はマルチテナントSaaS全般に通用しそうな汎用概念だが、後者はこのドメイン固有。同じ配列に混在しており、汎用部分だけ抽出する設計（例: ドメイン固有語彙を外部設定ファイル化）が必要かは未検証 |
+| ~~`RISK_KEYWORDS`のうち`auth`/`rls`/`policy`と`facility`/`tenant`/`organization`/`inventory`の混在~~ **（2026-09-05 に解消。2026-09-12 に訂正）** | `.claude/workflows/lib/router-risk.js` | **この行は 2026-09-12 まで「汎用部分だけ抽出する設計が必要かは未検証」と書いたまま残っていたが、既に片付いていた。** 実測: `DEFAULT_RISK_CONFIG` の `domainKeywords` は `auth` / `rls` / `policy` / `migration` の 4 語だけで、`facility`・`tenant`・`organization`・`inventory` は 1 つも含まれない（固有語は `aidd.config.json` へ移し、設定は既定値に「足す」だけで消せない）。**同じ文書の上の行（TRI/RISK分類エンジンの構造）が分離済みと正しく書いており、1 つの文書の中で 2 つの行が矛盾していた**——「未検証」を読んだ人は、既に終わっている設計課題に着手することになる。行を消さずに残すのは、同じ取り違えを繰り返さないため |
 | Workflow DSLの制約（filesystem API不可）への回避策群 | `docs/agents/tooling-decisions.md`「ツール制約回避のload-bearing workaround棚卸し」 | 制約自体はClaude Code側（ツール共通）だが、回避策の実装（bashスクリプトへの委譲パターン等）はこのリポジトリの実装に密結合しており、他リポジトリでも同じ回避策がそのまま使えるかは未検証 |
 | `~/write_aidd_stats.sh`・`~/.claude/pending_issues.jsonl`等、リポジトリ外（ホームディレクトリ）に置かれた個人スクリプト・設定 | ルート`CLAUDE.md`「AIDD stats 書き出しルール」等 | リポジトリに含まれないため「移植」の対象なのかどうか自体が論点（ユーザー個人の運用習慣なのか、フレームワークの一部なのか） |
 | sweep-db/sweep-ui/sweep-types/sweep-dataという4軸分類 | `.claude/agents/sweep-*.md` | 「UI/データ/DB/型」という軸自体はNext.js+Supabase構成に最適化されており、他スタック（例: モバイルアプリ、バッチ処理基盤）でも同じ4軸が意味を持つかは未検証 |

@@ -18,6 +18,7 @@ green でも、実行パスの本体（プロンプト駆動のエージェン�
 
 1. `.claude/workflows/aidd-phase2.js`のSpec Check/Manifest Check関連プロンプトを変更したとき
 2. 四半期に1回の定期訓練として（下記「次回実施予定日」参照）
+3. この回では供給網の侵害演習（`docs/agents/supply-chain-drill.md`、issue #757 の 30）も同時に実施する（`bash scripts/supply-chain-drill.sh`）
 
 ## 対象シナリオ（4種）
 
@@ -122,6 +123,28 @@ Issue作成後、この実施記録欄に対応Issue番号を記入する。
 > `log-agent-progress.sh` を見つけられない（プラグインの `bin/` は Workflow エージェントの Bash の PATH に
 > 無い）ことと、`bin/` のスクリプトが `$SCRIPT_DIR/lib/` を参照して壊れていたことを発見し、後者は
 > 生成スクリプトで修正した（前者は `docs/plugin/KNOWN-LIMITS.md`）。
+
+## 訓練したゲートの版
+
+最後に訓練した版: `4392608c83a3`
+
+**この 1 行は機械が読む。** `scripts/lib/gate-prompt-hash.mjs` が
+`aidd.config.json` の `faultInjectionDrill` に書いた門の文言（Spec Check / Manifest Check）を
+`.claude/workflows/aidd-phase2.js` から取り出して数えた値で、
+`scripts/check-fault-injection-drill-staleness.sh`（SessionStart hook）が現在値と突き合わせる。
+**違えば「門の文言が変わったのに訓練していない」**として警告する（ブロックはしない）。
+
+訓練を回したら、この行を `node scripts/lib/gate-prompt-hash.mjs` の出力で書き換える。
+
+上の値の根拠（2026-09-11 実測）: 最後の訓練は 2026-09-06。
+`git log --since=2026-09-05 -- .claude/workflows/aidd-phase2.js` は `d115b354`（2026-09-10）の
+1 件だけなので、訓練日の中身は `d115b354^` と同じ。その版と現在の版を同じ走査器に掛けて、
+どちらも `4392608c83a3` になることを確かめた（2026-09-10 の 164 行の変更でも**門の文言は
+一字も動いていなかった**）。
+
+**限界**: 見るのは**文言**だけ。文言と判定表（`.claude/workflows/lib/manifest-check.js` の
+`classifyManifestCheck`）の意味が合っているかは見ない。ファイル全体ではなく門の文言だけを
+見るのは、`aidd-phase2.js` が別の理由でよく変わるため（毎回鳴る警告は読まれなくなる）。
 
 ## 次回実施予定日
 

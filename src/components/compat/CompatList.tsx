@@ -41,19 +41,19 @@ export function CompatList({ items, isAdmin, onDelete, hasFilter, isLoading, onA
     if (hasFilter) {
       return (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-sm font-medium" style={{ color: '#6B7280' }}>条件に一致する互換品がありません</p>
+          <p className="text-sm font-medium" style={{ color: '#4B5563' }}>条件に一致する互換品がありません</p>
         </div>
       )
     }
     if (isAdmin) {
       return (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-sm font-medium" style={{ color: '#6B7280' }}>互換品が登録されていません</p>
+          <p className="text-sm font-medium" style={{ color: '#4B5563' }}>互換品が登録されていません</p>
           <button
             type="button"
             onClick={onAddClick}
             className="mt-3 text-sm font-semibold"
-            style={{ color: '#FF5F03' }}
+            style={{ color: '#B03F00' }}
           >
             ＋互換品を追加
           </button>
@@ -62,7 +62,7 @@ export function CompatList({ items, isAdmin, onDelete, hasFilter, isLoading, onA
     }
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-sm font-medium" style={{ color: '#6B7280' }}>互換品はまだ登録されていません</p>
+        <p className="text-sm font-medium" style={{ color: '#4B5563' }}>互換品はまだ登録されていません</p>
       </div>
     )
   }
@@ -104,8 +104,8 @@ export function CompatList({ items, isAdmin, onDelete, hasFilter, isLoading, onA
               <td className="px-6 py-4 text-sm" style={{ color: '#111827' }}>{item.categoryName}</td>
               <td className="px-6 py-4 text-sm" style={{ color: '#111827' }}>{formatProductLabel(item.product1)}</td>
               <td className="px-6 py-4 text-sm" style={{ color: '#111827' }}>{formatProductLabel(item.product2)}</td>
-              <td className="px-6 py-4 text-sm" style={{ color: '#6B7280' }}>{item.note ?? '—'}</td>
-              <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+              <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>{item.note ?? '—'}</td>
+              <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                 {formatDate(item.createdAt)}
               </td>
               {isAdmin && (

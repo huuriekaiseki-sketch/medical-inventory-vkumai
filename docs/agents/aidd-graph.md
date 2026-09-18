@@ -140,6 +140,9 @@ flowchart TD
   review["Review: review"]
   classify-review{{"Review: classify-review"}}
   implementer-retry["Review: implementer-retry"]
+  gate-retry{{"Review: gate-retry"}}
+  integration-recheck["Review: integration-recheck"]
+  gate-recheck{{"Review: gate-recheck"}}
   end_(["Review: end"])
   spec-check -->|"pass"| manifest-check
   spec-check -->|"blocked: Spec Check → stop-1"| end_
@@ -169,7 +172,12 @@ flowchart TD
   review -->|"always"| classify-review
   classify-review -->|"pass"| end_
   classify-review -->|"retry"| implementer-retry
-  implementer-retry -->|"loop"| review
+  implementer-retry -->|"always"| gate-retry
+  gate-retry -->|"blocked: Review Retry → stop-2"| end_
+  gate-retry -->|"pass"| integration-recheck
+  integration-recheck -->|"always"| gate-recheck
+  gate-recheck -->|"blocked: Integrate Recheck → human"| end_
+  gate-recheck -->|"loop"| review
   classify-review -->|"blocked: Review → stop-2"| end_
 ```
 
@@ -186,5 +194,7 @@ blocked / token-cap の復帰先:
 | `Coverage Check` | 人間（オーケストレーターが detail を読んで判断） |  |
 | `Integrate` | 人間（オーケストレーターが detail を読んで判断） | 3 回修正しても test/lint/tsc が赤 |
 | `Token Cap (before Review)` | resumeFromRunId（docs/agents/workflow-resume-runbook.md） | Review ループの各ラウンド先頭で判定 |
+| `Review Retry` | 停止②（構造化レビュー） | 修正そのものが fail/blocked（直せない・対象が特定できない）。従来は status を見ずに次ラウンドへ回していた |
+| `Integrate Recheck` | 人間（オーケストレーターが detail を読んで判断） | 修正で test/lint/tsc が赤になった、または修正中に SPEC.md が変わり specHash が不一致 |
 | `Review` | 停止②（構造化レビュー） | レビュー自体ができない観点がある、または 3 回差し戻しても fail が残る |
 

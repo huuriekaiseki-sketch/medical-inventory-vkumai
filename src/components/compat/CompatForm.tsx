@@ -135,7 +135,7 @@ export const CompatForm = forwardRef<CompatFormHandle, CompatFormProps>(function
           type="button"
           onClick={handleToggle}
           className="px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-          style={{ backgroundColor: '#FF5F03', fontFamily: 'var(--font-ubuntu), sans-serif', borderRadius: '2px' }}
+          style={{ backgroundColor: '#B03F00', fontFamily: 'var(--font-ubuntu), sans-serif', borderRadius: '2px' }}
         >
           ＋互換品を追加
         </button>
@@ -201,7 +201,7 @@ export const CompatForm = forwardRef<CompatFormHandle, CompatFormProps>(function
               )}
             </select>
             {isLoadingProducts && (
-              <span data-testid="compat-form-products-loading" className="text-xs" style={{ color: '#6B7280' }}>
+              <span data-testid="compat-form-products-loading" className="text-xs" style={{ color: '#4B5563' }}>
                 読み込み中...
               </span>
             )}
@@ -232,7 +232,7 @@ export const CompatForm = forwardRef<CompatFormHandle, CompatFormProps>(function
               )}
             </select>
             {isLoadingProducts && (
-              <span className="text-xs" style={{ color: '#6B7280' }}>
+              <span className="text-xs" style={{ color: '#4B5563' }}>
                 読み込み中...
               </span>
             )}
@@ -264,7 +264,7 @@ export const CompatForm = forwardRef<CompatFormHandle, CompatFormProps>(function
             type="button"
             onClick={handleToggle}
             className="rounded-md border px-4 py-2 text-sm"
-            style={{ borderColor: '#E5E7EB', color: '#6B7280' }}
+            style={{ borderColor: '#E5E7EB', color: '#4B5563' }}
           >
             キャンセル
           </button>

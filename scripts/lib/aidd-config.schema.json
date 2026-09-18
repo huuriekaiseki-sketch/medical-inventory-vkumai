@@ -6,29 +6,78 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "$schema": { "type": "string" },
-    "_comment": { "type": "string" },
+    "$schema": {
+      "type": "string"
+    },
+    "_comment": {
+      "type": "string"
+    },
     "risk": {
       "type": "object",
       "additionalProperties": false,
       "description": "TRI/RISK 判定（router-risk.js の classifyRoute）に足す固有語彙",
       "properties": {
-        "keywords": { "$ref": "#/$defs/stringList", "description": "taskDescription（説明文）に含まれていれば高リスク候補とする語。changedFiles が空のときの補助判定にのみ使う" },
-        "pathPrefixes": { "$ref": "#/$defs/stringList", "description": "この接頭辞で始まる変更パスは高リスク（例: db/migrations/）" },
-        "domainKeywords": { "$ref": "#/$defs/stringList", "description": "変更パス・ファイル名に含まれていれば高リスクとする語（小文字比較）" },
-        "metaPathPrefixes": { "$ref": "#/$defs/stringList", "description": "全変更がこの接頭辞配下のみならメタ改修ルート。通常は既定値（.claude/workflows/ .claude/agents/ docs/agents/）のままでよい" }
+        "keywords": {
+          "$ref": "#/$defs/stringList",
+          "description": "taskDescription（説明文）に含まれていれば高リスク候補とする語。changedFiles が空のときの補助判定にのみ使う"
+        },
+        "pathPrefixes": {
+          "$ref": "#/$defs/stringList",
+          "description": "この接頭辞で始まる変更パスは高リスク（例: db/migrations/）"
+        },
+        "domainKeywords": {
+          "$ref": "#/$defs/stringList",
+          "description": "変更パス・ファイル名に含まれていれば高リスクとする語（小文字比較）"
+        },
+        "metaPathPrefixes": {
+          "$ref": "#/$defs/stringList",
+          "description": "全変更がこの接頭辞配下のみならメタ改修ルート。通常は既定値（.claude/workflows/ .claude/agents/ docs/agents/）のままでよい"
+        }
       }
     },
-    "readonlyAgentTypes": { "$ref": "#/$defs/stringList", "description": "PreToolUse で書き込み系 Bash を deny する読み取り専用ロール名（check-readonly-bash.sh）。hook は scripts/lib/aidd-config.sh 経由で読む" },
+    "readonlyAgentTypes": {
+      "$ref": "#/$defs/stringList",
+      "description": "PreToolUse で書き込み系 Bash を deny する読み取り専用ロール名（check-readonly-bash.sh）。hook は scripts/lib/aidd-config.sh 経由で読む"
+    },
+    "faultInjectionDrill": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "fault injection 訓練が守る deny-by-default ゲートのプロンプトの在り処。書かなければ『この仕組みを持たない導入先』として鮮度判定を飛ばす",
+      "properties": {
+        "_comment": {
+          "type": "string"
+        },
+        "promptSource": {
+          "type": "string",
+          "description": "ゲートのプロンプトが書かれているファイル（リポジトリ相対）"
+        },
+        "gateMarkers": {
+          "$ref": "#/$defs/stringList",
+          "description": "各ゲートのプロンプトを一意に指す文字列。promptSource 内で 1 回だけ出ること（2 回以上出ると別の門を数えるので落ちる）"
+        }
+      },
+      "required": [
+        "promptSource",
+        "gateMarkers"
+      ]
+    },
     "commands": {
       "type": "object",
       "additionalProperties": false,
       "description": "Stop hook の実行痕跡検知（ai-check-suggest.sh）と引き継ぎメモが参照するコマンド。hook は scripts/lib/aidd-config.sh 経由で読む",
       "properties": {
-        "check": { "type": "string" },
-        "test": { "type": "string" },
-        "lint": { "type": "string" },
-        "typecheck": { "type": "string" }
+        "check": {
+          "type": "string"
+        },
+        "test": {
+          "type": "string"
+        },
+        "lint": {
+          "type": "string"
+        },
+        "typecheck": {
+          "type": "string"
+        }
       }
     },
     "docs": {
@@ -36,15 +85,145 @@
       "additionalProperties": false,
       "description": "高リスク変更時に追記を促すドキュメントの場所（check-domain-decisions-suggest.sh）。hook は scripts/lib/aidd-config.sh 経由で読む",
       "properties": {
-        "domain": { "type": "string" },
-        "decisions": { "type": "string" }
+        "domain": {
+          "type": "string"
+        },
+        "decisions": {
+          "type": "string"
+        }
       }
+    },
+    "errorResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "入口（route）が catch したエラーの message をそのまま応答へ入れてよい条件（scripts/check-raw-error-response.test.sh）。**翻訳済みだと分かっている型だけを通す**ホワイトリスト方式を前提にする。この節が無い導入先では検査は対象 0 件で黙って通る。",
+      "properties": {
+        "_comment": {
+          "type": "string"
+        },
+        "translatedErrorTypes": {
+          "type": "array",
+          "description": "message をそのまま返してよい型の名前（例: ClientVisibleError）。**危ない語を弾くブラックリストは書かない**——列挙から漏れたものが全部そのまま出るため。",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scanDirs": {
+          "type": "array",
+          "description": "走査するディレクトリ（例: src/app/api）。この配下の route ファイルだけを見る。",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "「作る前に聞く質問」（docs/agents/design-questions.md）で人が決めた値。リポジトリごとに違う（項目名も上限も）。埋まっていない・置き換え忘れの値があれば scripts/check-design-answers.test.sh が止める。",
+      "required": [
+        "decidedOn",
+        "textLength",
+        "requestsPerMinute",
+        "invitesPerDay"
+      ],
+      "properties": {
+        "decidedOn": {
+          "type": "string",
+          "description": "決めた日（YYYY-MM-DD）。古くなったら棚卸しの合図"
+        },
+        "decidedBy": {
+          "type": "string",
+          "description": "誰が決めたか（人の名前・役割）。AI が既定値で埋めたものは値として認めない"
+        },
+        "textLength": {
+          "type": "object",
+          "description": "自由入力の文字数の上限。キーは列の役割（このリポジトリの語彙）",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minProperties": 1
+        },
+        "requestsPerMinute": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1 人あたり毎分のリクエスト上限"
+        },
+        "invitesPerDay": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "管理者 1 人あたり 1 日の招待メール上限"
+        },
+        "authJudgmentTimeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "description": "認可・認証の判定（利用者の取得・認可 RPC・回数の上限）が外部依存の応答を待つ上限。判定は本来ミリ秒で終わるので、これを超えたら材料が取れなかったものとして拒否側へ倒す。重い一覧・レポートには効かせない"
+        },
+        "localLogRowsWarnAt": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "手元の DB の追記専用テーブル（監査ログ・拒否記録）で、**1 回の問い合わせが返す塊**（audit_log なら table_name ごと）が何行を超えたら知らせるか。全件を読む形のテストが既定の取得上限で切り落とされる手前で気づくための値。表の総行数ではない（総行数で見るとテストを 1 周回すだけで越えて毎回鳴る。2026-09-08 に変更）。越えたらローカル DB を作り直す（追記専用なので個別に消す手段は無い）"
+        },
+        "pitfallTypesMinRows": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "「検査の設計で間違えやすい型」の表（C-xxx）に、少なくとも何行あるかの下限。表の読み取りが壊れて 0 件になっても気づけるようにするための空振り防止で、**型を増やす目標値ではない**。導入先が実際に踏んで書き足した数に合わせて上げていく（ratchet）。この値を書かない導入先では、型の表そのものを持っていないものとして検査を飛ばす"
+        }
+      }
+    },
+    "stdoutSync": {
+      "type": "object",
+      "description": "出力してから process.exit() を呼ぶ書き方の免除（C-051）。エンジンは共通側、一覧は導入先",
+      "properties": {
+        "_comment": {
+          "type": "string"
+        },
+        "exemptions": {
+          "type": "object",
+          "description": "リポジトリ相対パス → なぜ今も console.log のままでよいかの理由",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "controlBytes": {
+      "type": "object",
+      "description": "制御バイトを置いてよいファイルとコミット（C-052）。エンジンは共通側、一覧は導入先",
+      "properties": {
+        "_comment": {
+          "type": "string"
+        },
+        "allowedFiles": {
+          "type": "object",
+          "description": "リポジトリ相対パス → なぜ制御バイトが要るか",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "allowedCommits": {
+          "type": "object",
+          "description": "コミットの先頭 7 桁以上 → なぜ直せないか（push 済みなど）",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "$defs": {
     "stringList": {
       "type": "array",
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "uniqueItems": true
     }
   }

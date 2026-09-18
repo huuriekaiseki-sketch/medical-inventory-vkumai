@@ -11,6 +11,10 @@
 #      （コメント行と、文字列内の `npx[` のような正規表現片は除く）
 #   3. hook から Node 標準の型除去で直接実行される scripts/lib/*.ts の相対 import に拡張子がある
 #      （拡張子が無いと node が ERR_MODULE_NOT_FOUND で落ち、hook は fail-open で沈黙する）
+#   4. ワークフローに `version: latest` が無い（2026-09-08 追加）。
+#      supabase/setup-cli@v3 が 3 本とも latest で、CI が回るたびに別版の CLI を取ってきていた。
+#      同じ日に手元で `npx supabase` が別版（2.117.0）を引き、ローカルの Supabase 一式が壊れた
+#      のと同型の経路。版の正本は .supabase-version の 1 か所に置く。
 #
 # 実行: bash scripts/check-no-registry-fetch.test.sh
 # 環境変数（テスト用注入ポイント）:
@@ -38,8 +42,8 @@ check() {
     [ -f "$f" ] || continue
     hits="$(grep -nE '^[[:space:]]*(- )?run:.*\bnpm install\b' "$f" || true)"
     if [ -n "$hits" ]; then
-      printf '%s\n' "$hits" | sed "s#^#    npm-install: $(basename "$f"):#"
-      violations=$((violations + $(printf '%s\n' "$hits" | grep -c .)))
+      sed "s#^#    npm-install: $(basename "$f"):#" <<<"$hits"
+      violations=$((violations + $(grep -c . <<<"$hits")))
     fi
   done
 
@@ -49,8 +53,18 @@ check() {
     case "$f" in *.test.sh) continue ;; esac
     hits="$(grep -nE '(^|[;&|(`])[[:space:]]*npx[[:space:]]' "$f" | grep -vE '^[0-9]+:[[:space:]]*#' || true)"
     if [ -n "$hits" ]; then
-      printf '%s\n' "$hits" | sed "s#^#    npx: $(basename "$f"):#"
-      violations=$((violations + $(printf '%s\n' "$hits" | grep -c .)))
+      sed "s#^#    npx: $(basename "$f"):#" <<<"$hits"
+      violations=$((violations + $(grep -c . <<<"$hits")))
+    fi
+  done
+
+  # 4. workflows: `version: latest`（実行のたびに別版が来る）
+  for f in "$wf"/*.yml; do
+    [ -f "$f" ] || continue
+    hits="$(grep -nE '^[[:space:]]*version:[[:space:]]*.?latest.?[[:space:]]*$' "$f" || true)"
+    if [ -n "$hits" ]; then
+      sed "s#^#    version-latest: $(basename "$f"):#" <<<"$hits"
+      violations=$((violations + $(grep -c . <<<"$hits")))
     fi
   done
 
@@ -58,18 +72,18 @@ check() {
   local ts entry queue seen="" spec target
   queue="$(grep -hoE 'node [^"]*--experimental-strip-types[^"]*"[^"]+\.ts"' "$sc"/*.sh 2>/dev/null | grep -oE '"[^"]+\.ts"' | tr -d '"' | sed "s#\$SCRIPT_DIR#$sc#" | sort -u || true)"
   while [ -n "$queue" ]; do
-    entry="$(printf '%s\n' "$queue" | head -n1)"
-    queue="$(printf '%s\n' "$queue" | tail -n +2)"
+    entry="$(head -n1 <<<"$queue")"
+    queue="$(tail -n +2 <<<"$queue")"
     ts="$entry"
     [ -f "$ts" ] || ts="$REPO_ROOT/$entry"
     [ -f "$ts" ] || continue
-    printf '%s\n' "$seen" | grep -qx "$ts" && continue
+    grep -qx "$ts" <<<"$seen" && continue
     seen="$(printf '%s\n%s' "$seen" "$ts")"
     for spec in $(grep -oE "from '\.\.?/[^']+'" "$ts" | sed "s/from '//; s/'\$//"); do
       case "$spec" in
         *.ts|*.js|*.mjs|*.json) target="$(dirname "$ts")/$spec"; queue="$(printf '%s\n%s' "$queue" "$target")" ;;
         *)
-          echo "    ts-import: $(basename "$ts") の相対 import に拡張子が無い: $spec（node 直接実行で解決できない）"
+          echo "    ts-import: $(basename "$ts") の相対 import に拡張子が無い: ${spec}（node 直接実行で解決できない）"
           violations=$((violations+1))
           ;;
       esac
@@ -81,11 +95,11 @@ check() {
 
 echo "=== scenario 1: 実態のワークフロー・スクリプトに違反が無い ==="
 RESULT="$(check "${NRF_WORKFLOWS_DIR:-$REPO_ROOT/.github/workflows}" "${NRF_SCRIPTS_DIR:-$REPO_ROOT/scripts}")"
-printf '%s\n' "$RESULT" | grep -v '^violations=' || true
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+grep -v '^violations=' <<<"$RESULT" || true
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   assert_ok "違反なし"
 else
-  assert_fail "違反あり" "$(printf '%s\n' "$RESULT" | tail -n1)"
+  assert_fail "違反あり" "$(tail -n1 <<<"$RESULT")"
 fi
 
 echo "=== scenario 2: fixture で違反を検知できる（RED 方向の自己検証） ==="
@@ -99,6 +113,12 @@ jobs:
       - run: npm install
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - uses: supabase/setup-cli@v3
+        with:
+          version: latest
+      - uses: other/action@v1
+        with:
+          version: ${{ steps.pinned.outputs.version }}
 EOF
 cat > "$WORK_DIR/sc/bad-hook.sh" <<'EOF'
 #!/bin/bash
@@ -114,18 +134,63 @@ EOF
 printf "import { a } from './dep.ts'\nimport { b } from './noext'\n" > "$WORK_DIR/sc/lib/entry.ts"
 printf "export const a = 1\n" > "$WORK_DIR/sc/lib/dep.ts"
 RESULT="$(check "$WORK_DIR/wf" "$WORK_DIR/sc")"
-# 期待: npm install 1 + npx 2（npx -y tsx、$(npx something)）+ 拡張子なし import 1 = 4
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=4" ]; then
-  assert_ok "違反 4 件をちょうど検知"
+# 期待: npm install 1 + npx 2（npx -y tsx、$(npx something)）+ version: latest 1 + 拡張子なし import 1 = 5
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=5" ]; then
+  assert_ok "違反 5 件をちょうど検知"
 else
-  assert_fail "違反件数が期待（4）と異なる" "$RESULT"
+  assert_fail "違反件数が期待（5）と異なる" "$RESULT"
 fi
-for needle in 'npm-install: bad.yml' 'npx: bad-hook.sh:4' 'npx: bad-hook.sh:5' "ts-import: entry.ts"; do
-  if printf '%s\n' "$RESULT" | grep -qF "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
+for needle in 'npm-install: bad.yml' 'npx: bad-hook.sh:4' 'npx: bad-hook.sh:5' 'version-latest: bad.yml' "ts-import: entry.ts"; do
+  if grep -qF "$needle" <<<"$RESULT"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
 done
-for needle in 'npm ci' 'playwright' 'bad-hook.test.sh' 'PATTERN'; do
-  if printf '%s\n' "$RESULT" | grep -qF "$needle"; then assert_fail "誤検知: $needle"; else assert_ok "誤検知しない: $needle"; fi
+for needle in 'npm ci' 'playwright' 'bad-hook.test.sh' 'PATTERN' 'other/action'; do
+  if grep -qF "$needle" <<<"$RESULT"; then assert_fail "誤検知: $needle"; else assert_ok "誤検知しない: $needle"; fi
 done
+
+echo "=== scenario 3: Supabase CLI の版が .supabase-version の 1 か所で決まっている ==="
+PIN_FILE="$REPO_ROOT/.supabase-version"
+if [ -s "$PIN_FILE" ]; then
+  assert_ok ".supabase-version がある"
+else
+  assert_fail ".supabase-version が無い（版の正本が不在）"
+fi
+PINNED="$(head -n1 "$PIN_FILE" 2>/dev/null || true)"
+if grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' <<<"$PINNED"; then
+  assert_ok "版が固定の数字（${PINNED}）"
+else
+  assert_fail "版が固定の数字でない" "actual=$PINNED"
+fi
+# WHY(空振り防止): setup-cli を使うファイルが 0 件でもこのループは黙って通ってしまう。
+#      「1 本以上ある」ことを先に確かめてから、その全部が正本を読んでいるかを見る。
+SETUP_FILES="$(grep -rlF 'supabase/setup-cli' "$REPO_ROOT/.github/workflows" || true)"
+SETUP_COUNT="$(grep -c . <<<"$SETUP_FILES" || true)"
+if [ "$SETUP_COUNT" -gt 0 ]; then
+  assert_ok "supabase/setup-cli を使うワークフローが $SETUP_COUNT 本ある（検査が空振りしていない）"
+else
+  assert_fail "supabase/setup-cli を使うワークフローが 1 本も無い（検査が空振りしている）"
+fi
+while IFS= read -r wf_file; do
+  [ -n "$wf_file" ] || continue
+  if grep -qF 'steps.supabase-cli.outputs.version' "$wf_file"; then
+    assert_ok "$(basename "$wf_file") は .supabase-version を読んでいる"
+  else
+    assert_fail "$(basename "$wf_file") が版を直書きしている（.supabase-version を読ませる）"
+  fi
+done <<< "$SETUP_FILES"
+
+echo "=== scenario 4: npx 経由の supabase が settings.json で deny されている ==="
+SETTINGS="$REPO_ROOT/.claude/settings.json"
+if jq -e '.permissions.deny | index("Bash(npx supabase*)")' "$SETTINGS" > /dev/null; then
+  assert_ok "deny に Bash(npx supabase*) がある"
+else
+  assert_fail "deny に Bash(npx supabase*) が無い"
+fi
+LEFTOVER="$(jq -r '(.permissions.allow + .permissions.ask)[] | select(startswith("Bash(npx supabase"))' "$SETTINGS")"
+if [ -z "$LEFTOVER" ]; then
+  assert_ok "allow / ask に npx supabase が残っていない"
+else
+  assert_fail "allow / ask に npx supabase が残っている" "$LEFTOVER"
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

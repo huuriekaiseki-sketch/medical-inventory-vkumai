@@ -1,0 +1,19 @@
+{
+  "_comment": "生成物。正本は中心リポジトリの scripts/lib/plugin-layout.json の checkScopes。手で編集しない",
+  "checks": {
+    "check-integration-freshness.test.sh": "both",
+    "check-full-run-before-finish.test.sh": "self",
+    "check-rls-mutation-freshness.test.sh": "both",
+    "check-readonly-bash.test.sh": "self",
+    "check-dependency-change.test.sh": "self",
+    "ai-check-suggest.test.sh": "self",
+    "check-automode-config.test.sh": "self",
+    "lib/resolve-log-dir.test.sh": "self",
+    "check-rls-mutation.test.sh": "self",
+    "check-rls-grant-gaps.test.sh": "both",
+    "check-write-path-gaps.test.sh": "both",
+    "check-operation-contracts.test.sh": "both",
+    "check-guard-regressions.test.sh": "both",
+    "check-skip-scope.test.sh": "both"
+  }
+}

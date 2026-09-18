@@ -8,7 +8,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '../../../..')
 const LIB_FILE = path.resolve(__dirname, '../router-risk.js')
 const DOC_FILES = ['AGENTS.md', 'docs/agents/common.md']
-const SECTION_HEADING = '## TRI/RISK 機械判定基準'
+// WHY(見出しレベルを固定しない): 2026-09-07 に common.md を分野ごとに再構成した際、
+// この節が `##` から `###`（分野「作業を始める前に」の下）へ下がり、`'## TRI/RISK 機械判定基準'`
+// の前方一致が外れて section が null になった（本テストが 14 件落ちて検知した）。
+// 本テストが守っているのは **AGENTS.md と common.md の内容が食い違わないこと**であって、
+// 見出しの深さではない。深さに依存しない形にする（保証は変えない。下の RED 方向の自己検証が残る）。
+const SECTION_TITLE = 'TRI/RISK 機械判定基準'
 
 // WHY: TRI/RISK 機械判定基準（高リスクパス・ドメイン語）は、Claude Code が読む
 // docs/agents/common.md（CLAUDE.md から @import）と Codex が読む AGENTS.md の両方に本文として
@@ -26,13 +31,25 @@ const SECTION_HEADING = '## TRI/RISK 機械判定基準'
 // を検証する。AGENTS.md をポインタ化して重複を無くす案（issue #715 案A）は、Codex が起動時に
 // 読む本文から常時ルールが消えるため採らなかった（docs/agents/decisions.md）。
 
-function extractSection(markdown, heading) {
+/**
+ * 見出しの深さに依存せず節を切り出す。
+ * 開始は `##`〜`######` のいずれかで title が始まる行、終わりは**同じか浅い**次の見出し。
+ * （`###` の節なら `####` の小見出しは中に含み、次の `###` / `##` で切れる）
+ */
+function extractSection(markdown, title) {
   const lines = markdown.split('\n')
-  const start = lines.findIndex(l => l.startsWith(heading))
+  const headingRe = /^(#{2,6}) (.*)$/
+  let start = -1
+  let level = 0
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(headingRe)
+    if (m && m[2].startsWith(title)) { start = i; level = m[1].length; break }
+  }
   if (start < 0) return null
   let end = lines.length
   for (let i = start + 1; i < lines.length; i++) {
-    if (/^## /.test(lines[i])) { end = i; break }
+    const m = lines[i].match(headingRe)
+    if (m && m[1].length <= level) { end = i; break }
   }
   return lines.slice(start, end).join('\n')
 }
@@ -79,10 +96,10 @@ describe('TRI/RISK 機械判定基準の AGENTS.md / common.md と router-risk.j
 
   const sections = {}
   for (const rel of DOC_FILES) {
-    const section = extractSection(readFileSync(path.join(REPO_ROOT, rel), 'utf-8'), SECTION_HEADING)
+    const section = extractSection(readFileSync(path.join(REPO_ROOT, rel), 'utf-8'), SECTION_TITLE)
     sections[rel] = section
 
-    it(`${rel} に「${SECTION_HEADING}」節がある`, () => {
+    it(`${rel} に「${SECTION_TITLE}」節がある（見出しの深さは問わない）`, () => {
       expect(section).not.toBeNull()
     })
 
@@ -113,5 +130,42 @@ describe('TRI/RISK 機械判定基準の AGENTS.md / common.md と router-risk.j
     const tampered = sections['AGENTS.md'].replaceAll('proxy.ts', 'prox_y.ts')
     expect(extractRuleCore(tampered)).not.toBe(extractRuleCore(sections['docs/agents/common.md']))
     expect(tampered).not.toContain('proxy.ts')
+  })
+
+  // WHY(2026-09-07): 節の見出しを `##` から `###` へ下げただけで extractSection が null を返し、
+  //      本テストが 14 件落ちた。抽出の前提（見出しの深さ）が暗黙だったため、
+  //      doc を整理するたびに同じことが起きる。切り出し自体をここで固定する。
+  describe('extractSection の切り出し（見出しの深さに依存しない）', () => {
+    const doc = [
+      '# タイトル', '', '## 分野A', '', 'リード', '',
+      '### 対象の節', '', '本文1', '',
+      '#### 小見出し', '', '本文2', '',
+      '### 次の節', '', '入ってはいけない', '',
+      '## 分野B', '', '入ってはいけない', '',
+    ].join('\n')
+
+    it('`###` の節でも切り出せる', () => {
+      expect(extractSection(doc, '対象の節')).not.toBeNull()
+    })
+
+    it('より深い小見出し（`####`）は節の中に含む', () => {
+      const s = extractSection(doc, '対象の節')
+      expect(s).toContain('本文2')
+      expect(s).toContain('#### 小見出し')
+    })
+
+    it('同じ深さの次の見出しで切れる（後続の節を飲み込まない）', () => {
+      expect(extractSection(doc, '対象の節')).not.toContain('入ってはいけない')
+    })
+
+    it('`##` の節でも同じように切り出せる（AGENTS.md 側の形）', () => {
+      const s = extractSection(doc, '分野A')
+      expect(s).toContain('本文2')
+      expect(s).not.toContain('## 分野B')
+    })
+
+    it('無い節は null を返す', () => {
+      expect(extractSection(doc, '存在しない節')).toBeNull()
+    })
   })
 })

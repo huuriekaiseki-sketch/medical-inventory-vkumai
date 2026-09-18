@@ -28,6 +28,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeLine } from './stdout-sync.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = path.resolve(__dirname, '../..')
@@ -184,7 +185,10 @@ export function checkFile(root, absFile, opts = {}) {
       if (!/^[\w./@+-]+$/.test(relPath)) continue
       const abs = path.join(root, relPath)
       if (existsSync(abs)) continue
-      if (ignored(relPath)) continue
+      // .gitignore のディレクトリ限定パターン（末尾 /）は、スラッシュを落としたパスには一致しない。
+      // 実体のある手元では existsSync で抜けるため隠れるが、実体の無い CI では誤検知になる。
+      // 言及が `foo/` の形なら、その形のまま git に渡す。
+      if (ignored(/\/$/.test(text) ? `${relPath}/` : relPath)) continue
       violations.push({ file: rel, line: lineNo, kind: 'path', detail: `言及されたパスが存在しない: \`${text}\`` })
     }
   })
@@ -209,10 +213,10 @@ if (isMain) {
   const opts = parseArgs(process.argv.slice(2))
   const result = run(opts)
   if (opts.format === 'json') {
-    console.log(JSON.stringify(result, null, 2))
+    writeLine(JSON.stringify(result, null, 2))
   } else {
-    for (const v of result.violations) console.log(`  NG: ${v.file}:${v.line} [${v.kind}] ${v.detail}`)
-    console.log(`checked=${result.checkedFiles} violations=${result.violations.length}`)
+    for (const v of result.violations) writeLine(`  NG: ${v.file}:${v.line} [${v.kind}] ${v.detail}`)
+    writeLine(`checked=${result.checkedFiles} violations=${result.violations.length}`)
   }
   process.exit(result.violations.length === 0 ? 0 : 1)
 }

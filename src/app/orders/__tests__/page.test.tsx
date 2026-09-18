@@ -368,4 +368,30 @@ describe('OrdersPage', () => {
 
     expect(push).toHaveBeenCalledWith('/orders')
   })
+
+  // WHY(2026-09-11): `Number(...)` をそのまま使っていたので `?offset=abc` が NaN になり、
+  //      API へ "NaN" を送って 400 になっていた（サーバーは `Number.isInteger` で弾くので
+  //      漏れはしないが、壊れたリンクを踏んだ利用者には一覧が出ない画面になる）。
+  //      入口で 0 に倒すようにしたので、**送る値**を見て固定する。
+  //      見つけたのは held-out の eval で Sweep が実コードを掃いたとき。
+  describe.each([
+    ['数字でない値', 'offset=abc'],
+    ['負の数', 'offset=-5'],
+    ['小数', 'offset=1.5'],
+  ])('URL の offset が %s のとき', (_label, query) => {
+    it('API へ offset=0 を送る（NaN や不正値をそのまま送らない）', async () => {
+      currentSearchParams = new URLSearchParams(query)
+      const fetchMock = vi.fn((url: string) => {
+        if (url === '/api/facilities') return Promise.resolve(jsonResponse({ facilities, isAdmin: false }))
+        return Promise.resolve(jsonResponse({ orders: [makeOrder()] }))
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      render(<OrdersPage />)
+      await screen.findByText('虫垂切除術')
+
+      expect(fetchMock).toHaveBeenCalledWith('/api/orders?facility_id=f1&limit=50&offset=0')
+      expect(screen.getByRole('button', { name: '前へ' })).toBeDisabled()
+    })
+  })
 })

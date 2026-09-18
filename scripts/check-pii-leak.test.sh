@@ -36,13 +36,13 @@ scan_emails() {
   # （cwd を変えずに走らせると全ファイルが見つからず、2>/dev/null で黙って「0 件」になる。RED fixture で踏んだ）
   (
     cd "$root" || exit 1
-    git ls-files -z -- ':!package-lock.json' ':!*.svg' ':!*.png' ':!*.jpg' ':!*.ico' ':!*.woff' ':!*.woff2' \
+    git ls-files -z --cached --others --exclude-standard -- ':!package-lock.json' ':!*.svg' ':!*.png' ':!*.jpg' ':!*.ico' ':!*.woff' ':!*.woff2' \
       | xargs -0 grep -n -o -E -I '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' -- \
       | grep -v -i -E "@${ALLOWED_DOMAINS_RE}\$" || true
   )
 }
 
-echo "=== scenario 1: 追跡ファイルに許可ドメイン以外のメールアドレスが無い ==="
+echo "=== scenario 1: 追跡・未追跡のファイルに許可ドメイン以外のメールアドレスが無い ==="
 HITS="$(scan_emails "$REPO_ROOT")"
 if [ -z "$HITS" ]; then
   assert_ok "許可ドメイン以外のメールアドレスなし"
@@ -71,12 +71,12 @@ printf 'leaked: %s\n' "$LEAK_EMAIL" > "$WORK_DIR/leak.md"
 printf 'signed-off: noreply@anthropic.com\n' > "$WORK_DIR/sig.md"
 git -C "$WORK_DIR" add -A
 FIX_HITS="$(scan_emails "$WORK_DIR")"
-if printf '%s\n' "$FIX_HITS" | grep -q "leak.md:1:$LEAK_EMAIL"; then
+if grep -q "leak.md:1:$LEAK_EMAIL" <<<"$FIX_HITS"; then
   assert_ok "gmail.com を検知"
 else
   assert_fail "gmail.com を検知できない" "$FIX_HITS"
 fi
-if printf '%s\n' "$FIX_HITS" | grep -q -e 'ok.md' -e 'sig.md'; then
+if grep -q -e 'ok.md' -e 'sig.md' <<<"$FIX_HITS"; then
   assert_fail "許可ドメインを誤検知" "$FIX_HITS"
 else
   assert_ok "example.com / anthropic.com は許可"

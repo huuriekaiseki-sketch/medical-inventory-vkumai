@@ -1,0 +1,11 @@
+{
+  "heldOut": true,
+  "expectedFilePathContains": "sterilization_logs.sql",
+  "expectedKeywords": [
+    "SECURITY DEFINER",
+    "認可",
+    "auth.uid",
+    "is_facility_member",
+    "呼び出し元"
+  ]
+}

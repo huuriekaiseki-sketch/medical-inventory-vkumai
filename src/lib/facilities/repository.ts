@@ -71,12 +71,7 @@ export async function updateFacility(db: SupabaseClient, id: string, input: Faci
   return mapFacility(data)
 }
 
-export async function deleteFacility(db: SupabaseClient, id: string): Promise<void> {
-  const { data, error } = await db
-    .from('facilities')
-    .delete()
-    .eq('id', id)
-    .select('id')
-  if (error) throw new Error(error.message)
-  if (data.length === 0) throw new ClientVisibleError(`施設ID "${id}" は存在しません`)
-}
+// WHY(deleteFacility を置かない、2026-09-08・E-055): `facilities` に DELETE の RLS ポリシーが
+//      無いので、この関数は誰が呼んでも 0 行になり、それを「存在しません」と読んで
+//      **実在する施設に 404 を返していた**。呼び出し元（DELETE route）ごと消した。
+//      作り直すときは RLS のポリシーと一緒に作る（片方だけあっても使えない）。

@@ -1,0 +1,12 @@
+{
+  "heldOut": true,
+  "expectedFilePathContains": "consumable-register-form.tsx",
+  "expectedKeywords": [
+    "二重送信",
+    "多重送信",
+    "連打",
+    "disabled",
+    "isSubmitting",
+    "送信中"
+  ]
+}

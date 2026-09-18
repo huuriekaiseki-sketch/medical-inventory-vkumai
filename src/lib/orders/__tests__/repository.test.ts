@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { listOrders } from '@/lib/orders/repository'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase のクエリビルダはメソッドチェーンで、実物の型（PostgrestFilterBuilder）はジェネリクスが深く、テスト用のモックでは再現できない。このモック関数の戻り値に限って any を使う
 function makeChainableQuery(result: { data: unknown; error: unknown }): any {
   const builder: Record<string, unknown> = {
     select: vi.fn(() => builder),
@@ -57,24 +57,27 @@ describe('listOrders', () => {
       consumable_order_items: [],
     },
   ]
+  // WHY(2026-09-08 に形が変わった): 「対応する返却が 0 件か」ではなく
+  //      **明細ごとの残数**で未返却を判定するようになった（分割返却、20260908030000）。
+  //      loan_returns の埋め込みは使わず、発注明細に紐付いた返却の数量を見る。
   const loanOrderRows = [
     {
+      // 5 本借りて 2 本返した = 残り 3
       id: 'lo-1', facility_id: 'f-1', procedure_name: 'PCI', maker: 'メドトロニック', status: 'submitted',
       created_at: '2026-06-25T00:00:00Z',
-      loan_order_items: [{ name: 'カテーテルA' }],
-      loan_returns: [],
+      loan_order_items: [{ name: 'カテーテルA', quantity: 5, loan_return_items: [{ quantity: 2 }] }],
     },
     {
+      // 2 本借りて 2 本返した = 残り 0
       id: 'lo-2', facility_id: 'f-1', procedure_name: 'CAG', maker: 'アボット', status: 'submitted',
       created_at: '2026-06-21T00:00:00Z',
-      loan_order_items: [{ name: 'バルーンB' }],
-      loan_returns: [{ id: 'lr-1' }],
+      loan_order_items: [{ name: 'バルーンB', quantity: 2, loan_return_items: [{ quantity: 1 }, { quantity: 1 }] }],
     },
     {
+      // draft なので残数に関わらず未返却にしない
       id: 'lo-3', facility_id: 'f-1', procedure_name: 'EVAR', maker: 'クック', status: 'draft',
       created_at: '2026-06-20T00:00:00Z',
-      loan_order_items: [],
-      loan_returns: [],
+      loan_order_items: [{ name: 'ステントC', quantity: 1, loan_return_items: [] }],
     },
   ]
   const loanReturnRows = [
@@ -209,15 +212,73 @@ describe('listOrders', () => {
     expect(coo2?.summary).toBe('消耗品 0 品目')
   })
 
-  it('unreturned: true になる行 = submitted かつ loan_returns が0件のloan_orderのみ', async () => {
+  it('unreturned: true になる行 = submitted かつ 残数がある loan_order のみ（残数も返す）', async () => {
     const { db } = makeMockOrdersDb(allTableResults())
     const result = await listOrders(db, 'f-1', { kind: 'loan_order' }, 50, 0)
     const lo1 = result.find(o => o.id === 'lo-1')
     const lo2 = result.find(o => o.id === 'lo-2')
     const lo3 = result.find(o => o.id === 'lo-3')
     expect(lo1?.unreturned).toBe(true)
+    expect(lo1?.outstandingQuantity, '5 本のうち 2 本返したので残り 3').toBe(3)
     expect(lo2?.unreturned).toBe(false)
-    expect(lo3?.unreturned).toBe(false)
+    expect(lo2?.outstandingQuantity, '2 本を 1 本ずつ 2 回で返しきった').toBe(0)
+    expect(lo3?.unreturned, 'draft は未返却にしない').toBe(false)
+  })
+
+  // WHY(E-056 の残り、2026-09-09): 返却は**回ごと**にも**品目ごとにも**取り消せる。
+  //      どちらか片方だけを残数から除くと、「取り消したのに返し直せない」か
+  //      「取り消していないのに残数が戻る」のどちらかになる（E-053 と同じ食い違い）。
+  //      **同じ問いの答えを 4 か所で揃える**うちの 1 か所をここで固定する。
+  it('残数は、回ごと取り消した返却も品目ごと取り消した明細も数えない', async () => {
+    const rows = [
+      {
+        // 5 本借り、2 本返したが**その明細を取り消した** = 残り 5
+        id: 'lo-c1', facility_id: 'f-1', procedure_name: '品目取り消し', maker: 'M', status: 'submitted',
+        created_at: '2026-09-09T00:00:00Z',
+        loan_order_items: [
+          { name: 'カテーテルA', quantity: 5, loan_return_items: [{ quantity: 2, status: 'cancelled' }] },
+        ],
+      },
+      {
+        // 5 本借り、2 本返したが**返却ごと取り消した** = 残り 5
+        id: 'lo-c2', facility_id: 'f-1', procedure_name: '回ごと取り消し', maker: 'M', status: 'submitted',
+        created_at: '2026-09-09T00:00:00Z',
+        loan_order_items: [
+          {
+            name: 'カテーテルA', quantity: 5,
+            loan_return_items: [{ quantity: 2, status: 'active', loan_returns: { status: 'cancelled' } }],
+          },
+        ],
+      },
+      {
+        // 5 本借り、2 本返して 1 本ぶんの明細だけ取り消した = 残り 4
+        id: 'lo-c3', facility_id: 'f-1', procedure_name: '一部だけ取り消し', maker: 'M', status: 'submitted',
+        created_at: '2026-09-09T00:00:00Z',
+        loan_order_items: [
+          {
+            name: 'カテーテルA', quantity: 5,
+            loan_return_items: [
+              { quantity: 1, status: 'active' },
+              { quantity: 1, status: 'cancelled' },
+            ],
+          },
+        ],
+      },
+    ]
+    const { db } = makeMockOrdersDb({ ...allTableResults(), loan_orders: { data: rows, error: null } })
+    const result = await listOrders(db, 'f-1', { kind: 'loan_order' }, 50, 0)
+    expect(
+      result.find(o => o.id === 'lo-c1')?.outstandingQuantity,
+      '品目を取り消したのに残数が戻っていない'
+    ).toBe(5)
+    expect(
+      result.find(o => o.id === 'lo-c2')?.outstandingQuantity,
+      '回ごと取り消したのに残数が戻っていない'
+    ).toBe(5)
+    expect(
+      result.find(o => o.id === 'lo-c3')?.outstandingQuantity,
+      '生きている明細まで数えていない（1 本ぶんだけ戻る）'
+    ).toBe(4)
   })
 
   it('loan_returnのsummaryは返却日時のJST日付になる（UTC 15:00 = JST 翌日 0:00。issue #757 の 15）', async () => {

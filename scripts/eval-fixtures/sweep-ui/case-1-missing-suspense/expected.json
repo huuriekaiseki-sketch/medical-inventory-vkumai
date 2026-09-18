@@ -1,4 +1,4 @@
 {
-  "expectedFilePathContains": "eval-fixture-recall/page.tsx",
+  "expectedFilePathContains": "shift-handovers/page.tsx",
   "expectedKeywords": ["Suspense", "useSearchParams"]
 }

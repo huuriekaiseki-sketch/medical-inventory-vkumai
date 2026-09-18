@@ -51,20 +51,68 @@ fi
 
 EVAL_RUNS_CHANGED="$(echo "$CHANGED_FILES" | grep -c '^docs/agents/eval-runs\.jsonl$' || true)"
 
+# WHY(中身を見る、2026-09-10・レビュー指摘 R11 の後段):
+#   ここは長らく「**ファイルに差分があるか**」しか見ていなかった。
+#   だから **古い日付の記録・別の fixture の結果・失敗した回・木の情報が無い昔の形式**を
+#   1 行足すだけで通った（レビューで再現済み）。
+#   見たいのは「eval-runs.jsonl が変わったか」ではなく
+#   「**いま変更したプロンプトで測った記録があるか**」なので、
+#   追記された行の `workflowsTree` を HEAD の木と突き合わせる。
+#
+#   `workflowsDirty: true` の行は数えない——その回は clone(HEAD) から読むので、
+#   **手元のプロンプトの変更が評価に入っていない**（record-eval-run.sh の WHY 参照）。
+#
+#   これは C-010（人が書いた印を実態と突き合わせない）そのもので、
+#   ここでの「印」は**ファイルが変わったという事実**だった。
+STALE_COUNT=0
 if [ "$EVAL_RUNS_CHANGED" -gt 0 ]; then
-  echo "check-eval-runs-freshness: .claude/workflows/*.js の変更とdocs/agents/eval-runs.jsonlの更新が両方含まれています。OK。"
-  exit 0
+  CURRENT_TREE="$(git rev-parse --verify --quiet "${HEAD_REF}:.claude/workflows" 2>/dev/null || echo "")"
+  COUNTS="$(git diff "$BASE_REF" "$HEAD_REF" -- docs/agents/eval-runs.jsonl | python3 -c '
+import sys, json
+tree = sys.argv[1]
+fresh = stale = 0
+for line in sys.stdin:
+    if not line.startswith("+") or line.startswith("+++"):
+        continue
+    body = line[1:].strip()
+    if not body:
+        continue
+    try:
+        row = json.loads(body)
+    except Exception:
+        # 読めない行は「測った証拠」に数えない（0 と読めないを混ぜない）
+        stale += 1
+        continue
+    if row.get("workflowsDirty") is True:
+        stale += 1
+    elif tree and row.get("workflowsTree") == tree:
+        fresh += 1
+    else:
+        stale += 1
+print(fresh, stale)
+' "$CURRENT_TREE" 2>/dev/null || echo "0 0")"
+  read -r FRESH_COUNT STALE_COUNT <<< "$COUNTS"
+  if [ "${FRESH_COUNT:-0}" -gt 0 ]; then
+    echo "check-eval-runs-freshness: .claude/workflows/*.js の変更と、その木（${CURRENT_TREE:0:12}）で測った eval の記録が ${FRESH_COUNT} 行あります。OK。"
+    exit 0
+  fi
 fi
 
 # eval-skip 申告: PR 本文の行頭 `eval-skip:` に続く非空の理由があれば許容する
-SKIP_LINE="$(printf '%s\n' "${PR_BODY:-}" | grep -m 1 -E '^[[:space:]]*eval-skip:' || true)"
+SKIP_LINE="$(grep -m 1 -E '^[[:space:]]*eval-skip:' <<<"${PR_BODY:-}" || true)"
 if [ -n "$SKIP_LINE" ]; then
   SKIP_REASON="$(printf '%s' "$SKIP_LINE" | sed -E 's/^[[:space:]]*eval-skip:[[:space:]]*//')"
   if [ -n "$SKIP_REASON" ]; then
-    echo "::notice::.claude/workflows/*.js が変更されていますが、PR本文の eval-skip 申告により eval 未実行を許容します（理由: $SKIP_REASON）。変更箇所:$WORKFLOWS_DETAIL"
+    echo "::notice::.claude/workflows/*.js が変更されていますが、PR本文の eval-skip 申告により eval 未実行を許容します（理由: ${SKIP_REASON}）。変更箇所:$WORKFLOWS_DETAIL"
     exit 0
   fi
   echo "::error::PR本文に eval-skip がありますが理由が空です。\`eval-skip: <理由>\` の形で理由を書いてください。"
+  exit 1
+fi
+
+# 「更新が無い」と「更新はあるが古い記録だけ」は別の話。**混ぜると直し方が分からない**
+if [ "$EVAL_RUNS_CHANGED" -gt 0 ]; then
+  echo "::error::docs/agents/eval-runs.jsonl は更新されていますが、**いま変更したプロンプトの木（${CURRENT_TREE:0:12}）で測った記録が 1 行もありません**（追記された ${STALE_COUNT} 行は、別の木で測った回・未コミットのまま測った回（workflowsDirty）・木の情報が無い古い形式のいずれか）。変更後のプロンプトで測り直してからコミットするか、eval が不要な変更なら PR 本文に \`eval-skip: <理由>\` と書いてください。変更箇所:$WORKFLOWS_DETAIL"
   exit 1
 fi
 

@@ -18,7 +18,7 @@ export function FacilitySummaryList({ facilitySummaries, loanOutstanding }: Faci
   if (facilitySummaries.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center rounded bg-white shadow-sm" style={{ border: '1px solid #E5E7EB' }}>
-        <p className="text-sm font-medium" style={{ color: '#6B7280' }}>データがありません</p>
+        <p className="text-sm font-medium" style={{ color: '#4B5563' }}>データがありません</p>
       </div>
     )
   }
@@ -51,7 +51,7 @@ export function FacilitySummaryList({ facilitySummaries, loanOutstanding }: Faci
                   未返却 {outstandingCount}件
                 </span>
               ) : (
-                <span className="rounded-full px-3 py-1 text-xs font-semibold" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>
+                <span className="rounded-full px-3 py-1 text-xs font-semibold" style={{ backgroundColor: '#F3F4F6', color: '#4B5563' }}>
                   未返却なし
                 </span>
               )}

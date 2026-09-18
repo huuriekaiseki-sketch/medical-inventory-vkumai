@@ -56,14 +56,14 @@ export function LoanReturnModal({ facilityId, isOpen, onClose, onSuccess }: Prop
   }
 
   const labelClass = 'block text-xs font-semibold uppercase tracking-widest mb-1'
-  const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+  const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
       <div className="bg-white rounded shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6" style={{ border: '1px solid #E5E7EB' }}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold" role="heading" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif' }}>短貸返却</h2>
-          <button type="button" onClick={handleClose} style={{ color: '#6B7280' }}>✕</button>
+          <button type="button" onClick={handleClose} style={{ color: '#4B5563' }}>✕</button>
         </div>
         {error && <div className="mb-4 px-4 py-2 rounded text-sm text-white" style={{ backgroundColor: '#DC2626' }}>{error}</div>}
         <form onSubmit={handleSubmit}>
@@ -76,7 +76,7 @@ export function LoanReturnModal({ facilityId, isOpen, onClose, onSuccess }: Prop
             <ItemRowInput rows={items} onChange={setItems} />
           </div>
           <div className="flex justify-end gap-3">
-            <button type="button" onClick={handleClose} className="px-4 py-2 text-sm rounded border" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>キャンセル</button>
+            <button type="button" onClick={handleClose} className="px-4 py-2 text-sm rounded border" style={{ borderColor: '#E5E7EB', color: '#4B5563' }}>キャンセル</button>
             <button type="submit" disabled={submitting} className="px-4 py-2 text-sm rounded text-white" style={{ backgroundColor: '#4B5563' }}>
               {submitting ? '送信中...' : '返却する'}
             </button>

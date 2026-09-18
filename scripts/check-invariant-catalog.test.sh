@@ -13,6 +13,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# 表の行を列に割るのはここだけ（`\|` を区切りとして数えないため。docs/agents/check-design-pitfalls.md C-047）
+source "$SCRIPT_DIR/lib/table-row.sh"
 CATALOG="${INVARIANT_CATALOG_PATH:-$REPO_ROOT/docs/agents/invariant-catalog.md}"
 TEST_ROOTS="${INVARIANT_TEST_ROOTS:-supabase/__tests__ supabase/migrations/__tests__ src e2e}"
 
@@ -48,27 +50,27 @@ check_catalog() {
 
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    id="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')"
+    id="$(table_field "$line" 2)"
 
-    nf="$(printf '%s' "$line" | awk -F'|' '{print NF}')"
+    nf="$(table_nf "$line")"
     if [ "$nf" -ne 9 ]; then
       echo "    columns: [$id] 列数が7列でない（区切り数=$((nf-1))）"
       violations=$((violations+1))
       continue
     fi
 
-    if ! printf '%s' "$id" | grep -qE '^I-[0-9]{3}$'; then
+    if ! grep -qE '^I-[0-9]{3}$' <<<"$id"; then
       echo "    id: [$id] ID が I-3桁でない"
       violations=$((violations+1))
     fi
-    if printf '%s\n' "$seen_ids" | grep -qx "$id"; then
+    if grep -qx "$id" <<<"$seen_ids"; then
       echo "    id: [$id] ID が重複"
       violations=$((violations+1))
     fi
     seen_ids="$(printf '%s\n%s' "$seen_ids" "$id")"
 
-    tests="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$7); print $7}')"
-    status="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$8); print $8}')"
+    tests="$(table_field "$line" 7)"
+    status="$(table_field "$line" 8)"
 
     case "$status" in
       実装済み|計画|対象外) ;;
@@ -108,7 +110,7 @@ check_catalog() {
 
   test_ids="$(ids_in_tests "$roots")"
   for id in $test_ids; do
-    if ! printf '%s\n' "$seen_ids" | grep -qx "$id"; then
+    if ! grep -qx "$id" <<<"$seen_ids"; then
       echo "    orphan: テストコードにあるがカタログに無い ID: $id"
       violations=$((violations+1))
     fi
@@ -128,11 +130,11 @@ fi
 
 echo "=== scenario 2: 実態のカタログとテストコードに違反が無い ==="
 RESULT="$(check_catalog "$CATALOG" "$TEST_ROOTS")"
-printf '%s\n' "$RESULT" | grep -v '^violations=' || true
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+grep -v '^violations=' <<<"$RESULT" || true
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   assert_ok "違反なし"
 else
-  assert_fail "違反あり" "$(printf '%s\n' "$RESULT" | tail -n1)"
+  assert_fail "違反あり" "$(tail -n1 <<<"$RESULT")"
 fi
 
 echo "=== scenario 3: fixture 差し替えで違反を検知できる（RED 方向の自己検証） ==="
@@ -159,21 +161,21 @@ RESULT="$(REPO_ROOT="$FIX_ROOT" check_catalog "$FIXTURE" "tests")"
 # 期待: I-901 id-in-test / I-902 path / I-903 status / I-904 status / I-900 重複 /
 #       I-12 規約違反 + id-in-test / I-906 列ずれ / I-999 孤児 = 9
 EXPECTED=9
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
-  assert_fail "違反件数が期待（$EXPECTED）と異なる" "$RESULT"
+  assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
 fi
 for needle in \
   'id-in-test: \[I-901\]' 'path: \[I-902\]' 'status: \[I-903\]' 'status: \[I-904\]' \
   'id: \[I-900\] ID が重複' 'id: \[I-12\] ID が I-3桁でない' 'columns: \[I-906\]' 'orphan: .*I-999'; do
-  if printf '%s\n' "$RESULT" | grep -q "$needle"; then
+  if grep -q "$needle" <<<"$RESULT"; then
     assert_ok "検知: $needle"
   else
     assert_fail "検知できない: $needle"
   fi
 done
-if printf '%s\n' "$RESULT" | grep -q 'I-905'; then
+if grep -q 'I-905' <<<"$RESULT"; then
   assert_fail "未 の計画行が検査されている（I-905）"
 else
   assert_ok "未 の計画行は ID 検査を掛けない（I-905）"
@@ -181,10 +183,10 @@ fi
 
 echo "=== scenario 4: 実態のカタログの ID は区分ごとの番号帯に収まる ==="
 BAD_BAND=0
-for id in $(catalog_rows "$CATALOG" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}'); do
+for id in $(catalog_rows "$CATALOG" | table_mask_stream | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}' | table_unmask_stream); do
   case "$id" in
-    I-01[0-9]|I-02[0-9]|I-03[0-9]|I-04[0-9]|I-05[0-9]) ;;
-    *) echo "    band: $id は定義済みの番号帯（01x〜05x）に無い"; BAD_BAND=1 ;;
+    I-01[0-9]|I-02[0-9]|I-03[0-9]|I-04[0-9]|I-05[0-9]|I-06[0-9]) ;;
+    *) echo "    band: $id は定義済みの番号帯（01x〜06x）に無い"; BAD_BAND=1 ;;
   esac
 done
 if [ "$BAD_BAND" -eq 0 ]; then assert_ok "全 ID が番号帯に収まる"; else assert_fail "番号帯の外の ID がある"; fi

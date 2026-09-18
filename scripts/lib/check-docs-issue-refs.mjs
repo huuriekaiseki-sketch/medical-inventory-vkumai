@@ -23,6 +23,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defaultTargets, stripFences } from './check-docs-integrity.mjs'
+import { writeLine } from './stdout-sync.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ROOT = path.resolve(__dirname, '../..')
@@ -94,12 +95,12 @@ if (isMain) {
   const opts = parseArgs(process.argv.slice(2))
   const { candidates, warnings, unresolved } = run(opts)
   if (opts.list) {
-    for (const c of candidates) console.log(`  ${c.file}:${c.line} issue #${c.issue}: ${c.text.slice(0, 100)}`)
-    console.log(`candidates=${candidates.length}`)
+    for (const c of candidates) writeLine(`  ${c.file}:${c.line} issue #${c.issue}: ${c.text.slice(0, 100)}`)
+    writeLine(`candidates=${candidates.length}`)
   } else {
-    for (const w of warnings) console.log(`  WARN: ${w.file}:${w.line} は「保留・未対応」の文脈で issue #${w.issue} を参照していますが、その issue は CLOSED です。文面を更新するか、歴史的記述なら文脈を直してください: ${w.text.slice(0, 100)}`)
-    if (unresolved.length) console.log(`  (状態を取得できなかった issue: ${unresolved.map(n => '#' + n).join(', ')}。gh 未認証・ネットワーク不可の場合は判定をスキップします)`)
-    console.log(`candidates=${candidates.length} warnings=${warnings.length} unresolved=${unresolved.length}`)
+    for (const w of warnings) writeLine(`  WARN: ${w.file}:${w.line} は「保留・未対応」の文脈で issue #${w.issue} を参照していますが、その issue は CLOSED です。文面を更新するか、歴史的記述なら文脈を直してください: ${w.text.slice(0, 100)}`)
+    if (unresolved.length) writeLine(`  (状態を取得できなかった issue: ${unresolved.map(n => '#' + n).join(', ')}。gh 未認証・ネットワーク不可の場合は判定をスキップします)`)
+    writeLine(`candidates=${candidates.length} warnings=${warnings.length} unresolved=${unresolved.length}`)
     if (opts.strict && warnings.length > 0) process.exit(1)
   }
 }

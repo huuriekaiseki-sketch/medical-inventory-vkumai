@@ -73,6 +73,23 @@ migration を適用順に畳み込み、GRANT の無い関数を「PUBLIC 既定
 呼べるのに境界テストで `.rpc()` されていない関数が増えると落ちる。`bash scripts/check-constraint-coverage.sh`
 で現状の一覧を怪しい順に見られる。
 
+**2026-09-11、同じ型がもう一度出た（E-074）。今度は「GRANT を書いた」側。**
+発注の 4 本（`create_case_order_atomic` ほか）は `GRANT EXECUTE ... TO authenticated` と
+**書いてある**ので、上の機械検知（GRANT の**無い**関数を拾う）には出ない。それでも (1) の
+PUBLIC 既定が残っていたため**未ログインでも呼べた**。
+**「`TO authenticated` と書いたから authenticated だけ」という読みは成り立たない。**
+GRANT は足すだけで、既定の PUBLIC を消さない。
+同じ日に、価格履歴の RPC（`get_distributor_product_price_history`）を締めようとして
+先に `REVOKE ... FROM anon` だけを書いたら、(1) が残って統合テストが赤のままだった。
+**(1) と (2) は片方ずつ外しても効かない。両方外してから要るロールへ配り直す。**
+
+**機械検知（2026-09-11 に足した）:** `rpc-boundary-sweep.integration.test.ts` の `ANON_CALLABLE`。
+公開 RPC を**実際に未ログインで呼び**、通ったものを宣言と**両方向**で突き合わせる
+（通るのに宣言が無い／宣言にあるのに通らない、のどちらでも落ちる）。
+GRANT の書き方ではなく**通るかどうか**を見るので、上の 2 層のどちらが原因でも拾える。
+宣言に載せた RPC には未ログインでも `assert` を当てるので、
+「呼べてよい」と決めたものが**何を返すか**まで毎回実測される。
+
 ### 後付けFK列のカーディナリティを宣言しないまま放置する（issue #675）
 
 **チェック内容:** 既存テーブルへ `ALTER TABLE ... ADD COLUMN ... REFERENCES` で
@@ -324,6 +341,22 @@ issue化を検討）。
 
 詳細: [`tooling-decisions.md`](./tooling-decisions.md#subagent-frontmatterのskillsプリロードpermissionmode-planは見送りmaxturnsは延期issue-652)
 
+### 認可・MFA の判定で `{ data }` だけ受け取り、API が落ちるとガードが素通りする（2026-09-06）
+
+**チェック内容:** `await …rpc(` / `auth.getUser(` / `auth.mfa.*` の結果は必ず `error` を受け取り、
+`error || !data` を拒否側に倒す。「取れなかったら判定しない」は「取れなかったら通す」と同じ。
+一覧は [`fail-open-inventory.md`](./fail-open-inventory.md)（F-xxx）、`scripts/check-fail-open.test.sh`
+が `error` を捨てる判定呼び出しを機械で止める。
+
+**なぜ再発したか:** proxy の MFA ガードは `const { data: aal } = await getAuthenticatorAssuranceLevel()`
+と書き、`aal && …` で判定していた。正常系のテスト（aal1→aal2 は送る、aal1→aal1 は通す）は全部
+green で、「API が落ちた」ケースは誰も書かなかった。DB 側は書き込みにだけ aal2 を要求するので、
+MFA 登録済みの aal1 セッションが保護ページを**読める**穴になっていた。認可の判定は「通す条件」
+ではなく「拒否できない条件」で書く。
+
+**機械検知:** `scripts/check-fail-open.test.sh`（hooks-test）、`src/__tests__/proxy.test.ts`
+（MFA API がエラー / data null → /mfa-challenge、getUser がエラー → /login）。
+
 ### fail-open の warning-only hook が、入力形式の変化で無音のまま死ぬ（2026-09-05）
 
 **チェック内容:** 「判定材料が取れなければ沈黙する（fail-open）」設計の hook を書く・触るときは、
@@ -405,6 +438,53 @@ Markdown の素テキストで返すことがあり、`jq -r '.detail'` が失�
 **「MISS = 見落とし」ではない。判定器・fixture・エージェントの 3 者のどれが原因かを生出力で
 毎回切り分ける。**
 
+## テスト層（E2E・共有フィクスチャ）
+
+### 後片付けを「施設 A のものを全部」で書き、並列で走る別の spec の土台を消す（2026-09-09）
+
+**チェック内容:** e2e の後片付け（`beforeEach` / `afterAll` の削除）は、**その spec が作った行だけ**に
+絞る。「施設 A の◯◯を全部消す」は書かない。施設 A は複数の spec が同時に触る共有フィクスチャで、
+Playwright は既定でファイル単位に並列実行するため、**他の spec が今まさに使っている行**を消しうる。
+削除は連鎖することも数える（院内価格を消すと価格履歴も消える。20260906000007）。
+
+**なぜ再発したか:** `hospital-prices.spec.ts` の `clearPrices()` は「施設 × 代理店商品が UNIQUE なので
+前のテストの行が残ると 409 になる」という**自分の都合**から書かれ、意図は正しかった。
+消す範囲だけが必要より広く、施設 A の全件になっていた。書いた時点では施設 A の院内価格を使う spec が
+他に無かったため誰も困らず、**後から** `price-history.spec.ts` が同じ土台を使い始めて壊れた。
+つまり「書いた側のバグ」ではなく「共有物の範囲を宣言しないまま増やした」ことが原因で、
+新しい spec を足すたびに再発しうる。
+
+**気づき方の非対称性:** `npx playwright test e2e/<新しい spec>.ts` は**通る**。落ちるのは全体実行だけ。
+新しい spec を足したら、単体で緑になった時点で終わりにせず、**必ず一度は全体で回す**
+（`npm run test:e2e`）。単体実行しかしていない spec は「並列に耐えるか」を一度も測っていない。
+
+**機械検知:** 無い（第 3 層）。全体実行での失敗が唯一の検知で、揺れとして出るため
+`scripts/check-flaky-tests.sh --runs 3` の対象になる。文字列で「広すぎる削除」を当てる検査は
+書き方を変えれば外れるので作っていない。構造で消すなら「spec ごとに施設を分ける」方向だが、
+フィクスチャ生成の作り直しになるため未着手（`docs/agents/undetectable-rules-inventory.md` に載せる候補）。
+
+### storageState を作る関数を spec の中から呼び、黙って別人のセッションを書き出す（2026-09-09）
+
+**チェック内容:** `signInAndSaveStorageState()` は `chromium.launch()` を使う。**spec の中から呼ぶと**、
+テストランナーが差し替えた `chromium` が `playwright.config.ts` の `use.storageState`
+（＝共有のテストユーザー）を新しいコンテキストに引き継ぐ。するとマジックリンクの着地が
+`/login` ではなく保護ページになり、`/login` のハッシュ処理（`setSession`）が走らないまま、
+**共有ユーザーの cookie がそのまま書き出される**。新しい利用者を作る spec は、
+コンテキストを空の storageState から始めること。
+
+**なぜ再発したか:** 成功判定が「`sb-*-auth-token` cookie が現れたか」だけで、
+**誰の cookie かを一度も見ていなかった**。globalSetup から呼ぶ限り正しく動いていたので、
+呼び出し方によって意味が変わることに気づく機会が無かった。
+実害として、MFA の spec が「新しく作った利用者」ではなく**共有のテストユーザーとして走り、
+共有ユーザーに MFA を有効化してしまった**（手元の DB のみ。`supabase db reset` で復旧）。
+これは他の全 spec を aal1 で 0 行にする、静かで広い壊し方だった。
+`price-history.spec.ts` の件と合わせて、**共有物に触る道が 2 本見つかった**のが同じ日。
+
+**機械検知:** `signInAndSaveStorageState()` が、書き出す直前に cookie を復号して
+**頼んだメールと一致するか**を確かめ、違えば両者の名前を出して落とす
+（`e2e/generate-auth-state.ts`。分割 cookie `.0` / `.1` も繋いでから読む）。
+2026-09-09 に、直しを一時的に外して**実際にこの関門が落ちること**を確認済み。
+
 ## RLS/テナント分離層
 
 ### 「動いたからOK」でfacility_idフィルタ漏れ・RLS未設定を見逃す（issue #24再発防止）
@@ -439,6 +519,30 @@ DELETE、RPC関数）をレビューする際は、以下を**攻撃者視点**�
 引き継ぎメモの「検証済み」欄には、他テナントIDでのアクセス確認結果を明示する
 （詳細は [`common.md`](./common.md#引き継ぎフォーマット) 参照）。
 
+### テーブルに GRANT を書かず、service_role でも読めないまま守りのテストが赤で放置される（2026-09-07）
+
+**チェック内容:** RLS を有効にしてポリシーを 1 つも作らないテーブル（SECURITY DEFINER 関数から
+しか触らない設計）を新設したら、**読む側の GRANT も明示的に書く**。Supabase の既定権限
+（`ALTER DEFAULT PRIVILEGES`）に頼らず、`REVOKE ALL ... FROM PUBLIC, anon, authenticated,
+service_role;` してから必要なロールにだけ `GRANT SELECT` する（`audit_log`（20260906000004）が
+その型）。そのうえで、**読める側と読めない側の両方を統合テストで測る**。
+
+**なぜ再発したか:** `schema_drift_log` / `schema_baseline_snapshots`（20260714000001）は
+「関数からしか書かない」ことだけを設計し、読む側を書かなかった。RLS はポリシーが無いので
+client からは弾かれるが、**service_role も GRANT が無いので `permission denied` になる**
+（RLS のバイパスと、テーブル権限は別の話）。その結果、夜間の不変条件検査を守るはずの
+`business-invariants-nightly.integration.test.ts` が「記録されたか」を読めず、
+ずっと落ちたままだった。検知の仕組み自体は動いていた（anon 公開の `drift_alert_view` に
+行が出ることを実測で確認）ので、**赤いのはテストだけで、誰も直しに来なかった**。
+
+さらに `detail`（何がどう違反したか）は誰も読めず、原因の調べようが無い状態だった。
+
+**機械検知:** 統合テストが手元でしか回らない期間は「赤いテストが放置される」ことが起きる。
+`npm run test:integration` を通したときは、自分の変更と無関係な失敗も**必ず切り分けて報告する**
+（変更を外して `supabase db reset` し、元から落ちているかを確かめる）。
+権限そのものは `schema-drift-rpc-authz.integration.test.ts` が
+service_role / anon / authenticated の 3 方向で固定した。
+
 ## 依存関係層（npm サプライチェーン）
 
 ### npm パッケージの追加を「部品を増やす作業」として通してしまう（2026-09-04）
@@ -465,7 +569,8 @@ DELETE、RPC関数）をレビューする際は、以下を**攻撃者視点**�
 | クリーンインストール | CI 全ジョブの `npm ci`（`npm install` は `scripts/check-no-registry-fetch.test.sh` で禁止） | package.json と lockfile の不整合、PC だけで動く依存状態 | lockfile に既に入った悪意ある部品 |
 | ロックファイルの出所 | `scripts/check-lockfile-integrity.test.sh`（hooks-test） | レジストリ外の出所、integrity 欠落、git / file / http 指定 | レジストリ上の正規パッケージ内部の悪意 |
 | 既知脆弱性 | CI `dependency-audit` ジョブ（`npm audit --omit=dev --audit-level=high`） | 公開済み脆弱性 | 未公表の攻撃、登録されていない悪意あるコード |
-| Dependabot | `.github/dependabot.yml`（weekly） | 古い版の放置 | 新版そのものの侵害 |
+| Dependabot | `.github/dependabot.yml`（weekly） | 古い版の放置（minor / patch） | 新版そのものの侵害。major は人が判断するまで open のまま |
+| 月次の棚卸し | `docs/agents/dependency-update-runbook.md`（SessionStart `check-dependency-update-staleness.sh` と maintenance-digest が期限を警告） | major の保留理由・Dependabot の停止・`outdated` の表示ずれ | 棚卸しの中身の妥当性 |
 
 **入ってしまったら:** 疑いのある変更を含むデプロイを止め、安全だったコミットへ戻し、侵害期間中に
 読まれた可能性のある認証情報（GitHub・Supabase・DB・外部 API）をローテーションし、信頼できる

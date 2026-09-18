@@ -1,12 +1,18 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createConsumableOrder, listConsumableOrders, mapItem } from '@/lib/consumable-orders/repository'
+import {
+  CONSUMABLE_NOT_ORDERABLE_ERROR,
+  createConsumableOrder,
+  listConsumableOrders,
+  mapItem,
+} from '@/lib/consumable-orders/repository'
+import { INVARIANT_VIOLATION_MESSAGE } from '@/lib/invariant-error'
 
 function makeMockRpcDb(rpcResult: unknown): SupabaseClient {
   return { rpc: vi.fn().mockResolvedValue(rpcResult) } as unknown as SupabaseClient
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase のクエリビルダはメソッドチェーンで、実物の型（PostgrestFilterBuilder）はジェネリクスが深く、テスト用のモックでは再現できない。このモック関数の戻り値に限って any を使う
 function makeChainableQuery(result: { data: unknown; error: unknown }): any {
   const builder: Record<string, unknown> = {
     select: vi.fn(() => builder),
@@ -46,6 +52,43 @@ describe('createConsumableOrder', () => {
     expect(result.items).toHaveLength(1)
     expect(result.items[0].consumableId).toBe('c-1')
     expect(result.items[0].quantity).toBe(3)
+  })
+
+  // WHY(2026-09-09、I-035): 何が選べるかの判定は RPC が 1 か所で持っている。
+  //      アプリの仕事は**エラーを利用者に読める一文へ写すこと**だけなので、ここで固定するのは写し方。
+  //      写しを間違えると「一覧を開き直せば直る」ことが伝わらず、利用者は詰まったままになる。
+  //      DB のエラーの形（23514 ＋ `is not orderable`）は
+  //      統合テスト（consumable-order-items-boundary）が実 DB で同じ形を実測している。
+  it('選べない消耗品（23514 ＋ is not orderable）を、やることが分かる一文に写す [I-035]', async () => {
+    const db = makeMockRpcDb({
+      data: null,
+      error: { code: '23514', message: 'consumable 0d0 is not orderable in this facility (retired or belongs elsewhere)' },
+    })
+    await expect(
+      createConsumableOrder(db, 'f-1', { items: [{ consumableId: 'c-1', quantity: 1 }] })
+    ).rejects.toThrow(CONSUMABLE_NOT_ORDERABLE_ERROR)
+  })
+
+  it('同じ 23514 でも、別の業務ルール違反は汎用の一文のまま（写しすぎない） [I-035]', async () => {
+    // WHY(C-023 の型): 合図（23514）が同じなので、文言まで見ないと層を取り違える。
+    //      何でも「一覧を開き直してください」に写すと、まったく別の原因を誤って案内する
+    const db = makeMockRpcDb({
+      data: null,
+      error: { code: '23514', message: 'quantity must be positive' },
+    })
+    await expect(
+      createConsumableOrder(db, 'f-1', { items: [{ consumableId: 'c-1', quantity: 0 }] })
+    ).rejects.toThrow(INVARIANT_VIOLATION_MESSAGE)
+  })
+
+  it('文言が同じでもコードが違えば写さない（23514 であることも見る） [I-035]', async () => {
+    const db = makeMockRpcDb({
+      data: null,
+      error: { code: '23503', message: 'is not orderable' },
+    })
+    await expect(
+      createConsumableOrder(db, 'f-1', { items: [{ consumableId: 'c-1', quantity: 1 }] })
+    ).rejects.not.toThrow(CONSUMABLE_NOT_ORDERABLE_ERROR)
   })
 
   it('create_consumable_order_atomic を正しい引数で呼ぶ', async () => {

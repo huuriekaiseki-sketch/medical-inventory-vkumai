@@ -38,7 +38,10 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const supabase = await createServerSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
+  // WHY: error は未認証と同じ扱い（ヘッダをログアウト状態で描く）。認可の判定材料はエラーを受け取る
+  //      規約（scripts/check-fail-open.test.sh、issue #757 の 31）
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const user = userError ? null : userData.user;
 
   return (
     <html

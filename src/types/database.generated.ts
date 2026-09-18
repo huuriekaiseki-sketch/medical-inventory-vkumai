@@ -34,6 +34,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_denials: {
+        Row: {
+          actor_id: string | null
+          facility_id: string | null
+          guard: string
+          id: string
+          method: string | null
+          occurred_at: string
+          reason: string
+          route: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          facility_id?: string | null
+          guard: string
+          id?: string
+          method?: string | null
+          occurred_at?: string
+          reason: string
+          route?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          facility_id?: string | null
+          guard?: string
+          id?: string
+          method?: string | null
+          occurred_at?: string
+          reason?: string
+          route?: string | null
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
@@ -289,6 +322,7 @@ export type Database = {
           jan: string | null
           name: string
           purpose: string
+          status: string
           updated_at: string
         }
         Insert: {
@@ -298,6 +332,7 @@ export type Database = {
           jan?: string | null
           name: string
           purpose: string
+          status?: string
           updated_at?: string
         }
         Update: {
@@ -307,6 +342,7 @@ export type Database = {
           jan?: string | null
           name?: string
           purpose?: string
+          status?: string
           updated_at?: string
         }
         Relationships: [
@@ -408,7 +444,7 @@ export type Database = {
           delivery_rate: number | null
           distributor_product_id: string
           facility_id: string
-          gross_profit: number | null
+          gross_profit: number
           id: string
           purchase_price: number
           purchase_rate: number | null
@@ -420,7 +456,7 @@ export type Database = {
           delivery_rate?: number | null
           distributor_product_id: string
           facility_id: string
-          gross_profit?: number | null
+          gross_profit?: number
           id?: string
           purchase_price: number
           purchase_rate?: number | null
@@ -432,7 +468,7 @@ export type Database = {
           delivery_rate?: number | null
           distributor_product_id?: string
           facility_id?: string
-          gross_profit?: number | null
+          gross_profit?: number
           id?: string
           purchase_price?: number
           purchase_rate?: number | null
@@ -549,9 +585,11 @@ export type Database = {
           created_at: string
           id: string
           jan: string
+          loan_order_item_id: string | null
           loan_return_id: string
           lot: string | null
           quantity: number
+          status: string
           ubd: string | null
           updated_at: string
         }
@@ -559,9 +597,11 @@ export type Database = {
           created_at?: string
           id?: string
           jan: string
+          loan_order_item_id?: string | null
           loan_return_id: string
           lot?: string | null
           quantity?: number
+          status?: string
           ubd?: string | null
           updated_at?: string
         }
@@ -569,9 +609,11 @@ export type Database = {
           created_at?: string
           id?: string
           jan?: string
+          loan_order_item_id?: string | null
           loan_return_id?: string
           lot?: string | null
           quantity?: number
+          status?: string
           ubd?: string | null
           updated_at?: string
         }
@@ -582,6 +624,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["jan"]
+          },
+          {
+            foreignKeyName: "loan_return_items_loan_order_item_id_fkey"
+            columns: ["loan_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "loan_order_items"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "loan_return_items_loan_return_id_fkey"
@@ -681,6 +730,45 @@ export type Database = {
           },
         ]
       }
+      privileged_operations: {
+        Row: {
+          actor_id: string
+          error_code: string | null
+          id: string
+          method: string | null
+          occurred_at: string
+          operation: string
+          route: string | null
+          succeeded: boolean
+          target_email: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          actor_id: string
+          error_code?: string | null
+          id?: string
+          method?: string | null
+          occurred_at?: string
+          operation: string
+          route?: string | null
+          succeeded: boolean
+          target_email?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          actor_id?: string
+          error_code?: string | null
+          id?: string
+          method?: string | null
+          occurred_at?: string
+          operation?: string
+          route?: string | null
+          succeeded?: boolean
+          target_email?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
       product_compatibilities: {
         Row: {
           category_id: string
@@ -760,6 +848,27 @@ export type Database = {
           name?: string
           ref?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      rate_limit_counters: {
+        Row: {
+          bucket: string
+          hits: number
+          updated_at: string
+          window_start: string
+        }
+        Insert: {
+          bucket: string
+          hits?: number
+          updated_at?: string
+          window_start: string
+        }
+        Update: {
+          bucket?: string
+          hits?: number
+          updated_at?: string
+          window_start?: string
         }
         Relationships: []
       }
@@ -868,6 +977,15 @@ export type Database = {
       }
     }
     Functions: {
+      assert_facility_owns: {
+        Args: {
+          p_facility_id: string
+          p_ids: string[]
+          p_kind: string
+          p_parent_id?: string
+        }
+        Returns: undefined
+      }
       check_business_invariants: {
         Args: never
         Returns: {
@@ -876,12 +994,33 @@ export type Database = {
           object_name: string
         }[]
       }
+      check_denial_anomalies: {
+        Args: {
+          p_lookback_seconds?: number
+          p_threshold?: number
+          p_window_seconds?: number
+        }
+        Returns: {
+          detail: Json
+          hits: number
+          subject: string
+        }[]
+      }
       check_schema_drift: {
         Args: never
         Returns: {
           detail: Json
           drift_type: string
           object_name: string
+        }[]
+      }
+      consume_rate_limit: {
+        Args: { p_bucket: string; p_limit: number; p_window_seconds: number }
+        Returns: {
+          allowed: boolean
+          hit_count: number
+          limit_value: number
+          reset_at: string
         }[]
       }
       create_case_order_atomic: {
@@ -978,15 +1117,74 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_facility_member: { Args: { p_facility_id: string }; Returns: boolean }
       is_facility_writer: { Args: { p_facility_id: string }; Returns: boolean }
+      loan_outstanding_count: {
+        Args: { p_facility_id: string }
+        Returns: number
+      }
+      rate_limit_bucket_key: {
+        Args: {
+          p_bucket: string
+          p_window_seconds: number
+          p_window_start: string
+        }
+        Returns: string
+      }
+      rate_limit_window_start: {
+        Args: { p_window_seconds: number }
+        Returns: string
+      }
+      record_access_denial: {
+        Args: {
+          p_actor_id?: string
+          p_facility_id?: string
+          p_guard: string
+          p_method?: string
+          p_reason: string
+          p_route?: string
+        }
+        Returns: string
+      }
       record_business_invariants: { Args: never; Returns: undefined }
+      record_denial_anomalies: {
+        Args: {
+          p_lookback_seconds?: number
+          p_threshold?: number
+          p_window_seconds?: number
+        }
+        Returns: undefined
+      }
       record_issue_url: {
         Args: { log_id: string; url: string }
         Returns: undefined
+      }
+      record_privileged_operation: {
+        Args: {
+          p_actor_id: string
+          p_error_code?: string
+          p_method?: string
+          p_operation: string
+          p_route?: string
+          p_succeeded: boolean
+          p_target_email?: string
+          p_target_user_id?: string
+        }
+        Returns: string
       }
       record_schema_drift: { Args: never; Returns: undefined }
       refresh_schema_baseline_snapshot: {
         Args: { new_epoch: string }
         Returns: undefined
+      }
+      refund_rate_limit: {
+        Args: { p_bucket: string; p_window_seconds: number }
+        Returns: {
+          hit_count: number
+          refunded: boolean
+        }[]
+      }
+      resolve_denial_anomaly_subject: {
+        Args: { p_object_name: string }
+        Returns: string
       }
       resolve_jan_unit_price: {
         Args: { p_facility_id: string; p_jan: string }

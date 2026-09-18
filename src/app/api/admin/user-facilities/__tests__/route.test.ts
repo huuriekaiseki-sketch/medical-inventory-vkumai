@@ -7,10 +7,13 @@ const mockFrom = vi.fn()
 
 const mockUpsert = vi.fn()
 
+// WHY(2026-09-07、P-035): 所属と役割の書き込みは service_role をやめて利用者の JWT に移した。
+//      RLS の `is_admin() AND has_aal2()` が書き込みと同じ文で評価されるようにするため。
+//      モックの入口も createServerSupabase に寄せる。
 vi.mock('@/lib/supabase/server', () => ({
-  createAdminSupabase: () => ({ from: mockFrom }),
   createServerSupabase: () => ({
     auth: { getUser: mockGetUser },
+    from: mockFrom,
   }),
 }))
 
@@ -38,7 +41,7 @@ beforeEach(() => {
 describe('POST /api/admin/user-facilities', () => {
   it('role 省略時は staff で upsert して 200 を返す', async () => {
     mockFrom.mockReturnValue({ upsert: mockUpsert })
-    mockUpsert.mockResolvedValue({ error: null })
+    mockUpsert.mockReturnValue({ select: () => Promise.resolve({ data: [{ user_id: 'u1' }], error: null }) })
 
     const req = new NextRequest('http://localhost/api/admin/user-facilities', {
       method: 'POST',
@@ -54,7 +57,7 @@ describe('POST /api/admin/user-facilities', () => {
 
   it('role=admin で upsert して 200 を返す', async () => {
     mockFrom.mockReturnValue({ upsert: mockUpsert })
-    mockUpsert.mockResolvedValue({ error: null })
+    mockUpsert.mockReturnValue({ select: () => Promise.resolve({ data: [{ user_id: 'u1' }], error: null }) })
 
     const req = new NextRequest('http://localhost/api/admin/user-facilities', {
       method: 'POST',
@@ -70,7 +73,7 @@ describe('POST /api/admin/user-facilities', () => {
 
   it('role=viewer で upsert して 200 を返す', async () => {
     mockFrom.mockReturnValue({ upsert: mockUpsert })
-    mockUpsert.mockResolvedValue({ error: null })
+    mockUpsert.mockReturnValue({ select: () => Promise.resolve({ data: [{ user_id: 'u1' }], error: null }) })
 
     const req = new NextRequest('http://localhost/api/admin/user-facilities', {
       method: 'POST',
@@ -86,7 +89,7 @@ describe('POST /api/admin/user-facilities', () => {
 
   it('既存レコードの role を staff から admin に更新できる', async () => {
     mockFrom.mockReturnValue({ upsert: mockUpsert })
-    mockUpsert.mockResolvedValue({ error: null })
+    mockUpsert.mockReturnValue({ select: () => Promise.resolve({ data: [{ user_id: 'u1' }], error: null }) })
 
     const req = new NextRequest('http://localhost/api/admin/user-facilities', {
       method: 'POST',
@@ -131,11 +134,28 @@ describe('POST /api/admin/user-facilities', () => {
     const res = await POST(req)
     expect(res.status).toBe(400)
   })
+
+  // WHY(0 行を成功にしない): RLS に弾かれた書き込みは error を返さず、単に 0 行になる。
+  //      そのまま 200 を返すと「成功したのに何も起きていない」になる。
+  //      aal2 へ昇格していない admin がここに来る（P-035）。
+  it('RLS に弾かれて 0 行のときは 200 ではなく 403 を返す', async () => {
+    mockFrom.mockReturnValue({ upsert: mockUpsert })
+    mockUpsert.mockReturnValue({ select: () => Promise.resolve({ data: [], error: null }) })
+
+    const req = new NextRequest('http://localhost/api/admin/user-facilities', {
+      method: 'POST',
+      body: JSON.stringify({ userId: 'u1', facilityId: 'f1' }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(403)
+  })
 })
 
 describe('DELETE /api/admin/user-facilities', () => {
   it('施設割り当てを削除して 200 を返す', async () => {
-    const mockEq2 = vi.fn().mockResolvedValue({ error: null })
+    const mockEq2 = vi
+      .fn()
+      .mockReturnValue({ select: () => Promise.resolve({ data: [{ user_id: 'u1' }], error: null }) })
     const mockEq1 = vi.fn().mockReturnValue({ eq: mockEq2 })
     const mockDel = vi.fn().mockReturnValue({ eq: mockEq1 })
     mockFrom.mockReturnValue({ delete: mockDel })
@@ -164,6 +184,19 @@ describe('DELETE /api/admin/user-facilities', () => {
     mockGetUser.mockResolvedValue({
       data: { user: { email: 'other@test.com' } },
     })
+    const req = new NextRequest('http://localhost/api/admin/user-facilities', {
+      method: 'DELETE',
+      body: JSON.stringify({ userId: 'u1', facilityId: 'f1' }),
+    })
+    const res = await DELETE(req)
+    expect(res.status).toBe(403)
+  })
+
+  it('RLS に弾かれて 0 行のときは 200 ではなく 403 を返す', async () => {
+    const mockEq2 = vi.fn().mockReturnValue({ select: () => Promise.resolve({ data: [], error: null }) })
+    const mockEq1 = vi.fn().mockReturnValue({ eq: mockEq2 })
+    mockFrom.mockReturnValue({ delete: vi.fn().mockReturnValue({ eq: mockEq1 }) })
+
     const req = new NextRequest('http://localhost/api/admin/user-facilities', {
       method: 'DELETE',
       body: JSON.stringify({ userId: 'u1', facilityId: 'f1' }),

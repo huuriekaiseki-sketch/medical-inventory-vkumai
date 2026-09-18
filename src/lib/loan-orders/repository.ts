@@ -5,7 +5,8 @@ import { KEYWORD_SCAN_LIMIT, type OrderRepositoryFilter } from '@/lib/orders/lis
 import type { LoanOrder, LoanOrderInput, LoanOrderItem } from '@/types/order'
 import { toRepositoryError } from '@/lib/invariant-error'
 
-const STATUSES = ['draft', 'submitted'] as const
+// WHY(cancelled、2026-09-08・E-056): 間違えた発注を取り消せるようにした。行は消さず状態で表す
+const STATUSES = ['draft', 'submitted', 'cancelled'] as const
 
 interface LoanOrderItemRow {
   id?: unknown
@@ -15,6 +16,9 @@ interface LoanOrderItemRow {
   quantity?: unknown
   unit_price?: unknown
   created_at?: unknown
+  // WHY(2026-09-08): 分割返却の残数を出すために、この明細へ紐付いた返却の数量を埋め込む。
+  //      取り消した返却は数えないので、親の状態も一緒に取る（E-056）
+  loan_return_items?: { quantity?: unknown; status?: unknown; loan_returns?: { status?: unknown } | null }[]
 }
 
 interface LoanOrderRow {
@@ -36,6 +40,16 @@ export function mapItem(row: LoanOrderItemRow): LoanOrderItem {
     quantity: asNumber(row.quantity),
     unitPrice: asNullableNumber(row.unit_price),
     createdAt: asString(row.created_at),
+    // 埋め込みが無い呼び出し（古い select）では 0 になる。残り = quantity - returnedQuantity
+    // WHY(cancelled を除く、E-056): 取り消した返却は残数に数えない。DB 側
+    //      （loan_outstanding_count・過剰返却トリガー）と `orders/repository.ts` も同じ条件。
+    //      **同じ問いの答えを 3 か所で揃える**（E-053 で 2 か所が食い違った）
+    // WHY(明細の取り消しも除く、2026-09-09): 回ごとの取り消し（親の status）と
+    //      品目ごとの取り消し（明細の status）の両方を除く。片方だけだと残数が食い違う
+    returnedQuantity: (row.loan_return_items ?? [])
+      .filter(r => asString(r.loan_returns?.status) !== 'cancelled')
+      .filter(r => asString(r.status) !== 'cancelled')
+      .reduce((n, r) => n + asNumber(r.quantity), 0),
   }
 }
 
@@ -51,7 +65,9 @@ export async function listLoanOrders(
 ): Promise<LoanOrder[]> {
   let query = db
     .from('loan_orders')
-    .select('*, loan_order_items(*)')
+    // WHY(2026-09-08): 返却フォームが明細ごとの残数を出すため、紐付いた返却の数量まで取る。
+    //      取り消した返却を除くので、親の状態（loan_returns.status）も取る（E-056）
+    .select('*, loan_order_items(*, loan_return_items(quantity, status, loan_returns(status)))')
     .eq('facility_id', facilityId)
     .order('created_at', { ascending: false })
 

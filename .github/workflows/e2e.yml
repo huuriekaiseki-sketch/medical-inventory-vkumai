@@ -37,9 +37,15 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      - name: Read pinned Supabase CLI version
+        id: supabase-cli
+        # WHY: 版の正本は .supabase-version の 1 か所。ここに数字を直接書くと 3 本の
+        #      ワークフローで別々にずれる（2026-09-08 に latest で開いていた穴と同型）。
+        run: echo "version=$(cat .supabase-version)" >> "$GITHUB_OUTPUT"
+
       - uses: supabase/setup-cli@v3
         with:
-          version: latest
+          version: ${{ steps.supabase-cli.outputs.version }}
 
       # WHY: e2e/env-guard.ts のデフォルト許可ホストは127.0.0.1/localhostのみ。
       #      本番Supabaseの接続情報がCIに一切渡らないよう、GitHub Secretsは使わず

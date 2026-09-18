@@ -11,7 +11,7 @@ type Props = {
 }
 
 const labelClass = 'text-xs font-semibold uppercase tracking-widest mb-1 block'
-const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
 const inputClass = 'rounded border px-3 py-2 text-sm'
 const inputStyle = { borderColor: '#072C2C33', color: '#072C2C' }
 
@@ -83,7 +83,7 @@ export function ProductSearchFilters({ keyword, isLoading, onKeywordChange, onCl
         クリア
       </button>
       {isLoading && (
-        <span className="text-xs" style={{ color: '#6B7280' }}>
+        <span className="text-xs" style={{ color: '#4B5563' }}>
           読み込み中...
         </span>
       )}

@@ -24,7 +24,7 @@ printf '{"type":"assistant","timestamp":"2026-09-05T00:00:00Z","message":{"conte
 fail=0
 ok() { echo "  OK: $1"; }
 ng() { echo "  NG: $1"; [ -n "${2:-}" ] && echo "      $2"; fail=1; }
-contains() { if printf '%s\n' "$1" | grep -qF -- "$2"; then ok "$3"; else ng "$3" "expected: $2 / actual: $1"; fi; }
+contains() { if grep -qF -- "$2" <<<"$1"; then ok "$3"; else ng "$3" "expected: $2 / actual: $1"; fi; }
 
 run_harvest() {
   # $@: 追加引数。stdout を OUT、stderr を ERR に入れる

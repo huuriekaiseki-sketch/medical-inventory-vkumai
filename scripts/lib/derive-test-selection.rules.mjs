@@ -63,6 +63,17 @@ export const RULES = [
   { key: 'dependency-audit', label: '依存監査（既知脆弱性）', timing: 'always', commands: ['npm audit --omit=dev --audit-level=high'] },
   { key: 'lockfile-integrity', label: 'ロックファイルの出所', timing: 'always', commands: ['bash scripts/check-lockfile-integrity.test.sh'] },
   { key: 'docs-integrity', label: 'docs 整合性', timing: 'always', commands: ['node scripts/lib/check-docs-integrity.mjs'] },
+  // WHY(毎回): merge=union の重複は「マージした PR」ではなく「次に表を触った PR」で表面化する。
+  //      触った人が犯人とは限らないので、変更時ではなく毎回回して早く落とす。
+  // WHY(毎回): ルールを外に出す判断はどの PR でも起こりうる。安いので毎回回す。
+  { key: 'rule-guard-coverage', label: 'ルールを守る検査の有無', timing: 'always', commands: ['node scripts/lib/check-rule-guard-coverage.mjs --verbose'] },
+  // WHY(毎回): 12 秒で終わる。検査の実効性は「検査を書いた PR」以外でも劣化しうる
+  //      （テスト側を緩めれば no-op でも通るようになる）ので、変更時ではなく毎回回す。
+  { key: 'rule-guard-effective', label: 'ルールを守る検査が効いているか', timing: 'always', commands: ['bash scripts/check-rule-guard-effective.test.sh'] },
+  // WHY(毎回): 状態が古くなるのは「その項目を実装した PR」ではなく、その後のどの PR でも起こる
+  //      （実装した本人がカタログを直し忘れる形）。安いので毎回見る。
+  { key: 'roadmap-staleness', label: 'ロードマップの状態の鮮度', timing: 'always', commands: ['node scripts/lib/check-roadmap-staleness.mjs --verbose'] },
+  { key: 'table-row-duplicates', label: '棚卸し表の行の重複', timing: 'always', commands: ['node scripts/lib/check-table-row-duplicates.mjs'] },
 
   // ---- 変更時 ----
   {
@@ -113,8 +124,10 @@ export const RULES = [
       why: highRiskHit(ctx) ? `auth / 認可 / RLS に関わるパスに触れた: ${ctx.route.matchedPaths.join(', ')}` : 'リスク申告 authz_change',
     }),
     notRequiredReason: 'auth / 認可 / RLS に関わるパスに触れていない',
-    // 2026-09-06: API Route 全メソッドの総当たりは E2E（P-017）が機械化。手動は weak 印と新しい攻撃ベクトルのみ
-    commands: ['npx playwright test e2e/api-cross-facility-attack.spec.ts', '(手動) 攻撃表で weak 印の route と新しい攻撃ベクトルを他施設ユーザーで直接呼び、03 欄に記録する'],
+    // 2026-09-06: API Route 全メソッドの総当たりは E2E（P-017）が機械化。
+    // 2026-09-09: weak（認可まで届かない攻撃）は 0 件になり、印は実測と突き合わせて検査される。
+    //             手動で残るのは「新しい攻撃ベクトルの探索」だけ
+    commands: ['npx playwright test e2e/api-cross-facility-attack.spec.ts', '(手動) 攻撃表に無い新しい攻撃ベクトルを他施設ユーザーで直接呼び、03 欄に記録する'],
   },
   {
     key: 'agents-baseline',
@@ -211,6 +224,21 @@ export const RULES = [
   },
   { key: 'schema-drift', label: 'スキーマドリフト検知', timing: 'milestone', event: '日次 cron（自動）' },
   {
+    key: 'flaky',
+    label: 'フレーキー検知',
+    timing: 'milestone',
+    event: '週次 cron（自動。日曜 20:00 UTC）。同時実行・冪等性の統合テストや検知スクリプト自体に触れた PR は手元で回す',
+    // 揺れやすい統合テスト（並列・同時送信）と検知の仕組み自体に触れた PR はローカル実行に昇格させる
+    trigger: ctx => {
+      const hits = anyPath(
+        ctx.files,
+        /^supabase\/__tests__\/integration\/[^/]*(concurrency|idempotency)[^/]*\.ts$|^scripts\/check-flaky-tests\.sh$|^scripts\/lib\/flaky-[^/]+\.(mjs|sh)$|^\.github\/workflows\/flaky-detection\.yml$/,
+      )
+      return { hit: hits.length > 0, why: `揺れやすいテストか検知の仕組みに触れた: ${hits.join(', ')}` }
+    },
+    commands: ['bash scripts/check-flaky-tests.sh --runs 3 --config vitest.integration.config.ts', 'bash scripts/check-flaky-tests.test.sh'],
+  },
+  {
     key: 'fault-injection-drill',
     label: 'fault injection 訓練（ゲート）',
     timing: 'milestone',
@@ -222,12 +250,20 @@ export const RULES = [
     key: 'fault-injection',
     label: '障害注入（外部依存停止）',
     timing: 'milestone',
-    status: 'not-ready',
     event: '依存 major 更新、外部公開前',
-    trigger: ctx => ({ hit: ctx.risks.includes('external_side_effect'), why: 'リスク申告 external_side_effect' }),
-    commands: ['(個別テスト) Supabase 停止・タイムアウト時に UI / API Route が失敗を返すことを Assert する'],
+    // 認可・認証・MFA の判定材料を取る箇所（fail-open 棚卸しの対象）に触れた PR は手元実行に昇格
+    trigger: ctx => {
+      const hits = anyPath(
+        ctx.files,
+        /^src\/proxy\.ts$|^src\/lib\/(admin-status|admin-auth)\.ts$|^src\/lib\/supabase\/require-[^/]+\.ts$|^src\/hooks\/useFacilityRole\.ts$|^src\/app\/(mfa-challenge|account\/mfa)\/|^docs\/agents\/fail-open-inventory\.md$/,
+      )
+      const hit = ctx.risks.includes('external_side_effect') || hits.length > 0
+      return { hit, why: ctx.risks.includes('external_side_effect') ? 'リスク申告 external_side_effect' : `認可・認証・MFA の判定材料を取る箇所に触れた: ${hits.join(', ')}` }
+    },
+    commands: ['bash scripts/check-fail-open.test.sh', 'npx vitest run src/__tests__/proxy.test.ts src/lib/supabase/__tests__ src/lib/__tests__/admin-status.test.ts'],
   },
   { key: 'runbook', label: '復旧手順（ランブック）', timing: 'milestone', event: '障害発生時、公開前' },
+  { key: 'scale-measurement', label: '規模の実測', timing: 'milestone', event: '索引・スキーマの変更、依存の major 更新、外部公開前' },
 ]
 
 // --risk で申告できるキー。test-matrix.md のトリガー列と対応

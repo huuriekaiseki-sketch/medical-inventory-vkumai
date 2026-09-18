@@ -26,6 +26,17 @@ function parseKind(value: string | null): OrderKind | null {
   return VALID_KINDS.includes(value as OrderKind) ? (value as OrderKind) : null
 }
 
+// WHY(2026-09-11): `Number(...)` をそのまま使うと `?offset=abc` で NaN になり、
+//      API へ "NaN" を送って 400（「offset は 0〜… の整数で指定してください」）になる。
+//      **サーバーは弾くので漏れはしない**（`api-pagination.ts` が `Number.isInteger` を見る）が、
+//      壊れたリンクやブックマークを踏んだ利用者には一覧が出ないだけの画面になる。
+//      入口で 0 に倒す。負数・小数も同じ扱い（どれも API では弾かれる値）。
+//      見つけたのは 2026-09-11、held-out の eval で Sweep が実コードを掃いたとき。
+function parseOffset(value: string | null): number {
+  const n = Number(value ?? '0')
+  return Number.isInteger(n) && n >= 0 ? n : 0
+}
+
 function OrdersPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -34,7 +45,7 @@ function OrdersPageInner() {
   const dateFrom = searchParams.get('dateFrom') ?? ''
   const dateTo = searchParams.get('dateTo') ?? ''
   const keyword = searchParams.get('keyword') ?? ''
-  const offset = Number(searchParams.get('offset') ?? '0')
+  const offset = parseOffset(searchParams.get('offset'))
 
   // WHY: /orders はグローバルナビからアクセスする横断ページで、/facilities/[id]/... のように
   // URLパスに施設IDを含まない。/api/facilities から取得した一覧から対象施設を選ぶ
@@ -160,7 +171,7 @@ function OrdersPageInner() {
         <div>
           <p
             className="text-xs font-semibold uppercase tracking-widest mb-1"
-            style={{ color: '#FF5F03', fontFamily: 'var(--font-oswald), sans-serif' }}
+            style={{ color: '#B03F00', fontFamily: 'var(--font-oswald), sans-serif' }}
           >
             Orders
           </p>
@@ -234,18 +245,30 @@ function OrdersPageInner() {
       )}
 
       {!error && ordersLoading && (
-        <p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>読み込み中...</p>
       )}
 
       {!error && !ordersLoading && items.length === 0 && (
-        <p className="text-sm" style={{ color: '#6B7280' }}>
+        <p className="text-sm" style={{ color: '#4B5563' }}>
           {hasFilter ? '条件に一致する発注がありません' : '発注履歴がありません'}
         </p>
       )}
 
       {!error && !ordersLoading && items.length > 0 && (
         <>
-          <OrderHistoryTable items={items} />
+          {/* WHY(E-056): 取り消しは施設 ID を要求するので、施設が選ばれているときだけ出す。
+              取り消した行は消さず「取り消し済」にして、その場で表示だけ差し替える */}
+          <OrderHistoryTable
+            items={items}
+            facilityId={facilityId ?? undefined}
+            onCancelled={(id) =>
+              setItems((prev) =>
+                prev.map((o) =>
+                  o.id === id ? { ...o, status: 'cancelled', unreturned: false } : o
+                )
+              )
+            }
+          />
           {/* WHY: APIは総件数を返さないため、返却件数がLIMIT未満なら「次へ」を無効化する
               （返却件数=LIMITのときのみ次ページが存在しうると判定する簡易実装） */}
           <div className="mt-4 flex items-center justify-between">
@@ -276,7 +299,7 @@ function OrdersPageInner() {
 
 export default function OrdersPage() {
   return (
-    <Suspense fallback={<p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>}>
+    <Suspense fallback={<p className="text-sm" style={{ color: '#4B5563' }}>読み込み中...</p>}>
       <OrdersPageInner />
     </Suspense>
   )

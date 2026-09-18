@@ -45,7 +45,7 @@ function matchesOrExpr(row: Record<string, unknown>, orExpr: string): boolean {
   })
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase のクエリビルダはメソッドチェーンで、実物の型（PostgrestFilterBuilder）はジェネリクスが深く、テスト用のモックでは再現できない。このモック関数の戻り値に限って any を使う
 function makeChainableQuery(result: { data: unknown; error: unknown }): any {
   let orExpr: string | undefined
   const builder: Record<string, unknown> = {

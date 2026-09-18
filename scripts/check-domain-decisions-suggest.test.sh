@@ -19,7 +19,7 @@ SCRIPT="$SCRIPT_DIR/check-domain-decisions-suggest.sh"
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then
+  if grep -qF -- "$needle" <<<"$haystack"; then
     echo "  OK: $label"
   else
     echo "  NG: $label"

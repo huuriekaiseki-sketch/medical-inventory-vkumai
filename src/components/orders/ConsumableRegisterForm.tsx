@@ -32,7 +32,7 @@ export function ConsumableRegisterForm({ facilityId, onRegistered }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   const labelClass = 'block text-xs font-semibold uppercase tracking-widest mb-1'
-  const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+  const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
   const inputStyle = { borderColor: '#E5E7EB' }
 
   const handleSubmit = async (e: React.FormEvent) => {

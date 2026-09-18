@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { GET, PUT, DELETE } from '../route'
+import { GET, PUT } from '../route'
 
 const mockGetUser = vi.fn()
 const mockResolveIsAdmin = vi.fn()
 const mockGetFacility = vi.fn()
 const mockUpdateFacility = vi.fn()
-const mockDeleteFacility = vi.fn()
 
 vi.mock('@/lib/supabase/server', () => ({
   createServerSupabase: async () => ({
@@ -20,7 +19,6 @@ vi.mock('@/lib/admin-status', () => ({
 vi.mock('@/lib/facilities/repository', () => ({
   getFacility: (...args: unknown[]) => mockGetFacility(...args),
   updateFacility: (...args: unknown[]) => mockUpdateFacility(...args),
-  deleteFacility: (...args: unknown[]) => mockDeleteFacility(...args),
 }))
 
 const context = { params: Promise.resolve({ id: 'f1' }) }
@@ -75,26 +73,17 @@ describe('PUT /api/facilities/[id]', () => {
   })
 })
 
-describe('DELETE /api/facilities/[id]', () => {
-  it('未認証の場合は401を返す', async () => {
-    unauthenticated()
-    const res = await DELETE(new Request('http://localhost') as never, context)
-    expect(res.status).toBe(401)
-    expect(mockDeleteFacility).not.toHaveBeenCalled()
-  })
-
-  it('認証済みで正常に削除できる', async () => {
-    authenticated()
-    mockDeleteFacility.mockResolvedValue(undefined)
-    const res = await DELETE(new Request('http://localhost') as never, context)
-    expect(res.status).toBe(200)
-  })
-
-  it('一般ユーザーの場合は403を返す', async () => {
-    authenticated()
-    mockResolveIsAdmin.mockResolvedValue(false)
-    const res = await DELETE(new Request('http://localhost') as never, context)
-    expect(res.status).toBe(403)
-    expect(mockDeleteFacility).not.toHaveBeenCalled()
+// WHY(2026-09-08・E-055): DELETE は**使えない道だった**ので消した。
+//      `facilities` には DELETE の RLS ポリシーが 1 つも無く、admin が叩いても 0 行になり、
+//      実在する施設に 404「施設が見つかりません」を返していた。
+//      ここは「戻ってきたら気づく」ための ratchet。**RLS のポリシーと一緒でなければ作らない。**
+//      作り直すときはこのテストを消し、DELETE の RLS ポリシーを足す migration と
+//      「誰が消せるか」の決定（docs/agents/design-questions.md）を同じ PR に入れること。
+// WHY(リポジトリ側をここで見ない): このファイルは `@/lib/facilities/repository` をモックしているので、
+//      ここから import しても本物の公開一覧は見えない。route の公開だけを見る。
+describe('DELETE /api/facilities/[id] は無い（E-055）', () => {
+  it('route が DELETE を公開していない', async () => {
+    const route = await import('../route')
+    expect(Object.keys(route).sort()).toEqual(['GET', 'PUT'])
   })
 })

@@ -8,15 +8,17 @@ import {
   deleteHospitalPrice,
   HOSPITAL_PRICE_CONFLICT_MESSAGE,
 } from '@/lib/hospital-prices/repository'
-import { apiError } from '@/lib/api-error'
-import type { HospitalPriceInput } from '@/types/hospitalPrice'
+import { authGuardError, apiError } from '@/lib/api-error'
+import { ClientVisibleError } from '@/lib/client-visible-error'
 import type { RouteContext } from '@/types/route'
+import { parseBody } from '@/lib/validation/parse-body'
+import { hospitalPriceInputSchema } from '@/lib/validation/schemas'
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params
   const db = await createServerSupabase()
   let user
-  try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+  try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
   const price = await getHospitalPrice(db, id)
   if (!price) {
     return NextResponse.json({ error: '病院別価格が見つかりません' }, { status: 404 })
@@ -31,22 +33,14 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PUT(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
-  let input: HospitalPriceInput
-  try {
-    input = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'リクエストが不正です' }, { status: 400 })
-  }
-
-  if (!input.distributorProductId || !input.facilityId ||
-      input.purchasePrice === undefined || input.deliveryPrice === undefined) {
-    return NextResponse.json({ error: '必須項目が未入力です' }, { status: 400 })
-  }
+  const parsed = await parseBody(request, hospitalPriceInputSchema)
+  if (!parsed.ok) return parsed.response
+  const input = parsed.data
 
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     const existing = await getHospitalPrice(db, id)
     if (!existing) {
       return NextResponse.json({ error: '価格情報が見つかりません' }, { status: 404 })
@@ -66,7 +60,15 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const price = await updateHospitalPrice(db, id, input)
     return NextResponse.json({ price })
   } catch (error) {
-    if (error instanceof Error) {
+    // WHY(2026-09-11): `Error` ではなく `ClientVisibleError` を見る。
+    //      ここは分岐の先で **error.message をそのまま利用者へ返す**ので、`Error` で受けると
+    //      DB の生エラーが偶然この文言を含んだときに素通りする道が残る。
+    //      翻訳済みだと分かっているもの（`client-visible-error.ts` のマーカー）だけを通す。
+    //      現実に起きる確率は低い（PostgreSQL のエラーは英語）が、**構造で閉じる**ほうを採る。
+    //      見つけたのは held-out の eval で Sweep がこの route を挙げたとき。
+    //      指摘そのもの（「生の message を返している」）は**この形では誤り**だったが、
+    //      判定が `instanceof Error` だったのは事実なので、そこだけ締めた。
+    if (error instanceof ClientVisibleError) {
       if (error.message.includes('病院別価格ID')) {
         return NextResponse.json({ error: '価格情報が見つかりません' }, { status: 404 })
       }
@@ -90,7 +92,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     const existing = await getHospitalPrice(db, id)
     if (!existing) {
       return NextResponse.json({ error: '病院別価格が見つかりません' }, { status: 404 })

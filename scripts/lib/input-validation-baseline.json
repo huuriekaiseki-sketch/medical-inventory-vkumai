@@ -1,0 +1,6 @@
+{
+  "_comment": "issue #757 の 20。本文（request.json()）を読むのに parseBody を通していない route の一覧。**2026-09-07 に 0 本になった。**この一覧は増やせない（scripts/check-input-validation-coverage.test.sh が MAX_PENDING で止める）。新しい route が本文を検査せずに読むと落ちる。どうしても移せない事情ができたときだけ、理由を具体的に書いて足す。",
+  "_ledger": "**これは本文（body）だけの台帳。ほかの借金と足し算しない。** クエリ文字列の台帳は `query-validation-baseline.json` で別物。こちらが 0 本でも、あちらが 0 本とは限らない（2026-09-09 にこの取り違えが起きたので書いた）。",
+  "_howto": "移し方: (1) schemas.ts にその route の本文のスキーマを足す（上限の数字は書かない。text-limits.ts の requiredText / optionalText を使う） (2) route で safeParse し、失敗したら firstIssueMessage で 400 (3) この一覧から行を消す (4) bash scripts/check-input-validation-coverage.test.sh",
+  "pending": []
+}

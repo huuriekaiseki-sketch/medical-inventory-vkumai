@@ -1,4 +1,4 @@
 {
-  "expectedFilePathContains": "eval_fixture_recall.sql",
+  "expectedFilePathContains": "shift_handovers.sql",
   "expectedKeywords": ["SECURITY DEFINER", "認可", "is_facility_member"]
 }

@@ -15,10 +15,40 @@ loadEnvConfig(process.cwd())
 assertTestSupabaseEnv()
 
 /**
+ * storageState の中の Supabase 認証 cookie から、そのセッションの持ち主のメールを取り出す。
+ *
+ * WHY(2026-09-09): 書き出した storageState が**頼んだ人のものとは限らない**ことがあった（下記）。
+ *      「サインインできた」ことは cookie の有無でしか見ておらず、**誰の cookie かを一度も見ていなかった**。
+ *      長い cookie は `sb-<ref>-auth-token.0` / `.1` と分割されるので、番号順に繋いでから読む。
+ */
+function readCookieUserEmail(cookies: { name: string; value: string }[]): string | null {
+  const chunks = cookies
+    .filter((c) => /^sb-.+-auth-token(\.\d+)?$/.test(c.name))
+    .sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true }))
+  if (chunks.length === 0) return null
+  const joined = chunks.map((c) => c.value).join('')
+  try {
+    const session = JSON.parse(Buffer.from(joined.replace(/^base64-/, ''), 'base64').toString())
+    return typeof session?.user?.email === 'string' ? session.user.email : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * 既存ユーザー（email_confirm済み）に対してマジックリンクでサインインし、
  * 認証済みのPlaywright storageStateを authFilePath に書き出す。
  * issue #321: 複数ユーザー分のstorageStateを生成する必要があるため、
  * generateAuthState（単一の固定テストユーザー用）から共通処理として切り出した。
+ *
+ * WHY(空のコンテキストから始める、2026-09-09): この関数は globalSetup からも **spec の中からも**
+ *      呼ばれる。spec の中から呼ぶと、`chromium.launch()` は Playwright テストランナーが
+ *      差し替えたものになり、**`playwright.config.ts` の `use.storageState`（共有のテストユーザー）が
+ *      新しいコンテキストに引き継がれる**。するとマジックリンクの着地が `/login` ではなく
+ *      保護ページになり、`/login` のハッシュ処理（setSession）が走らないまま、
+ *      **共有ユーザーの cookie がそのまま書き出される**（2026-09-09 実測。
+ *      MFA の spec が「新しく作った利用者」ではなく共有ユーザーとして動き、
+ *      共有ユーザーに MFA を付けてしまった）。空の storageState を明示して断つ。
  */
 export async function signInAndSaveStorageState(
   supabase: SupabaseClient,
@@ -48,7 +78,8 @@ export async function signInAndSaveStorageState(
   // （空stateだと後続テストが未認証のまま走り、原因が分かりにくいリダイレクト失敗として現れるため）
   const browser = await chromium.launch()
   try {
-    const page = await browser.newPage()
+    const context = await browser.newContext({ storageState: { cookies: [], origins: [] } })
+    const page = await context.newPage()
     await page.goto(data.properties.action_link)
 
     // マジックリンク検証後は /#access_token=... や /login#access_token=... など
@@ -60,7 +91,7 @@ export async function signInAndSaveStorageState(
     const deadline = Date.now() + 30_000
     let authenticated = false
     while (Date.now() < deadline) {
-      const cookies = await page.context().cookies()
+      const cookies = await context.cookies()
       if (cookies.some((c) => /^sb-.+-auth-token/.test(c.name))) {
         authenticated = true
         break
@@ -74,11 +105,48 @@ export async function signInAndSaveStorageState(
       )
     }
 
-    await page.context().storageState({ path: authFilePath })
+    // WHY(誰の cookie かを必ず確かめる、2026-09-09): cookie の**有無**だけを見ていたため、
+    //      別人のセッションが書き出されても気づけなかった。頼んだ人と違ったら、ここで止める。
+    const actual = readCookieUserEmail(await context.cookies())
+    if (actual?.toLowerCase() !== email.toLowerCase()) {
+      throw new Error(
+        `[E2E auth] 書き出そうとした storageState が別人のものです。` +
+          `頼んだ人=${email} / 実際=${actual ?? '(読み取れない)'}。` +
+          'テストの中からこの関数を呼ぶと use.storageState が引き継がれる問題（2026-09-09）を参照。'
+      )
+    }
+
+    await context.storageState({ path: authFilePath })
     console.log(`[E2E auth] 認証済みstorageStateを書き出しました: ${authFilePath}`)
   } finally {
     await browser.close()
   }
+}
+
+/**
+ * メールアドレスから利用者 ID を引く。**全ページを走査する。**
+ *
+ * WHY(2026-09-08): 以前は `listUsers()` を 1 回だけ呼んで find していた。
+ *      既定の `perPage` は **50** なので、手元の DB に利用者がたまると
+ *      **居るのに「見つかりません」で落ちる**（実測: 利用者 52 人・固定のテストユーザーは
+ *      最初の 50 人に入らず E2E の globalSetup ごと失敗した）。
+ *      消せないデータ・たまるデータで既定のページ長に当たって静かに壊れる形は
+ *      E-022（拒否記録）・E-023（監査ログ）・E-061（a11y の件数）と同じで、**4 回目**。
+ *      「既定のページ長に依存して探さない」が共通の教訓。
+ */
+async function findUserIdByEmail(
+  supabase: SupabaseClient,
+  email: string
+): Promise<string | null> {
+  const perPage = 1000
+  for (let page = 1; page <= 50; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage })
+    if (error) throw new Error(`テストユーザー検索失敗: ${error.message}`)
+    const hit = data.users.find((u) => u.email === email)
+    if (hit) return hit.id
+    if (data.users.length < perPage) return null
+  }
+  return null
 }
 
 export async function generateAuthState() {
@@ -111,9 +179,7 @@ export async function generateAuthState() {
   let testUserId = createdUser?.user?.id
   if (!testUserId) {
     // 既存ユーザーの場合はcreateUserがuserを返さないため、一覧から拾う
-    const { data: userList, error: listError } = await supabase.auth.admin.listUsers()
-    if (listError) throw new Error(`テストユーザー検索失敗: ${listError.message}`)
-    testUserId = userList.users.find((u) => u.email === testEmail)?.id
+    testUserId = (await findUserIdByEmail(supabase, testEmail)) ?? undefined
     if (!testUserId) throw new Error(`テストユーザーが見つかりません: ${testEmail}`)
   }
 

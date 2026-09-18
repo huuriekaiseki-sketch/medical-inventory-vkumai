@@ -36,10 +36,6 @@
       "Bash(supabase migration new *)",
       "Bash(supabase db diff*)",
       "Bash(supabase status*)",
-      "Bash(npx supabase migration list*)",
-      "Bash(npx supabase migration new *)",
-      "Bash(npx supabase db diff*)",
-      "Bash(npx supabase status*)",
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",
@@ -95,6 +91,23 @@
       "Bash(bash scripts/check-blocked-issues-staleness.test.sh*)",
       "Bash(scripts/check-fault-injection-drill-staleness.sh *)",
       "Bash(bash scripts/check-fault-injection-drill-staleness.test.sh*)",
+      "Bash(scripts/record-test-failure.sh *)",
+      "Bash(scripts/check-escape-ledger.sh *)",
+      "Bash(bash scripts/check-escape-ledger.test.sh*)",
+      "Bash(bash scripts/triage-escapes.sh*)",
+      "Bash(scripts/check-full-run-before-finish.sh *)",
+      "Bash(bash scripts/check-full-run-before-finish.test.sh*)",
+      "Bash(scripts/check-integration-freshness.sh *)",
+      "Bash(scripts/check-rls-mutation-freshness.sh *)",
+      "Bash(scripts/check-mutation-freshness.sh *)",
+      "Bash(bash scripts/check-mutation-freshness.test.sh*)",
+      "Bash(bash scripts/run-mutation-tests.sh*)",
+      "Bash(bash scripts/check-rls-mutation-freshness.test.sh*)",
+      "Bash(bash scripts/check-integration-freshness.test.sh*)",
+      "Bash(bash scripts/run-integration-tests.sh*)",
+      "Bash(scripts/check-e2e-freshness.sh *)",
+      "Bash(bash scripts/check-e2e-freshness.test.sh*)",
+      "Bash(bash scripts/run-e2e-tests.sh*)",
       "Bash(scripts/check-claude-md-size.sh *)",
       "Bash(bash scripts/check-claude-md-size.test.sh*)",
       "Bash(scripts/check-stale-worktrees.sh*)",
@@ -119,12 +132,6 @@
       "Bash(supabase functions deploy*)",
       "Bash(supabase secrets*)",
       "Bash(supabase link*)",
-      "Bash(npx supabase db push*)",
-      "Bash(npx supabase db reset*)",
-      "Bash(npx supabase db execute*)",
-      "Bash(npx supabase functions deploy*)",
-      "Bash(npx supabase secrets*)",
-      "Bash(npx supabase link*)",
       "Bash(gh pr create*)",
       "Bash(gh pr merge*)",
       "Bash(gh pr edit*)",
@@ -137,6 +144,7 @@
       "Bash(gh repo edit*)"
     ],
     "deny": [
+      "Bash(npx supabase*)",
       "Bash(rm -rf *)",
       "Bash(git push --force*)",
       "Bash(git push -f*)",
@@ -231,7 +239,47 @@
           },
           {
             "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-dependency-update-staleness.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-access-review-staleness.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-subagent-model-force.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-plugin-integrity.sh",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-hook-dependencies.sh",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-integration-freshness.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-e2e-freshness.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-rls-mutation-freshness.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-mutation-freshness.sh",
             "timeout": 10
           }
         ]
@@ -251,58 +299,113 @@
       {
         "matcher": "Bash|Write|Edit|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-skip-marker-write.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-skip-marker-write.sh",
+            "timeout": 5
+          }
         ]
       },
       {
         "matcher": "Bash|Write|Edit|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-dependency-change.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-dependency-change.sh",
+            "timeout": 5
+          }
         ]
       },
       {
         "matcher": "Write|Edit|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-run-manifest-presence.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-run-manifest-presence.sh",
+            "timeout": 5
+          }
         ]
       },
       {
         "matcher": "Bash|mcp__.*execute_sql",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-direct-ddl-execution.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-direct-ddl-execution.sh",
+            "timeout": 5
+          }
         ]
       },
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/check-readonly-bash.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-readonly-bash.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/record-test-failure.sh",
+            "timeout": 10
+          }
         ]
       }
     ],
     "SubagentStart": [
       {
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/log-subagent-hook-skeleton.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/log-subagent-hook-skeleton.sh",
+            "timeout": 5
+          }
         ]
       }
     ],
     "SubagentStop": [
       {
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/log-subagent-hook-skeleton.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/log-subagent-hook-skeleton.sh",
+            "timeout": 5
+          }
         ]
       }
     ],
     "InstructionsLoaded": [
       {
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/scripts/log-instructions-loaded.sh", "timeout": 5 }
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/log-instructions-loaded.sh",
+            "timeout": 5
+          }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-full-run-before-finish.sh",
+            "timeout": 20,
+            "statusMessage": "全件を通したかを確認中(C-041)..."
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/check-escape-ledger.sh",
+            "timeout": 10
+          },
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-domain-decisions-suggest.sh",

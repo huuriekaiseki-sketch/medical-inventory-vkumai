@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 // WHY: created_at は timestamptz(UTC)だが、日付入力は施設の運用時間帯(JST)基準。
 //      UTC固定で扱うと日付境界が最大9時間ずれるため、+09:00を明示してJSTの一日として解釈する。
 //      この変換ロジックが case-orders/consumable-orders/loan-orders/loan-returns/orders の
@@ -31,4 +33,35 @@ export function isValidDateString(value: string): boolean {
   const [year, month, day] = value.split('-').map(Number)
   const date = new Date(Date.UTC(year, month - 1, day))
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+
+// WHY(2026-09-09、判定を 1 か所にする): `date_from` / `date_to` の検証が
+//      `/api/admin/audit` と `/api/admin/reports` に**同じ 3 つの条件・同じ文言で 2 回**書かれていた。
+//      いまは食い違っていないが、片方だけ直せば食い違う形（E-053 の予備軍）。
+//      クエリ文字列の唯一の入口（`parseQuery`）へ移すのに合わせて、判定もここへ寄せる。
+
+/** 日付範囲のクエリの形。ほかの項目と一緒に `z.object({ ...dateRangeShape, ... })` で使う */
+export const dateRangeShape = {
+  date_from: z.string().optional(),
+  date_to: z.string().optional(),
+} as const
+
+/**
+ * 日付範囲の中身を検査する。`dateRangeShape` を含む `z.object` に掛ける。
+ *
+ * WHY(else-if で順に見る): `parseQuery` は**最初の 1 件**を利用者に返す。
+ *      形式の誤りと前後関係の誤りを同時に出すと、どれを直せばよいか分からなくなるので、
+ *      移す前の route と同じ優先順（date_from の形式 → date_to の形式 → 前後関係）を保つ。
+ */
+export function refineDateRange<T extends z.ZodObject<z.ZodRawShape>>(schema: T) {
+  return schema.superRefine((value, ctx) => {
+    const { date_from: from, date_to: to } = value as { date_from?: string; date_to?: string }
+    if (from && !isValidDateString(from)) {
+      ctx.addIssue({ code: 'custom', message: 'date_from は YYYY-MM-DD 形式で指定してください' })
+    } else if (to && !isValidDateString(to)) {
+      ctx.addIssue({ code: 'custom', message: 'date_to は YYYY-MM-DD 形式で指定してください' })
+    } else if (from && to && from > to) {
+      ctx.addIssue({ code: 'custom', message: 'date_from は date_to 以前の日付を指定してください' })
+    }
+  })
 }

@@ -1,0 +1,9 @@
+{
+  "expectNoFinding": true,
+  "expectedFilePathContains": "ward_supplies.sql",
+  "expectedKeywords": [
+    "SECURITY DEFINER",
+    "認可",
+    "is_facility_member"
+  ]
+}

@@ -3,26 +3,28 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import { listLoanReturns, createLoanReturn } from '@/lib/loan-returns/repository'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
-import { ClientVisibleError } from '@/lib/client-visible-error'
-import { parsePagination } from '@/lib/api-pagination'
-import { validateClientRequestId } from '@/lib/client-request-id'
+import { apiError, authGuardError, repositoryError, toClientErrorMessage } from '@/lib/api-error'
+import { parseQuery } from '@/lib/validation/parse-query'
+import { orderListQuerySchema } from '@/lib/orders/list-filter'
 import type { LoanReturnInput } from '@/types/order'
+import { parseBody } from '@/lib/validation/parse-body'
+import { loanReturnInputSchema } from '@/lib/validation/schemas'
 
 export async function GET(request: NextRequest) {
   const db = await createServerSupabase()
   let user
-  try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
-  const facilityId = request.nextUrl.searchParams.get('facility_id')
+  try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
+  // WHY(2026-09-09): クエリを読むのは parseQuery だけ。4 つの一覧 route が同じ形を
+  //      別々に書いていたので、形（orderListQuerySchema）も 1 か所へ寄せた
+  const parsed = parseQuery(request, orderListQuerySchema)
+  if (!parsed.ok) return parsed.response
+  const { facility_id: facilityId, limit, offset } = parsed.data
   try {
-    await requireFacilityAccess(db, user, facilityId)
+    await requireFacilityAccess(db, user, facilityId ?? null)
   } catch (e) {
     if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('facility_id は必須です', 400)
     return apiError('アクセス権限がありません', 403)
   }
-  const pagination = parsePagination(request.nextUrl.searchParams)
-  if (!pagination.ok) return pagination.response
-  const { limit, offset } = pagination
   try {
     const returns = await listLoanReturns(db, facilityId!, limit, offset)
     return NextResponse.json({ returns })
@@ -36,29 +38,18 @@ export async function POST(request: NextRequest) {
   //      loan_returns.loan_order_id（issue #20 Set A）へ紐付けないと「未返却」バッジが
   //      新規返却でも永久に解消されないバグになる（レビュー指摘）。bodyから別フィールドとして
   //      受け取り、createLoanReturn の第4引数としてそのまま渡す
-  let body: { facilityId?: string; loanOrderId?: string } & Partial<LoanReturnInput>
-  try {
-    body = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-  if (!body.facilityId) return apiError('施設IDは必須です', 400)
-  if (!body.returnDatetime) return apiError('返却日時は必須です', 400)
-  if (body.items && body.items.some((item: { jan?: string }) => !item.jan?.trim())) {
-    return apiError('JANは必須です', 400)
-  }
-  const clientRequestId = validateClientRequestId(body.clientRequestId)
-  if (!clientRequestId.ok) return apiError(clientRequestId.message, 400)
-
+  const parsed = await parseBody(request, loanReturnInputSchema)
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
   const input: LoanReturnInput = {
     returnDatetime: body.returnDatetime,
-    items: body.items ?? [],
-    clientRequestId: clientRequestId.value,
+    items: body.items,
+    clientRequestId: body.clientRequestId,
   }
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     try {
       await requireFacilityAccess(db, user, body.facilityId)
     } catch (e) {
@@ -68,12 +59,9 @@ export async function POST(request: NextRequest) {
     const loanReturn = await createLoanReturn(db, body.facilityId, input, body.loanOrderId)
     return NextResponse.json({ loanReturn }, { status: 201 })
   } catch (error) {
-    // WHY: ClientVisibleError は repository層が「クライアントに見せてよいと翻訳済み」と
-    //      保証したエラー（loanOrderIdが自施設に存在しない場合の LOAN_ORDER_NOT_FOUND_ERROR、
-    //      および今回追加されたUNIQUE制約違反(23505)時の重複返却エラーの両方を含む）。
-    //      consumables/route.ts と同じ経路に統一し、個別の文字列比較を廃止する
-    //      （issue #675 Part2 セットB）
-    if (error instanceof ClientVisibleError) return apiError(error.message, 400)
-    return apiError(toClientErrorMessage(error, '返却に失敗しました'))
+    // WHY: ClientVisibleError（loanOrderId が自施設に無い・重複返却・未登録の JAN・
+    //      業務ルール違反）は利用者の直せる間違いなので 400。判定は repositoryError に集約した
+    //      （2026-09-08。他の 3 つの発注 route が 500 のままだったため）
+    return repositoryError(error, '返却に失敗しました')
   }
 }

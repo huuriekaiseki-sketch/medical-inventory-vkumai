@@ -13,7 +13,7 @@ SCRIPT="$SCRIPT_DIR/check-run-manifest-presence.sh"
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then
+  if grep -qF -- "$needle" <<<"$haystack"; then
     echo "  OK: $label"
   else
     echo "  NG: $label"
@@ -168,6 +168,27 @@ set +e
 OUT="$(printf '%s' "$input" | env -u AIDD_CONFIG_FILE bash "$SCRIPT")"
 set -e
 assert_contains "$OUT" '"permissionDecision": "allow"' "cwd 直下の設定の pathPrefixes が効く"
+rm -f "$NO_MANIFEST_REPO/aidd.config.json"
+
+echo "=== scenario 7g: 設定の値に正規表現の特殊文字があっても壊れない ==="
+# WHY(2026-09-10 に実際に踏んだ): 設定の値を正規表現へ変えるときのエスケープ（jq の `esc`）が
+#      壊れていた。jq の gsub は置換文字列を**キャプチャのオブジェクト**を `.` として評価するため、
+#      `"\\" + .` は「string と object は足せない」で **jq 自体が異常終了**する。
+#      特殊文字を含む値が 1 つも無いうちは gsub が一致せず置換が評価されないので、
+#      **設定に `src/lib/api-error.ts` を足した瞬間まで一度も現れなかった**。
+#      壊れると extra が空になり、判定は既定値だけに縮む（＝黙って守りが薄くなる。fail-open）。
+printf '{"risk":{"domainKeywords":[],"pathPrefixes":["src/lib/api-error.ts","src/lib/x+y/"]}}\n' > "$NO_MANIFEST_REPO/aidd.config.json"
+input="$(jq -n --arg cwd "$NO_MANIFEST_REPO" '{tool_name: "Write", tool_input: {file_path: "src/lib/api-error.ts", content: "x"}, cwd: $cwd}')"
+set +e
+OUT="$(printf '%s' "$input" | env -u AIDD_CONFIG_FILE bash "$SCRIPT")"
+set -e
+assert_contains "$OUT" '"permissionDecision": "allow"' "特殊文字を含む設定でも判定できる（設定が丸ごと落ちない）"
+# エスケープが効いていること: `.` が「任意の1文字」のままだと api-errorXts も当たってしまう
+input="$(jq -n --arg cwd "$NO_MANIFEST_REPO" '{tool_name: "Write", tool_input: {file_path: "src/lib/api-errorXts", content: "x"}, cwd: $cwd}')"
+set +e
+OUT="$(printf '%s' "$input" | env -u AIDD_CONFIG_FILE bash "$SCRIPT")"
+set -e
+assert_empty "$OUT" "ドットが任意の1文字として効いていない（エスケープが実際に働いている）"
 rm -f "$NO_MANIFEST_REPO/aidd.config.json"
 
 echo "=== scenario 8: Bashツールは対象外(matcherに含まれない) → 何も出力しない ==="

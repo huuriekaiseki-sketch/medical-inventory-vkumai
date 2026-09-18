@@ -65,7 +65,7 @@ export function LoanOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
   }
 
   const labelClass = 'block text-xs font-semibold uppercase tracking-widest mb-1'
-  const labelStyle = { color: '#6B7280', fontFamily: 'var(--font-oswald), sans-serif' }
+  const labelStyle = { color: '#4B5563', fontFamily: 'var(--font-oswald), sans-serif' }
   const inputClass = 'border rounded px-3 py-2 text-sm w-full'
   const inputStyle = { borderColor: '#E5E7EB' }
 
@@ -74,7 +74,7 @@ export function LoanOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
       <div className="bg-white rounded shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6" style={{ border: '1px solid #E5E7EB' }}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold" role="heading" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif' }}>短貸発注</h2>
-          <button type="button" onClick={handleClose} style={{ color: '#6B7280' }}>✕</button>
+          <button type="button" onClick={handleClose} style={{ color: '#4B5563' }}>✕</button>
         </div>
         {error && <div className="mb-4 px-4 py-2 rounded text-sm text-white" style={{ backgroundColor: '#DC2626' }}>{error}</div>}
         <form onSubmit={handleSubmit}>
@@ -89,9 +89,9 @@ export function LoanOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
           <div className="mb-6">
             <p className={labelClass} style={labelStyle}>発注物品</p>
             <div className="flex gap-2 mb-1 px-1">
-              <span className="text-xs font-semibold w-28" style={{ color: '#6B7280' }}>JAN（任意）</span>
-              <span className="text-xs font-semibold flex-1" style={{ color: '#6B7280' }}>品名</span>
-              <span className="text-xs font-semibold w-16" style={{ color: '#6B7280' }}>数量</span>
+              <span className="text-xs font-semibold w-28" style={{ color: '#4B5563' }}>JAN（任意）</span>
+              <span className="text-xs font-semibold flex-1" style={{ color: '#4B5563' }}>品名</span>
+              <span className="text-xs font-semibold w-16" style={{ color: '#4B5563' }}>数量</span>
             </div>
             {items.map((row, i) => (
               <div key={i} className="flex gap-2 mb-2 items-center">
@@ -104,7 +104,7 @@ export function LoanOrderModal({ facilityId, isOpen, onClose, onSuccess }: Props
             <button type="button" onClick={addRow} className="text-sm px-3 py-1 rounded border" style={{ borderColor: '#072C2C', color: '#072C2C' }}>+ 行を追加</button>
           </div>
           <div className="flex justify-end gap-3">
-            <button type="button" onClick={handleClose} className="px-4 py-2 text-sm rounded border" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>キャンセル</button>
+            <button type="button" onClick={handleClose} className="px-4 py-2 text-sm rounded border" style={{ borderColor: '#E5E7EB', color: '#4B5563' }}>キャンセル</button>
             <button type="submit" disabled={submitting} className="px-4 py-2 text-sm rounded text-white" style={{ backgroundColor: '#2563EB' }}>
               {submitting ? '送信中...' : '発注する'}
             </button>

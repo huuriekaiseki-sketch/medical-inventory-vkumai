@@ -45,6 +45,53 @@ export function createServiceRoleClient(): SupabaseClient {
   })
 }
 
+/**
+ * 後片付けの削除。**失敗したら投げる。**
+ *
+ * WHY(2026-09-09、実測して分かった): これまで後片付けは
+ * `await serviceClient.from(t).delete().eq(...)` と書いて **戻り値の error を誰も見ていなかった**。
+ * `price_histories.distributor_product_id` の FK は `ON DELETE` 指定なしで入っているので、
+ * 履歴が 1 行でもあると `products` の削除が 23503 で失敗する。それが黙って捨てられ、
+ * **緑の全件実行 1 回につき業務表に 41 行が残り続けていた**（165 → 206 → 247 で再現）。
+ *
+ * 「消したつもり」を「消えた」と読むのは C-020 の型。**消えなかったら落とす。**
+ * 残った行は E-022 / E-023（PostgREST の 1,000 行上限で全件を取る形のテストが
+ * 古い順に切り落とされる）へ育つので、静かに積むより赤くする方がよい。
+ *
+ * 0 行に当たった場合はエラーにならない（テスト自身が先に消していることがあるため）。
+ */
+export async function deleteWhereIn(
+  client: SupabaseClient,
+  table: string,
+  column: string,
+  values: Array<string | undefined | null>
+): Promise<void> {
+  const list = values.filter((v): v is string => Boolean(v))
+  if (list.length === 0) return
+  const { error } = await client.from(table).delete().in(column, list)
+  if (error) {
+    throw new Error(
+      `[seed-rls-idor] ${table} の後片付けに失敗しました: ${error.message}` +
+        ` (${column} in ${list.join(', ')})`
+    )
+  }
+}
+
+/** 後片付けの削除（パターン一致）。**失敗したら投げる**。理由は deleteWhereIn と同じ */
+async function deleteWhereLike(
+  client: SupabaseClient,
+  table: string,
+  column: string,
+  pattern: string
+): Promise<void> {
+  const { error } = await client.from(table).delete().like(column, pattern)
+  if (error) {
+    throw new Error(
+      `[seed-rls-idor] ${table} の後片付けに失敗しました: ${error.message} (${column} like ${pattern})`
+    )
+  }
+}
+
 async function createSignedInClient(
   serviceClient: SupabaseClient,
   email: string
@@ -167,8 +214,7 @@ export async function cleanupFacilitiesAndUsers(
 
   await serviceClient.auth.admin.deleteUser(userA.id)
   await serviceClient.auth.admin.deleteUser(userB.id)
-  await serviceClient.from('facilities').delete().eq('id', facilityA.id)
-  await serviceClient.from('facilities').delete().eq('id', facilityB.id)
+  await deleteWhereIn(serviceClient, 'facilities', 'id', [facilityA.id, facilityB.id])
 }
 
 /** シードしたユーザー・施設を後始末する（service role clientで直接削除） */
@@ -522,7 +568,7 @@ export async function cleanupOrderItemsRlsIdorFixtures(
   // facilities の削除で親（case_orders等）が消え、明細もCASCADEで消える。
   // products は施設に紐づかないので個別に消す（明細が消えた後でないとFKで残る）
   await cleanupFacilitiesAndUsers(fixtures.userA, fixtures.userB, fixtures.facilityA, fixtures.facilityB)
-  await serviceClient.from('products').delete().eq('id', fixtures.productId)
+  await deleteWhereIn(serviceClient, 'products', 'id', [fixtures.productId])
 }
 
 export interface SeedPriceHistoriesFixtures extends SeedHospitalPricesRlsIdorFixtures {
@@ -591,13 +637,9 @@ export async function seedPriceHistoriesFixtures(): Promise<SeedPriceHistoriesFi
 export async function cleanupPriceHistoriesFixtures(
   fixtures: SeedPriceHistoriesFixtures
 ): Promise<void> {
-  const serviceClient = createServiceRoleClient()
-  // price_histories は hospital_prices/distributor_products へのCASCADEを持たない
-  // （FKは NOT VALID で ON DELETE 指定なし）ため、先に自分で消す
-  await serviceClient
-    .from('price_histories')
-    .delete()
-    .eq('distributor_product_id', fixtures.distributorProduct.id)
+  // WHY(履歴の削除をここに書かない、2026-09-09): 履歴を消していたのは**この関数だけ**で、
+  //      同じ種をまく他のファイル（hospital-prices / price-histories 以外）は漏らしていた。
+  //      基底の cleanupHospitalPricesRlsIdorFixtures 側へ移し、種をまいた全員が同じ後始末をする。
   await cleanupHospitalPricesRlsIdorFixtures(fixtures)
 }
 
@@ -686,15 +728,18 @@ export async function cleanupAdminBoundaryFixtures(
   const serviceClient = createServiceRoleClient()
   await serviceClient.auth.admin.deleteUser(fixtures.adminUser.id)
   await serviceClient.auth.admin.deleteUser(fixtures.staffUser.id)
-  await serviceClient.from('facilities').delete().eq('id', fixtures.facility.id)
+  await deleteWhereIn(serviceClient, 'facilities', 'id', [fixtures.facility.id])
+  // WHY(履歴を自分で消さない、2026-09-10): `price_histories` の GRANT は SELECT のみで、
+  //      service_role でも消せない（実測: permission denied）。親の削除に合わせて消すのは
+  //      DB のトリガーの仕事（20260910000000）。ここは親を消すだけでよい。
   // products の削除で distributor_products / product_compatibilities も CASCADE で消える
-  await serviceClient
-    .from('products')
-    .delete()
-    .in('id', [fixtures.existing.productId, fixtures.productId2])
-  await serviceClient.from('categories').delete().eq('id', fixtures.existing.categoryId)
+  await deleteWhereIn(serviceClient, 'products', 'id', [
+    fixtures.existing.productId,
+    fixtures.productId2,
+  ])
+  await deleteWhereIn(serviceClient, 'categories', 'id', [fixtures.existing.categoryId])
   // adminが対照テストで作った行（名前に runId を含む）も後始末する
-  await serviceClient.from('categories').delete().like('name', `%${fixtures.runId}%`)
+  await deleteWhereLike(serviceClient, 'categories', 'name', `%${fixtures.runId}%`)
 }
 
 export interface SeedProductCompatibilitiesFixtures {
@@ -764,14 +809,14 @@ export async function cleanupProductCompatibilitiesFixtures(
 ): Promise<void> {
   const serviceClient = createServiceRoleClient()
   // products / categories の削除で product_compatibilities は CASCADE で消える
-  await serviceClient
-    .from('products')
-    .delete()
-    .in('id', [fixtures.productSmall.id, fixtures.productLarge.id])
-  await serviceClient
-    .from('categories')
-    .delete()
-    .in('id', [fixtures.categoryA.id, fixtures.categoryB.id])
+  await deleteWhereIn(serviceClient, 'products', 'id', [
+    fixtures.productSmall.id,
+    fixtures.productLarge.id,
+  ])
+  await deleteWhereIn(serviceClient, 'categories', 'id', [
+    fixtures.categoryA.id,
+    fixtures.categoryB.id,
+  ])
 }
 
 export interface SeedHospitalPricesRlsIdorFixtures {
@@ -898,6 +943,9 @@ export async function cleanupHospitalPricesRlsIdorFixtures(
   // products / categories は施設に紐づかないため個別に消す（products の削除で
   // distributor_products も CASCADE で消える）
   await cleanupFacilitiesAndUsers(fixtures.userA, fixtures.userB, fixtures.facilityA, fixtures.facilityB)
-  await serviceClient.from('products').delete().eq('id', fixtures.masters.productId)
-  await serviceClient.from('categories').delete().eq('id', fixtures.masters.categoryId)
+  // WHY(履歴を自分で消さない、2026-09-10): `price_histories` の GRANT は SELECT のみで、
+  //      service_role でも消せない（実測: permission denied）。親の削除に合わせて消すのは
+  //      DB のトリガーの仕事（20260910000000）。ここは親を消すだけでよい。
+  await deleteWhereIn(serviceClient, 'products', 'id', [fixtures.masters.productId])
+  await deleteWhereIn(serviceClient, 'categories', 'id', [fixtures.masters.categoryId])
 }

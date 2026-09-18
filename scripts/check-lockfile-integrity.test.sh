@@ -30,22 +30,22 @@ check() {
   # 1. lock の全 resolved が registry.npmjs.org 由来（link・bundled は resolved を持たないので対象外）
   hits="$(jq -r '.packages | to_entries[] | select(.value.resolved != null) | select(.value.resolved | startswith("https://registry.npmjs.org/") | not) | "\(.key) -> \(.value.resolved)"' "$lock")"
   if [ -n "$hits" ]; then
-    printf '%s\n' "$hits" | sed 's/^/    resolved: /'
-    violations=$((violations + $(printf '%s\n' "$hits" | grep -c .)))
+    sed 's/^/    resolved: /' <<<"$hits"
+    violations=$((violations + $(grep -c . <<<"$hits")))
   fi
 
   # 2. resolved を持つ項目は sha512 の integrity を持つ
   hits="$(jq -r '.packages | to_entries[] | select(.value.resolved != null) | select((.value.integrity // "") | startswith("sha512-") | not) | .key' "$lock")"
   if [ -n "$hits" ]; then
-    printf '%s\n' "$hits" | sed 's/^/    integrity: /'
-    violations=$((violations + $(printf '%s\n' "$hits" | grep -c .)))
+    sed 's/^/    integrity: /' <<<"$hits"
+    violations=$((violations + $(grep -c . <<<"$hits")))
   fi
 
   # 3. package.json の dependencies / devDependencies / optionalDependencies にレジストリ外の指定が無い
   hits="$(jq -r '[.dependencies, .devDependencies, .optionalDependencies] | map(select(. != null)) | add // {} | to_entries[] | select(.value | test("^(git\\+|git:|github:|gitlab:|bitbucket:|file:|link:|https?://|[a-z0-9-]+/[a-z0-9-]+$)")) | "\(.key): \(.value)"' "$pkg")"
   if [ -n "$hits" ]; then
-    printf '%s\n' "$hits" | sed 's/^/    spec: /'
-    violations=$((violations + $(printf '%s\n' "$hits" | grep -c .)))
+    sed 's/^/    spec: /' <<<"$hits"
+    violations=$((violations + $(grep -c . <<<"$hits")))
   fi
 
   # 4. lock の項目数が 0 でない（パーサ自壊の検知）
@@ -60,11 +60,11 @@ check() {
 
 echo "=== scenario 1: 実態の package-lock.json / package.json に違反が無い ==="
 RESULT="$(check "$LOCK" "$PKG")"
-printf '%s\n' "$RESULT" | grep -v '^violations=' || true
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=0" ]; then
+grep -v '^violations=' <<<"$RESULT" || true
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=0" ]; then
   assert_ok "違反なし（$(jq -r '.packages | length' "$LOCK") 項目）"
 else
-  assert_fail "違反あり" "$(printf '%s\n' "$RESULT" | tail -n1)"
+  assert_fail "違反あり" "$(tail -n1 <<<"$RESULT")"
 fi
 
 echo "=== scenario 2: fixture で違反を検知できる（RED 方向の自己検証） ==="
@@ -94,15 +94,15 @@ RESULT="$(check "$WORK_DIR/lock.json" "$WORK_DIR/package.json")"
 # 期待: resolved 3（evil-mirror・from-git・linked の ../linked）+ integrity 4（from-git・no-integrity・sha1-only・linked）
 #       + spec 4（github:・x/y・file:・https）= 11
 EXPECTED=11
-if [ "$(printf '%s\n' "$RESULT" | tail -n1)" = "violations=$EXPECTED" ]; then
+if [ "$(tail -n1 <<<"$RESULT")" = "violations=$EXPECTED" ]; then
   assert_ok "違反 ${EXPECTED} 件をちょうど検知"
 else
-  assert_fail "違反件数が期待（$EXPECTED）と異なる" "$RESULT"
+  assert_fail "違反件数が期待（${EXPECTED}）と異なる" "$RESULT"
 fi
 for needle in 'resolved: node_modules/evil-mirror' 'resolved: node_modules/from-git' 'integrity: node_modules/no-integrity' 'integrity: node_modules/sha1-only' 'spec: from-github' 'spec: shorthand' 'spec: local' 'spec: from-url'; do
-  if printf '%s\n' "$RESULT" | grep -qF "$needle"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
+  if grep -qF "$needle" <<<"$RESULT"; then assert_ok "検知: $needle"; else assert_fail "検知できない: $needle"; fi
 done
-if printf '%s\n' "$RESULT" | grep -q 'node_modules/good'; then assert_fail "正常項目 good を誤検知"; else assert_ok "正常項目 good は誤検知しない"; fi
+if grep -q 'node_modules/good' <<<"$RESULT"; then assert_fail "正常項目 good を誤検知"; else assert_ok "正常項目 good は誤検知しない"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

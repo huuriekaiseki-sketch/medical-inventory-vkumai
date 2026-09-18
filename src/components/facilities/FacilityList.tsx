@@ -12,7 +12,7 @@ export function FacilityList({ facilities }: FacilityListProps) {
   if (facilities.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-sm font-medium" style={{ color: '#6B7280' }}>施設が登録されていません</p>
+        <p className="text-sm font-medium" style={{ color: '#4B5563' }}>施設が登録されていません</p>
       </div>
     )
   }
@@ -46,7 +46,7 @@ export function FacilityList({ facilities }: FacilityListProps) {
                   {facility.name}
                 </Link>
               </td>
-              <td className="px-6 py-4 text-sm" style={{ color: '#6B7280', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
+              <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                 {formatJstDate(facility.createdAt)}
               </td>
             </tr>

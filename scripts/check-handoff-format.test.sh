@@ -31,7 +31,7 @@ assert_empty() {
 }
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then
+  if grep -qF -- "$needle" <<<"$haystack"; then
     echo "  OK: $label"
   else
     echo "  NG: $label"
@@ -202,7 +202,7 @@ assert_contains "$OUT" "4値" "4値への言及がある"
 assert_contains "$OUT" "型検査（状態" "4値でない行を種別名で名指しする"
 assert_contains "$OUT" "lint（➖ なのに理由が無い）" "理由の無い ➖ を名指しする"
 assert_contains "$OUT" "build（⬜ なのに理由が無い）" "理由の無い ⬜ を名指しする"
-if printf '%s' "$OUT" | grep -qF 'unit（'; then
+if grep -qF 'unit（' <<<"$OUT"; then
   echo "  NG: 正常行 unit が名指しされている"; fail=1
 else
   echo "  OK: 正常行は名指しされない"
@@ -264,7 +264,7 @@ add_pr_response 204 'no headings either'
 run_hook
 assert_contains "$OUT" "PR #202" "1 本目の問題 PR を名指し"
 assert_contains "$OUT" "PR #204" "3 本目の問題 PR を名指し"
-if printf '%s' "$OUT" | grep -qF 'PR #203'; then
+if grep -qF 'PR #203' <<<"$OUT"; then
   echo "  NG: 正常な PR #203 が名指しされている"; fail=1
 else
   echo "  OK: 正常な PR #203 は名指しされない"

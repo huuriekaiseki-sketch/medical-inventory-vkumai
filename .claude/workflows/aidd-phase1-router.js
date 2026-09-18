@@ -137,18 +137,30 @@ function classifyRisk(taskDescription, changedFiles = [], riskConfig) {
 // （decisions/aidd-pipeline.md「なぜchangedFiles空時のキーワード一致フォールバックを人間確認に変えたか」
 // 参照）。changedFilesが1件以上ある場合（パスベース判定が効く場合）はこの分岐を通らず、
 // 従来通りmatchedPathsのみでisHighRiskが決まる（issue #456の修正は変更しない）。
-// 戻り値: { route: 'meta'|'confirm'|'deep'|'light', isHighRisk, isMetaChange, matchedKeywords, matchedPaths }
+// 【issue R02】changedFilesが1件以上あるとき、判定はmatchedPathsだけを見る（issue #456）。
+// このため「認証と施設分離のルールを変更する」という説明で src/lib/admin-status.ts や
+// src/lib/security/*.ts だけを変えると、説明はドメイン語に当たるのにパスは1件も当たらず、
+// 認可の本体を触っているのに軽量ルートへ落ちていた。
+// 説明とパスが食い違っているのは「どちらかが間違っている」ということなので、
+// 自動でdeepへ振る（=issue #456の過剰調査が戻る）のでも軽量で流すのでもなく、
+// confirmルートで人間に確認させる。あわせて認可を担う実モジュールは
+// aidd.config.json の pathPrefixes へ載せた（stryker.config.json の mutate と
+// router-risk-authz-coverage.test.js で突き合わせる）。
+// 戻り値: { route: 'meta'|'confirm'|'deep'|'light', isHighRisk, isMetaChange, matchedKeywords, matchedPaths, confirmReason }
 function classifyRoute(taskDescription, changedFiles = [], riskConfig) {
   const config = resolveRiskConfig(riskConfig)
   if (isMetaPipelineOnlyChange(changedFiles, config)) {
-    return { route: 'meta', isHighRisk: false, isMetaChange: true, matchedKeywords: [], matchedPaths: [] }
+    return { route: 'meta', isHighRisk: false, isMetaChange: true, matchedKeywords: [], matchedPaths: [], confirmReason: null }
   }
   const { isHighRisk, matchedKeywords, matchedPaths } = classifyRisk(taskDescription, changedFiles, config)
   const hasChangedFiles = (changedFiles ?? []).length > 0
   if (!hasChangedFiles && matchedKeywords.length > 0) {
-    return { route: 'confirm', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths }
+    return { route: 'confirm', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths, confirmReason: 'no-changed-files' }
   }
-  return { route: isHighRisk ? 'deep' : 'light', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths }
+  if (hasChangedFiles && !isHighRisk && matchedKeywords.length > 0) {
+    return { route: 'confirm', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths, confirmReason: 'description-path-mismatch' }
+  }
+  return { route: isHighRisk ? 'deep' : 'light', isHighRisk, isMetaChange: false, matchedKeywords, matchedPaths, confirmReason: null }
 }
 
 // Workflowツール実行系のargsがverbatimでなく文字列化されて渡ってくる既知の不具合への回避策。
@@ -179,7 +191,13 @@ const LOCAL_RISK_CONFIG = {
     'inventory', '在庫',
     'rls', 'policy', 'ポリシー',
   ],
-  pathPrefixes: ['supabase/migrations/', 'src/lib/supabase/'],
+  // 認可の判断が書かれている場所（stryker.config.json の mutate と同じ集合を覆う。issue R02）
+  pathPrefixes: [
+    'supabase/migrations/', 'src/lib/supabase/',
+    'src/lib/security/', 'src/lib/audit/', 'src/lib/admin-', 'src/app/api/admin/',
+    'src/lib/api-error.ts', 'src/lib/api-pagination.ts',
+    'src/lib/invariant-error.ts', 'src/lib/log-safe.ts',
+  ],
   domainKeywords: ['auth', 'facility', 'tenant', 'organization', 'inventory', 'rls', 'policy'],
 }
 // @aidd-local-config:end
@@ -187,7 +205,7 @@ const LOCAL_RISK_CONFIG = {
 // 汎用既定値 ← LOCAL_RISK_CONFIG ← args.riskConfig の順に「足す」（消せない）。
 const riskConfig = resolveRiskConfig(parsedArgs?.riskConfig, resolveRiskConfig(LOCAL_RISK_CONFIG))
 
-const { route, isHighRisk, isMetaChange, matchedKeywords, matchedPaths } = classifyRoute(taskDescription, changedFiles, riskConfig)
+const { route, isHighRisk, isMetaChange, matchedKeywords, matchedPaths, confirmReason } = classifyRoute(taskDescription, changedFiles, riskConfig)
 
 // issue #457: メタ改修（.claude/workflows/・.claude/agents/・docs/agents/配下のみの変更）は
 // TRI/RISK判定そのものを迂回し、4軸Sweep（aidd-phase1）も深掘り調査（aidd-1-1-deep-task）も
@@ -220,17 +238,32 @@ if (route === 'meta') {
 // （数十エージェント・数百万トークン規模）を無人で自動起動せず、workflow()を一切呼ばずに
 // 判定保留の結果を返す。呼び出し側（Claude Code）はこの結果を見て、人間に確認してから
 // aidd-1-1-deep-task/aidd-phase1のどちらを明示的に呼び出すか判断すること。
+// issue R02: 変更ファイルは分かっているのに高リスクパスが1件も無く、説明文だけが
+// ドメイン語に当たる場合も同じ扱いにする。「認可を触る」と書いてあるのに認可のファイルが
+// 1つも挙がっていないなら、説明かファイル一覧のどちらかが間違っている。
+// 認可の本体（src/lib/security/・src/lib/admin-*・src/app/api/admin/ 等）が
+// 軽量ルートへ落ちていた実例があるため、静かに流さず人間に確認させる。
 if (route === 'confirm') {
-  log(`changedFiles未確定でキーワードのみ一致（${matchedKeywords.join(', ')}）→ 深掘りルートへの自動振り分けを保留し、人間の確認を求める`)
+  const mismatch = confirmReason === 'description-path-mismatch'
+  log(
+    mismatch
+      ? `説明とファイルが食い違う（説明の一致: ${matchedKeywords.join(', ')} / 高リスクパス: なし・変更ファイル: ${changedFiles.join(', ')}）→ 自動振り分けを保留し、人間の確認を求める`
+      : `changedFiles未確定でキーワードのみ一致（${matchedKeywords.join(', ')}）→ 深掘りルートへの自動振り分けを保留し、人間の確認を求める`
+  )
   return {
     route: 'aidd-phase1-needs-confirmation',
     matchedKeywords,
     matchedPaths,
     isMetaChange,
+    confirmReason,
     result: {
       needsConfirmation: true,
-      reason: `changedFilesが空(未指定)の状態で、taskDescription中のキーワード一致（${matchedKeywords.join('、')}）のみでTRI/RISK該当と判定されました。changedFilesが空になるのはPhase1調査の通常の呼び出し方であり、キーワード一致は「〜には触れない」等の否定文脈を区別できません。深掘り調査（aidd-1-1-deep-task）は数十エージェント・数百万トークン規模のコストがかかるため、実際に高リスクドメインへ触れる変更なのか人間に確認してから起動してください。`,
-      suggestion: '対象タスクが実際にauth/facility/tenant/organization/inventory/RLS/policy等のドメインに触れるか確認し、触れる場合はWorkflow(aidd-1-1-deep-task)、触れない場合はWorkflow(aidd-phase1)を明示的に呼び出してください。',
+      reason: mismatch
+        ? `taskDescriptionはドメイン語（${matchedKeywords.join('、')}）に一致していますが、changedFiles（${changedFiles.join('、')}）には高リスクと判定されるパスが1件もありません。説明が正しければ認可の実ファイルが一覧から漏れており、一覧が正しければ説明が実態と合っていません。どちらの場合も軽量ルートで流すべきではないため、人間の確認を求めます。`
+        : `changedFilesが空(未指定)の状態で、taskDescription中のキーワード一致（${matchedKeywords.join('、')}）のみでTRI/RISK該当と判定されました。changedFilesが空になるのはPhase1調査の通常の呼び出し方であり、キーワード一致は「〜には触れない」等の否定文脈を区別できません。深掘り調査（aidd-1-1-deep-task）は数十エージェント・数百万トークン規模のコストがかかるため、実際に高リスクドメインへ触れる変更なのか人間に確認してから起動してください。`,
+      suggestion: mismatch
+        ? 'changedFilesに認可を担うファイル（src/lib/supabase/・src/lib/security/・src/lib/admin-*・src/app/api/admin/・supabase/migrations/ 等）が漏れていないか確認してください。触れるならWorkflow(aidd-1-1-deep-task)、本当に触れないなら説明文を実態に合わせた上でWorkflow(aidd-phase1)を明示的に呼び出してください。'
+        : '対象タスクが実際にauth/facility/tenant/organization/inventory/RLS/policy等のドメインに触れるか確認し、触れる場合はWorkflow(aidd-1-1-deep-task)、触れない場合はWorkflow(aidd-phase1)を明示的に呼び出してください。',
       stats: {
         phase: 'phase1-needs-confirmation',
         agents: 0,

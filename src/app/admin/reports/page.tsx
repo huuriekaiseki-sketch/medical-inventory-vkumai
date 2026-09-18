@@ -63,7 +63,7 @@ function ReportsPageInner() {
       <div className="mb-8 border-b pb-4" style={{ borderColor: '#072C2C33' }}>
         <p
           className="text-xs font-semibold uppercase tracking-widest mb-1"
-          style={{ color: '#FF5F03', fontFamily: 'var(--font-oswald), sans-serif' }}
+          style={{ color: '#B03F00', fontFamily: 'var(--font-oswald), sans-serif' }}
         >
           Reports
         </p>
@@ -88,13 +88,13 @@ function ReportsPageInner() {
       )}
 
       {!error && !hasFilter && (
-        <p className="text-sm" style={{ color: '#6B7280' }}>
+        <p className="text-sm" style={{ color: '#4B5563' }}>
           期間を指定して「集計する」を押してください
         </p>
       )}
 
       {!error && hasFilter && loading && (
-        <p className="text-sm" style={{ color: '#6B7280' }}>集計中...</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>集計中...</p>
       )}
 
       {!error && hasFilter && !loading && <ReportTable rows={rows} />}
@@ -104,7 +104,7 @@ function ReportsPageInner() {
 
 export default function ReportsPage() {
   return (
-    <Suspense fallback={<p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>}>
+    <Suspense fallback={<p className="text-sm" style={{ color: '#4B5563' }}>読み込み中...</p>}>
       <ReportsPageInner />
     </Suspense>
   )

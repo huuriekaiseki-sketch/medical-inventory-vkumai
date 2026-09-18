@@ -1,0 +1,79 @@
+#!/usr/bin/env node
+// ゲートのプロンプト（deny-by-default の門）の「版」を 1 つのハッシュにする。
+//
+// WHY(2026-09-11): fault injection 訓練は「`aidd-phase2.js` の Spec Check / Manifest Check
+//      関連のプロンプトを変更したとき」に回す決まりだが、**回したかどうかを誰も見ていなかった**
+//      （docs/agents/undetectable-rules-inventory.md の第 3 層）。
+//      既にある `check-fault-injection-drill-staleness.sh` は**日付（四半期）しか見ていない**。
+//      「変わったのに測っていない」を見るには版が要る。
+//
+//      ファイル全体のハッシュにしないのは、`aidd-phase2.js` が別の理由でよく変わるため
+//      （2026-09-10 の 164 行の変更でも**プロンプトは一字も動いていなかった**と実測した）。
+//      門の文言だけを取り出して数える。
+//
+// 使い方: node scripts/lib/gate-prompt-hash.mjs [--root DIR]
+// 出力:   12 桁の 16 進（標準出力に 1 行）
+// 終了コード: 0 = 出せた / 1 = 走査が壊れている（マーカー不在・重複・元ファイル無し） /
+//             2 = この導入先はこの仕組みを持たない（aidd.config.json に設定が無い）
+//
+// 限界: 見るのは**文言**だけ。文言と判定表（lib/manifest-check.js）の意味が合っているかは見ない。
+import { readFileSync, existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { extractTemplateLiteralContaining } from '../../.claude/workflows/lib/prompts/extract-template-literal.js'
+import { writeLine } from './stdout-sync.mjs'
+
+const args = process.argv.slice(2)
+const rootArg = args.indexOf('--root')
+const ENGINE_DIR = path.dirname(fileURLToPath(import.meta.url))
+const root =
+  rootArg >= 0 && args[rootArg + 1]
+    ? args[rootArg + 1]
+    : process.env.CLAUDE_PROJECT_DIR ?? path.resolve(ENGINE_DIR, '../..')
+
+const configPath = path.join(root, 'aidd.config.json')
+if (!existsSync(configPath)) process.exit(2)
+
+let config
+try {
+  config = JSON.parse(readFileSync(configPath, 'utf8'))
+} catch (e) {
+  console.error(`gate-prompt-hash: aidd.config.json を読めない: ${e.message}`)
+  process.exit(1)
+}
+
+const drill = config.faultInjectionDrill
+if (!drill?.promptSource || !Array.isArray(drill.gateMarkers) || drill.gateMarkers.length === 0) {
+  process.exit(2)
+}
+
+const sourcePath = path.join(root, drill.promptSource)
+if (!existsSync(sourcePath)) {
+  console.error(`gate-prompt-hash: 元ファイルが無い: ${drill.promptSource}`)
+  process.exit(1)
+}
+const source = readFileSync(sourcePath, 'utf8')
+
+const parts = []
+for (const marker of drill.gateMarkers) {
+  // WHY(C-040): マーカーが 2 つのリテラルに当たると**別の門を数えて**しまう。
+  //      「取れた」が「正しいものを取れた」を意味するように、一意であることを先に見る。
+  const occurrences = source.split(marker).length - 1
+  if (occurrences === 0) {
+    console.error(`gate-prompt-hash: マーカーが見つからない: ${marker}`)
+    process.exit(1)
+  }
+  if (occurrences > 1) {
+    console.error(`gate-prompt-hash: マーカーが ${occurrences} 回出る（一意でない）: ${marker}`)
+    process.exit(1)
+  }
+  try {
+    parts.push(extractTemplateLiteralContaining(source, marker))
+  } catch (e) {
+    console.error(`gate-prompt-hash: プロンプトを取り出せない: ${e.message}`)
+    process.exit(1)
+  }
+}
+
+writeLine(createHash('sha256').update(parts.join('\u0000')).digest('hex').slice(0, 12))

@@ -1,0 +1,162 @@
+{
+  "_comment": "issue #757 の 7 の続き。**認可の本体は RLS ポリシーにあるのに、そこが測れていなかった。** 2026-09-07 に TypeScript 層のテストの効き目を測ったら 62% だった（補強後 76%）。同じ計測を RLS に対して行う。ポリシーを 1 つ壊して、対応するテストが本当に落ちるかを実測する。落ちなければ、そのテストは守っていない。",
+  "_howto": "bash scripts/check-rls-mutation.sh で回す。実 DB が要る（supabase start 済み）。1 件あたり migration 追加 → db push --local → 該当テスト → db reset の 1 巡で、10 件で 10 分ほど。結果は docs/agents/rls-mutation.md に残す。",
+  "_design": "restore は db reset（migration ファイルから作り直す）で行う。元のポリシー定義を手で書き写して戻す方式にすると、その写し自体がズレの発生源になる（2026-09-07 の Codex 指摘と同じ理由）。",
+  "mutants": [
+    {
+      "id": "RM-001",
+      "breaks": "施設スコープの読み取り（case_orders）から施設判定を外し、認証済みなら誰でも読めるようにする",
+      "sql": "DROP POLICY IF EXISTS \"facility_member_or_admin\" ON case_orders;\nCREATE POLICY \"facility_member_or_admin\" ON case_orders\n  FOR ALL TO authenticated\n  USING (true)\n  WITH CHECK (true);",
+      "expect": "supabase/__tests__/integration/case-orders-rls-idor.integration.test.ts",
+      "promise": "P-010"
+    },
+    {
+      "id": "RM-002",
+      "breaks": "施設スコープの書き込み（case_orders）から aal2 の要求を外す",
+      "sql": "DROP POLICY IF EXISTS \"facility_writer_or_admin\" ON case_orders;\nCREATE POLICY \"facility_writer_or_admin\" ON case_orders\n  FOR ALL TO authenticated\n  USING (is_facility_writer(facility_id) OR is_admin())\n  WITH CHECK (is_facility_writer(facility_id) OR is_admin());",
+      "expect": "supabase/__tests__/integration/require-aal2-in-facility-writer-rls.integration.test.ts",
+      "promise": "P-031",
+      "note": "2026-09-07 の初回計測で生き残り、直接書き込みのテストを足して倒した。**2026-09-10 にまた生き残った**——2026-09-09 に直接 INSERT を権限ごと剥がしたので、そのテストは権限の層で止まるようになり、ポリシーを壊しても気づかなくなっていた（C-023 の逆向き。E-066）。取り消し（UPDATE）の aal2 テストを 4 表すべてへ広げて倒した。測る先も P-030 のファイルから P-031 のファイルへ移した"
+    },
+    {
+      "id": "RM-003",
+      "breaks": "施設スコープの書き込み（hospital_prices）から書き手判定を外し、閲覧者も書けるようにする",
+      "sql": "DROP POLICY IF EXISTS \"facility_writer_or_admin\" ON hospital_prices;\nCREATE POLICY \"facility_writer_or_admin\" ON hospital_prices\n  FOR ALL TO authenticated\n  USING (is_facility_member(facility_id) OR is_admin())\n  WITH CHECK (is_facility_member(facility_id) OR is_admin());",
+      "expect": "supabase/__tests__/integration/rls-mutation-gaps.integration.test.ts",
+      "promise": "P-020",
+      "note": "2026-09-07 の初回計測で生き残った。専用のテストを足して倒した"
+    },
+    {
+      "id": "RM-004",
+      "breaks": "明細（case_order_items）の親経由の施設判定を外す",
+      "sql": "DROP POLICY IF EXISTS \"facility_member_or_admin\" ON case_order_items;\nCREATE POLICY \"facility_member_or_admin\" ON case_order_items\n  FOR ALL TO authenticated\n  USING (true)\n  WITH CHECK (true);",
+      "expect": "supabase/__tests__/integration/order-items-rls-idor.integration.test.ts",
+      "promise": "P-013"
+    },
+    {
+      "id": "RM-005",
+      "breaks": "マスタ（products）の書き込みから admin 判定を外し、誰でも書けるようにする",
+      "sql": "DROP POLICY IF EXISTS \"products_write\" ON products;\nCREATE POLICY \"products_write\" ON products\n  FOR ALL TO authenticated\n  USING (true)\n  WITH CHECK (true);",
+      "expect": "supabase/__tests__/integration/master-tables-admin-boundary.integration.test.ts",
+      "promise": "P-021"
+    },
+    {
+      "id": "RM-006",
+      "breaks": "施設一覧（facilities）の作成から admin 判定を外す",
+      "sql": "DROP POLICY IF EXISTS \"admin_insert\" ON facilities;\nCREATE POLICY \"admin_insert\" ON facilities\n  FOR INSERT TO authenticated\n  WITH CHECK (true);",
+      "expect": "supabase/__tests__/integration/rls-mutation-gaps.integration.test.ts",
+      "promise": "P-021",
+      "note": "2026-09-07 の初回計測で生き残った。専用のテストを足して倒した"
+    },
+    {
+      "id": "RM-007",
+      "breaks": "監査ログ（audit_log）を誰でも読めるようにする",
+      "sql": "DROP POLICY IF EXISTS \"audit_log_select\" ON audit_log;\nCREATE POLICY \"audit_log_select\" ON audit_log\n  FOR SELECT TO authenticated\n  USING (true);",
+      "expect": "supabase/__tests__/integration/audit-log-rls-idor.integration.test.ts",
+      "promise": "P-062"
+    },
+    {
+      "id": "RM-008",
+      "breaks": "拒否の記録（access_denials）を誰でも読めるようにする",
+      "sql": "DROP POLICY IF EXISTS \"access_denials_select\" ON access_denials;\nCREATE POLICY \"access_denials_select\" ON access_denials\n  FOR SELECT TO authenticated\n  USING (true);",
+      "expect": "supabase/__tests__/integration/access-denials-rls-idor.integration.test.ts",
+      "promise": "P-063"
+    },
+    {
+      "id": "RM-009",
+      "breaks": "価格履歴（price_histories）の直接 INSERT を許す",
+      "sql": "DROP POLICY IF EXISTS \"price_histories_no_insert\" ON price_histories;\nCREATE POLICY \"price_histories_allow_insert\" ON price_histories\n  FOR INSERT TO authenticated\n  WITH CHECK (true);\n-- WHY(GRANT も渡す): price_histories は GRANT SELECT だけで INSERT の GRANT が無い。\n--      ポリシーだけ緩めても GRANT が先に拒否するので、変異が**何も変えない**（等価変異）。\nGRANT INSERT ON price_histories TO authenticated;\n-- 新しく渡した権限は PostgREST のスキーマキャッシュに載るまで API 層に効かない（RM-010 と同じ）\nNOTIFY pgrst, 'reload schema';",
+      "expect": "supabase/__tests__/integration/price-histories-rls-idor.integration.test.ts",
+      "promise": "P-051",
+      "note": "2026-09-07 の 2 回目の計測で生き残った。**変異が自分の宣言を実装できていなかった**（ポリシーだけ緩めても GRANT が先に拒否するので何も変わらない等価変異）。GRANT INSERT も渡す形に直して実効化した。**守っているのがポリシーなのか GRANT なのかを取り違えていた例**で、テスト側も 42501 を期待していたため、両方が同じ思い込みに乗っていた"
+    },
+    {
+      "id": "RM-010",
+      "breaks": "回数のカウンタ（rate_limit_counters）を client から読めるようにする",
+      "sql": "GRANT SELECT ON rate_limit_counters TO authenticated;\nCREATE POLICY \"leak\" ON rate_limit_counters\n  FOR SELECT TO authenticated\n  USING (true);\n-- WHY: 新しく GRANT した表は PostgREST のスキーマキャッシュに載っていないため、\n--      再読み込みしないと API 層では見えず、変異が効かない（2026-09-07 実測）\nNOTIFY pgrst, 'reload schema';",
+      "expect": "supabase/__tests__/integration/rls-mutation-gaps.integration.test.ts",
+      "promise": "P-064",
+      "note": "2026-09-07 の初回計測で生き残った。専用のテストを足して倒した"
+    },
+    {
+      "id": "RM-011",
+      "breaks": "特権操作の記録（privileged_operations）の読み取りから aal2 の要求を外し、パスワードだけの admin でも読めるようにする",
+      "sql": "DROP POLICY IF EXISTS \"privileged_operations_select\" ON privileged_operations;\nCREATE POLICY \"privileged_operations_select\" ON privileged_operations\n  FOR SELECT TO authenticated\n  USING (is_admin());",
+      "expect": "supabase/__tests__/integration/privileged-operations-rls-idor.integration.test.ts",
+      "promise": "P-066",
+      "note": "2026-09-07 に表を追加したので変異も足した（rls-mutation.md の更新の引き金「RLS ポリシーを足したり変えたりしたとき」）。この表は招待先のメールを持つので、読み手の条件が緩むと PII が広がる"
+    },
+    {
+      "id": "RM-012",
+      "breaks": "拒否の記録（access_denials）の読み取りから aal2 の要求だけを外す（admin 判定は残す）",
+      "sql": "DROP POLICY IF EXISTS \"access_denials_select\" ON access_denials;\nCREATE POLICY \"access_denials_select\" ON access_denials\n  FOR SELECT TO authenticated\n  USING (is_admin());",
+      "expect": "supabase/__tests__/integration/access-denials-rls-idor.integration.test.ts",
+      "promise": "P-063",
+      "note": "RM-008 は is_admin() を丸ごと外す変異で、**aal2 だけを外す形は測っていなかった**。RM-011 で同じ穴が見つかったので同型のポリシー全部に変異を足した（2026-09-07）。初回は生き残った"
+    },
+    {
+      "id": "RM-013",
+      "breaks": "所属と役割の変更（user_facilities）から aal2 の要求だけを外す（admin 判定は残す）",
+      "sql": "DROP POLICY IF EXISTS \"admin_write\" ON user_facilities;\nCREATE POLICY \"admin_write\" ON user_facilities\n  FOR ALL TO authenticated\n  USING (is_admin())\n  WITH CHECK (is_admin());",
+      "expect": "supabase/__tests__/integration/permission-change-authz.integration.test.ts",
+      "promise": "P-035",
+      "note": "同上。**E-033（パスワードだけ奪われた admin が共犯者を昇格できた事故）を塞いだ本体**なので、ここが緩むと同じ事故に戻る。初回は生き残った（この migration の存在理由そのものが測れていなかった）"
+    },
+    {
+      "id": "RM-014",
+      "breaks": "マスタ（products）の書き込みから aal2 の要求だけを外す（admin 判定は残す）",
+      "sql": "DROP POLICY IF EXISTS \"products_write\" ON products;\nCREATE POLICY \"products_write\" ON products\n  FOR ALL TO authenticated\n  USING (is_admin())\n  WITH CHECK (is_admin());",
+      "expect": "supabase/__tests__/integration/blast-radius.integration.test.ts",
+      "promise": "P-033",
+      "note": "同上。RM-005 は admin 判定を外す変異で、aal2 だけを外す形は測っていなかった。初回から倒せていた"
+    },
+    {
+      "id": "RM-015",
+      "breaks": "返却が残っている短貸発注を取り消せなくする番人（トリガー）を外す",
+      "sql": "DROP TRIGGER IF EXISTS loan_orders_block_cancel_with_returns ON loan_orders;",
+      "expect": "supabase/__tests__/integration/loan-order-cancel-boundary.integration.test.ts",
+      "promise": "P-050",
+      "note": "2026-09-09 に人が決めた業務規則（I-022）の本体。ポリシーではなくトリガーだが、**認可と同じで「壊して落ちるか」でしか効き目は測れない**ので同じ登録簿に置く。取り消しは終端で戻せないため、ここが緩むと「物が動いた事実がある発注を無かったことにする」が黙って通る"
+    },
+    {
+      "id": "RM-016",
+      "breaks": "消耗品発注 RPC が、共有の参照先検証（assert_facility_owns）を呼ぶのをやめる",
+      "sql": "-- WHY(前提を先に確かめる): 取り除く対象がもう無いのに「壊したつもり」で通る余地を消す。\nDO $chk$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM pg_proc WHERE proname = 'create_consumable_order_atomic' AND prosrc LIKE '%assert_facility_owns%'\n  ) THEN\n    RAISE EXCEPTION 'RM-016 の前提が崩れている';\n  END IF;\nEND $chk$;\n\nCREATE OR REPLACE FUNCTION create_consumable_order_atomic(\n  p_facility_id UUID,\n  p_items JSONB,\n  p_client_request_id UUID DEFAULT NULL\n)\nRETURNS JSONB\nLANGUAGE plpgsql\nSECURITY DEFINER\nSET search_path = ''\nAS $$\nDECLARE\n  v_order public.consumable_orders%ROWTYPE;\n  v_items JSONB;\n  v_replayed BOOLEAN := FALSE;\nBEGIN\n  IF NOT public.is_facility_writer(p_facility_id) THEN\n    RAISE EXCEPTION 'forbidden: not a member of this facility';\n  END IF;\n  IF NOT public.has_aal2() THEN\n    RAISE EXCEPTION 'forbidden: aal2 required';\n  END IF;\n\n  -- ここにあった共有関数の呼び出しを外すのがこの変異\n\n  IF p_client_request_id IS NOT NULL THEN\n    SELECT * INTO v_order FROM public.consumable_orders\n    WHERE facility_id = p_facility_id AND client_request_id = p_client_request_id;\n    v_replayed := FOUND;\n  END IF;\n\n  IF NOT v_replayed THEN\n    BEGIN\n      INSERT INTO public.consumable_orders (facility_id, client_request_id, status)\n      VALUES (p_facility_id, p_client_request_id, 'submitted')\n      RETURNING * INTO v_order;\n    EXCEPTION WHEN unique_violation THEN\n      SELECT * INTO v_order FROM public.consumable_orders\n      WHERE facility_id = p_facility_id AND client_request_id = p_client_request_id;\n      IF NOT FOUND THEN\n        RAISE;\n      END IF;\n      v_replayed := TRUE;\n    END;\n  END IF;\n\n  IF NOT v_replayed THEN\n    INSERT INTO public.consumable_order_items (consumable_order_id, consumable_id, quantity, unit_price)\n    SELECT\n      v_order.id,\n      (elem->>'consumable_id')::UUID,\n      COALESCE((elem->>'quantity')::INTEGER, 1),\n      (\n        SELECT public.resolve_jan_unit_price(c.jan, p_facility_id)\n        FROM public.consumables c\n        WHERE c.id = (elem->>'consumable_id')::UUID\n      )\n    FROM jsonb_array_elements(COALESCE(p_items, '[]'::JSONB)) AS elem;\n  END IF;\n\n  SELECT COALESCE(jsonb_agg(to_jsonb(i) ORDER BY i.created_at), '[]'::JSONB)\n  INTO v_items\n  FROM public.consumable_order_items i\n  WHERE i.consumable_order_id = v_order.id;\n\n  RETURN to_jsonb(v_order) || jsonb_build_object('items', v_items, 'replayed', v_replayed);\nEND;\n$$;",
+      "expect": "supabase/__tests__/integration/consumable-order-items-boundary.integration.test.ts",
+      "promise": "P-013",
+      "note": "2026-09-09 に実測で見つけた穴（I-035）。当初は検証を RPC 内に直接書いていたが、同日に共有関数へ移したので、変異も**呼び出しを外す**形に置き換えた。これが測るのは「**その RPC が共有関数を呼んでいるか**」。共有関数そのものが効いているかは RM-018 が測る（2 つで対になる）"
+    },
+    {
+      "id": "RM-017",
+      "breaks": "返却 RPC が、header の発注 ID について共有の参照先検証を呼ぶのをやめる",
+      "sql": "-- WHY(前提を先に確かめる): 取り除く対象がもう無いのに「壊したつもり」で通る余地を消す。\nDO $chk$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM pg_proc WHERE proname = 'create_loan_return_atomic' AND prosrc LIKE '%assert_facility_owns%'\n  ) THEN\n    RAISE EXCEPTION 'RM-017 の前提が崩れている';\n  END IF;\nEND $chk$;\n\nCREATE OR REPLACE FUNCTION create_loan_return_atomic(\n  p_header JSONB,\n  p_items JSONB\n)\nRETURNS JSONB\nLANGUAGE plpgsql\nSECURITY DEFINER\nSET search_path = ''\nAS $$\nDECLARE\n  v_facility_id UUID := (p_header->>'facility_id')::UUID;\n  v_loan_order_id UUID := NULLIF(p_header->>'loan_order_id', '')::UUID;\n  v_client_request_id UUID := NULLIF(p_header->>'client_request_id', '')::UUID;\n  v_return public.loan_returns%ROWTYPE;\n  v_items JSONB;\n  v_replayed BOOLEAN := FALSE;\nBEGIN\n  IF NOT public.is_facility_writer(v_facility_id) THEN\n    RAISE EXCEPTION 'forbidden: not a member of this facility';\n  END IF;\n  IF NOT public.has_aal2() THEN\n    RAISE EXCEPTION 'forbidden: aal2 required';\n  END IF;\n\n  -- ここにあった header の検証（共有関数の呼び出し）を外すのがこの変異\n\n  -- 明細の紐付け先も自施設の、かつ選んだ発注のものだけ（I-030 の前提）\n  PERFORM public.assert_facility_owns(\n    v_facility_id,\n    'loan_order_item',\n    ARRAY(\n      SELECT NULLIF(elem->>'loan_order_item_id', '')::UUID\n      FROM jsonb_array_elements(COALESCE(p_items, '[]'::JSONB)) AS elem\n    ),\n    v_loan_order_id\n  );\n\n  IF v_client_request_id IS NOT NULL THEN\n    SELECT * INTO v_return FROM public.loan_returns\n    WHERE facility_id = v_facility_id AND client_request_id = v_client_request_id;\n    v_replayed := FOUND;\n  END IF;\n\n  IF NOT v_replayed THEN\n    BEGIN\n      INSERT INTO public.loan_returns (facility_id, return_datetime, loan_order_id, client_request_id, status)\n      VALUES (v_facility_id, (p_header->>'return_datetime')::TIMESTAMPTZ, v_loan_order_id, v_client_request_id, 'returned')\n      RETURNING * INTO v_return;\n    EXCEPTION WHEN unique_violation THEN\n      -- WHY: 20260908030000 で loan_order_id の部分 UNIQUE は外したので、ここへ来るのは\n      --      client_request_id の索引だけ。鍵で相手の行が見つかった場合だけ再送として扱う\n      SELECT * INTO v_return FROM public.loan_returns\n      WHERE facility_id = v_facility_id AND client_request_id = v_client_request_id;\n      IF NOT FOUND THEN\n        RAISE;\n      END IF;\n      v_replayed := TRUE;\n    END;\n  END IF;\n\n  IF NOT v_replayed THEN\n    INSERT INTO public.loan_return_items (loan_return_id, jan, lot, ubd, quantity, loan_order_item_id)\n    SELECT\n      v_return.id,\n      elem->>'jan',\n      elem->>'lot',\n      elem->>'ubd',\n      COALESCE((elem->>'quantity')::INTEGER, 1),\n      NULLIF(elem->>'loan_order_item_id', '')::UUID\n    FROM jsonb_array_elements(COALESCE(p_items, '[]'::JSONB)) AS elem;\n  END IF;\n\n  SELECT COALESCE(jsonb_agg(to_jsonb(i) ORDER BY i.created_at), '[]'::JSONB)\n  INTO v_items\n  FROM public.loan_return_items i\n  WHERE i.loan_return_id = v_return.id;\n\n  RETURN to_jsonb(v_return) || jsonb_build_object('items', v_items, 'replayed', v_replayed);\nEND;\n$$;",
+      "expect": "supabase/__tests__/integration/rpc-reference-boundary.integration.test.ts",
+      "promise": "P-013",
+      "note": "2026-09-09 に実測で見つけた穴（I-036）。明細の検証は前からあったが、**明細を 1 つも紐付けなければ 1 行も見ない**ので header が素通りしていた。同日に共有関数へ移したので、変異は header 側の呼び出しだけを外す形にした（明細側の呼び出しは残すので、header だけが測られる）"
+    },
+    {
+      "id": "RM-018",
+      "breaks": "共有の参照先検証（assert_facility_owns）を、何もしない関数にする",
+      "sql": "-- WHY(この変異が要る): RM-016 / RM-017 は「**RPC が共有関数を呼んでいるか**」を測る。\n--      こちらは「**共有関数そのものが効いているか**」を測る。呼んでいても中身が空なら意味が無い。\n-- WHY(本体を丸ごと差し替えないで済む): 共有関数にしたおかげで、変異は\n--      **この 1 本を no-op にするだけ**になった。RPC の本体を書き写す必要が無いので、\n--      関数が別の理由で書き直されても変異が古い本体を復元する事故が起きない\n--      （RM-016 / RM-017 に残っていた弱さが、ここでは消えている）。\nDO $chk$\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'assert_facility_owns') THEN\n    RAISE EXCEPTION 'RM-018 の前提が崩れている（共有関数が無い）';\n  END IF;\nEND $chk$;\n\nCREATE OR REPLACE FUNCTION assert_facility_owns(\n  p_facility_id UUID,\n  p_kind TEXT,\n  p_ids UUID[],\n  p_parent_id UUID DEFAULT NULL\n)\nRETURNS VOID\nLANGUAGE plpgsql\nSTABLE\nSET search_path = ''\nAS $fn$\nBEGIN\n  RETURN;  -- 何も確かめない\nEND;\n$fn$;",
+      "expect": "supabase/__tests__/integration/rpc-reference-boundary.integration.test.ts",
+      "promise": "P-013",
+      "note": "2026-09-09 に共有関数（20260909080000）を入れたときに足した。**変異が 1 本で済むのが共有化の効き目**で、RPC が増えてもこの変異は増えない。逆に「RPC が呼び忘れた」は捕まえられない（それは RM-016 / RM-017 の担当）"
+    },
+    {
+      "id": "RM-019",
+      "breaks": "価格履歴の RPC を未ログイン（anon）へ開き直す",
+      "sql": "-- WHY(前提を先に確かめる): すでに開いていたら「壊したつもり」で通ってしまう。\nDO $chk$\nBEGIN\n  IF has_function_privilege('anon', 'public.get_distributor_product_price_history(uuid)', 'EXECUTE') THEN\n    RAISE EXCEPTION 'RM-019 の前提が崩れている（すでに anon が呼べる）';\n  END IF;\nEND $chk$;\n\nGRANT EXECUTE ON FUNCTION public.get_distributor_product_price_history(UUID) TO anon;",
+      "expect": "supabase/__tests__/integration/rpc-boundary-sweep.integration.test.ts",
+      "promise": "P-019",
+      "note": "2026-09-11（E-013）。**未ログインで全代理店商品の仕切値の変更履歴が読めていた**のを締めた（20260911000000）。締めたことを守るのは「未ログインで通る RPC は宣言と一致する」の突合なので、開き直したら落ちなければならない。掃きの元の判定（施設 A の目印が出ないか）はマスタに対しては何も言わないので、**この変異は前の判定では倒せない**"
+    },
+    {
+      "id": "RM-020",
+      "breaks": "発注 RPC の EXECUTE を PUBLIC へ戻す（GRANT ... TO authenticated だけを書いた状態の再現）",
+      "sql": "-- WHY(前提を先に確かめる): 同上。\nDO $chk$\nBEGIN\n  IF has_function_privilege('anon', 'public.create_case_order_atomic(uuid,timestamptz,text,text,text,text,text,jsonb,uuid)', 'EXECUTE') THEN\n    RAISE EXCEPTION 'RM-020 の前提が崩れている（すでに anon が呼べる）';\n  END IF;\nEND $chk$;\n\nGRANT EXECUTE ON FUNCTION public.create_case_order_atomic(UUID, TIMESTAMPTZ, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, UUID) TO PUBLIC;",
+      "expect": "supabase/__tests__/integration/rpc-boundary-sweep.integration.test.ts",
+      "promise": "P-019",
+      "note": "2026-09-11（E-013）。**`GRANT ... TO authenticated` と書いてあっても、CREATE FUNCTION の既定で PUBLIC に EXECUTE が付いたまま**だった。止めていたのは関数の中の is_facility_writer() 1 行だけで、そこが崩れれば認証すら不要の入口になる。20260911000001 で PUBLIC ごと外したので、戻したら落ちること（＝権限の層が本当に効いていること）を測る"
+    }
+  ]
+}

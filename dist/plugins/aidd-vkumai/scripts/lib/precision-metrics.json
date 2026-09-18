@@ -1,0 +1,122 @@
+{
+  "_comment": "精度指標の登録簿（2026-09-10、レビューの設計提案 3）。何をどの記録から読むかをここに書き、エンジン（scripts/lib/precision-metrics.mjs）は読み方だけを持つ。エンジンは共通側（aidd-core）、この登録簿は導入先（aidd-vkumai）。",
+  "_design": "指標は役割別に分ける。**1 つの数字に混ぜない**——見逃し率と指摘の正確さは別の問いで、そこへ「測れなかった」を混ぜるとどちらも意味を失う。各指標は `numerator`（数えたいもの）/ `denominator`（**予定した件数**）/ `unmeasured`（測れなかった件数）の 3 つを別々に読む。",
+  "_limits": "記録に残っている数字しか出せない。**見逃し率と指摘の正確さは、人が確定した既知欠陥の集合が要る**が、いまあるのは Sweep の fixture（陽性 1 + 陰性 1）だけなので、母数がその 2 件しかない。ばらつきは**同じ条件（conditionFields）の直近 N 回**でだけ見る——条件の欄を持たない古い記録は比較から外す。費用は `claude -p --output-format json` の `total_cost_usd`（表示価格ベース）で、**実際の請求と一致するとは限らない**。モックで回した eval からは取れないので、**取れなかった回を 0 円として足さず件数で出す**。",
+  "metrics": [
+    {
+      "id": "PM-010",
+      "name": "変異撃破率（認可ポリシー・RLS）",
+      "kind": "変異撃破率",
+      "role": "H-06",
+      "log": "logs/rls-mutation-runs.jsonl",
+      "numerator": "killed",
+      "denominator": "targeted",
+      "unmeasured": "errors",
+      "note": "未変異の対照が緑であることを確かめてから測った件数だけを撃破に数える（2026-09-10 に対照を必須化）",
+      "conditionFields": [
+        "supabaseTree"
+      ]
+    },
+    {
+      "id": "PM-011",
+      "name": "変異撃破率（製品コード・Stryker）",
+      "kind": "変異撃破率",
+      "role": "H-06",
+      "log": "logs/mutation-runs.jsonl",
+      "percent": "score",
+      "note": "対象は認可の判断が書かれた 13 ファイルだけ。**対象を減らせばスコアは上がる**ので、鮮度 hook が測る対象の一覧も見張る",
+      "conditionFields": [
+        "srcTree",
+        "strykerTree"
+      ]
+    },
+    {
+      "id": "PM-020",
+      "name": "実行可能率（統合テストのデータ検査）",
+      "kind": "実行可能率",
+      "role": "H-02",
+      "log": "logs/integration-runs.jsonl",
+      "stateField": "dataGuardResult",
+      "measuredStates": [
+        "pass",
+        "fail"
+      ],
+      "unmeasuredStates": [
+        "unmeasured",
+        "skipped"
+      ],
+      "note": "「測れなかった」を合格にも不合格にも数えない。skipped はテストが赤で後片付けを判定していない回",
+      "conditionFields": [
+        "supabaseTree"
+      ]
+    },
+    {
+      "id": "PM-030",
+      "name": "見逃し率（Sweep のコード調査）",
+      "kind": "見逃し率",
+      "role": "H-01",
+      "log": "docs/agents/eval-runs.jsonl",
+      "filter": {
+        "field": "script",
+        "value": "eval-sweep-recall"
+      },
+      "groupBy": "fixtureSet",
+      "numerator": "pass",
+      "denominator": "total",
+      "note": "人が仕込んだ既知欠陥のうち何件を見つけたか。陰性対照（欠陥の無い fixture）は逆向きに採点され、同じ分母に入る",
+      "conditionFields": [
+        "workflowsTree",
+        "agentsTree",
+        "fixturesTree",
+        "model",
+        "judgeBlob"
+      ]
+    },
+    {
+      "id": "PM-040",
+      "name": "指摘の正確さ（ワークフロープロンプト）",
+      "kind": "指摘の正確さ",
+      "role": "H-01",
+      "log": "docs/agents/eval-runs.jsonl",
+      "filter": {
+        "field": "script",
+        "value": "eval-workflow-prompts"
+      },
+      "groupBy": "fixtureSet",
+      "numerator": "pass",
+      "denominator": "total",
+      "note": "期待した status（pass / blocked）を返したか。エージェントの実行が失敗した回も分母に残る（実行不能を黙って消さない）",
+      "conditionFields": [
+        "workflowsTree",
+        "agentsTree",
+        "fixturesTree",
+        "model"
+      ]
+    },
+    {
+      "id": "PM-050",
+      "name": "実コードへの指摘の多さ（Sweep）",
+      "kind": "実コードへの指摘の多さ",
+      "role": "H-01",
+      "log": "docs/agents/eval-runs.jsonl",
+      "filter": {
+        "field": "script",
+        "value": "eval-sweep-recall"
+      },
+      "groupBy": "fixtureSet",
+      "numerator": "findingsReported",
+      "denominator": "findingsSamples",
+      "unmeasured": "findingsUnreadable",
+      "note": "Sweep は毎回リポジトリ全体を掃くので、仕込みを見逃した回の指摘は実コードへの指摘。**本物か誤りかは分けない**——分けるのは人の仕事で、ここで測れるのは増減だけ。陰性対照は「その fixture への指摘」しか過検出に数えないため、この欄が無いと実在ファイルへの誤指摘が 0 件として素通りする（2026-09-10 に実際に素通りしていた）",
+      "conditionFields": [
+        "workflowsTree",
+        "agentsTree",
+        "fixturesTree",
+        "model",
+        "judgeBlob"
+      ],
+      "count": true
+    }
+  ],
+  "_conditions": "conditionFields は「何を同じ条件とみなすか」。**ここが違う回どうしを同じばらつきに入れない**（2026-09-10、設計提案 3）。混ぜると、モデルの揺れと『その間にコードが変わっただけ』を区別できなくなる。条件の欄を持たない古い記録は比較から外し、外した件数を出す。"
+}

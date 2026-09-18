@@ -1,0 +1,7 @@
+{
+  "_comment": "統合テストの**消し残し**（走行中に作って、終わっても残っている業務データの行）の上限。判定は scripts/run-integration-tests.sh が全件・緑の実行に対してだけ行う。",
+  "_ledger": "この台帳が数えるのは「緑の全件実行 1 回で業務表に残る行数」だけ。ほかの台帳（input-validation / query-validation / write-path / check-mutants / rls-mutants）とは**別物で、足し算しない**。2026-09-09 に台帳の取り違えを 2 回やったので、どの台帳が何を数えるかを各ファイルに書くことにした。",
+  "_history": "2026-09-10: 41 → 0。後片付けの削除が毎回失敗していたのに戻り値のエラーを誰も見ていなかった（E-065）。price_histories からの FK（ON DELETE 指定なし）と、その表の GRANT が SELECT のみであることの二段構え。",
+  "_raising": "この値を増やす前に、まず (1) 後片付けを直す (2) そもそも行を作らない、を検討する。増やすなら理由を _history に 1 行足す。",
+  "maxLeakedRows": 0
+}

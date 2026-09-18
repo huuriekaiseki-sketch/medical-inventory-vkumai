@@ -10,13 +10,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:e2e": "playwright test",
+    "test:integration": "bash scripts/run-integration-tests.sh",
+    "test:e2e": "bash scripts/run-e2e-tests.sh",
     "e2e:auth": "npx -y tsx e2e/generate-auth-state.ts",
     "loop-summary": "bash scripts/summarize-loop-observability.sh",
     "find-av-precision-summary": "bash scripts/summarize-find-av-precision.sh",
     "eval:workflows": "bash scripts/eval-workflow-prompts.sh",
-    "ai:check": "npm run typecheck && npm run lint && npm run test && npm run test:e2e"
+    "ai:check": "npm run typecheck && npm run lint && npm run test && npm run test:integration && npm run test:e2e",
+    "test:mutation": "bash scripts/run-mutation-tests.sh"
   },
   "dependencies": {
     "@next/env": "16.2.12",
@@ -24,10 +25,14 @@
     "@supabase/supabase-js": "^2.108.2",
     "next": "16.3.4",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "4.5.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@playwright/test": "^1.62.1",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
@@ -38,9 +43,13 @@
     "@vitejs/plugin-react": "^6.1.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
+    "fast-check": "^4.9.0",
     "jsdom": "^30.0.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "qs": "6.16.0"
   }
 }

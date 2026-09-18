@@ -1,0 +1,15 @@
+{
+  "heldOut": true,
+  "expectedFilePathContains": [
+    "facility-shift-notes.ts",
+    "facility_shift_notes.sql"
+  ],
+  "expectedKeywords": [
+    "null",
+    "NULL",
+    "nullable",
+    "NOT NULL",
+    "省略可能",
+    "任意"
+  ]
+}

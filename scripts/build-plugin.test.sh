@@ -64,9 +64,37 @@ done
 ok "両プラグインに 5 文書と evidence/ がある（欠落があれば上に NG）"
 [ -f "$WORK/a/aidd-core/schema/aidd-config.schema.json" ] && ok "設定スキーマが aidd-core/schema/ にある" || ng "スキーマが無い"
 [ -f "$WORK/a/aidd-core/templates/consumer/aidd.config.json" ] && ok "導入先ひな形が aidd-core/templates/ にある" || ng "ひな形が無い"
+# WHY(2026-09-12): ひな形の README は**表に 4 行しか無いのに実ファイルは 8 個**だった。
+#      説明の無いファイルを渡された導入先は、置き場も役割も分からない。逆に、表にあるのに
+#      実体が無い行（`.claude/rules/`）もあった。**どちらの向きもここまで誰も見ていなかった**
+#      （既存の門は agent / skill / workflow しか見ず、ひな形は aidd.config.json の存在 1 件だけ）。
+#      表と実体を両方向で突き合わせる（C-011: 宣言の検査が「実在するか」しか見ていない、の逆側）。
+TPL_DIR="$WORK/a/aidd-core/templates/consumer"
+TPL_README="$TPL_DIR/README.md"
+if [ ! -f "$TPL_README" ]; then
+  ng "ひな形に README が無い（渡されたファイルの役割を誰も説明できない）"
+else
+  TPL_MISSING_DOC=""
+  for f in "$TPL_DIR"/*; do
+    b="$(basename "$f")"
+    [ "$b" = "README.md" ] && continue
+    grep -qF -- "\`$b\`" "$TPL_README" || TPL_MISSING_DOC="${TPL_MISSING_DOC}${b} "
+  done
+  TPL_GHOST=""
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    [ -e "$TPL_DIR/$name" ] || TPL_GHOST="${TPL_GHOST}${name} "
+  done <<< "$(grep -o -E '^\| `[^`]+`' "$TPL_README" | tr -d '|` ' || true)"
+  if [ -z "$TPL_MISSING_DOC" ] && [ -z "$TPL_GHOST" ]; then
+    ok "ひな形の README が実ファイルを過不足なく説明している"
+  else
+    [ -n "$TPL_MISSING_DOC" ] && ng "README が説明していないひな形ファイルがある: $TPL_MISSING_DOC"
+    [ -n "$TPL_GHOST" ] && ng "README の表にあるのに実体が無い: $TPL_GHOST"
+  fi
+fi
 # COMPATIBILITY.md の版は docs/agents/upstream-docs-review.md「最後に確認した版」（正本）と一致する
 REVIEWED="$(grep -o -E 'Claude Code \| [0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/docs/agents/upstream-docs-review.md" | head -n1 | grep -o -E '[0-9]+\.[0-9]+\.[0-9]+' || true)"
-if [ -n "$REVIEWED" ] && grep -q "$REVIEWED" "$WORK/a/aidd-core/COMPATIBILITY.md"; then ok "COMPATIBILITY.md が docs 確認版 $REVIEWED を含む"; else ng "COMPATIBILITY.md の版が upstream-docs-review と食い違う（reviewed=$REVIEWED）"; fi
+if [ -n "$REVIEWED" ] && grep -q "$REVIEWED" "$WORK/a/aidd-core/COMPATIBILITY.md"; then ok "COMPATIBILITY.md が docs 確認版 $REVIEWED を含む"; else ng "COMPATIBILITY.md の版が upstream-docs-review と食い違う（reviewed=${REVIEWED}）"; fi
 
 echo "=== scenario 4c: --marketplace で出力先の親に marketplace.json と README を書く（配布形態 (a)） ==="
 node "$BUILD" --marketplace --out "$WORK/mp/plugins" >/dev/null
@@ -115,6 +143,56 @@ cat > "$FX/.claude/settings.json" <<'EOF'
 {"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/scripts/hook-a.sh","timeout":5},{"type":"command","command":"$CLAUDE_PROJECT_DIR/scripts/hook-b.sh","timeout":5}]}]}}
 EOF
 if node "$BUILD" --source "$FX" --layout "$FX/layout.json" --out "$WORK/fx-red3" >/dev/null 2>"$WORK/red3.err"; then ng "層の表に無い hook を検知できない"; else grep -q 'hookScripts に無い' "$WORK/red3.err" && ok "層の表に無い hook で失敗する" || ng "失敗理由が違う" "$(cat "$WORK/red3.err")"; fi
+cat > "$FX/.claude/settings.json" <<'EOF'
+{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/scripts/hook-a.sh","timeout":5}]}]}}
+EOF
+
+echo "=== scenario 6: 逃がし口（allowUnresolvedReferences）の衛生 ==="
+# WHY(2026-09-11): **死んだ免除は、同じ参照が将来また入ったときに黙って通す。** しかも理由は
+#      別の文脈で書かれたものなので、読んだ人は納得してしまう。実測すると 51 件中 15 件が
+#      一度も当たっていなかった。逃がし口は放っておくと腐るので、当たっているかと件数を見る。
+mk_layout() { # $1=allowUnresolvedReferences の中身 $2=max 行（空なら書かない）
+  {
+    printf '{\n'
+    printf '  "plugins": {"core": {"version": "0.0.1", "description": "d", "dependencies": [], "forbiddenWords": true}},\n'
+    printf '  "forbiddenWords": ["forbiddenword"],\n'
+    printf '  "agents": {"agent-a": "core"},\n'
+    printf '  "skills": {},\n'
+    printf '  "workflows": {"flow-a": "core"},\n'
+    printf '  "hookScripts": {"hook-a.sh": "core"},\n'
+    printf '  "supportScripts": {"lib/helper.sh": "core"},\n'
+    printf '  "bin": {},\n'
+    [ -n "${2:-}" ] && printf '  "allowUnresolvedReferencesMax": %s,\n' "$2"
+    printf '  "allowUnresolvedReferences": %s\n' "$1"
+    printf '}\n'
+  } > "$FX/layout2.json"
+}
+
+# 免除が 0 件なら上限を書かせない（対を置く。使っていない導入先で毎回赤くしない）
+mk_layout '{}' ''
+if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow0" >/dev/null 2>"$WORK/allow0.err"; then ok "逃がし口が 0 件なら上限は要らない"; else ng "逃がし口 0 件で落ちた" "$(cat "$WORK/allow0.err")"; fi
+
+# 一度も当たらない免除は落とす
+mk_layout '{"scripts/never-referenced.sh": "どこからも参照されていない"}' '5'
+if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow1" >/dev/null 2>"$WORK/allow1.err"; then ng "死んだ免除を検知できない"; else grep -q '一度も当たっていない' "$WORK/allow1.err" && ok "一度も当たらない免除を検知" || ng "失敗理由が違う" "$(cat "$WORK/allow1.err")"; fi
+
+# 実際に当たる免除は誤検知しない（対を置く。C-021）
+printf '#!/usr/bin/env bash\nsource "$SCRIPT_DIR/lib/missing.sh"\n' > "$FX/scripts/hook-a.sh"
+mk_layout '{"scripts/lib/missing.sh": "導入先が持つので同梱しない"}' '5'
+if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow2" >/dev/null 2>"$WORK/allow2.err"; then ok "当たっている免除は通る"; else ng "当たっている免除で落ちた" "$(cat "$WORK/allow2.err")"; fi
+
+# 理由が空の免除は落とす
+mk_layout '{"scripts/lib/missing.sh": "   "}' '5'
+if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow3" >/dev/null 2>"$WORK/allow3.err"; then ng "理由が空の免除を検知できない"; else grep -q '理由が空' "$WORK/allow3.err" && ok "理由が空の免除を検知" || ng "失敗理由が違う" "$(cat "$WORK/allow3.err")"; fi
+
+# 上限を書き忘れたら落とす（免除があるのに見張りが無い状態を許さない）
+mk_layout '{"scripts/lib/missing.sh": "導入先が持つので同梱しない"}' ''
+if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow4" >/dev/null 2>"$WORK/allow4.err"; then ng "上限の書き忘れを検知できない"; else grep -q 'allowUnresolvedReferencesMax が層の表に無い' "$WORK/allow4.err" && ok "上限の書き忘れを検知" || ng "失敗理由が違う" "$(cat "$WORK/allow4.err")"; fi
+
+# 上限を超えたら落とす
+mk_layout '{"scripts/lib/missing.sh": "導入先が持つので同梱しない"}' '0'
+if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow5" >/dev/null 2>"$WORK/allow5.err"; then ng "上限超過を検知できない"; else grep -q '上限 0 を超えた' "$WORK/allow5.err" && ok "上限超過を検知" || ng "失敗理由が違う" "$(cat "$WORK/allow5.err")"; fi
+printf '#!/usr/bin/env bash\nsource "$SCRIPT_DIR/lib/helper.sh"\necho ok\n' > "$FX/scripts/hook-a.sh"
 
 if [ "$fail" -ne 0 ]; then echo "FAILED"; exit 1; fi
 echo "ALL PASSED"

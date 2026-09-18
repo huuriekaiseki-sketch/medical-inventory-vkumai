@@ -56,7 +56,7 @@ export default function Home() {
   if (!data) {
     return (
       <div className="mx-auto max-w-6xl px-6 py-10">
-        <p className="text-sm" style={{ color: '#6B7280' }}>読み込み中...</p>
+        <p className="text-sm" style={{ color: '#4B5563' }}>読み込み中...</p>
       </div>
     )
   }
@@ -64,7 +64,7 @@ export default function Home() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       <div className="mb-8 border-b pb-4" style={{ borderColor: '#072C2C33' }}>
-        <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#FF5F03', fontFamily: 'var(--font-oswald), sans-serif' }}>
+        <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#B03F00', fontFamily: 'var(--font-oswald), sans-serif' }}>
           Dashboard
         </p>
         <h1 className="text-3xl font-bold" style={{ color: '#072C2C', fontFamily: 'var(--font-oswald), sans-serif', letterSpacing: '0.04em' }}>

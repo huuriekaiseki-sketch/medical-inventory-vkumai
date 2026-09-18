@@ -1,0 +1,51 @@
+{
+  "_comment": "issue #757 の 20。DB（migration の CHECK）と API（zod スキーマ）の突合で、**規約から導けない部分だけ**を人が書く表。両側の条件は実物から自動抽出する（scan-db-constraints.mjs / extract-api-rules.ts）。列 → フィールドの対応は snake_case → camelCase で自動。ここに書くのは表 → スキーマの対応と、規約から外れる列だけ。",
+  "_howto": "tables: 表名 → zod スキーマ名。columns: 列ごとに次のいずれか。(a) api: \"<スキーマ名>.<フィールド名>\" … 規約と違う名前の対応 (b) serverOnly: \"理由\" … 利用者が送れない列（恒久。期限は不要） (c) exception: \"理由\", until: \"YYYY-MM-DD\" … 一時的に揃っていないことを認める（**期限必須。過ぎたら落ちる**）",
+  "_why_expiry": "serverOnly は恒久の分類なので期限を付けない（監査ログの列が将来 API から書けるようになることはない）。期限が要るのは exception だけ。恒久の分類に期限を付けると、意味の無い更新作業が毎年発生する",
+
+  "tables": {
+    "case_orders": "caseOrderInputSchema",
+    "case_order_items": "janItemSchema",
+    "loan_orders": "loanOrderInputSchema",
+    "loan_order_items": "loanOrderInputSchema",
+    "loan_return_items": "janItemSchema",
+    "consumable_order_items": "consumableOrderInputSchema",
+    "consumables": "consumableInputSchema",
+    "categories": "categoryInputSchema",
+    "facilities": "facilityInputSchema",
+    "products": "productInputSchema",
+    "distributor_products": "distributorProductInputSchema",
+    "hospital_prices": "hospitalPriceInputSchema",
+    "product_compatibilities": "compatibilityInputSchema",
+    "user_facilities": "userFacilityAssignSchema"
+  },
+
+  "columns": {
+    "case_orders.status": { "serverOnly": "状態は RPC とトリガー（I-020）が進める。利用者は送れない" },
+    "loan_orders.status": { "serverOnly": "同上（I-020）" },
+    "loan_returns.status": { "serverOnly": "同上（I-020）" },
+    "consumable_orders.status": { "serverOnly": "同上（I-020）" },
+    "loan_return_items.status": { "serverOnly": "明細ごとの取り消し（2026-09-09）。作成時は必ず active で、取り消しは専用の route（PATCH /api/loan-returns/[id]/items/[itemId]）が `action: 'cancel'` だけを受ける。返却の作成本文（janItemSchema）からは送れない" },
+    "consumables.status": { "serverOnly": "使用停止（2026-09-09）。登録時は必ず active で、止めるのは専用の route（PATCH /api/consumables/[id]）が `action: 'retire'` だけを受ける。登録・更新の本文（consumableInputSchema）からは送れない" },
+
+    "case_order_items.unit_price": { "serverOnly": "発注時の単価スナップショット。RPC が価格表から写す" },
+    "loan_order_items.unit_price": { "serverOnly": "同上" },
+    "consumable_order_items.unit_price": { "serverOnly": "同上" },
+
+    "access_denials.guard": { "serverOnly": "拒否の記録。record_access_denial() だけが書く" },
+    "access_denials.reason": { "serverOnly": "同上" },
+    "access_denials.route": { "serverOnly": "同上（proxy のヘッダから取る）" },
+    "audit_log.action": { "serverOnly": "監査ログ。トリガーだけが書く" },
+    "price_histories.entity_type": { "serverOnly": "価格履歴。トリガーだけが書く" },
+    "price_histories.field_name": { "serverOnly": "同上" },
+    "rate_limit_counters.bucket": { "serverOnly": "回数のカウンタ。consume_rate_limit() だけが書く" },
+    "rate_limit_counters.hits": { "serverOnly": "同上" },
+    "schema_drift_log.drift_type": { "serverOnly": "ドリフト検知。record_* 関数だけが書く" },
+    "schema_drift_log.event_kind": { "serverOnly": "同上" },
+
+    "privileged_operations.operation": { "serverOnly": "特権操作の記録。record_privileged_operation() だけが書く（EXECUTE は service_role のみ）" },
+    "privileged_operations.target_email": { "serverOnly": "同上。招待先のメールはサーバーが検証済みの値を写す（利用者が直接この表へ送る経路は無い）" },
+    "privileged_operations.error_code": { "serverOnly": "同上。GoTrue が返した code をサーバーが写す" },
+    "privileged_operations.route": { "serverOnly": "同上（proxy のヘッダから取る）" }
+  }
+}

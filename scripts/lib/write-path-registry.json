@@ -1,0 +1,43 @@
+{
+  "_comment": "「DB は許すのにアプリに道が無い」を数えるエンジン（scripts/lib/check-write-path-gaps.mjs）の登録簿。エンジンは共通側・**この登録簿は導入先のもの**。2026-09-09 新設（E-056 / E-057 が 2 日で 2 回、別々の表で同じ形を出したため）。",
+  "_howto": "隙間が出たら選ぶのは 3 つ: (1) アプリに道を作る (2) DB の権限を剥がす (3) ここに理由を書く。**(3) は増やせない**（maxGaps）。",
+  "_limits": "静的解析。`.from('表').insert/update/delete/upsert(` の形しか見ない。道が『あるか』だけを見て、その道の認可が正しいかは見ない（それは攻撃表 P-017 の担当）。",
+  "migrationsDir": "supabase/migrations",
+  "scan": {
+    "roots": [
+      "src/app",
+      "src/lib",
+      "src/components"
+    ],
+    "extensions": [
+      ".ts",
+      ".tsx"
+    ],
+    "excludeDirs": [
+      "__tests__"
+    ],
+    "excludeFilePattern": "\\.test\\."
+  },
+  "dynamicCallSites": {
+    "_comment": "表名が変数の `.from(...)`。走査では拾えないので、何を書くのかをここで宣言する（宣言と実測の数が合わなければ落ちる）。",
+    "src/lib/orders/cancel.ts": {
+      "tables": [
+        "case_orders",
+        "consumable_orders",
+        "loan_orders"
+      ],
+      "verbs": [
+        "update"
+      ],
+      "reason": "発注 3 種の取り消しを 1 か所にまとめてあり、表名を引数で受け取る（E-056）。3 表とも status を cancelled にする UPDATE だけを行う"
+    }
+  },
+  "declaredGaps": {
+    "_comment": "DB は authenticated に許しているが、アプリはその向きに一度も書かない組み合わせ。**2026-09-09 に 0 件になった。** 行を足すのは最後の手段で、まず (1) アプリに道を作る (2) DB の権限を剥がす を検討する。",
+    "_delete_note": "発注 3 種・返却とその明細（8 表）の DELETE は 2026-09-09 に**権限ごと剥がした**（20260909020000）。E-056 の判断で削除の道はこれから先も作らないため、宣言ではなく DB から外した。",
+    "_update_note": "明細 3 表と互換の組の UPDATE も同日に剥がした（20260909030000）。作ったら書き換えない・作るか消すかだけ、という判断が確定していたため。",
+    "_insert_note": "発注 3 種・返却とその明細（8 表）の直接 INSERT も同日に剥がした（20260909040000）。作成は SECURITY DEFINER の RPC だけが行うので、**発注は RPC からしか作れない**入口 1 本になった。"
+  },
+  "_maxGaps_history": "2026-09-09 に 20 で始め、同日のうちに DELETE 8 件・UPDATE 4 件・INSERT 8 件を権限ごと剥がして **0** にした。**上げない**（上げるときは、なぜ返せない借金になったのかを引き継ぎメモに書く）。0 のままなら、新しい表を作ったときに「誰がどの動詞を使うか」を決めないと必ず落ちる。",
+  "maxGaps": 0
+}

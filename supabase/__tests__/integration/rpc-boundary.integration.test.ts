@@ -139,10 +139,13 @@ describe('クライアントから呼べる RPC の境界（他施設・非 admi
       expect(ids(other)).toContain(fx.masterHistory.id)
       expect(ids(other)).not.toContain(fx.facilityScopedHistory.id)
 
-      // anon は GRANT されている（マスタの履歴は公開情報）。施設スコープの行は出ない
+      // WHY(2026-09-11 に変えた): ここは長く「anon は GRANT されている（マスタの履歴は公開情報）」
+      //      として、**呼べること自体を許していた**。実際にはログインせずに全代理店商品の
+      //      仕切値の変更履歴が読めており、公開範囲を人に聞いたうえで締めた（20260911000000）。
+      //      EXECUTE ごと外したので、いまは関数に届く前に拒否される
       const { data: anon, error: anonError } = await call(createAnonClient())
-      expect(anonError).toBeNull()
-      expect(ids(anon)).not.toContain(fx.facilityScopedHistory.id)
+      expect(anonError?.code).toBe(PERMISSION_DENIED)
+      expect(ids(anon)).toEqual([])
 
       const { data: own } = await call(fx.userA.client)
       expect(ids(own)).toContain(fx.facilityScopedHistory.id)
@@ -178,6 +181,44 @@ describe('クライアントから呼べる RPC の境界（他施設・非 admi
       const { data: admin, error: adminError } = await adminA.client.rpc('get_order_amount_report', args)
       expect(adminError).toBeNull()
       expect((admin ?? []).map((r: { facility_id: string }) => r.facility_id)).toContain(fx.facilityA.id)
+    })
+
+    // WHY(E-056): 2026-09-08 に発注の取り消しを作った（20260908070000）。
+    //      集計はそれまで**状態を一切見ていなかった**ので、取り消した発注の金額が
+    //      月次に載り続ける。RPC 本体で「取り消すと減る」ことを admin の目線で測る。
+    it('get_order_amount_report: 取り消した発注の金額は集計に載らない', async () => {
+      const args = { p_date_from: null, p_date_to: null }
+      const caseAmount = async () => {
+        const { data } = await adminA.client.rpc('get_order_amount_report', args)
+        const row = (data ?? []).find((r: { facility_id: string }) => r.facility_id === fx.facilityA.id)
+        return Number(row?.case_order_amount ?? 0)
+      }
+
+      const before = await caseAmount()
+
+      const { data: order, error: createError } = await fx.userA.client.rpc('create_case_order_atomic', {
+        p_facility_id: fx.facilityA.id,
+        p_case_datetime: new Date().toISOString(),
+        p_procedure_name: '集計取り消しテスト',
+        p_patient_id: 'PT-REPORT-CANCEL',
+        p_patient_initials: 'R.C.',
+        p_gender: 'other',
+        p_doctor_name: '集計取り消しテスト医師',
+        p_items: [{ jan, lot: null, ubd: null, quantity: 3 }],
+        p_client_request_id: randomUUID(),
+      })
+      expect(createError, JSON.stringify(createError)).toBeNull()
+
+      const withOrder = await caseAmount()
+      expect(withOrder, '発注しても集計が動かない（単価が付いていない）').toBeGreaterThan(before)
+
+      const { error: cancelError } = await fx.userA.client
+        .from('case_orders')
+        .update({ status: 'cancelled' })
+        .eq('id', (order as { id: string }).id)
+      expect(cancelError, JSON.stringify(cancelError)).toBeNull()
+
+      expect(await caseAmount(), '取り消したのに集計に残っている').toBe(before)
     })
 
     it('resolve_jan_unit_price: 他施設の facility_id では null、自施設では価格が返り、anon はテーブル権限で拒否される', async () => {

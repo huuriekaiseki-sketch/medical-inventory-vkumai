@@ -62,7 +62,7 @@ function NewsPageInner() {
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- この effect 自身が router.replace で facilityId を書き換えるため、urlFacilityId / router を依存に入れると再実行が連鎖する。施設の一覧はマウント時に 1 回だけ読めばよい
   }, [])
 
   // フィード取得用: selectedFacilityId が変わるたびに1ページ目から取得する
@@ -134,7 +134,7 @@ function NewsPageInner() {
         <div>
           <p
             className="text-xs font-semibold uppercase tracking-widest mb-1"
-            style={{ color: '#FF5F03', fontFamily: 'var(--font-oswald), sans-serif' }}
+            style={{ color: '#B03F00', fontFamily: 'var(--font-oswald), sans-serif' }}
           >
             Information
           </p>

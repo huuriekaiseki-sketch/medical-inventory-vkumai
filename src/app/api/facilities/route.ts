@@ -4,14 +4,15 @@ import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listFacilities, createFacility } from '@/lib/facilities/repository'
 import { listUserFacilities } from '@/lib/user-facilities/repository'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
-import type { FacilityInput } from '@/types/facility'
+import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
+import { parseBody } from '@/lib/validation/parse-body'
+import { facilityInputSchema } from '@/lib/validation/schemas'
 
 export async function GET() {
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     const facilities = await listFacilities(db)
     // WHY: フロントエンドが「全施設」表示オプションを出すかどうかの判定に使う。
     // require-facility-access.ts の resolveIsAdmin と同じ判定にすることで、
@@ -30,21 +31,14 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  let input: FacilityInput
-  try {
-    input = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-
-  if (!input.name?.trim()) {
-    return apiError('施設名は必須です', 400)
-  }
+  const parsed = await parseBody(request, facilityInputSchema)
+  if (!parsed.ok) return parsed.response
+  const input = parsed.data
 
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     const isAdmin = await resolveIsAdmin(db, user)
     if (!isAdmin) return apiError('権限がありません', 403)
     const facility = await createFacility(db, input)

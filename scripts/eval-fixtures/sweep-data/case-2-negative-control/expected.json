@@ -1,0 +1,5 @@
+{
+  "expectNoFinding": true,
+  "expectedFilePathContains": "ward-supplies/[id]/route.ts",
+  "expectedKeywords": ["requireAuth", "認証", "認可"]
+}

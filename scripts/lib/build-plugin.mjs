@@ -28,6 +28,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
+import { writeLine } from './stdout-sync.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -51,6 +52,8 @@ const opts = parseArgs(process.argv.slice(2))
 const SOURCE = path.resolve(opts.source ?? path.resolve(__dirname, '../..'))
 const LAYOUT_FILE = path.resolve(opts.layout ?? path.join(SOURCE, 'scripts/lib/plugin-layout.json'))
 const OUT = path.resolve(opts.out ?? path.join(SOURCE, 'dist/plugins'))
+// 配布物の同一性（issue #757 の 37）。scripts/check-plugin-integrity.sh と同じ名前を使う
+const MANIFEST_NAME = '.aidd-manifest.json'
 const layout = JSON.parse(readFileSync(LAYOUT_FILE, 'utf8'))
 
 const errors = []
@@ -223,6 +226,70 @@ function build(outRoot) {
     if (name.startsWith('_')) continue
     copyText(plugin, `.claude/workflows/lib/${name}`, `scripts/workflow-lib/${name}`)
   }
+  // 検査（*.test.sh）を同梱する（issue #757 の 19 の教訓）。
+  // WHY: これまで hook 本体だけを配り、その hook を守る検査と、hook を持たない構造テスト
+  //      （カタログの形・索引の抜け・秘密情報の走査）は 1 本も配っていなかった。
+  //      派生先には「止める仕組み」だけが渡り、「その仕組みが壊れていないことを確かめる手段」が
+  //      渡らない状態だった。ルールを配るなら、そのルールの検査も一緒に配る。
+  //
+  //      対象スクリプトを持つ検査（check-x.sh に対する check-x.test.sh）は、
+  //      対象と同じプラグインへ自動的に付いていく（層の表に二重登録しない）。
+  //      対象を持たない構造テストだけを layout.checks に書く。
+  const testOwners = {}
+  const declareTest = (base, plugin) => {
+    const t = base + '.test.sh'
+    if (!existsSync(path.join(SOURCE, 'scripts', t))) return
+    ;(testOwners[t] ??= new Set()).add(plugin)
+  }
+  for (const [name, plugin] of Object.entries(layout.hookScripts)) declareTest(name.replace(/\.sh$/, ''), plugin)
+  for (const [name, owners] of Object.entries(layout.supportScripts)) {
+    for (const plugin of (Array.isArray(owners) ? owners : [owners])) {
+      declareTest(name.replace(/\.(sh|mjs|ts|jq)$/, ''), plugin)
+    }
+  }
+  for (const [name, plugin] of Object.entries(layout.bin ?? {})) declareTest(name.replace(/\.sh$/, ''), plugin)
+  // layout.checks は「対象を持たない構造テスト」の宣言と、自動で決まった層の上書きを兼ねる。
+  // 上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙で書かれている検査
+  // （高リスクパスの例・ドメイン語・スタック名）。共通側に固有語は置けないのでアダプター側へ回す。
+  for (const [name, owners] of Object.entries(layout.checks ?? {})) {
+    if (name.startsWith('_')) continue
+    testOwners[name] = new Set(Array.isArray(owners) ? owners : [owners])
+  }
+  // 配らない検査（理由つき）。中身が導入先に無いものを検査していて、配ると必ず落ちるもの
+  for (const name of Object.keys(layout.checksNotDistributed ?? {})) {
+    if (name.startsWith('_')) continue
+    delete testOwners[name]
+  }
+  for (const [name, plugins] of Object.entries(testOwners)) {
+    for (const plugin of plugins) copyText(plugin, 'scripts/' + name, 'scripts/' + name, null, 0o755)
+  }
+
+  // 検査が「何を見るか」（self / consumer / both）を配布物にも持たせる。
+  // bin/aidd-check がこれを読み、**導入先を見る検査だけ**を導入先のルートで回す。
+  // 宣言が無い検査はここに出さない——入口が黙って回すより、載っていないほうが分かる
+  // （宣言の抜けは check-plugin-check-coverage.test.sh が落とす）。
+  // 検査そのものが supportScripts に置かれている場合（対象スクリプトを持たない走査系）も数える
+  const scopeOwners = new Map()
+  for (const [name, plugins] of Object.entries(testOwners)) scopeOwners.set(name, new Set(plugins))
+  for (const [name, owners] of Object.entries(layout.supportScripts ?? {})) {
+    if (!name.endsWith('.test.sh')) continue
+    const set = scopeOwners.get(name) ?? new Set()
+    for (const p of (Array.isArray(owners) ? owners : [owners])) set.add(p)
+    scopeOwners.set(name, set)
+  }
+  for (const plugin of pluginNames) {
+    const scopes = {}
+    for (const [name, plugins] of scopeOwners) {
+      if (!plugins.has(plugin)) continue
+      const scope = (layout.checkScopes ?? {})[name]
+      if (scope) scopes[name] = scope
+    }
+    put(plugin, 'scripts/lib/check-scopes.json', JSON.stringify({
+      _comment: '生成物。正本は中心リポジトリの scripts/lib/plugin-layout.json の checkScopes。手で編集しない',
+      checks: scopes,
+    }, null, 2) + '\n')
+  }
+
   // 7 項目のファイル（対応版・変更履歴・既知の制約・移行手順・破壊的変更・実証結果）を両プラグインの
   // ルートへ。設定スキーマは schema/、導入先ひな形は templates/ へ（いずれも共通側）
   const rd = layout.releaseDocs
@@ -271,6 +338,11 @@ function build(outRoot) {
   // 2. 同梱閉包: 参照先が同じプラグイン内にあること（7 項目のファイル・ひな形は対象外。
   //    導入先の手順として中心リポジトリのパスを書くため）
   const allowed = layout.allowUnresolvedReferences ?? {}
+  // WHY(2026-09-11): **死んだ免除は、同じ参照が将来また入ったときに黙って通す。**
+  //      しかも理由は別の文脈で書かれたものなので、読んだ人は納得してしまう。
+  //      実測すると 51 件中 15 件が一度も当たっていなかった（逃がし口は放っておくと腐る）。
+  //      当たった鍵を数えて、当たらなかったものを落とす。
+  const allowedUsed = new Set()
   const closureSkip = layout.forbiddenWordsSkipPaths ?? []
   // bin/ はどのプラグインのものも Bash の PATH に足されるため、プラグインを跨いで参照してよい
   const allBin = new Set(Object.keys(layout.bin ?? {}).map(b => `bin/${b}`))
@@ -280,6 +352,19 @@ function build(outRoot) {
       const p = path.join(outRoot, plugin, r)
       if (!isText(p)) continue
       if (closureSkip.some(s => r === s || r.startsWith(s))) continue
+      // 検査（*.test.sh）は fixture として存在しないファイル名を書く（scripts/check-a.sh のような
+      // 架空の名前を一時ディレクトリに作って検知力を試す）。それを実行時参照と見なすと
+      // 際限なく allowUnresolvedReferences が増えるので、検査については
+      // 「対象スクリプトが同梱されているか」だけを見る（本当に困るのはそこだけ）。
+      if (/\.test\.sh$/.test(r)) {
+        const subject = r.replace(/\.test\.sh$/, '.sh')
+        // bin/ へ置き換えられるスクリプト（進捗記録など）は scripts/ ではなく bin/ に同梱される
+        const asBinSubject = 'bin/' + path.posix.basename(subject)
+        if (existsSync(path.join(SOURCE, subject)) && !have.has(subject) && !have.has(asBinSubject)) {
+          fail(`${plugin}/${r}: 対象の ${subject} が同じプラグインに無い（検査だけ配っても動かない）`)
+        }
+        continue
+      }
       const text = readFileSync(p, 'utf8')
       const refs = new Set()
       for (const m of text.matchAll(/scripts\/((?:lib\/)?[A-Za-z0-9_.-]+\.(?:sh|mjs|ts|jq|py))/g)) refs.add(`scripts/${m[1]}`)
@@ -302,12 +387,39 @@ function build(outRoot) {
         const asScript = ref
         const asBin = `bin/${ref.replace(/^scripts\//, '')}`
         if (have.has(asScript) || have.has(asBin) || allBin.has(asBin)) continue
-        if (allowed[ref]) continue
+        if (allowed[ref]) { allowedUsed.add(ref); continue }
         // 同梱前の元パス表記（scripts/lib/x）で allow に書かれているものは、置き場所違いでも許容
-        if (allowed[`scripts/${ref.replace(/^scripts\/workflow-lib\//, 'lib/')}`]) continue
+        const legacyKey = `scripts/${ref.replace(/^scripts\/workflow-lib\//, 'lib/')}`
+        if (allowed[legacyKey]) { allowedUsed.add(legacyKey); continue }
         fail(`${plugin}/${r}: 参照先 ${ref} が同じプラグインに同梱されていない（層の表に足すか allowUnresolvedReferences に理由を書く）`)
       }
     }
+  }
+  // 2b. 逃がし口の衛生: 使われていない免除を残さない／理由を空にしない／件数の上限
+  //
+  // WHY(この規則を隣へ広げないこと。2026-09-11 に実測して確かめた): 同じ扱いをしてよいのは
+  //     **1 件ずつの免除**（この一覧は「この参照を許す」という個別の宣言）だけ。
+  //     `forbiddenWordsSkipPaths` は**種類ごとの方針**（「リリース文書は禁止語の対象外」）で、
+  //     いま中身に禁止語が無くても次の版で書かれる。実測では COMPATIBILITY.md と BREAKING.md が
+  //     「今は禁止語を含まない」状態だったが、これを理由に外すと**一度も通らない道**を作る（C-024）。
+  //     `forbiddenWordsAllowPhrases` は 3 件とも実際に使われていた（腐っていない）。
+  for (const [key, reason] of Object.entries(allowed)) {
+    if (key.startsWith('_')) continue
+    if (!String(reason ?? '').trim()) {
+      fail(`allowUnresolvedReferences: ${key} の理由が空（なぜ同梱しなくてよいかを書く）`)
+    }
+    if (!allowedUsed.has(key)) {
+      fail(`allowUnresolvedReferences: ${key} は一度も当たっていない（消す。残すと同じ参照が戻ったとき別の文脈の理由で黙って通る）`)
+    }
+  }
+  // ratchet: 逃がし口は放っておくと増える。増やすときは人が上限を上げる（減らすのは自由）。
+  // 逃がし口が 1 つも無い導入先には上限を書かせない（0 件のままなら見張る対象が無い）
+  const allowMax = layout.allowUnresolvedReferencesMax
+  const allowCount = Object.keys(allowed).filter((k) => !k.startsWith('_')).length
+  if (allowCount > 0 && typeof allowMax !== 'number') {
+    fail('allowUnresolvedReferencesMax が層の表に無い（逃がし口が増えても気づけない）')
+  } else if (typeof allowMax === 'number' && allowCount > allowMax) {
+    fail(`allowUnresolvedReferences が ${allowCount} 件で上限 ${allowMax} を超えた（同梱するか、上限を上げる理由を書く）`)
   }
   // 3. 名前空間の付け忘れ（生成後の workflow に裸の agentType / workflow( が無い）
   for (const plugin of pluginNames) {
@@ -318,6 +430,22 @@ function build(outRoot) {
       for (const m of text.matchAll(/workflow\(\s*'([^':]+)'/g)) fail(`${plugin}/${r}: 名前空間の無い workflow('${m[1]}')`)
     }
   }
+  // 4. 配布物の同一性（issue #757 の 37）。生成した全ファイルの sha256 を .aidd-manifest.json に書く。
+  //    導入先では SessionStart hook（check-plugin-integrity.sh）がこの表と実物を突き合わせ、
+  //    配布経路での差し替え・部分適用・手編集を検知する。
+  //    written には入れない（禁止語・同梱閉包の検査対象にせず、内容も検査結果に影響させないため）。
+  //    中身は sha256 とパスだけで、時刻・ホスト名・版などの揺れる値を入れない（決定性のため）。
+  for (const plugin of pluginNames) {
+    const files = {}
+    for (const r of (written[plugin] ?? []).slice().sort()) {
+      files[r] = sha(readFileSync(path.join(outRoot, plugin, r)))
+    }
+    writeFileSync(
+      path.join(outRoot, plugin, MANIFEST_NAME),
+      JSON.stringify({ plugin, algorithm: 'sha256', files }, null, 2) + '\n'
+    )
+  }
+
   return written
 }
 
@@ -348,7 +476,7 @@ try {
       console.error('bash scripts/build-plugin.sh を実行して生成物を更新してください')
       process.exit(1)
     }
-    console.log(`build-plugin --check: OK（${Object.keys(want).length} ファイル一致）`)
+    writeLine(`build-plugin --check: OK（${Object.keys(want).length} ファイル一致）`)
   } else {
     for (const plugin of pluginNames) {
       const dst = path.join(OUT, plugin)
@@ -398,8 +526,8 @@ try {
       writeFileSync(path.join(repoRoot, 'README.md'), readme)
     }
     const summary = Object.fromEntries(pluginNames.map(p => [p, (written[p] ?? []).length]))
-    if (opts.json) console.log(JSON.stringify({ out: OUT, files: summary }, null, 2))
-    else console.log(`build-plugin: ${OUT} に生成（${pluginNames.map(p => `${p}: ${summary[p]} ファイル`).join(' / ')}）`)
+    if (opts.json) writeLine(JSON.stringify({ out: OUT, files: summary }, null, 2))
+    else writeLine(`build-plugin: ${OUT} に生成（${pluginNames.map(p => `${p}: ${summary[p]} ファイル`).join(' / ')}）`)
   }
 } finally {
   rmSync(tmp, { recursive: true, force: true })

@@ -16,5 +16,33 @@
   `CLAUDE_PROJECT_DIR` 優先に（スクリプト位置基準だとプラグインでは導入先を指さない）
 - 2026-09-06: `bin/` のスクリプトの `$SCRIPT_DIR/lib/` 参照を `../scripts/lib/` へ書き換え、gap 判定の JS を
   `scripts/workflow-lib/` に同梱。derive（04 表の機械導出）は同梱対象から外した（KNOWN-LIMITS）
+- **2026-09-07: 検査（`*.test.sh`）を同梱するようにした。** それまでは hook 本体だけを配っており、
+  その hook を守る検査と、hook を持たない構造テスト（カタログの形・索引の抜け・設定の形）は 1 本も
+  配っていなかった。派生先には「止める仕組み」だけが渡り、「その仕組みが壊れていないことを確かめる手段」が
+  渡っていなかった。対象スクリプトを持つ検査は対象と同じプラグインへ自動で付いていき、対象を持たない
+  構造テストは層の表の `checks` に書く。配らないものは `checksNotDistributed` に**理由つきで**書き、
+  未分類の検査があると `scripts/check-plugin-check-coverage.test.sh` が落ちる。
+  aidd-core は 74 → 107 ファイル、aidd-vkumai は 31 → 39 ファイルになった
 - 2026-09-06: 配布形態 (a) へ移行。marketplace `aidd-plugins`（非公開）に生成物を置き、`aidd-core--v0.1.0` /
   `aidd-vkumai--v0.1.0` をタグ付け。manifest の生成元注記を `metadata` へ、`author` を追加
+- **2026-09-11: `aidd-core` にエージェント `proposer` を追加した（4 → 5 体）。** 足りていたつもりで
+  1 体欠けていた——Claude 側の正本が `~/.claude/agents/`（グローバル）にしか無く、リポジトリには
+  Codex 側の toml だけがあった。リポジトリへ移したあとも層の表へ足し忘れたが、**生成器は表を回るだけ**
+  なのでビルドは成功し、生成物の差分にも出なかった。agent / skill / workflow の実体と層の表を
+  **両方向**で突き合わせる `scripts/check-plugin-asset-coverage.test.sh` を足して塞いだ
+  （hook は最初から両方向だった。型は `docs/agents/check-design-pitfalls.md` の C-047）
+- **2026-09-12: 導入先の入口を wrapper Workflow からセッションの直接呼び出しへ変えた。** ひな形の
+  wrapper は `aidd-vkumai:aidd-phase1-router` を呼び、その router がさらに `aidd-phase1` を呼ぶので
+  **入れ子が 2 段**になり、エージェントを 1 体も起動しないまま失敗していた（Claude Code 2.1.258 で実測）。
+  中心リポジトリは router を直接呼ぶので 1 段に収まる——**配布物の形でだけ壊れていた**。
+  ひな形から Workflow を削り、MIGRATION.md と README を直接呼び出しへ直した。連鎖そのものは
+  `scripts/check-workflow-nesting.test.sh` が門にする（型は C-053、実例は E-085）
+- **2026-09-12: 配った検査に「何を見るか」の宣言と、導入先から回す入口を付けた。** それまで
+  入口が無く、配った 92 本は**導入先ではなくプラグイン自身**を見ていた（導入先に置いた違反 4 件のうち
+  反応したのは 1 本だけ、と実測）。層（self / consumer / both）を `plugin-layout.json` の `checkScopes` で
+  宣言し、生成物へ `scripts/lib/check-scopes.json` として配る。入口は `aidd-check.sh`
+  （aidd-core の `bin/` に入り PATH に足される）。
+  宣言が無い検査は `scripts/check-plugin-check-coverage.test.sh` が落とす。
+  あわせて `consumer` の 4 本（shell の 2 本・スキル本文の長さ・Codex 設定の分離）の根を
+  `CLAUDE_PROJECT_DIR` 優先へ変え、**小さい導入先で意味の無い赤が出ない**ようにした
+  （空振り防止の下限を 20 本 → 0 本、`.codex/` が無ければ対象なしで黙る）

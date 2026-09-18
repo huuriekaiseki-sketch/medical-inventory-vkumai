@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { getUserFacilityRole } from '@/lib/user-facilities/repository'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
+import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
 import type { RouteContext } from '@/types/route'
 
 // WHY: viewerロールのUIゲーティング(issue #608)用。自分が指定施設で
@@ -16,8 +16,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   let user
   try {
     user = await requireAuth(db)
-  } catch {
-    return apiError('認証が必要です', 401)
+  } catch (e) {
+    return authGuardError(e)
   }
 
   try {

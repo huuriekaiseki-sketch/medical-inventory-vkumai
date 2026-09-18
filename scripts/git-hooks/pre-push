@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# git の pre-push hook。GitHub の main へ直接 push するのを止める（ブランチへの push と、GitLab の控えは通す）。
+#
+# WHY(2026-09-11、外部レビュー): GitHub のアカウント停止中に、ローカルの main にはコミットが溜まり続けた。
+#      復旧したときに main をそのまま push すると、**CI（lint・hooks-test・dependency-audit）を一度も通さずに**
+#      正本へ入る——docs/agents/human-bypass-inventory.md の H-001「main へ直接 push もできる（ブランチ保護なし）」
+#      の経路そのもの。Free プランでは GitHub 側でブランチ保護を掛けられないので、手元で止める。
+#      正しい入れ方は、ブランチとして push して PR を 1 本作り、CI を通してからマージする
+#      （docs/agents/merge-rehearsal.md「GitHub 復旧時の入れ方」）。
+#
+# 止めるのは「URL に github.com を含む remote の refs/heads/main への push（削除を含む）」だけ。
+# GitLab（控え）への push と、GitHub のほかのブランチへの push は通す。
+# 緊急でどうしても直接 push するなら `git push --no-verify` で横を通り、
+# `bash scripts/log-manual-override.sh --safeguard H-001 --actor <名前> --reason "<理由>"` で理由を残す。
+#
+# 入れ方: bash scripts/install-git-hooks.sh（git の core.hooksPath をこのディレクトリへ向ける）
+set -u
+
+remote_name="${1:-}"
+remote_url="${2:-}"
+case "$remote_url" in
+  *github.com*) ;;
+  *) exit 0 ;;
+esac
+
+blocked=""
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    blocked="yes"
+  fi
+done
+
+if [ -n "$blocked" ]; then
+  echo "[pre-push] GitHub の main（${remote_name:-?}）へ直接 push しようとしたので止めました（H-001）。" >&2
+  echo "[pre-push] ブランチとして push して PR を作り、CI を通してからマージしてください:" >&2
+  echo "[pre-push]   git push ${remote_name:-origin} main:refs/heads/recovery/local-main" >&2
+  echo "[pre-push]   手順: docs/agents/merge-rehearsal.md「GitHub 復旧時の入れ方」" >&2
+  echo "[pre-push] 緊急で横を通るなら --no-verify。そのときは scripts/log-manual-override.sh --safeguard H-001 で理由を残す" >&2
+  exit 1
+fi
+exit 0

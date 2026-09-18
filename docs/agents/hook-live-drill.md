@@ -129,9 +129,33 @@ InstructionsLoaded、SubagentStart/Stop（phase1 実走時）。状態ファイ�
 skip-marker / readonly-bash / dependency-change / direct-ddl）は検証リポジトリで Write / Bash を伴う
 操作をしていないため未実走（構造テストと中心リポジトリでの実機 deny 確認のみ）。
 
+## 実走した版（2026-09-11 に追加）
+
+「hook を変えたら回す」という目安は書いてあったが、**変わったかどうかを誰も見ていなかった**
+（期限＝四半期だけが `scripts/maintenance-digest.sh` に載っていた）。版で見る。
+
+最後に実走した版: 未記録
+この仕組みを入れた時点の版: `4e16c913748b`（2026-09-11）
+
+- 版は `node scripts/lib/hook-registry-hash.mjs --root .` が出す。
+  見るのは**配線**——どの hook が・どのイベントに・どのコマンドで登録されているか。
+  対象は **Claude 側（`.claude/settings.json`）と Codex 側（`.codex/hooks.json`）の両方**。
+- `.codex/hooks.json` には 8 本の hook があり、うち 3 本は deny（DDL 実行・依存追加・skip marker）。
+  **止める側が黙って死ぬほうが危ない**ので、Codex 側も版に入れる。
+- **スクリプトの中身は版に入れていない。** 最初は入れたが、`maintenance-digest.sh` 自身が
+  登録された hook なので**この仕組みを書いている最中に版が変わった**。hook はふだんの開発でよく
+  触るので、中身まで見ると毎回鳴る——**毎回鳴る警告は読まれなくなる**。
+  実測（2026-09-11）: 登録されたスクリプトへ 1 行追記しても版は `4e16c913748b` のまま、
+  Codex の PreToolUse から deny を 1 本外すと `561c576724df` に動いた。
+  **ある hook のロジックを書き換えたときは、目安どおり自分でその hook を実走すること。**
+- **2026-09-05 の実走は版を残していない**ので、そこから何が変わったかは遡れない。
+  次の実走のときに「最後に実走した版」をその日の版で書き換えること。
+- 版が動いても**実機で発火するか**は測れない（それがこのドリルの役目）。版は「やり直す合図」まで。
+
 ## 次回実施の目安
 
-- `.claude/settings.json` の hooks を追加・変更したとき（その hook のみ）
+- `.claude/settings.json` または `.codex/hooks.json` の hooks を追加・変更したとき（その hook のみ）。
+  変わったことは上の「実走した版」で機械が見る
 - Claude Code 本体のメジャー更新後（transcript / `wf_*.json` の形式が変わりうる）
 - プラグイン v1 の切り出し前と、各バージョンのリリース前（全件）
 

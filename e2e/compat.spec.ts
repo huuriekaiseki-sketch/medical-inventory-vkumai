@@ -50,6 +50,10 @@ async function seedCategoryWithTwoProducts(request: APIRequestContext, suffix: s
         maker: `E2Eコンパチメーカー-${suffix}`,
         supplier: `E2Eコンパチ卸-${suffix}`,
         name: product.name,
+        // WHY(2026-09-08): 入口の検証（ff2a189 / 79a6c52、2026-09-07）で quantity が必須に
+        //      なったが、この spec は更新されておらず 400「数量は数値で入力してください」で
+        //      赤のままだった。E2E は main マージ後にしか回らないので誰も見ていなかった
+        quantity: 1,
       },
     })
     expect(dpRes.ok(), `POST /api/distributor-products failed: ${await dpRes.text()}`).toBe(true)

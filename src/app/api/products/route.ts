@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { parseQuery } from '@/lib/validation/parse-query'
+import { keywordQueryShape } from '@/lib/api-keyword-query'
+
+const productsQuerySchema = z.object({ ...keywordQueryShape() })
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { resolveIsAdmin } from '@/lib/admin-status'
 import { listProducts, createProduct } from '@/lib/products/repository'
-import { apiError, toClientErrorMessage } from '@/lib/api-error'
-import { parseKeyword } from '@/lib/api-keyword-query'
-import type { ProductInput, ProductsApiErrorResponse, ProductsApiQuery, ProductsApiResponse } from '@/types/product'
+import { authGuardError, apiError, toClientErrorMessage } from '@/lib/api-error'
+import type { ProductsApiErrorResponse, ProductsApiQuery, ProductsApiResponse } from '@/types/product'
+import { parseBody } from '@/lib/validation/parse-body'
+import { productInputSchema } from '@/lib/validation/schemas'
 
 // WHY: apiError は共通の { error: string } 形式を返すが、ProductsApiErrorResponse型と一致していることを
 //      コンパイル時に保証するため、戻り値をこの型でラップして返す（order.tsの参照実装パターンを踏襲。
@@ -19,14 +25,15 @@ export async function GET(
 ): Promise<NextResponse<ProductsApiResponse> | NextResponse<ProductsApiErrorResponse>> {
   try {
     const db = await createServerSupabase()
-    try { await requireAuth(db) } catch { return productsApiError('認証が必要です', 401) }
+    try { await requireAuth(db) } catch (e) { return authGuardError(e) }
 
-    const kw = parseKeyword(request.nextUrl.searchParams)
-    if (!kw.ok) return kw.response
+    // WHY(2026-09-09): クエリを読むのは parseQuery だけ（keyword の判定は keywordQueryShape）
+    const parsed = parseQuery(request, productsQuerySchema)
+    if (!parsed.ok) return parsed.response
 
     // WHY: ProductsApiQuery型（src/types/product.ts）を実際に参照することで、route側の
     //      パース結果がSPECで定義した契約と一致していることをコンパイル時に保証する
-    const query: ProductsApiQuery = { ...(kw.keyword ? { keyword: kw.keyword } : {}) }
+    const query: ProductsApiQuery = { ...(parsed.data.keyword ? { keyword: parsed.data.keyword } : {}) }
 
     const products = await listProducts(db, query)
     return NextResponse.json({ products } satisfies ProductsApiResponse)
@@ -36,25 +43,14 @@ export async function GET(
 }
 
 export async function POST(request: NextRequest) {
-  let input: ProductInput
-  try {
-    input = await request.json()
-  } catch {
-    return apiError('リクエストが不正です', 400)
-  }
-
-  if (!input.jan || !input.ref) {
-    return apiError('JAN と REF は必須です', 400)
-  }
-
-  if (!input.name || !input.name.trim()) {
-    return apiError('製品名は必須です', 400)
-  }
+  const parsed = await parseBody(request, productInputSchema)
+  if (!parsed.ok) return parsed.response
+  const input = { ...parsed.data, maker: parsed.data.maker ?? null }
 
   try {
     const db = await createServerSupabase()
     let user
-    try { user = await requireAuth(db) } catch { return apiError('認証が必要です', 401) }
+    try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
     const isAdmin = await resolveIsAdmin(db, user)
     if (!isAdmin) return apiError('権限がありません', 403)
     const product = await createProduct(db, input)

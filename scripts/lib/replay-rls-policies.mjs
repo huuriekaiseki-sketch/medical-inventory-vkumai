@@ -1,0 +1,217 @@
+#!/usr/bin/env node
+// migration を順に再生して、いま存在する RLS ポリシーを数える。
+//
+// WHY(2026-09-13): docs/agents/security-test-catalog.md の引き金「RLS ポリシーが 30 本を超えたら」は
+//      「**数える口が無い**（静的には判定不能。現存数は実 DB の pg_policies が要る）」として
+//      「引き金が引けない行」に載せてあった。**これは誤りだった。**
+//      当時の私は `CREATE POLICY` の出現回数（115）と `DROP POLICY`（95）を数えて
+//      「上限 115 は 30 超・下限 20 は 30 未満だから判定不能」と結論したが、
+//      **順に再生していなかった**だけ。migration は連番で順序が確定し、このリポジトリでは
+//      psql / supabase db execute が禁止されていて DB を変える手段は migration だけなので
+//      （経路外の変更はスキーマドリフト検知が拾う）、再生すれば現存集合が一意に決まる。
+//      再生したら 35 本で、**閾値 30 はとっくに超えていた**。
+//
+//      「調べ尽くした風の断定」は次に読む人の再挑戦を最も確実に止める。だから
+//      **数え方を 1 つ試して駄目だったことを「数えられない」と書かない**。
+//
+// 数え方:
+//   - `CREATE POLICY <名前> ON <表>` で (表, 名前) を足す
+//   - `DROP POLICY [IF EXISTS] <名前> ON <表>` で引く
+//   - **動的 DDL も展開する**。`DO $$ ... FOREACH t IN ARRAY ARRAY[...] LOOP EXECUTE format('... %I ...')`
+//     を表リストの各表へ展開する。これを飛ばすと 4 行ぶん（= 20 文）が数から丸ごと落ちる
+//   - POLICY を含むのにどちらでも読めなかった行は **黙って飛ばさず名指しする**。
+//     飛ばすと「上限内」という嘘の安心が出る（C-044）
+//
+// 限界:
+//   - 表ごと消す DDL（DROP TABLE ... CASCADE）は付随するポリシーまでは追わない。
+//     見つけたら報告する（2026-09-13 時点で 1 件あるが、最初の CREATE POLICY より前なので影響なし）
+//   - ALTER POLICY / RENAME は追わない（実例が無い）。見つけたら報告する
+//   - 数えるのは**ポリシーの本数**であって、中身が正しいかは見ない（それは RLS 変異計測 H-06 の担当）
+//   - 危険な名前は既知のもの（auth_only = USING (true)）しか見ない
+import { readdirSync, readFileSync } from 'node:fs'
+import path from 'node:path'
+import { writeLine } from './stdout-sync.mjs'
+
+// WHY(2026-09-13): Map の鍵の区切りは**実行時に作る**。ソースにバックスラッシュ + u の形で書くと、
+//      書き出しの経路で実バイトになってファイルに NUL が入る（E-082 / C-052 でこのファイル自身がやらかした）。
+const SEP = String.fromCharCode(0)
+
+const NAME = String.raw`(?:"[^"]+"|[A-Za-z_][\w$]*)`
+const RE_CREATE = new RegExp(String.raw`\bCREATE\s+POLICY\s+(${NAME})\s+ON\s+([\w."]+)`, 'i')
+const RE_DROP = new RegExp(
+  String.raw`\bDROP\s+POLICY\s+(?:IF\s+EXISTS\s+)?(${NAME})\s+ON\s+([\w."]+)`,
+  'i',
+)
+const RE_FMT_CREATE = new RegExp(String.raw`CREATE\s+POLICY\s+(${NAME})\s+ON\s+%I`, 'i')
+const RE_FMT_DROP = new RegExp(
+  String.raw`DROP\s+POLICY\s+(?:IF\s+EXISTS\s+)?(${NAME})\s+ON\s+%I`,
+  'i',
+)
+const RE_DO_START = /^\s*DO\s*\$\$/i
+const RE_DO_END = /^\s*\$\$\s*;/i
+const RE_FOREACH = /FOREACH\s+\w+\s+IN\s+ARRAY\s+ARRAY\s*\[/i
+const RE_POLICY_WORD = /\bPOLICY\b/i
+
+const RISKY = [
+  [/\bDROP\s+TABLE\b/i, '表の削除'],
+  [/\bALTER\s+POLICY\b/i, 'ポリシーの変更'],
+  [/\bRENAME\s+TO\b/i, '改名'],
+  [/\bDROP\s+SCHEMA\b/i, 'スキーマの削除'],
+]
+
+/** 既知の危険な名前。USING (true) なので認証さえ通れば全施設が読める */
+export const DANGEROUS_NAMES = new Set(['auth_only'])
+
+const norm = (s) => s.trim().replace(/^"|"$/g, '').toLowerCase()
+const normTable = (s) => {
+  const t = norm(s)
+  return t.startsWith('public.') ? t.slice('public.'.length) : t
+}
+
+/** ARRAY[ 'a', 'b' ] から表名を取り出す */
+function parseTableList(block) {
+  const m = /ARRAY\s*\[([\s\S]*?)\]/.exec(block)
+  if (!m) return []
+  return m[1]
+    .split(',')
+    .map((x) => x.trim().replace(/^['"]|['"]$/g, ''))
+    .filter(Boolean)
+}
+
+/**
+ * migration ディレクトリを再生する。
+ * @returns {{live: Array<[string,string]>, creates: number, drops: number,
+ *            noop: string[], unparsed: string[], risky: string[], files: number}}
+ */
+export function replayPolicies(migrationsDir) {
+  const live = new Map()
+  const noop = []
+  const unparsed = []
+  const risky = []
+  let creates = 0
+  let drops = 0
+
+  const files = readdirSync(migrationsDir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort()
+
+  for (const file of files) {
+    const text = readFileSync(path.join(migrationsDir, file), 'utf8')
+    const lines = text.split('\n')
+    const dynamicLines = new Set()
+
+    // 先に動的 DDL のブロックを展開し、その行は通常の走査から外す
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!RE_DO_START.test(lines[i])) continue
+      let end = i
+      while (end < lines.length && !RE_DO_END.test(lines[end])) end += 1
+      const block = lines.slice(i, end + 1).join('\n')
+      if (RE_FOREACH.test(block)) {
+        const tables = parseTableList(block)
+        if (tables.length === 0) {
+          unparsed.push(`${file}:${i + 1} 動的ループの表リストが読めません`)
+        } else {
+          // format('...') の中の DDL を、表リストの各表へ書かれた順に適用する
+          for (const m of block.matchAll(/format\(\s*((?:'[^']*'\s*(?:\|\|)?\s*)+)/gi)) {
+            const sql = m[1]
+            const dm = RE_FMT_DROP.exec(sql)
+            const cm = RE_FMT_CREATE.exec(sql)
+            for (const t of tables) {
+              if (dm) {
+                drops += 1
+                const key = `${normTable(t)}${SEP}${norm(dm[1])}`
+                if (live.has(key)) live.delete(key)
+                else noop.push(`${file}(動的) ${normTable(t)}.${norm(dm[1])}`)
+              }
+              if (cm) {
+                creates += 1
+                live.set(`${normTable(t)}${SEP}${norm(cm[1])}`, `${file}(動的)`)
+              }
+            }
+          }
+          for (let n = i; n <= end; n += 1) dynamicLines.add(n)
+        }
+      }
+      i = end
+    }
+
+    lines.forEach((line, idx) => {
+      if (dynamicLines.has(idx)) return
+      const stripped = line.trim()
+      if (stripped.startsWith('--')) return
+
+      for (const [pat, label] of RISKY) {
+        if (pat.test(line)) risky.push(`${file}:${idx + 1} [${label}] ${stripped.slice(0, 100)}`)
+      }
+
+      const cm = RE_CREATE.exec(line)
+      if (cm) {
+        creates += 1
+        live.set(`${normTable(cm[2])}${SEP}${norm(cm[1])}`, file)
+        return
+      }
+      const dm = RE_DROP.exec(line)
+      if (dm) {
+        drops += 1
+        const key = `${normTable(dm[2])}${SEP}${norm(dm[1])}`
+        if (live.has(key)) live.delete(key)
+        else noop.push(`${file}:${idx + 1} ${normTable(dm[2])}.${norm(dm[1])}`)
+        return
+      }
+      // POLICY を含むのに読めなかった行は黙って飛ばさない
+      if (RE_POLICY_WORD.test(line)) unparsed.push(`${file}:${idx + 1} ${stripped.slice(0, 120)}`)
+    })
+  }
+
+  return {
+    live: [...live.keys()].map((k) => k.split(SEP)),
+    creates,
+    drops,
+    noop,
+    unparsed,
+    risky,
+    files: files.length,
+  }
+}
+
+/** 危険な名前で残っているもの */
+export function dangerousLeft(live) {
+  return live.filter(([, name]) => DANGEROUS_NAMES.has(name)).map(([t, n]) => `${t}.${n}`)
+}
+
+// --- CLI ---
+// 使い方: node scripts/lib/replay-rls-policies.mjs --migrations <dir>
+// 出力は key=value と、詳細行（UNPARSED / RISKY / DANGEROUS / POLICY）。
+// **判定はしない**（合否は呼び出す側の入口が決める）。
+// WHY(2026-09-13): ここに入口のファイル名を書かない。手元では同じ木にあるので解決するが、
+//      配ると走査器と入口が別のプラグインへ散り、`build-plugin --check` が
+//      「参照先が同梱されていない」で落ちる（C-053: 配る形と使う形で壊れる）。
+//      **コメント 1 行のファイル名が配布の依存関係を作る。**
+// 終了コード: 0 = 再生できた / 2 = 再生できない（読めない・ディレクトリが無い）
+if (process.argv[1] && process.argv[1].endsWith('replay-rls-policies.mjs')) {
+  const args = process.argv.slice(2)
+  const at = args.indexOf('--migrations')
+  const dir = at >= 0 ? args[at + 1] : 'supabase/migrations'
+
+  let r
+  try {
+    r = replayPolicies(dir)
+  } catch (e) {
+    writeLine(`error=${String(e && e.message).replace(/\n/g, ' ')}`)
+    process.exit(2)
+  }
+
+  const dl = dangerousLeft(r.live)
+  writeLine(`files=${r.files}`)
+  writeLine(`creates=${r.creates}`)
+  writeLine(`drops=${r.drops}`)
+  writeLine(`live=${r.live.length}`)
+  writeLine(`noop=${r.noop.length}`)
+  writeLine(`unparsed=${r.unparsed.length}`)
+  writeLine(`risky=${r.risky.length}`)
+  writeLine(`dangerous=${dl.length}`)
+  for (const u of r.unparsed) writeLine(`UNPARSED ${u}`)
+  for (const x of r.risky) writeLine(`RISKY ${x}`)
+  for (const d of dl) writeLine(`DANGEROUS ${d}`)
+  for (const [t, n] of [...r.live].sort()) writeLine(`POLICY ${t}.${n}`)
+}

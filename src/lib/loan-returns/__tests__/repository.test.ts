@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLoanReturn, listLoanReturns, LOAN_ORDER_NOT_FOUND_ERROR } from '@/lib/loan-returns/repository'
 import { ClientVisibleError } from '@/lib/client-visible-error'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase のクエリビルダはメソッドチェーンで、実物の型（PostgrestFilterBuilder）はジェネリクスが深く、テスト用のモックでは再現できない。このモック関数の戻り値に限って any を使う
 function makeChainableQuery(result: { data: unknown; error: unknown }): any {
   const builder: Record<string, unknown> = {
     select: vi.fn(() => builder),
@@ -94,7 +94,8 @@ describe('createLoanReturn', () => {
 
     expect(rpc).toHaveBeenCalledWith('create_loan_return_atomic', expect.objectContaining({
       p_header: expect.objectContaining({ facility_id: 'f-1', return_datetime: '2026-06-24T15:00:00Z' }),
-      p_items: [{ jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1 }],
+      // WHY(loan_order_item_id): 2026-09-08 に分割返却を入れた。対象の明細を選ばない返却は null
+      p_items: [{ jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1, loan_order_item_id: null }],
     }))
   })
 
@@ -114,7 +115,7 @@ describe('createLoanReturn', () => {
   //      生のPostgresエラー(制約名・テーブル名を含む)をそのままthrowするとスキーマ情報が
   //      漏洩し得るため、ClientVisibleErrorとして翻訳しroute側で400として扱えるようにする
   //      (consumables/repository.ts:53 と同じパターン)
-  it('RPCが23505(UNIQUE制約違反)エラーを返した場合はClientVisibleErrorに翻訳する', async () => {
+  it('RPCが23505(UNIQUE制約違反)エラーを返した場合はClientVisibleErrorに翻訳する（鍵の重複）', async () => {
     const { db } = makeMockRpcDb({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "loan_returns_loan_order_id_unique"' } })
 
     await expect(
@@ -122,7 +123,9 @@ describe('createLoanReturn', () => {
         returnDatetime: '2026-06-24T15:00:00Z',
         items: [{ jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1 }],
       })
-    ).rejects.toThrow('この短貸発注は既に返却登録されています')
+    // WHY(文言が変わった): 2026-09-08 に loan_order_id の部分 UNIQUE を外した（分割返却）。
+    //      ここへ来る 23505 は client_request_id の索引だけになった
+    ).rejects.toThrow('同じ内容の返却が既に登録されています')
 
     await expect(
       createLoanReturn(db, 'f-1', {

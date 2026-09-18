@@ -71,6 +71,11 @@ command -v jq >/dev/null 2>&1 || exit 0
 cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 04 表の判定（4 値・理由の有無）は共通の入口を使う。
+# docs/sessions/ 側の構造テストと同じ判定にするため（複製すると片方だけ古くなる。C-047）。
+# 表の割り方（`\|` を区切りにしない）もこの先で読まれる
+# shellcheck source=lib/handoff-04-table.sh
+source "$SCRIPT_DIR/lib/handoff-04-table.sh"
 MARKER_FILE="${HANDOFF_CHECK_MARKER_FILE:-.aidd/handoff-format-warning-shown.json}"
 GH_CMD="${HANDOFF_CHECK_GH_CMD:-gh}"
 
@@ -118,40 +123,28 @@ check_pr() {
   pr_body="$("$GH_CMD" pr view "$pr_number" --json body --jq '.body' 2>/dev/null || true)"
 
   has_summary=0
-  if printf '%s' "$pr_body" | grep -qF '30秒サマリー'; then
+  if grep -qF '30秒サマリー' <<<"$pr_body"; then
     has_summary=1
   fi
   has_verified=0
-  if printf '%s' "$pr_body" | grep -qF 'どう確認したか'; then
+  if grep -qF 'どう確認したか' <<<"$pr_body"; then
     has_verified=1
   fi
 
-  # 04 表の4値検知。「どう確認したか」節の表行（見出し行・区切り行を除く）ごとに
-  # 状態列（2列目）が4値のいずれかで始まるか、➖ / ⬜ の行に3列目（理由）があるかを見る。
-  # 外れた行の種別名を four_state_issues に溜める（空なら問題なし）
+  # 04 表の4値検知。判定そのものは lib/handoff-04-table.sh が持つ
+  # （docs/sessions/ 側の構造テストと**同じ判定**を使う。複製すると片方だけ古くなる。C-047）
   four_state_issues=""
   if [ "$has_verified" -eq 1 ]; then
-    four_state_issues="$(printf '%s\n' "$pr_body" | awk -F'|' '
-      /^#+ .*どう確認したか/ {f=1; next}
-      /^## / {f=0}
-      f && /^\| / {
-        kind=$2; gsub(/^ +| +$/,"",kind)
-        if (kind=="" || kind ~ /^-+$/ || kind ~ /^種別/) next
-        status=$3; gsub(/^ +| +$/,"",status)
-        reason=$4; gsub(/^ +| +$/,"",reason)
-        if (status !~ /^(✅|➖|🟡|⬜)/) { printf "%s（状態 \"%s\" が4値でない）; ", kind, status; next }
-        # substr は Linux の awk（C ロケール）だとバイト単位で絵文字を切るため使わない
-        if (status ~ /^(➖|⬜)/ && (reason=="" || reason=="—")) { mark = (status ~ /^➖/) ? "➖" : "⬜"; printf "%s（%s なのに理由が無い）; ", kind, mark }
-      }' 2>/dev/null || true)"
+    four_state_issues="$(handoff_four_state_issues "$pr_body")"
   fi
 
   # 依存の変更（package.json / package-lock.json を触った PR に「依存の変更」の記述があるか）。
   # 変更ファイル一覧が取れない場合は判定しない（fail-open）
   dep_issue=""
   pr_files="$("$GH_CMD" pr view "$pr_number" --json files --jq '.files[].path' 2>/dev/null || true)"
-  if printf '%s\n' "$pr_files" | grep -qxE '(.*/)?package(-lock)?\.json'; then
-    if ! printf '%s' "$pr_body" | grep -qF '依存の変更'; then
-      dep_issue="$(printf '%s\n' "$pr_files" | grep -E '(.*/)?package(-lock)?\.json' | tr '\n' ' ')"
+  if grep -qxE '(.*/)?package(-lock)?\.json' <<<"$pr_files"; then
+    if ! grep -qF '依存の変更' <<<"$pr_body"; then
+      dep_issue="$(grep -E '(.*/)?package(-lock)?\.json' <<<"$pr_files" | tr '\n' ' ')"
     fi
   fi
 
@@ -173,7 +166,7 @@ NEW_KEYS=""
 while IFS= read -r pr_number; do
   [ -n "$pr_number" ] || continue
   key="${SESSION_ID}:${pr_number}"
-  if printf '%s\n' "$WARNED_KEYS" | grep -qxF "$key"; then
+  if grep -qxF "$key" <<<"$WARNED_KEYS"; then
     continue
   fi
   msg="$(check_pr "$pr_number")"

@@ -155,7 +155,7 @@ describe('発注・返却 RPC の冪等性（client_request_id） [P-053 I-034]'
     expect(await countRows('loan_returns', fx.facilityA.id, key)).toBe(1)
   })
 
-  it('返却: 鍵があっても、同じ短貸発注への 2 回目の返却（P-050）は従来どおり 23505 で拒否される', async () => {
+  it('返却: 別の鍵なら同じ短貸発注へもう一度返却できる（分割返却。鍵の再送とは別物）', async () => {
     const { data: loanOrder } = await fx.userA.client.rpc('create_loan_order_atomic', {
       p_facility_id: fx.facilityA.id,
       p_procedure_name: 'P-050 との併存テスト',
@@ -171,9 +171,19 @@ describe('発注・返却 RPC の冪等性（client_request_id） [P-053 I-034]'
     })
     const first = await fx.userA.client.rpc('create_loan_return_atomic', { p_header: header(randomUUID()), p_items: [] })
     expect(first.error).toBeNull()
-    // 別の鍵（別のフォームからの 2 回目）は再送ではないので、loan_order_id の UNIQUE がそのまま効く
-    const second = await fx.userA.client.rpc('create_loan_return_atomic', { p_header: header(randomUUID()), p_items: [] })
-    expect(second.error?.code).toBe(UNIQUE_VIOLATION)
+    // WHY(2026-09-08 に変わった): loan_order_id の部分 UNIQUE は分割返却のために外した
+    //      （20260908030000）。別の鍵で同じ短貸発注へもう一度返却するのは**正しい操作**になり、
+    //      止めるのは「借りた数を超えたとき」だけになった（P-050 の書き換え）。
+    const second = await fx.userA.client.rpc('create_loan_return_atomic', {
+      p_header: {
+        facility_id: fx.facilityA.id,
+        return_datetime: new Date().toISOString(),
+        loan_order_id: loanOrderId,
+        client_request_id: randomUUID(),
+      },
+      p_items: [],
+    })
+    expect(second.error, JSON.stringify(second.error)).toBeNull()
   })
 
   it('鍵を渡さない従来の呼び出しは毎回新しい行を作る（後方互換。API 経由の画面は必ず渡す）', async () => {

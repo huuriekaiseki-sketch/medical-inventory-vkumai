@@ -1,0 +1,12 @@
+{
+  "expectNoFinding": true,
+  "expectedFilePathContains": [
+    "ward-supplies/repository.ts",
+    "types/ward-supplies.ts"
+  ],
+  "expectedKeywords": [
+    "internalNote",
+    "internal_note",
+    "WardSupplyItem"
+  ]
+}

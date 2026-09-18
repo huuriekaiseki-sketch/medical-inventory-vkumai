@@ -1,5 +1,5 @@
 name = "proposer"
-description = "仕様書の問題点・ギャップを受け取り、設計アプローチを1案提案する。Judge Panel フェーズで並列起動される。スタンス（MVP優先・リスク最小・拡張性重視）を指定して呼び出すこと。読み取り専用。"
+description = "仕様書の問題点・ギャップを受け取り、設計アプローチを1案提案する。spec-deep-validate の Judge Panel フェーズで並列起動される。スタンス（MVP優先・リスク最小・拡張性重視）を指定して呼び出すこと。読み取り専用。"
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 developer_instructions = """

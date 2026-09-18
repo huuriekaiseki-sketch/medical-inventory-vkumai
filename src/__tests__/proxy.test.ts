@@ -396,6 +396,76 @@ describe('proxy', () => {
       expect(response?.status).not.toBe(307)
     })
 
+    // WHY: issue #757 の 31（fail-open の総点検）。MFA API が落ちている間、以前は aal が取れないと
+    //      ガードを素通りさせていた（MFA 登録済みの aal1 セッションが保護ページを読める）。
+    //      判定材料が取れないときは「昇格が要る」側に倒す（docs/agents/fail-open-inventory.md F-004）
+    it('MFA API がエラーを返したら保護パスを通さず /mfa-challenge へ送る（fail-closed）', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: { id: 'u', email: 'u@example.com' } }, error: null }),
+          mfa: {
+            getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({ data: null, error: { message: 'mfa api down' } }),
+          },
+        },
+        rpc: vi.fn(),
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const response = await proxy(new NextRequest(new URL('http://localhost:3000/facilities')))
+
+      expect(response?.status).toBe(307)
+      expect(response?.headers.get('location')).toContain('/mfa-challenge')
+    })
+
+    it('MFA API が error なしで data も null を返したときも /mfa-challenge へ送る', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: { id: 'u', email: 'u@example.com' } }, error: null }),
+          mfa: {
+            getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({ data: null, error: null }),
+          },
+        },
+        rpc: vi.fn(),
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const response = await proxy(new NextRequest(new URL('http://localhost:3000/facilities')))
+
+      expect(response?.status).toBe(307)
+      expect(response?.headers.get('location')).toContain('/mfa-challenge')
+    })
+
+    it('MFA API がエラーでも /mfa-challenge 自体は通す（ループしない）', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: { id: 'u', email: 'u@example.com' } }, error: null }),
+          mfa: {
+            getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({ data: null, error: { message: 'mfa api down' } }),
+          },
+        },
+        rpc: vi.fn(),
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const response = await proxy(new NextRequest(new URL('http://localhost:3000/mfa-challenge')))
+
+      expect(response?.status).not.toBe(307)
+    })
+
+    it('getUser がエラーを返したら未認証として /login へ送る', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce({
+        auth: {
+          getUser: vi.fn().mockResolvedValueOnce({ data: { user: { id: 'stale', email: 'stale@example.com' } }, error: { message: 'auth down' } }),
+        },
+      } as unknown as ReturnType<typeof createServerClient>)
+
+      const response = await proxy(new NextRequest(new URL('http://localhost:3000/facilities')))
+
+      expect(response?.status).toBe(307)
+      expect(response?.headers.get('location')).toContain('/login')
+    })
+
     it('既にaal2のユーザーは保護パスへ通常通りアクセスできる', async () => {
       const { createServerClient } = await import('@supabase/ssr')
       vi.mocked(createServerClient).mockReturnValueOnce(
@@ -414,6 +484,49 @@ describe('proxy', () => {
       const response = await proxy(request)
 
       expect(response?.status).not.toBe(307)
+    })
+  })
+
+  // WHY(#757-24): Route Handler は自分のパスを知る手段が無いので、拒否の記録に経路を残すには
+  //      proxy が転送リクエストへ付けるしかない。付け忘れると証跡の route が静かに空になる
+  describe('拒否の記録に使う転送ヘッダ', () => {
+    it('通過するリクエストにパスとメソッドを付ける', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc({ id: 'u-1', email: 'u1@example.com' }, false, false) as unknown as ReturnType<
+          typeof createServerClient
+        >
+      )
+
+      const request = new NextRequest(new URL('http://localhost:3000/api/case-orders?facility_id=abc'), {
+        method: 'POST',
+      })
+
+      const response = await proxy(request)
+
+      expect(response?.status).not.toBe(307)
+      expect(response?.headers.get('x-middleware-override-headers')).toContain('x-aidd-route')
+      expect(response?.headers.get('x-middleware-request-x-aidd-route')).toBe('/api/case-orders')
+      expect(response?.headers.get('x-middleware-request-x-aidd-method')).toBe('POST')
+    })
+
+    it('クライアントが送ってきた同名ヘッダは上書きする（偽の経路を証跡に書かせない）', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc({ id: 'u-2', email: 'u2@example.com' }, false, false) as unknown as ReturnType<
+          typeof createServerClient
+        >
+      )
+
+      const request = new NextRequest(new URL('http://localhost:3000/api/loan-orders'), {
+        method: 'GET',
+        headers: { 'x-aidd-route': '/api/harmless', 'x-aidd-method': 'OPTIONS' },
+      })
+
+      const response = await proxy(request)
+
+      expect(response?.headers.get('x-middleware-request-x-aidd-route')).toBe('/api/loan-orders')
+      expect(response?.headers.get('x-middleware-request-x-aidd-method')).toBe('GET')
     })
   })
 

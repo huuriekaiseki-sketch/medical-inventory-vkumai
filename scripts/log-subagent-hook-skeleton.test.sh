@@ -12,7 +12,7 @@ SCRIPT="$SCRIPT_DIR/log-subagent-hook-skeleton.sh"
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then
+  if grep -qF -- "$needle" <<<"$haystack"; then
     echo "  OK: $label"
   else
     echo "  NG: $label"
@@ -85,8 +85,8 @@ input="{\"session_id\":\"sess-1\",\"transcript_path\":\"/tmp/t.jsonl\",\"cwd\":\
 run_hook "$input"
 assert_eq "$EXIT_CODE" "0" "exit 0"
 LAST_LINE="$(tail -n 1 "$TMP_LOG")"
-if printf '%s' "$LAST_LINE" | grep -qF '"intent"'; then
-  echo "  NG: intentフィールドが付与されないこと（実際: $LAST_LINE）"
+if grep -qF '"intent"' <<<"$LAST_LINE"; then
+  echo "  NG: intentフィールドが付与されないこと（実際: ${LAST_LINE}）"
   fail=1
 else
   echo "  OK: intentフィールドが付与されない"

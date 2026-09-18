@@ -1,0 +1,47 @@
+{
+  "_comment": "「ロードマップの状態列が実態と食い違っていないか」を見るエンジン（aidd-core が配る scripts/lib/check-roadmap-staleness.mjs）の登録簿。エンジンは共通側が配り、**この登録簿は導入先のもの**（ロードマップの番号も成果物も導入先ごとに違う）。",
+  "_howto": "catalog: 状態列を持つロードマップの文書。planPattern: 「まだ計画」を表す行の書き方（1 つ目の丸括弧で番号を取る）。evidence: 番号 → その番号が終わっていれば在るはずの成果物。**在れば終わり、ではなく「在るなら状態を見直せ」**の意味。",
+  "_limits": "逆（実装が消えたのに実装済みのまま）は見ていない。evidence に無い番号は「対応を定義していない」として --verbose のときだけ出す。この登録簿を置かない導入先では検査を飛ばす（ロードマップの持ち方は導入先ごとに違うため）。**打ち間違えた evidence パスは、まだ作っていない成果物と区別が付かない**——どちらも「在らない」ので、その番号は永久に鮮度判定に引っかからない（2026-09-11 時点で在らないのは 4 件：config-drift.md / key-rotation-runbook.md / monitoring.md / restore-drill.md。いずれも計画のまま）。番号を足すときは、パスを手で 1 度確かめる。",
+  "catalog": "docs/agents/security-test-catalog.md",
+  "planPattern": "計画 #757-([0-9]+)",
+  "evidence": {
+    "5": [
+      "src/lib/log-safe.ts",
+      "docs/agents/data-lifecycle-inventory.md"
+    ],
+    "6": [
+      "docs/agents/property-testing.md"
+    ],
+    "7": [
+      "stryker.config.json",
+      "docs/agents/mutation-testing.md"
+    ],
+    "8": [
+      "docs/agents/monitoring.md"
+    ],
+    "11": [
+      "docs/agents/restore-drill.md"
+    ],
+    "23": [
+      "docs/agents/restore-drill.md"
+    ],
+    "24": [
+      "docs/agents/privileged-write-rulebook.md"
+    ],
+    "28": [
+      "docs/agents/data-lifecycle-inventory.md"
+    ],
+    "29": [
+      "docs/agents/key-rotation-runbook.md"
+    ],
+    "32": [
+      "docs/agents/quota-inventory.md"
+    ],
+    "35": [
+      "docs/agents/config-drift.md"
+    ],
+    "39": [
+      "docs/agents/threat-model.md"
+    ]
+  }
+}

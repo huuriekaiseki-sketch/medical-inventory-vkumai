@@ -10,6 +10,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveIsAdmin } from '@/lib/admin-status'
+import { DENIAL_METHOD_HEADER, DENIAL_ROUTE_HEADER } from '@/lib/security/denial-headers'
 
 const PUBLIC_PATHS = ['/login', '/auth/callback']
 
@@ -18,8 +19,19 @@ const PUBLIC_PATHS = ['/login', '/auth/callback']
 // currentLevelと異なる間は/mfa-challenge以外へのアクセスを許さない。
 const MFA_CHALLENGE_PATH = '/mfa-challenge'
 
+// WHY(#757-24): Route Handler は自分のパスとメソッドを知る手段を持たないので、拒否の記録
+//      （access_denials）に経路を残すには proxy が転送リクエストへ付けるしかない。
+//      クライアントが同じ名前で送ってきても必ず上書きし、証跡に偽の経路を書かせない。
+//      cookie を差し替えた後の request から作るので、Supabase の セッション更新とも両立する。
+function forwardedHeaders(request: NextRequest): Headers {
+  const headers = new Headers(request.headers)
+  headers.set(DENIAL_ROUTE_HEADER, request.nextUrl.pathname)
+  headers.set(DENIAL_METHOD_HEADER, request.method)
+  return headers
+}
+
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request })
+  let supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders(request) } })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,7 +43,7 @@ export async function proxy(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({ request })
+          supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders(request) } })
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )
@@ -41,7 +53,10 @@ export async function proxy(request: NextRequest) {
   )
 
   // トークンリフレッシュ（updateSession パターン）
-  const { data: { user } } = await supabase.auth.getUser()
+  // WHY: error は user null と同じ扱い（未認証として /login へ）。error を捨てても挙動は同じだが、
+  //      「認可の判定材料はエラーを受け取る」規約（scripts/check-fail-open.test.sh）に揃える
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  const user = userError ? null : userData.user
 
   const pathname = request.nextUrl.pathname
 
@@ -52,8 +67,17 @@ export async function proxy(request: NextRequest) {
 
   // MFAガード（aal1のまま保護ページへ進ませない）
   if (user && pathname !== MFA_CHALLENGE_PATH) {
-    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== aal.nextLevel) {
+    const { data: aal, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    // WHY(issue #757 の 31、fail-open の総点検): 以前は error を捨て、aal が取れなければガードを
+    //      素通りさせていた。Supabase Auth の MFA API が落ちている間、MFA 登録済み利用者の aal1
+    //      セッションが保護ページを読めてしまう（DB は書き込みだけ aal2 を要求するので、読みは
+    //      RLS で止まらない）。判定材料が取れないときは「昇格が要る」側に倒し、/mfa-challenge へ
+    //      送る（同ページは MFA API のエラーを利用者に表示し、データは出さない）。
+    //      docs/agents/fail-open-inventory.md の F-004
+    if (aalError || !aal) {
+      return NextResponse.redirect(new URL(MFA_CHALLENGE_PATH, request.url))
+    }
+    if (aal.nextLevel === 'aal2' && aal.currentLevel !== aal.nextLevel) {
       return NextResponse.redirect(new URL(MFA_CHALLENGE_PATH, request.url))
     }
   }

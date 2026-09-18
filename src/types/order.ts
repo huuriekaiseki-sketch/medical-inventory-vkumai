@@ -7,7 +7,8 @@ export type CaseOrder = {
   patientInitials: string
   gender: 'male' | 'female' | 'other'
   doctorName: string
-  status: 'draft' | 'submitted'
+  /** cancelled は 2026-09-08 に足した取り消し状態（E-056）。行は消さず状態で表す */
+  status: 'draft' | 'submitted' | 'cancelled'
   items: CaseOrderItem[]
   createdAt: string
   updatedAt: string
@@ -52,6 +53,14 @@ export type Consumable = {
   purpose: string
   createdAt: string
   updatedAt: string
+  /** retired は 2026-09-09 に足した使用停止（一覧と発注の選択肢から外れるが、過去の発注は残る） */
+  status: 'active' | 'retired'
+  /**
+   * 発注で使われたことがあるか（2026-09-09）。
+   * WHY(画面が押す前に知る必要がある): 使われていれば消せず、使用停止にするしかない。
+   *      押してから 409 で気づかせるより、ボタンの出し分けで先に示す
+   */
+  inUse: boolean
 }
 
 export type ConsumableInput = {
@@ -96,7 +105,8 @@ export type ConsumablesApiErrorResponse = {
 export type ConsumableOrder = {
   id: string
   facilityId: string
-  status: 'draft' | 'submitted'
+  /** cancelled は 2026-09-08 に足した取り消し状態（E-056）。行は消さず状態で表す */
+  status: 'draft' | 'submitted' | 'cancelled'
   items: ConsumableOrderItem[]
   createdAt: string
   updatedAt: string
@@ -128,7 +138,8 @@ export type LoanOrder = {
   facilityId: string
   procedureName: string
   maker: string
-  status: 'draft' | 'submitted'
+  /** cancelled は 2026-09-08 に足した取り消し状態（E-056）。行は消さず状態で表す */
+  status: 'draft' | 'submitted' | 'cancelled'
   items: LoanOrderItem[]
   createdAt: string
   updatedAt: string
@@ -143,6 +154,11 @@ export type LoanOrderItem = {
   /** 発注時点の単価スナップショット。既存データ(unit_price追加前)はnull */
   unitPrice: number | null
   createdAt: string
+  /**
+   * この明細に対して**もう返した**数量の合計（2026-09-08）。
+   * 返却フォームが「残り」を出すために使う。紐付けの無い返却は入らない。
+   */
+  returnedQuantity?: number
 }
 
 export type LoanOrderInput = {
@@ -163,7 +179,12 @@ export type LoanReturn = {
   id: string
   facilityId: string
   returnDatetime: string
-  status: 'draft' | 'returned'
+  /**
+   * `cancelled` は 2026-09-08 に足した取り消し状態（E-056）。
+   * **行は消さない**（誰がいつ取り消したかを残す）。取り消した返却は
+   * 残数・未返却の件数のどちらにも数えない。取り消しからは戻れない。
+   */
+  status: 'draft' | 'returned' | 'cancelled'
   items: LoanReturnItem[]
   createdAt: string
   updatedAt: string
@@ -179,6 +200,16 @@ export type LoanReturnItem = {
   ubd?: string
   quantity: number
   createdAt: string
+  /** どの発注明細に対する返却か。紐付けない返却では undefined（2026-09-08） */
+  loanOrderItemId?: string
+  /**
+   * 品目ごとの取り消し（2026-09-09、E-056 の残り）。
+   *
+   * WHY: 1 回の返却で複数の品目を返したとき、そのうち 1 品目だけが間違いということが起きる。
+   *      回ごと取り消して全部入れ直すのではなく、その品目だけを `cancelled` にする。
+   *      `cancelled` の明細は残数・未返却の計算から除かれる（DB・アプリの 4 か所で同じ条件）。
+   */
+  status: 'active' | 'cancelled'
 }
 
 export type LoanReturnInput = {
@@ -193,6 +224,15 @@ export type LoanReturnItemInput = {
   lot?: string
   ubd?: string
   quantity: number
+  /**
+   * どの発注明細に対する返却か（`loan_order_items.id`）。
+   *
+   * WHY(2026-09-08 追加): 分割返却を表せるようにした（20260908030000）。
+   *      この紐付けが無い返却は残数の計算にも過剰返却の判定にも入らない
+   *      （対象を選ばずに記録だけ残す従来の経路を塞がないため）。
+   *      施設をまたいだ紐付けは RPC が弾く。
+   */
+  loanOrderItemId?: string
 }
 
 /**
@@ -205,7 +245,8 @@ export type OrderKind = 'case_order' | 'consumable_order' | 'loan_order' | 'loan
  * 横断一覧用サマリ型（issue #20 発注履歴ページ）
  * Set C: listOrders(db, facilityId, filter, limit, offset) の戻り値要素
  * unreturned は kind === 'loan_order' かつ status === 'submitted' かつ
- * 対応する loan_returns が0件の場合のみ true。それ以外は false または undefined
+ * **まだ返っていない数量が残っている**場合のみ true（2026-09-08 に「返却が 0 件」から変えた。
+ * 分割返却を表せるようにしたので、一部だけ返した発注も未返却のまま残る）
  */
 export type OrderListItem = {
   id: string
@@ -216,8 +257,13 @@ export type OrderListItem = {
   /** 手技名 / 消耗品 N 品目 など、UI 表示用の概要テキスト */
   summary: string
   createdAt: string
-  /** loan_order のみ意味を持つ。true: 対応する返却記録が0件 */
+  /** loan_order のみ意味を持つ。true: まだ返っていない数量がある */
   unreturned?: boolean
+  /**
+   * loan_order のみ意味を持つ。まだ返っていない数量の合計。
+   * 一覧のバッジが「未返却 2」のように出す（人が残りを知りたいため）。
+   */
+  outstandingQuantity?: number
 }
 
 /**

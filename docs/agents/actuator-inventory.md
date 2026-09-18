@@ -38,8 +38,11 @@
 | SessionStart | `check-blocked-issues-staleness.sh` | warning-only | `blocked`ラベル長期滞留issueの警告 |
 | SessionStart | `check-fault-injection-drill-staleness.sh` | warning-only | fault injection訓練の実施タイミング警告 |
 | SessionStart | `check-upstream-docs-review-staleness.sh` | warning-only | 公式ドキュメント差分の定期確認（`docs/agents/upstream-docs-review.md`）の期限切れ警告 |
+| SessionStart | `check-dependency-update-staleness.sh` | warning-only | 依存の月次棚卸し（`docs/agents/dependency-update-runbook.md`、issue #757 の 21）の期限切れ警告。Dependabot は major を判断しないため人の棚卸しを定期化する |
+| SessionStart | `check-access-review-staleness.sh` | warning-only | 鍵・権限・token の四半期棚卸し（`docs/agents/access-review-runbook.md`、issue #757 の 36）の期限切れ警告。未使用の公開 RPC・admin 利用者・ADMIN_EMAILS・token の scope と期限・SSH 鍵 |
 | SessionStart | `check-subagent-model-force.sh` | warning-only | `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`（Claude Code 2.1.257）が環境変数または settings の `env` に非空であれば警告（issue #743）。全 subagent のモデルを強制するため AIDD のモデル階層（agent ごとの model 指定、issue #419・#693）が黙って無効化される。個人環境の変数はリポジトリから消せず、意図的に使う場面もあるため warning-only |
-| Setup（matcher `maintenance`） | `maintenance-digest.sh` | warning-only | `claude -p --maintenance` で fault-injection 訓練・hook 実走ドリル・docs 差分確認の 3 期限を一括表示（issue #741）。明示的に呼ばないと動かないため SessionStart の個別警告は残す |
+| Setup（matcher `maintenance`） | `maintenance-digest.sh` | warning-only | `claude -p --maintenance` で fault-injection 訓練・hook 実走ドリル・docs 差分確認・依存の月次棚卸し・鍵と権限の四半期棚卸しの 5 期限を一括表示（issue #741、#757 の 21・36）。明示的に呼ばないと動かないため SessionStart の個別警告は残す |
+| SessionStart | `check-plugin-integrity.sh` | warning-only | 配布物の同一性（issue #757 の 37）。build-plugin.sh が各プラグインに書く `.aidd-manifest.json`（全ファイルの sha256）と実物を突き合わせ、差し替え・欠落・混入を警告する。中心リポジトリでは `dist/plugins/*`、導入先では `$CLAUDE_PLUGIN_ROOT` を見る。manifest ごと書き換えられたら検知できない（署名は #757-30）ため、止める力は持たせず warning-only |
 | SessionStart | `check-claude-md-size.sh` | warning-only | CLAUDE.md/docs/agents/common.mdの行数肥大化を警告（トークン効率化。common.mdは機械検知ルール集のため「短ければ良い」わけではなく、削除判断は人間に委ねる） |
 | SessionStart | `check-stale-worktrees.sh` | warning-only | worktree・ローカルブランチ残骸の蓄積警告（issue #674）。マージ/クローズ済みPRに対応するworktree数・goneブランチ数（閾値超過時）・PRを一度も作らず一定日数放置されたブランチ数（閾値超過時、issue #708）を警告。削除は不可逆に近い操作のため意図的にwarning-only |
 | Stop | `check-gap-check-state.sh` | **自動復旧（queue）** | gap check警告を`gap-check-followup`としてqueue登録（issue #488・#523） |
@@ -50,10 +53,18 @@
 | Stop | `gate-effectiveness-monthly-check.sh` | warning-only | 品質ゲート月次サマリの提示 |
 | Stop | `check-aidd-stats-recorded.sh` | warning-only | AIDD stats `start`呼び忘れの警告（issue #495） |
 | Stop | `check-aidd-phase-stats-recorded.sh` | warning-only | AIDD stats phase1/phase2呼び忘れの警告（issue #524） |
-| Stop | `check-handoff-format.sh` | warning-only | PR本文の引き継ぎフォーマット必須見出し欠如の警告（issue #524。PR本文経由のみ対象） |
 | Stop | `check-find-av-precision-recorded.sh` | warning-only | find-av-precisionログ記録漏れの警告（issue #522） |
+| Stop | `check-full-run-before-finish.sh` | warning-only | **いまの状態で統合テスト・E2E の全件を通したか**を終える瞬間に聞く（C-041 の機械化、2026-09-09）。判定は SessionStart 側と同じ engine（`lib/run-freshness.py`）だが、見る材料を HEAD の木から**未コミット・未追跡を含む「いまの姿」のハッシュ**へ広げた（`lib/worktree-hash.sh`）。手元で書き換えて単体だけ緑にして終える形は HEAD の木では見えない。セッションに 1 回だけ鳴る（毎ターン鳴ると読まれなくなる。C-031）。block しない（DB を落としている・時間が無い、は普通にある） |
 | （参考）`pull_request`（高リスクパス限定） | `.github/workflows/integration-gate.yml` | **block**（PRチェック失敗。ただしFreeプランのためマージは阻止されない） | `supabase/migrations/**`・`supabase/__tests__/**`・`src/lib/supabase/**`・`**/middleware.ts`・`**/proxy.ts` に触れたPRでのみ `npm run test:integration` を実行する。従来 `e2e.yml` は `push:[main]` のみで、**壊れたRLS変更をマージ前に止められなかった**（mainへ入った後で初めて鳴る）。全PRで回すとActions無料枠が枯渇するため（2026-08の実績）、パスで絞った。**既知の限界**: `paths`はファイルパスしか見られないため、TRI/RISK基準のうち内容ベースの判定（auth/facility/tenant等のドメイン）は表現できず、そこは引き続き`.claude/rules/db-schema.md`のローカル実行義務に依存する |
 | （参考）`npm test`（CI含む） | `supabase/migrations/__tests__/constraint_coverage_ratchet.test.ts` | **block**（テスト失敗、ただしCI上の強制力はプラン依存） | issue #675。カーディナリティ未宣言の後付けFK列・統合テスト対応の無い制約migrationの**新規発生**を止める（既知分はbaselineに固定するratchet方式）。hookではなくテストなので、ローカル`npm test`とCIの両方で機械的に起動する。ただし本リポジトリはFreeプランでCI失敗がマージを阻止しないため、実効的な強制力はローカル実行時に限る |
+| SessionStart | `check-empty-session-report.sh` | warning-only | 空のセッションレポート（`docs/sessions/` の自動生成テンプレが中身のまま残っているもの）を警告。**2026-09-12 に表へ追加**（下記の「表の抜け」参照） |
+| SessionStart | `check-hook-dependencies.sh` | warning-only | この環境で検知 hook が実際に動くか（jq / node / python3 / npx の有無）を毎セッション知らせる（issue #757 の 37 の周辺）。走査の本体は `scripts/lib/aidd-doctor.mjs` で、依存は**スクリプトの実体から実測する**（宣言表を持たない）。node が無ければ「hook の生存診断ができません＝検知 hook が動いているかは誰も見ていない状態です」と言う。**2026-09-12 に表へ追加** |
+| SessionStart | `check-integration-freshness.sh` | warning-only | 統合テストの打ち忘れ（木が変わったのに測っていない）を警告。H-02 / H-05 の「人が打つが打ち忘れは機械が拾う」の実体。**2026-09-12 に表へ追加** |
+| SessionStart | `check-e2e-freshness.sh` | warning-only | E2E の打ち忘れを警告。同上。**2026-09-12 に表へ追加** |
+| SessionStart | `check-rls-mutation-freshness.sh` | warning-only | RLS 変異計測の打ち忘れを警告。H-06 の「打ち忘れは SessionStart hook が拾う」の実体。**2026-09-12 に表へ追加** |
+| SessionStart | `check-mutation-freshness.sh` | warning-only | 製品コードの変異計測（Stryker）の打ち忘れを警告。測る対象の一覧も見張る（対象を減らせばスコアは上がるため）。**2026-09-12 に表へ追加** |
+| Stop | `check-escape-ledger.sh` | warning-only | 落ちた検査の下書きがあるのに `escaped-defects.md` を触っていなければ聞く。台帳へ移す一歩そのものは止めない（止めると書く側が下書きを消す）。**2026-09-12 に表へ追加** |
+| Stop（Codex側） | `codex-ai-check-suggest.sh` | warning-only | Claude 側 `ai-check-suggest.sh` の Codex 版（2026-09-11 に派生先から逆輸入。Codex 側には Stop hook が 1 本も無かった）。同じく止めない。**2026-09-12 に表へ追加——しかもこの 1 本は、人が手で突き合わせたときには見落としており、`check-actuator-inventory-coverage.test.sh` が書いた直後に見つけた**（`.codex/hooks.json` 側の登録を目視で追い切れていなかった） |
 | （参考）per-edit | security-guidanceプラグイン（`possible_real_facility_name`等） | warning-only | issue #440。Claude Code公式プラグイン経由、上記`.claude/settings.json`のhooksとは別経路 |
 
 （`SubagentStart`/`SubagentStop`の`log-subagent-hook-skeleton.sh`、および`InstructionsLoaded`の
@@ -62,22 +73,45 @@
 
 ## 集計と評価
 
+（**2026-09-12 に数え直した**。それまでの「約23件」は表の抜け **8 件**と deny 2 件を落としていた。
+数え方: `.claude/settings.json` の `hooks` に登録された 43 本（`log-subagent-hook-skeleton.sh` の
+2 回登録を 1 本と数える）＋ `.codex/hooks.json` の 3 本（deny 2 本と Stop hook 1 本）から、
+記録専用の 3 本（`log-subagent-hook-skeleton.sh`・`log-instructions-loaded.sh`・
+`record-test-failure.sh`）を除く。
+**この数え方は `scripts/check-actuator-inventory-coverage.test.sh` が毎回実測する**ので、
+ここの数字が古くなったら検査が落ちる——**人が手で数えた 1 回目は 8 本目を見落としていた**）
+
 - block: 3件（うち1件はretry上限付きエスケープあり。`check-readonly-bash.sh` は読み取り専用ロールのサブエージェント内のみ、issue #713）
 - ask: 1件
+- **deny: 2件**（Codex 側のみ。`codex-skip-marker-deny.sh`・`codex-dependency-change-deny.sh`。
+  Codex は ask 未対応のため Claude 側の ask を deny へ読み替える。**2026-09-12 まで集計に無かった**）
 - 自動復旧（queue、うち登録側）: 2件（`check-workflow-interruption.sh`・`check-gap-check-state.sh`）
 - 自動復旧（queue、表示側）: 1件（`check-recovery-queue.sh`）
-- warning-only: 17件
+- warning-only: 25件
 - context 注入（是正なし、compact 時のみ）: 1件（`reinject-aidd-run-state.sh`、issue #712）
 
-約23件の検知hookのうち、機械的に実行を止める・確認を強制する（block/ask）のは3件。
+**31件**の検知hookのうち、機械的に実行を止める・確認を強制する（block/ask/deny）のは6件。
 recovery-queue接続によって「次回セッション冒頭で機械的に目の前に出る」までは自動化されている
-ものが3件。残る17件はすべて、systemMessageが出力された後の是正判断・実行タイミングを完全に
+ものが3件。残る25件はすべて、systemMessageが出力された後の是正判断・実行タイミングを完全に
 人（またはそれを読んだセッション）に委ねている。
 
 （2026-08-10訂正: `verify-claims.sh`は当初この表でwarning-onlyと誤記されていたが、実装は
 `emit_block`による`exit 2`のblockだった。棚卸し文書自体が実装とドリフトし得るという実例。
 cardiosearch側issue #5でこの種の乖離を機械検知する仕組みを導入済み、本リポジトリへの
 逆輸入は未着手）
+
+（**2026-09-12 訂正: 同じドリフトが 2 例目として、しかも桁違いの規模で起きていた。**
+`.claude/settings.json` の `hooks` に登録され実際に動いているのに、この表に 1 行も無い検知 hook が
+**7 本**あった——`check-empty-session-report.sh`・`check-hook-dependencies.sh`・
+`check-integration-freshness.sh`・`check-e2e-freshness.sh`・`check-rls-mutation-freshness.sh`・
+`check-mutation-freshness.sh`・`check-escape-ledger.sh`。7 本とも `systemMessage` を出す検知 hook で、
+記録専用の対象外規定には当たらない。加えて集計には **deny の行そのものが無く**、Codex 側 2 件も
+落ちていた。とくに重いのは**鮮度 hook 4 本**——ハーネスの地図が H-02 / H-05 / H-06 の
+「人が打つが**打ち忘れは機械が拾う**」という中核の担保として説明している hook 群が、
+是正の棚卸しから丸ごと漏れていた。読む人は「打ち忘れ検知は止めるのか警告だけなのか」を
+この表から判断できない状態だった。
+**1 例目の訂正のときに「逆輸入は未着手」と書いたまま着手しなかったのが、そのまま 2 例目を招いた**
+——「機械で突き合わせない宣言は必ずずれる」ことの、この文書自身による実証になっている）
 
 **この偏り自体は問題ではない。** 停止①②（仕様レビュー・構造化レビュー）はそもそも人間判断が
 本質であり、機械化すべきでない。また`check-otel-collector-status.sh`のような情報提示や、

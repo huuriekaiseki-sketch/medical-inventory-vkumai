@@ -1,38 +1,54 @@
 # 共通ルール（全AIエージェント共通）
 
-このファイルは Claude Code・Codex 等、このリポジトリで作業するすべての AI エージェントが
-従うべき共通ルールを定義する。ツール固有の設定（サブエージェント・スキル・ワークフロー・
-開発フローのオーケストレーション等）は各ツールの入口ファイル（`CLAUDE.md` / `AGENTS.md`）
-側を参照すること。
+Claude Code・Codex 等、このリポジトリで作業するすべての AI エージェントが従う共通ルール。
+**ここには「何をすべきか」だけを置く。** 「なぜそうなったか」「hook の実装詳細」「どこに何があるか」は
+下記の分離先にあり、必要になったときに読む（常時ロードの総量を空けるため。2026-09-07）。
 
-**Claude CodeとCodexの並行作業**（同一worktree同時作業の禁止・設定/状態ファイルの分離・
-共有ガードの扱い）は [`parallel-agent-work.md`](./parallel-agent-work.md) を参照。
-リポジトリ非依存の設計原則・他リポジトリへの移植手順は
-[`claude-codex-coexistence-template.md`](./claude-codex-coexistence-template.md) を参照。
+| 分野 | いつ読むか |
+| --- | --- |
+| [作業を始める前に](#作業を始める前に) | 着手時。レーン判定とブランチ |
+| [変えるときの手順](#変えるときの手順) | 依存・DB・e2e を触るとき |
+| [AIDD フロー実行中の記録](#aidd-フロー実行中の記録) | フローを回すとき |
+| [終わり方](#終わり方) | 作業完了時 |
+| [ルール・仕組みを増やす前に](#ルール仕組みを増やす前に) | 新しいルール・検知を作るとき |
+| [どこに何があるか](#どこに何があるか) | 何かを作る前に「既にあるか」を確かめるとき |
 
-- ドメイン用語（facility・price等が何であるか）は [`domain.md`](./domain.md) を参照
-- 各ルールが「なぜ」その設計になったかは [`decisions.md`](./decisions.md) を参照
-- 過去に実際に再発した実装ミスのチェックリストは [`known-failure-patterns.md`](./known-failure-patterns.md) を参照（レビュー・Sweep系エージェントは必読）
-- 検知手段のないルール（自然言語のみで強制力の無いルール）の一覧は [`undetectable-rules-inventory.md`](./undetectable-rules-inventory.md) を参照
-- 検知hookの検知後の是正（block/自動復旧/warning-onlyのいずれか）の一覧は [`actuator-inventory.md`](./actuator-inventory.md) を参照（issue #578）
+**分離先**（本ファイルからは常時ロードされない。読みに行く）:
 
-## Next.js バージョンに関する注意
+- [`file-index.md`](./file-index.md) — 重要なファイル・スクリプトと目的の索引
+- [`decisions.md`](./decisions.md) — 各ルールが**なぜ**その設計になったか
+- [`domain.md`](./domain.md) — ドメイン用語（facility・price 等が何であるか）
+- [`known-failure-patterns.md`](./known-failure-patterns.md) — 過去に**実際に再発した**実装ミスのチェックリスト（レビュー・Sweep 系エージェントは必読）
+- [`undetectable-rules-inventory.md`](./undetectable-rules-inventory.md) — 破られても機械で気づけないルールの一覧
+- [`actuator-inventory.md`](./actuator-inventory.md) — 検知 hook の是正（block / 自動復旧 / warning-only）の一覧
+- [`parallel-agent-work.md`](./parallel-agent-work.md) — Claude Code / Codex 並行作業（同一 worktree 同時作業の禁止・状態ファイルの分離）
+- [`claude-codex-coexistence-template.md`](./claude-codex-coexistence-template.md) — 上記のリポジトリ非依存版
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from
-your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing
-any code. Heed deprecation notices.
+## 作業を始める前に
 
-## TRI/RISK 機械判定基準（AIDDパイプライン採用条件）
+どのレーンで進めるか・どのブランチで進めるかを決める。ここを外すと後から全部やり直しになる。
+
+### TRI/RISK 機械判定基準（AIDDパイプライン採用条件）
 
 変更が以下の**いずれか**に触れる場合、Sレーン（軽量レーン）は禁止。必ず M/L 扱いとし、RISK=はい と判定する：
 
 - `supabase/migrations/` 配下のファイル
 - `src/lib/supabase/` 配下のファイル
+- **認可の判断が書かれているファイル**（`stryker.config.json` の `mutate` と同じ集合。issue R02）：
+  `src/lib/security/` 配下 / `src/lib/audit/` 配下 / `src/app/api/admin/` 配下 /
+  パスが src/lib/admin- で始まるファイル（`src/lib/admin-auth.ts` など） /
+  `src/lib/api-error.ts` / `src/lib/api-pagination.ts` /
+  `src/lib/invariant-error.ts` / `src/lib/log-safe.ts`
 - `middleware.ts` / `proxy.ts`（プロジェクト内のすべてのmiddleware/proxy。proxy.tsはNext.js 16でmiddleware.tsから改名された同一ファイル規約。issue #681）
 - パス・ファイル名・変更内容が以下のドメインに関わるファイル：
   **auth / facility / tenant / organization / inventory / RLS / policy**
 
 この判定は人間の裁量で緩めない（機械判定）。迷ったら高リスク側に倒す。
+
+**説明と変更ファイルが食い違うときは確認ルートへ**（issue R02）: `changedFiles` に高リスクパスが
+1 件も無いのに `taskDescription` が上のドメイン語に当たる場合、`aidd-phase1-router` は
+`light` でも `deep` でもなく `confirm`（人間の確認待ち）を返す。説明が正しければ認可の実ファイルが
+一覧から漏れており、一覧が正しければ説明が実態と合っていない。どちらも黙って軽量で流してはいけない。
 理由は [`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#なぜtririsk判定を機械判定にし人の裁量で緩めないことにしたか) を参照。
 
 `aidd-phase1-router`を経由せず直接実装に入った場合の検知（issue #444）: 上記の高リスクパスへの
@@ -41,42 +57,48 @@ Write/Edit/MultiEdit時に`.aidd/run-manifest.json`が存在しなければ、Pr
 理由・鮮度判定を見送った理由は同スクリプトのコメント、経緯は
 [`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#なぜissue-444のpretooluse-hookを警告のみdenyの二段構えにしたか)を参照。
 
-### 第5カテゴリ: パイプライン自体のメタ改修（issue #457）
+#### 第5カテゴリ: パイプライン自体のメタ改修（issue #457）
 
-上記のTRI/RISK基準は「プロダクトコード変更」を前提にしており、`.claude/workflows/`・
-`.claude/agents/`・`docs/agents/`配下のみを変更する「パイプライン自体のメタ改修」タスクには
-機械的に2つの誤判定を起こしていた。
+`.claude/workflows/`・`.claude/agents/`・`docs/agents/` 配下**のみ**を変更するタスクは、
+上のキーワード・パス判定より**先に**「メタ改修」と確定し、Sweep を一切実行しない軽量ルートへ行く。
+1 件でもプロダクトコードが混ざる場合と changedFiles が空の場合は発火せず、上の判定がそのまま適用される。
+**この振り分けは `aidd-phase1-router.js` が自動で行う**（人が申告するものではない）。
+経緯・3 つの判断・対象を広げない理由は
+[`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#なぜメタ改修判定をキーワードマッチより先に評価することにしたかissue-457) を参照。
 
-- **症状1（キーワード誤検知）**: taskDescriptionに「DB/RLS/authには触れない」という
-  否定文を含めても、"auth"/"facility"/"rls"等の単語が単純文字列一致し、changedFilesが
-  実際は高リスク領域に一切該当しない（matchedPaths: []）にもかかわらず深掘り調査
-  （`aidd-1-1-deep-task`）へ誤って振り分けられる
-- **症状2（無駄な4軸Sweep）**: 軽量Sweep（`aidd-phase1`）の4軸（UI/データ/DB/型）は
-  プロダクトコード向けの分類軸であり、`.claude/workflows/*.js`のようなツール層の変更には
-  UI/データ/型の3軸が「対象コードがそもそも存在しないので当然指摘なし」を返すだけになる
+判定エンジンの正本は `.claude/workflows/lib/router-risk.js`（`classifyRoute`）、
+リポジトリ固有の語彙（上のパス・ドメイン語）は `aidd.config.json`。
+`aidd-phase1-router.js` は Workflow DSL でファイルを読めないため同じ値をインラインで持ち、
+両者の一致は `.claude/workflows/lib/__tests__/` の同期テストが `npm test` で検証する。
+**設定は既定値に「足す」だけで、既定値を消す手段は無い**（迷ったら高リスク側）。
 
-**対応（`aidd-phase1-router.js`）**: changedFilesが1件以上あり、かつ**全件**が
-`.claude/workflows/`・`.claude/agents/`・`docs/agents/`のいずれか配下の場合のみ、
-既存のキーワード一致・パス一致判定（上記の高リスクパス判定）より**先に**「メタ改修」と
-確定させ、Sweepを一切実行しない専用の軽量ルートへ振り分ける。この条件を満たさない限り
-（1件でもプロダクトコードが混在する、あるいはchangedFiles自体が空の場合）、この分岐は
-一切発火せず、既存のTRI/RISK判定（プロダクトコード向け）はそのまま適用される。「メタ改修
-パスが先に判定される」ことと「既存の高リスクパス判定を緩めない」ことは独立した設計であり、
-どちらもこの優先順位によって両立している。設計判断の詳細は
-[`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#なぜメタ改修判定をキーワードマッチより先に評価することにしたかissue-457)を参照。
+### ブランチ運用ルール
 
-正本は`.claude/workflows/lib/router-risk.js`（`classifyRoute`）、`aidd-phase1-router.js`側の
-インライン複製との同期は`.claude/workflows/lib/__tests__/router-risk-sync.test.js`が検証する
-（`npm test`に含まれる。他のプロンプト同期テストと同型のガード）。
-判定エンジンと語彙は分離してある（issue #420 v1 セット B、2026-09-05）: エンジンの既定値は
-どのリポジトリでも高リスクと言える汎用語（auth / rls / policy / migration とファイル名規則）のみで、
-上記のリポジトリ固有の値（`supabase/migrations/`・`src/lib/supabase/`・facility / tenant /
-organization / inventory）はリポジトリ直下の`aidd.config.json`（導入先アダプター）にある。
-`aidd-phase1-router.js`は Workflow DSL でファイルを読めないため同じ値を`LOCAL_RISK_CONFIG`として
-インラインで持ち、両者の一致は`.claude/workflows/lib/__tests__/aidd-config.test.js`が検証する。
-設定は既定値に「足す」だけで、既定値を消す手段は無い（迷ったら高リスク側）。
+- **新しい issue・機能の作業を始める前に、今のブランチが別 issue の未マージ PR の対象でないか確認する**
+  （`git branch --show-current` → `gh pr list --head <branch>`）。対象なら
+  `git checkout -b <new-branch> origin/main` で切り直してから進める。
+- **新しいブランチは必ず `git fetch origin main` してから `origin/main` を起点にする。**
+  ローカルの `main` 参照は自動更新されないので、古い `main` から切ると直近のマージが丸ごと欠落する。
+- **worktree は `git worktree add` を直接叩かず `scripts/create-worktree.sh <branch> [base]` を使う。**
+  素の `git worktree add` は `.env.local` / `.env.test` を引き継がず Runtime Error になる。
 
-## 依存関係の変更ルール（2026-09-04）
+SessionStart hook が一部を機械検知する（`check-branch-pr-status.sh`＝マージ済みブランチ上での作業、
+`check-local-main-freshness.sh`＝ローカル main の遅れ。どちらも **warning のみで止めない**）。
+**検知できない範囲**（未マージ PR が乗っているケース、EnterWorktree 経由の worktree 作成、
+fetch 直後に他者が push した場合）と各 hook の実装上の限界は
+[`decisions.md`](./decisions.md#なぜブランチ運用ルールの機械検知を-warning-のみにし検知できない範囲を残したか) を参照。
+
+### Next.js バージョンに関する注意
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from
+your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing
+any code. Heed deprecation notices.
+
+## 変えるときの手順
+
+触る対象ごとに、実行前に踏む手順が決まっている。
+
+### 依存関係の変更ルール（2026-09-04）
 
 npm パッケージの追加・更新・削除は「実行する第三者コードと依存関係を増やす設計判断」として扱う。
 `npm install <pkg>` 等のパッケージ名を伴うコマンドと package.json / package-lock.json への書き込みは
@@ -89,34 +111,19 @@ PreToolUse hook（`scripts/check-dependency-change.sh`）が **ask** で止め�
 [`known-failure-patterns.md`「依存関係層」](./known-failure-patterns.md#依存関係層npm-サプライチェーン)
 を参照。
 
-## テスト環境・データ衛生ルール
-
-`e2e/`配下のファイルをRead/Editする際にのみ [`.claude/rules/e2e-test-hygiene.md`](../../.claude/rules/e2e-test-hygiene.md) が自動ロードされる（issue #445）。
-
-## DBスキーマ変更ルール
+### DBスキーマ変更ルール
 
 `supabase/migrations/`配下のファイルをRead/Editする際にのみ [`.claude/rules/db-schema.md`](../../.claude/rules/db-schema.md) が自動ロードされる（issue #445。path-scoped rules化により、DB作業をしないセッションでは常時のコンテキストコストを払わない）。
 
-## ブランチ運用ルール
+### テスト環境・データ衛生ルール
 
-- **新しいissue・機能の作業を始める前に、現在のブランチが別issue用の未マージPRの対象になっていないか確認する**（`git branch --show-current` → `gh pr list --head <branch>`）。
-  なっていた場合は、着手前に `git checkout -b <new-branch> main` で新しいブランチを切ってから進める。
-  1つのPRに無関係なissueのコミットが混ざると、レビュアーが混乱し、片方だけ却下・差し戻しになった際に切り分けられなくなる
-  - **このルールのうち「現在のブランチに既にマージ済みのPRが乗っている」ケースは、SessionStart hook（`scripts/check-branch-pr-status.sh`）が機械的に警告する。**
-    `git branch --show-current` → `gh pr list --head <branch> --state merged` の結果が空でなければ、セッション開始時に警告メッセージを出す（block不可・warningのみ）。
-    実際にissue-20-orders-list-page等、マージ済みブランチ上で気づかず並行作業が続き、重複・陳腐化したworktreeが複数残った実害があったため導入した。
-    **「別issueの未マージPRが乗っている」ケース（マージ前の分岐）はこのhookの検知対象外**で、引き続き人手の確認に依存する。
-- **`git checkout -b <new-branch> main` の前に、必ず `git fetch origin main` してから最新の `origin/main` を起点にする**（`git checkout -b <new-branch> origin/main`、または直前に`git merge origin/main`でローカルmainを追従させる）。
-  ローカルの`main`ブランチ参照は自動更新されない（`gh pr merge`はリモートを更新するだけで、ローカルの別ブランチにいる間はローカル`main`が古いまま）。古いローカル`main`から新しいブランチを切ると、直近でマージされたPRの変更が丸ごと欠落した状態で作業が進んでしまい、後から気づいて`origin/main`をマージし直す手戻りが発生する
-  - **このルールは、SessionStart hook（`scripts/check-local-main-freshness.sh`、issue #499）が部分的に機械検知する。**
-    FETCH_HEADの更新時刻が既定24時間（`LOCAL_MAIN_STALE_HOURS`で変更可）より古いか、`git rev-list --count main..origin/main`が1以上（ローカルmainがorigin/mainより遅れている）のいずれかに該当すると、セッション開始時に警告メッセージを出す（block不可・warningのみ、fetch自体はhook内で実行しないためネットワークアクセス無し・オフラインでも動作する）。
-    worktree環境では`.git`がファイルでありFETCH_HEADの実体がworktree固有パスにあるため、`git rev-parse --git-path FETCH_HEAD`で実パスを解決している（`.git/FETCH_HEAD`と決め打ちすると存在しないパスを見て誤判定する）。
-    **これは近似判定であり、実際にリモートで何が起きているかまでは見ていない**（前回fetch時点の情報を基準にするため、fetch直後に他者がpushした場合は検知できない）。
-- **新しいworktreeを手動で作る場合は`git worktree add`を直接叩かず`scripts/create-worktree.sh <branch-name> [base-branch]`を使う**（issue発生源: supabase-env-config-325893セッション）。
-  `git worktree`はgit管理外ファイル（`.env.local`・`.env.test`等、`.gitignore`対象）を新規worktreeへ引き継がないため、素の`git worktree add`だけで作ると`NEXT_PUBLIC_SUPABASE_URL`等が欠落しRuntime Errorになる。このスクリプトは`git fetch origin main`→`origin/main`起点でのbranch作成（上記ルール）と`.env.local`/`.env.test`の自動コピーをまとめて行う。
-  **既知の限界**: Claude Code本体のEnterWorktreeツール経由でworktreeを作った場合はこのスクリプトを経由しないため、同じ欠落が起きうる（ツール内部の挙動でありこのリポジトリ側からは制御できない）。その場合は引き続き手動で`.env.local`/`.env.test`をコピーする必要がある
+`e2e/`配下のファイルをRead/Editする際にのみ [`.claude/rules/e2e-test-hygiene.md`](../../.claude/rules/e2e-test-hygiene.md) が自動ロードされる（issue #445）。
 
-## loop-observabilityログの記録漏れ検知
+## AIDD フロー実行中の記録
+
+フローを回すときだけ要る。**paths 付き rules には出せない**（オーケストレーターは `.claude/workflows/` を Read/Edit しないため、パス条件では発火しない）。
+
+### loop-observabilityログの記録漏れ検知
 
 AIDDフロー（`aidd-phase2.js` 等）は reviewer/implementer/judge-panel の呼び出しごとに記録を残す想定だが、これはエージェントへの自然言語指示に依存しており強制力がない（背景・既知の限界は [`observability-internals.md`](./observability-internals.md#loop-observability記録漏れ検知の背景と既知の限界) 参照）。
 
@@ -140,7 +147,7 @@ AIDDフロー（`aidd-phase2.js` 等）は reviewer/implementer/judge-panel の�
 
 既知の限界: stateファイルへの記録（上記1・2）自体は依然オーケストレーターの自己申告のまま（詳細は前掲の観測インフラ内部詳細を参照）。
 
-## サブエージェント進捗の可視化（issue #18）
+### サブエージェント進捗の可視化（issue #18）
 
 サブエージェント（sweep-db/sweep-ui/sweep-types/sweep-data/implementer/reviewer/integrator/
 judge-panel/proposer/adversarial-verify/completeness-critic/contract-writer）は、
@@ -156,64 +163,53 @@ scripts/log-agent-progress.sh --agent "<自分のagent名>" --feature "<feature�
 `--status` は `starting|running|waiting|done|failed` のいずれか。`feature`名が
 呼び出し元から与えられていない場合は `unknown` を使う。
 
-現在の状態は `scripts/show-agent-status.sh` で一覧できる（`--stale-seconds`未満は既定180秒＝3分。`running`/`waiting`のまま既定180秒以上更新がないエージェントは「止まってる？」として表示される）。最終報告が`--max-age-seconds`（既定604800秒＝7日）より古いエージェントは過去フローの残骸として表示せず、末尾に非表示件数だけ出す（`0`で全件表示。ログは追記のみで消えないため、数週間前の`running`が「止まってる？（数百万秒応答なし）」としてcompaction後の再注入（issue #712）に毎回混ざっていた対策）。
+現在の状態は `scripts/show-agent-status.sh` で一覧できる（既定で 180 秒以上更新の無い `running`/`waiting` を「止まってる？」と出し、7 日より古い報告は件数だけ出す。閾値と経緯は [`observability-internals.md`](./observability-internals.md#agent-progress記録の構造的限界記録内容検証の詳細)）。
 
-記録漏れ検知の手順はloop-observabilityと共通のgap check state方式（上記[「loop-observabilityログの記録漏れ検知」](#loop-observabilityログの記録漏れ検知)参照。フロー完了後に `scripts/record-gap-check-state.sh expected --agent-progress <値>` を呼ぶ）。記録内容の正しさは `scripts/verify-agent-progress-transcript.sh` が自己申告とtranscriptを機械比較する。両者の判定ロジック・既知の限界（agent-progress.jsonlの構造的限界、mismatches/lowOverlapDetailsの仕組み等）は [`observability-internals.md`](./observability-internals.md#agent-progress記録の構造的限界記録内容検証の詳細) を参照。
+記録漏れ検知は loop-observability と同じ gap check state 方式（フロー完了後に `scripts/record-gap-check-state.sh expected --agent-progress <値>`）。記録内容の正しさは `scripts/verify-agent-progress-transcript.sh` が自己申告と transcript を機械比較する。判定ロジックと既知の限界は [`observability-internals.md`](./observability-internals.md#agent-progress記録の構造的限界記録内容検証の詳細)。
 
-## 観測・Eval基盤の内部詳細への参照
+## 終わり方
 
-以下の実装詳細・経緯・既知の限界は `docs/agents/common.md` 圧縮（issue #486）により [`observability-internals.md`](./observability-internals.md) へ移動した:
+作業完了時の報告の形。
 
-- サブエージェント骨格記録の機械強制（issue #423、3層の保証レベル・journal.jsonl統合）
-- OpenTelemetryと自作JSONLの役割分担（issue #417、opt-in設定手順）
-- statuslineでcontext・コスト・レート制限を可視化（issue #446、opt-in設定手順）
-- agents設定変更時のbaselineスナップショット機械強制（issue #429）
-- Find→Adversarial Verify precision記録（issue #432）
-- Sweep recallベンチマーク（issue #431）
-- AIDDワークフロープロンプトのeval（issue #391）— 運用ルール（義務化、issue #496）は`.claude/workflows/`配下のファイルをRead/Editする際に [`.claude/rules/workflow-eval-requirement.md`](../../.claude/rules/workflow-eval-requirement.md) として自動ロードされる（issue #445）
+### 引き継ぎフォーマット
 
-## ツール・機能導入可否の判断記録への参照
+**「できました」で終わる完了報告は禁止。** 作業完了時（PR 本文・セッション終了報告・`docs/sessions/`）は
+`handoff-format` スキル（[SKILL.md](../../.claude/skills/handoff-format/SKILL.md)）の形で残す
+（30 秒サマリー＋00〜05 の証拠）。
 
-以下の実機検証結果・見送り理由は `docs/agents/common.md` 圧縮（issue #486）により [`tooling-decisions.md`](./tooling-decisions.md) へ移動した:
+- **04「どう確認したか」は表・4 値**（✅ 実施 / ➖ 今回不要 / 🟡 一部 / ⬜ 未実施）。
+  行は [`test-matrix.md`](./test-matrix.md) の「毎回」「変更時」の種別に揃える。
+- **04 の行と「➖ 今回不要」の理由は人が決めず、
+  `bash scripts/derive-test-selection.sh origin/main --format table` の出力を貼る。**
+  パスから読めない性質は `--risk authz_change,retry_possible,contention,external_side_effect` で申告する。
+- **auth / RLS / facility 境界に触れたら** [`promise-catalog.md`](./promise-catalog.md) の該当する
+  約束（`P-xxx`）を 03 欄に書く。新しい約束を作ったらカタログに行を足し、その ID をテストの
+  `describe` 名に含める（`scripts/check-promise-catalog.test.sh` が双方向に突合する）。
 
-- Bashサンドボックス機能は現行toolchainと非互換のため保留（issue #438）
-- Channelsは今回のユースケースに不向きなため見送り（issue #448）
-- claude-code-actionは費用対効果の観点で見送り（issue #447）
-- security-guidanceプラグインでknown-failure-patterns.mdを機械検知化（issue #440）
-- blockedラベルの再開条件見直しはSessionStart hookで機械ポーリング（issue #453）
-- 定期実行の機械トリガー化はSessionStart hookに一本化、OS launchdは見送り（issue #443）
-- autoMode(hard_deny)は個人設定のみ有効・設定し忘れ検知はSessionStart hookで（issue #439）
+Stop hook（`scripts/check-handoff-format.sh`）が PR 本文について、必須見出しの欠如と
+04 表の 4 値以外・理由の無い ➖ / ⬜ を行ごとに警告する（**PR につき 1 回・warning のみ。
+セッション終了報告と `docs/sessions/` 経由は検知対象外**）。
+4 値化の設計判断は
+[`decisions.md`](./decisions.md#なぜテスト一覧test-matrixmdと04の4値化を先に入れ機械導出deriveと約束カタログを後続prに分けたか) を参照。
 
-## 引き継ぎフォーマット
+## ルール・仕組みを増やす前に
 
-「できました」で終わる完了報告は禁止。作業完了時（PR本文・セッション終了報告・
-`docs/sessions/` への記録のいずれか）は、`handoff-format`スキル（[`../../.claude/skills/handoff-format/SKILL.md`](../../.claude/skills/handoff-format/SKILL.md)）のフォーマットで
-引き継ぎメモを残す（issue #542。タスク完了時のみ必要なため常時ロードから外しスキル化した）。
-このフォーマットはissue #666で、後任AI向けの観点に加え、人間レビュアーが「何が変わり、
-危険度はどれくらいで、どこを見ればよいか」を短時間で判断できる「30秒サマリー」＋
-00〜05の証拠パッケージ構成に刷新した。PR本文経由での引き継ぎ（`gh pr create`/`gh pr edit`）は、
-Stop hook（`scripts/check-handoff-format.sh`、issue #524／新フォーマットへの追従は
-issue #666）が「30秒サマリー」「どう確認したか」の見出しの有無を機械検知し、無ければ警告する
-（PRにつき1回・warningのみ。セッション終了報告・`docs/sessions/`経由の引き継ぎは検知対象外）。
+**新しいルールを書く前にここを読む。** 検知手段の無いルールは静かに劣化する。
 
-引き継ぎメモの「04 どう確認したか」は表形式・4値（✅ 実施 / ➖ 今回不要 / 🟡 一部 / ⬜ 未実施）で
-書き、行は [`test-matrix.md`](./test-matrix.md)（テスト種別ごとの実施タイミング・トリガー・証跡の
-正本）の「毎回」「変更時」の種別に揃える。「⬜ 未実施」が「今回不要」なのか「穴」なのかを
-読み手が区別できるようにするためで、一覧と 4値文言の整合は `scripts/check-test-matrix.test.sh`
-（CI `hooks-test`）が機械検査する。設計判断は
-[`decisions.md`](./decisions.md#なぜテスト一覧test-matrixmdと04の4値化を先に入れ機械導出deriveと約束カタログを後続prに分けたか)
-参照。
+### 検査を作る前に「型」を読む（2026-09-09）
 
-04 の行と「➖ 今回不要」の理由は人が表を読んで決めず、`bash scripts/derive-test-selection.sh origin/main --format table`
-の出力を貼る（PR②。高リスク判定は `router-risk.js` の `classifyRoute`、種別ごとの条件は
-`scripts/lib/derive-test-selection.rules.mjs`）。パスから読めない性質は `--risk authz_change,retry_possible,contention,external_side_effect`
-で申告する。auth / RLS / facility 境界に触れる変更では、[`promise-catalog.md`](./promise-catalog.md) の
-該当する約束（`P-xxx`）を 03 欄に書き、新しい約束を作ったらカタログに行を足してその ID をテストの
-`describe` 名に含める（`scripts/check-promise-catalog.test.sh` が突合する）。PR 本文の 04 表に4値以外の状態や理由の無い ➖ / ⬜ があれば、Stop hook
-（`scripts/check-handoff-format.sh`）が行を名指しで警告する（warning のみ。収まらない行は
-「一覧に無い種類の確認が出た」合図として扱う）。
+新しい検査・仕組みを作る前に
+[`check-design-pitfalls.md`](./check-design-pitfalls.md)（C-xxx）を読む。
+**検査そのものを設計するときの間違え方**を、実際に起きたものだけ型で並べてある
+（印を実態と突き合わせない・「何かが起きた」を成功と読む・不在で判定するのに出る側の対を置かない・
+壊して落ちることを確かめない・後片付けの範囲が広すぎる など）。
 
-## 検知手段のないルールの棚卸し（issue #339）
+どれも「テストは緑のまま」潜むので、**作った本人がいちばん気づけない**。
+すり抜けが 1 件出たとき（`escaped-defects.md` に行を足すとき）は、
+その 1 件が既存の型か新しい型かを必ず判断する。値（閾値・列名・バリデーションの中身）は
+プロジェクトごとに違うが、型は変わらないので、他リポジトリへ持ち出すのはこの表のほう。
+
+### 検知手段のないルールの棚卸し（issue #339）
 
 新しい運用ルールを書く前は必ず[`decisions.md`の該当原則](./decisions.md#なぜ新しい運用ルールに検知手段を先に決める原則を導入したかissue-339)を先に読むこと。
 特に、新しい検知・検証メカニズム自体を追加する際は「その起動トリガーは機械（hook/CI/cron/npm test）
@@ -221,7 +217,7 @@ issue #666）が「30秒サマリー」「どう確認したか」の見出し�
 一覧は [`undetectable-rules-inventory.md`](./undetectable-rules-inventory.md) を参照（issue #542で
 参照頻度の低い棚卸し表として本ファイルから分離）。
 
-## fault injection訓練の実施タイミング（issue #395）
+### fault injection訓練の実施タイミング（issue #395）
 
 `.claude/workflows/aidd-phase2.js`のSpec Check/Manifest Check関連のプロンプトを変更したとき、
 および四半期に1回の定期訓練として、実際のWorkflow実行を通じてdeny-by-defaultゲート
@@ -233,67 +229,43 @@ issue #666）が「30秒サマリー」「どう確認したか」の見出し�
 自動追従しない（issue #348で発覚した回避穴と同種のギャップ）。単体テストのgreenだけでは
 「実行パスの本体が本当にblockedを返すこと」は証明されないため、実測訓練で埋める。
 
-## ツール制約回避のload-bearing workaround棚卸し（issue #413）
+### ツール制約回避のload-bearing workaround棚卸し（issue #413）
 
 AIDDフレームワークの相当部分がツール（Workflow DSL / `claude -p`）の制約・不具合への回避策で
 できている。ツール本体を更新したとき、またはeval/ワークフロー実行が理由不明に失敗し始めた
 ときは、[`load-bearing-workarounds.md`](./load-bearing-workarounds.md) を参照すること
 （issue #542で参照頻度の低い棚卸し表として本ファイルから分離）。
 
-## 重要ファイルへのパス
+## どこに何があるか
 
-| ファイル | 目的 |
-|---|---|
-| [`docs/agents/common.md`](./common.md) | 全AIエージェント共通ルール（本ファイル）・引き継ぎフォーマット |
-| [`docs/agents/observability-internals.md`](./observability-internals.md) | 観測・Eval基盤の実装詳細・既知の限界（common.mdから分離、issue #486） |
-| [`docs/agents/test-matrix.md`](./test-matrix.md) | テスト種別ごとの実施タイミング（毎回/変更時/節目/一度きり）・トリガー・証跡・derive キーの正本。`scripts/check-test-matrix.test.sh`が整合を検査 |
-| [`docs/agents/promise-catalog.md`](./promise-catalog.md) | auth / RLS / facility 境界の約束カタログ（AAA、`P-xxx`）。守るテストの `describe` 名に ID を書き、`scripts/check-promise-catalog.test.sh` が双方向に突合 |
-| [`docs/agents/invariant-catalog.md`](./invariant-catalog.md) | 業務不変条件（`I-xxx`）。DB の CHECK / トリガーが守り、構造テストがテストと突合 |
-| [`docs/agents/security-test-catalog.md`](./security-test-catalog.md) | ルーチン外の検査の引き出し。新機能・事故・公開時に引き金列を読み #757 へ昇格 |
-| `scripts/derive-test-selection.sh` / `scripts/lib/derive-test-selection.mjs` / `scripts/lib/derive-test-selection.rules.mjs` | 変更ファイルから「今回必須 / 今回不要（理由付き）」を機械導出し 04 表を出す（PR②）。エンジン（共通）とルール表（固有）を分離。高リスク判定は`router-risk.js`を参照 |
-| [`docs/agents/tooling-decisions.md`](./tooling-decisions.md) | 公式機能・プラグインの導入可否判断記録（common.mdから分離、issue #486） |
-| [`docs/agents/actuator-inventory.md`](./actuator-inventory.md) | 検知hookの検知後の是正（block/自動復旧/warning-only）の棚卸し（issue #578） |
-| [`docs/agents/portability-inventory.md`](./portability-inventory.md) | 多リポジトリ展開に向けたドメイン非依存/スタック依存の切り分け棚卸し（issue #535） |
-| [`docs/agents/parallel-agent-work.md`](./parallel-agent-work.md) | Claude Code / Codex 並行作業ルール（同一worktree同時作業禁止・状態分離） |
-| [`docs/agents/claude-codex-coexistence-template.md`](./claude-codex-coexistence-template.md) | Claude/Codex共存設計のリポジトリ非依存テンプレート（9原則・実機検証手順・移植チェックリスト） |
-| `scripts/check-branch-tool-ownership.sh` | ブランチ命名規約（codex/*・claude/*）と起動ツールの取り違えをSessionStartで警告（両ツール共有） |
-| `scripts/codex-skip-marker-deny.sh` | Codex用ask→deny変換ラッパー（Codexはask未対応のため） |
-| `docs/ai-config-map.md` | エージェント・スキル全体マップ |
-| `src/app/` | Next.js App Router のページ・API Routes |
-| `src/components/` | UI コンポーネント |
-| `src/lib/supabase/` | Supabase クライアント・データ取得層 |
-| `supabase/migrations/` | DBマイグレーション |
-| `scripts/create-worktree.sh` | worktree作成 + `.env.local`/`.env.test`自動コピー（「ブランチ運用ルール」参照） |
-| [`docs/agents/run-manifest.md`](./run-manifest.md) | AIDDフローのspecHash/baseCommit突合用Run Manifestのスキーマ |
-| `scripts/log-agent-progress.sh` / `scripts/show-agent-status.sh` | サブエージェント進捗の記録・一覧表示（issue #18） |
-| `aidd.config.json` / `scripts/lib/aidd-config.sh` | 導入先アダプター設定（issue #420）。TRI/RISK の固有語彙・読み取り専用ロール・検査コマンド・追記先 docs。判定エンジンと hook 4 本が読み、値は汎用既定値に足すだけで消せない |
-| `scripts/build-plugin.sh` / `scripts/lib/plugin-layout.json` | プラグイン v1 の生成（issue #420）。層の表に従い `dist/plugins/` を機械生成し、共通側の禁止語・同梱閉包・決定性を検査。配布は `--marketplace --out ~/aidd-plugins/plugins`（非公開 marketplace `aidd-plugins`、版は `{plugin}--v{version}` タグ）。`build-plugin.test.sh` が dist の鮮度を見る |
-| `scripts/lib/resolve-log-dir.sh` | `logs/`の書き込み先をworktree横断で単一のディレクトリ（メインworktree直下）に解決する。全`log-*.sh`/`check-*.sh`/`summarize-*.sh`が参照する（issue #546。従来は各worktreeが起動時のカレントディレクトリ相対で別々の`logs/`に書き込み、観測記録の約半数が死蔵していた） |
-| `scripts/lib/canonical-event.ts` | hook/journal/agent-progress/loop-observabilityの4ログを正規化する読み取り専用Adapter層（issue #569） |
-| `scripts/harvest-journal-events.sh` / `scripts/lib/harvest-journal-events.ts` | Workflow journal(wf_*)をtranscript cleanupで消える前に`logs/journal-harvest.jsonl`へ収穫（Stop hook契機・source+agentIdで重複排除。issue #642） |
-| `scripts/summarize-gate-passfail.sh` / `scripts/lib/gate-effectiveness-summary.ts` | 収穫済みjournalベースでagentType別pass/fail/blockedを集計し月次品質ゲートサマリへ出力（旧summarize-gate-blocked.sh=blockedのみ集計を統合。issue #569・#642） |
-| `.claude/workflows/lib/constraint-coverage.js` | DB制約・RLS/admin境界・公開RPCの「守るテストが無い穴」の判定ロジック正本（issue #675、P-043） |
-| `scripts/check-constraint-coverage.sh` | 現存する穴を**怪しい順**に表示。新規発生の阻止は`supabase/migrations/__tests__/constraint_coverage_ratchet.test.ts`が`npm test`で行う |
-| `scripts/check-agent-progress-gap.sh` | agent-progress記録漏れの機械検知（issue #339） |
-| `scripts/record-gap-check-state.sh` | gap check用before/expected件数の記録（issue #488。オーケストレーター専用） |
-| `scripts/check-gap-check-state.sh` | Stop hookによるgap checkの自動実行（issue #488） |
-| `scripts/check-aidd-stats-recorded.sh` | Stop hookによるAIDD stats start呼び忘れの機械検知（issue #495） |
-| `scripts/check-aidd-phase-stats-recorded.sh` | Stop hookによるAIDD stats phase1/phase2呼び忘れの機械検知（issue #524） |
-| `scripts/check-handoff-format.sh` | Stop hookによるPR本文の引き継ぎフォーマット必須見出し欠如の機械検知（issue #524） |
-| `scripts/check-find-av-precision-recorded.sh` | Stop hookによるfind-av-precisionログ記録漏れの機械検知（issue #522） |
-| [`docs/agents/recovery-queue.md`](./recovery-queue.md) | 検知後の自動復旧閉ループの設計・スコープ・既知の限界（issue #523） |
-| `scripts/queue-recovery-task.sh` | 検知hookから呼ばれ`.aidd/recovery-queue.jsonl`へ復旧タスクを登録する（issue #523） |
-| `scripts/check-recovery-queue.sh` | SessionStart hookによる未解決の復旧タスクのcontext注入・surfaced放置エントリのエスカレーション（issue #523・#579） |
-| `scripts/resolve-recovery-task.sh` | 復旧タスク対応後に`status`を`"resolved"`へ書き換える（issue #579） |
-| `scripts/check-workflow-interruption.sh` | SessionStart hookによるWorkflow中断検知(`wf_*.json`のstatus/staleness判定)とrecovery-queueへの登録（issue #534） |
-| [`docs/agents/fault-injection-drill.md`](./fault-injection-drill.md) | `aidd-phase2.js`のdeny-by-defaultゲート実測訓練のランブック（issue #395） |
-| [`docs/agents/hook-live-drill.md`](./hook-live-drill.md) | 全 hook を現在セッションの実データで実走し、fail-open の無音死を見つけるランブックと実施記録（2026-09-05 初回で 7 件発見。プラグイン v1 前の必須作業） |
-| [`docs/agents/upstream-docs-review.md`](./upstream-docs-review.md) | Claude Code / Anthropic / Codex の公式ドキュメント差分を月 1 で確認する手順・実施記録・「最後に確認した版」（v1 の対応バージョンの正本）。期限は `scripts/check-upstream-docs-review-staleness.sh` が SessionStart で警告 |
-| `scripts/maintenance-digest.sh` | 定期作業 3 つ（fault-injection 訓練・hook 実走ドリル・docs 差分確認）の期限を一括表示。`claude -p --maintenance`（Setup hook）または手動実行（issue #741） |
-| `scripts/log-instructions-loaded.sh` / `scripts/summarize-instructions-loaded.sh` | InstructionsLoaded hook で実際に読み込まれた CLAUDE.md / rules を `logs/instructions-loaded.jsonl` に記録し、常時ロード量と rules 別ロード回数を集計する（issue #742。月次サマリにも載る） |
-| `scripts/check-subagent-model-force.sh` | `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` が設定されていると agent ごとの model 指定が黙って無効化されるため SessionStart で警告（issue #743） |
-| `scripts/aidd-fault-injection-setup.sh` / `scripts/aidd-fault-injection-teardown.sh` | fault injection訓練用の`.aidd/run-manifest.json`差し替え・復元（issue #395） |
-| `scripts/eval-workflow-prompts.sh` / `scripts/eval-fixtures/` | AIDDワークフロープロンプトのeval基盤（issue #391） |
-| `.claude/workflows/lib/prompts/` | ワークフロー内プロンプト文字列の正本（Workflow DSL側へはインライン複製、sync testで乖離検知） |
-| `.claude/workflows/lib/budget-guard.js` | Loop Until Dryへのbudgetガード判定ロジックの正本（issue #442） |
-| [`docs/agents/workflow-resume-runbook.md`](./workflow-resume-runbook.md) | Workflow実行が中断した際の`resumeFromRunId`再開手順（issue #442） |
+本ファイルに書いていないものの在り処。
+
+### どこに何があるか（索引）
+
+**何かを作る前に [`file-index.md`](./file-index.md) を見る。** 重要なファイル・スクリプトと目的の一覧
+（hook・検査・カタログ・ワークフロー・観測基盤）。同じことをするものが既にあることが多い。
+常時ロードの総量を空けるため本ファイルから分離した（2026-09-07）。限界も同ファイルに書いてある。
+
+**新しい「ハーネス」を作りたくなったら [`harness-map.md`](./harness-map.md) を先に見る**（2026-09-09）。
+8 つの役割（ワークフロー・データ・契約・実装・セキュリティ/回帰・ミューテーション・監視/観測・リリース）に
+**何が揃っていて、どこが空いているか**を 1 枚にしてある。
+空きには「手が届くもの」と「外部への到達が要るもの」の区別も書いてある。
+
+**地図の表は生成物**（2026-09-10）。正本は `scripts/lib/harness-registry.json` で、
+ハーネスを足したらここに 1 行足して `bash scripts/render-harness-map.sh` を回す。
+**起動の欄（機械 / 人 / 外部待ち）がいちばん大事**——`人` のものは誰かが忘れれば止まる。
+
+### 分離した参照ドキュメント
+
+本ファイルの圧縮（issue #486・2026-09-07）で、実装詳細・経緯・導入可否の判断は下記へ移した。
+必要になったときに読む。
+
+- [`observability-internals.md`](./observability-internals.md) — 観測・Eval 基盤の実装詳細と既知の限界
+  （サブエージェント骨格記録の機械強制・OpenTelemetry との役割分担・statusline・baseline スナップショット・
+  Find→Adversarial Verify precision・Sweep recall・ワークフロープロンプトの eval）
+- [`tooling-decisions.md`](./tooling-decisions.md) — 公式機能・プラグインの導入可否判断
+  （Bash サンドボックス・Channels・claude-code-action・security-guidance・blocked ラベル・
+  定期実行のトリガー・autoMode(hard_deny)）
+
+`.claude/workflows/` 配下を Read/Edit するときは
+[`workflow-eval-requirement.md`](../../.claude/rules/workflow-eval-requirement.md) が自動ロードされる（issue #445）。

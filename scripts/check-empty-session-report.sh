@@ -50,7 +50,7 @@ while IFS= read -r f; do
   # 「## 結果」以降の本文を取り出し、3項目すべてが空（コロン直後に何も無い）かを判定する
   RESULT_BODY="$(awk '/^## 結果/{flag=1; next} flag' "$f")"
   [ -n "$RESULT_BODY" ] || continue
-  if printf '%s\n' "$RESULT_BODY" | grep -qE '^- (うまくいったこと|問題・気になった点|次の課題): *\S'; then
+  if grep -qE '^- (うまくいったこと|問題・気になった点|次の課題): *\S' <<<"$RESULT_BODY"; then
     continue
   fi
   EMPTY_FILES="${EMPTY_FILES}${f}\n"
