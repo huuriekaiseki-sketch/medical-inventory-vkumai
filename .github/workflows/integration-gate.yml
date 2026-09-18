@@ -41,7 +41,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '24'  # ローカル開発環境に合わせる（node -v で確認）
+          node-version-file: '.nvmrc'  # 版の正本は .nvmrc（issue #775。浮動の '24' は npm の版まで動く）
           cache: 'npm'
 
       - name: Install dependencies

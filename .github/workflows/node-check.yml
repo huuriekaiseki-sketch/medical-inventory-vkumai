@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version-file: '.nvmrc'  # 版の正本は .nvmrc（issue #775）
           cache: 'npm'
       # WHY: npm install はロックファイルがあっても依存解決のためレジストリへ問い合わせに行き、
       #      レジストリが遅い日は 15 秒 → 300 秒になった（2026-09-04 実測、キャッシュは命中していた）。
