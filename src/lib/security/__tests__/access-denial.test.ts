@@ -108,6 +108,25 @@ describe('拒否された操作の記録（recordAccessDenial） [P-063]', () =>
     expect(rpc).not.toHaveBeenCalled()
   })
 
+  it('env 未設定時は初回だけ警告ログが出る（SPEC part 1、受け入れ条件1）', async () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const m = await loadModule()
+      // 1回目：警告ログが出る
+      await m.recordAccessDenial({ guard: 'auth', reason: 'unauthenticated' })
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(String(spy.mock.calls[0][0])).toContain('access_denial_client_unavailable')
+
+      // 2回目：警告ログが出ない（同一プロセス内で重複しない）
+      spy.mockClear()
+      await m.recordAccessDenial({ guard: 'auth', reason: 'unauthenticated' })
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('URL が無い場合も同じ（両方揃って初めて記録する）', async () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL
     const m = await loadModule()
@@ -115,10 +134,22 @@ describe('拒否された操作の記録（recordAccessDenial） [P-063]', () =>
     expect(createClient).not.toHaveBeenCalled()
   })
 
-  it('RPC が落ちても例外を投げない（拒否そのものを止めない）', async () => {
-    rpc.mockRejectedValue(new Error('network down'))
-    const m = await loadModule()
-    await expect(m.recordAccessDenial({ guard: 'facility', reason: 'forbidden' })).resolves.toBeUndefined()
+  // WHY(2026-09-18): 外側 catch のログ（`record_access_denial_unexpected`）を足したが、守るテストが
+  //      無く、その行を消しても全テストが緑のままだった（1 行ずつ壊して実測）。
+  //      「投げない」と「黙らない」を同じテストで対にして固定する。
+  //      context は戻り値の error の `record_access_denial` と**別**であることまで見る
+  //      （片方がもう片方を部分文字列として含むので、toContain だけでは取り違えを見逃す）
+  it('RPC が例外で落ちても投げないが、想定外の例外としてログには残す（黙って落とさない）', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      rpc.mockRejectedValue(new Error('network down'))
+      const m = await loadModule()
+      await expect(m.recordAccessDenial({ guard: 'facility', reason: 'forbidden' })).resolves.toBeUndefined()
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(String(spy.mock.calls[0][0])).toContain('record_access_denial_unexpected')
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   // WHY: PostgREST の失敗は throw ではなく**戻り値の error** に来る。捨てると try/catch にも
@@ -133,6 +164,8 @@ describe('拒否された操作の記録（recordAccessDenial） [P-063]', () =>
     await expect(m.recordAccessDenial({ guard: 'facility', reason: 'forbidden' })).resolves.toBeUndefined()
     expect(spy).toHaveBeenCalledTimes(1)
     expect(String(spy.mock.calls[0][0])).toContain('record_access_denial')
+    // 想定外の例外の context とは別物（こちらは PostgREST が返した error）
+    expect(String(spy.mock.calls[0][0])).not.toContain('record_access_denial_unexpected')
     spy.mockRestore()
   })
 

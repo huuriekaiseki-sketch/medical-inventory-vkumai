@@ -1,75 +1,125 @@
-# SPEC: 設定ドリフト検知の「期待値」側を作る（issue #757 の 35 の手元側）
+# 仕様書: アクセス拒否記録が黙って消える2経路（＋ログイン画面の保険 catch）を直す
 
-## Part 0: 調査で分かったこと（2026-09-18 の実測）
+> **範囲（2026-09-18 に人が決めた）**: この PR は `access-denial.ts` の 2 経路と
+> `login/page.tsx` の保険 catch だけを直す。調査中に見つかった
+> `src/lib/security/hidden-row-denial.ts` の同じ欠陥（`serviceRoleClient()` がコピペで同一）と、
+> 警告を 1 か所にまとめる共有ヘルパーは**別 PR に分ける**（下の「この PR の範囲外」）。
 
-| # | 事実 | 根拠 | 設計への影響 |
-| --- | --- | --- | --- |
-| 1 | **`.env.example` が存在しない** | `git ls-files "*env*"` → あるのは `.env.test.example` だけ | issue の前提「migration と `.env.example` から作った期待値」の**片方が無い**。作るのも本 PR に含めるかの判断が要る（判断 A） |
-| 2 | 製品が使う実行時の環境変数は 5 つ | `process.env.*` の走査: `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` / `ADMIN_EMAILS` / `NEXT_PUBLIC_SITE_URL`（他は NODE_ENV・CI・TZ 等の基盤側と、検査スクリプト専用） | 期待値の中身はこの 5 つ。手で数えず走査で出す |
-| 3 | migration に GRANT 61 文 / REVOKE 72 文 | `supabase/migrations` の走査（88 ファイル） | **順に再生しないと現存集合が出ない**（REVOKE のほうが多い） |
-| 4 | **RLS ポリシーの再生器が既にある** | `scripts/lib/replay-rls-policies.mjs`（動的 DDL の展開まで対応。読めない行は名指しする） | 同じ型で GRANT/REVOKE を再生できる。**ゼロから作らない** |
-| 5 | Storage を使っていない | `docs/agents/data-lifecycle-inventory.md` の D-033「機能が無い」 | Storage policy は対象外（生えたら足す） |
-| 6 | DB スキーマのドリフトは既に検知済み | `schema-drift-check.yml` + pg_cron（issue #305） | **本件はその重複ではない**。あちらは「DB 内部のスナップショット比較」、こちらは「migration から導いた期待値と実環境の突合」 |
+## Part 1 — 仕様（人間レビュー用）
 
-## Part 1: 判断（**レビューしてほしい点**）
+### 何ができるようになるか（利用者目線）
 
-### 判断 A: `.env.example` が無い問題をどうするか
+このシステムは、権限のない操作が弾かれた（アクセス拒否）とき、その記録を `access_denials`
+テーブルに残して「誰が・いつ・どの境界で弾かれたか」を後から追跡できるようにしている。
 
-| 案 | 内容 | 評価 |
-| --- | --- | --- |
-| **A-1（採用案）** | 本 PR で `.env.example` を**生成物として**作る。`process.env.*` の走査から変数名を出し、`--check` で鮮度を見る | 期待値の出所が機械で保てる。値は書かず**名前と必須/任意だけ**。秘密は入らない |
-| A-2 | 手で `.env.example` を書く | 腐る。このリポジトリが繰り返し踏んできた型 |
-| A-3 | 環境変数は範囲外にして GRANT/RLS だけやる | issue の記述の半分を落とす |
+今回直すのは、**その記録の仕組み自体が壊れていても、誰にも気づかれない**という問題。
 
-**A-1 を採る。** ただし「必須か任意か」は走査から自動判定できない（`?? 既定値` の有無で近似はできるが誤る）ので、
-**`aidd.config.json` に宣言を置き、走査と突き合わせる**（宣言漏れ・幽霊の両方向を検査）。
+- 環境変数（Supabaseへの接続情報）が設定されていない実行環境では、記録機能が最初から
+  動いていない。これは単体テストなど意図的な環境では正常だが、本番環境で万一同じ状態に
+  なった場合、誰も気づけない。
+- 記録処理の途中で想定外の例外が起きた場合、その例外はログに出ずに消えている。
+- ログイン画面の「保険」のエラー処理も同様に、例外を無言で握りつぶしている。
 
-### 判断 B: 「期待値」をいつ検証できるようにするか（**ここが本題**）
+この修正により、上記の状況が起きたときに**サーバーログに記録が残るようになる**。
+これは運用者・開発者が後から調査するためのログ出力の追加であり、利用者（ログイン画面を
+使う人）が画面上で見る内容・操作感・拒否そのものの動作（弾かれる/弾かれない）は
+一切変わらない。
 
-issue は「Vercel / Supabase ダッシュボードの実値が要るので外部待ち」としているが、**ローカル Supabase には届く**。
+**UI変更の有無**: 画面の見た目・操作フロー・処理中表示・バリデーション表示タイミングの
+変更はゼロ。すべてサーバー内部のログ出力（開発者向け）の追加のみ。したがって
+Part 1 に画面モックは不要（design スキルの対象外）。
 
-| 案 | 内容 | 評価 |
-| --- | --- | --- |
-| **B-1（採用案）** | 期待値を出す側を作り、**比較相手をローカル Supabase にして端から端まで動かす**。本番の接続先は差し替え可能にしておく | 「期待値だけ作って比較は未検証」を避けられる。**比較の形が正しいことを実測できる** |
-| B-2 | 期待値の生成だけ作り、比較は本番に届く日まで書かない | 比較の形が正しいか永久に分からない。作った日が一番よく分かっているのに測らないのは C-022 の型 |
+### 操作の流れ
 
-**B-1 を採る。** 外部待ちなのは**本番という接続先**であって、**比較そのもの**ではない。
+利用者側の操作フローに変化はない。ログイン画面（`/login`）を開く → 通常通り表示される、
+という挙動は今回の修正前後で同一。
 
-### 判断 C: 生成物をコミットするか
+### 受け入れ条件（チェックリスト）
 
-**する。** 既存の型（`harness-map.md`・`dist/plugins`・`aidd-graph`）に揃え、`--check` で鮮度を見る。
-コミットしないと「いつの姿に対する期待値か」が追えない。
+- [ ] `SUPABASE_SERVICE_ROLE_KEY` または `NEXT_PUBLIC_SUPABASE_URL` が未設定の状態で
+      `recordAccessDenial` が最初に呼ばれたとき、警告ログが1回だけ出力される
+      （同一プロセス内で複数回呼ばれても2回目以降は出力しない）
+- [ ] 上記の場合でも、`recordAccessDenial` は例外を投げず正常にreturnする
+      （拒否そのものの fail-closed 動作、記録は fail-open という既存方針は変えない）
+- [ ] `recordAccessDenial` 内の外側 `catch` で例外を捕まえた場合、`logServerError` で
+      ログに残る（現状は無言で握りつぶされている）
+- [ ] `src/app/login/page.tsx` の72行目付近の保険用 `catch` で例外を捕まえた場合、
+      `logServerError` でログに残る
+- [ ] 既存のテスト（`access-denial.test.ts`）が green のまま。特に
+      「環境変数不在時は何も起きずreturnする」という既存の前提テストを、
+      「初回だけ警告ログが出る」という新しい仕様に合わせて更新する
+- [ ] 記録そのもの（DB書き込み）の成功/失敗の挙動、および拒否判定（アクセスを弾く/弾かない）
+      の挙動は一切変更しない
 
-## Part 2: 作るもの
+---
 
-- `scripts/lib/replay-grants.mjs` — migration を順に再生して GRANT の現存集合を出す（`replay-rls-policies.mjs` と同じ型。読めない行は名指しする）
-- `scripts/lib/build-config-expected.mjs` — 期待値を 1 つの JSON にまとめる（RLS ポリシー集合・GRANT 集合・環境変数名）
-- `docs/agents/config-expected.json` — 生成物（コミットする）
-- `.env.example` — 生成物（名前と必須/任意だけ。値は書かない）
-- `scripts/check-config-drift.sh` — 期待値と**実 DB** を突き合わせる。接続先は環境変数で差し替え（既定はローカル）
-- `scripts/check-config-drift.test.sh` — 回帰テスト（RED 方向を含む）
+## Part 2 — 実装計画（AI用）
 
-## Part 3: 受け入れ条件
+### 実装セット一覧（依存順）
 
-- [ ] `replay-grants.mjs` が GRANT/REVOKE を順に再生し、**読めなかった行を黙って飛ばさず名指しする**
-- [ ] 期待値の JSON が決定的（2 回生成して一致）
-- [ ] `--check` で生成物の鮮度を見る（古ければ落ちる）
-- [ ] `.env.example` の変数名が `process.env.*` の走査と一致する。**宣言漏れも幽霊も両方向で検査**
-- [ ] **ローカル Supabase と突き合わせて、実際に差分を検出できることを実測**（わざとポリシーを 1 本落として落ちるか）
-- [ ] 差分が無ければ黙る。**接続できないときは「確認不能」と言う**（合格にしない）
-- [ ] 秘密の値が生成物に一切入らない（名前だけ）
+**セットA: `access-denial.ts` の修正**
+- 対象ファイル: `src/lib/security/access-denial.ts`
+- 内容:
+  1. `serviceRoleClient()` 内、`cached = url && key ? ... : null` の分岐で、
+     `null` になった**最初の1回だけ** `logServerError('access_denial_client_unavailable', ...)` を出す。
+     「1回だけ」は**既存のキャッシュ**が実現する（env が無いと `cached` は `null` で確定し、
+     2 回目以降は関数冒頭の `if (cached !== undefined) return cached` で返るので、警告の行に届かない）。
+     専用のフラグは持たない（初版は `warnedMissingEnv` を足していたが、外しても挙動が変わらないことを
+     1 行ずつ壊して実測し、消した）。
+     - WHY設計判断: env の有無はプロセスが生きている間は変わらないので、粒度はプロセス単位で足りる。
+       本番では「プロセス起動〜次のデプロイまで 1 回」、テストでは `vi.resetModules()` により
+       「テストケースごとに 1 回」になる。これは意図した挙動として受け入れる。
+     - 共有ヘルパーへの一本化は `hidden-row-denial.ts` を直す別 PR で行う（この PR ではファイル内に閉じる）。
+  2. 82-118行目の外側 `catch {}`（114-117行目）に `logServerError('record_access_denial_unexpected', error)`
+     相当を追加する（`catch {}` → `catch (error) { logServerError(...) }`）。
+     113行目の既存の `if (error) logServerError('record_access_denial', error)`（PostgREST戻り値の
+     エラー）とは別経路・別contextなので、区別できるcontext文字列にする。
+- テスト観点:
+  - 環境変数unset時、1回目の呼び出しで警告ログが出ることを確認
+  - 同一モジュールインスタンス内で2回目以降呼んでも警告ログが重複しないことを確認
+  - 外側catchが拾う例外（`routeFromHeaders`失敗、`withJudgmentTimeout`実行時の例外等）で
+    `logServerError`が呼ばれることを確認
+  - いずれの場合も `recordAccessDenial` が例外を投げずreturnすることを確認（fail-open維持）
+- 型: 変更なし（`AccessDenial`, `DenialGuard`, `DenialReason` は既存のまま）
+- データアクセス層: 変更なし（DB書き込み・RPCの呼び出し方は既存のまま）
 
-## Part 4: 対象外
+**セットB: `login/page.tsx` の保険catch修正**
+- 対象ファイル: `src/app/login/page.tsx`
+- 内容: 72-74行目の `catch { // WHY: ... }` に `catch (error) { logServerError('proxy_admin_denial_record_failed', error) }` を追加。
+  既存の32-38, 43-48, 53-61行目の他のcatchと同じパターンに揃える。
+- テスト観点:
+  - `recordAccessDenial`がthrowするケース（モックで例外を投げさせる）で`logServerError`が
+    呼ばれることを確認
+  - 既存の正常系（記録成功、`recordAccessDenial`が例外を投げない）テストに影響がないことを確認
+- 型: 変更なし
+- データアクセス層: 変更なし（このcatchはUI表示に影響しないServer Component側のロジック）
 
-- 本番 / staging への接続（**外部待ち**。接続先を差し替えられる形だけ作る）
-- GitHub のブランチ保護・権限の比較（`gh api` で取れるが、**有料化の判断（#757 の 6）と一体**なので分離）
-- Storage policy（機能が無い。生えたら足す）
+### この PR の範囲外（別 PR に分ける）
 
-## Part 5: 危険なところ
+- **`src/lib/security/hidden-row-denial.ts`**: `serviceRoleClient()` が `access-denial.ts` と同一のコピペで、
+  同じ欠陥（env 未設定で無音・外側 catch が無音）を持つ。調査（2026-09-18）で見つかった。
+- **共有ヘルパー**: env 未設定時の初回警告を `src/lib/security/` 配下の 1 関数にまとめ、
+  `access-denial.ts` と `hidden-row-denial.ts` の両方から呼ぶ。
+- 分けた理由: 依頼は「2 経路」で、`hidden-row-denial.ts` は調査で後から見つかった別ファイル。
+  共有ヘルパーは両方を同時に触るので、`hidden-row-denial.ts` を直す PR でまとめて入れるほうが差分が読みやすい。
 
-| リスク | 対処 |
-| --- | --- |
-| **秘密が生成物に混ざる** | 値を一切読まない（名前だけ）。`check-secret-leak.test.sh` が既に走る |
-| 再生の取りこぼしで「差分なし」の嘘 | 読めない行を名指しする（`replay-rls-policies.mjs` と同じ。C-044） |
-| 接続できないのを緑と読む | 「確認不能」と言って合格にしない |
-| 新しい検査 1 本ぶんの付帯作業 | 是正の登録簿・`plugin-layout.json`（配布層と `checkScopes`）・`harness-registry.json`・`build-plugin.sh` の再生成。**2026-09-18 に 6 回落ちて学んだ順序** |
+### 並列グループ宣言
+
+- セットA（`src/lib/security/access-denial.ts` + `src/lib/security/__tests__/access-denial.test.ts`）
+- セットB（`src/app/login/page.tsx` + `src/app/login/__tests__/page.test.tsx`）
+
+セットA・セットBは触るファイルが重複しないため、**同一の波（2つ同時実装可）**とする。
+統合ゲートでは両セットのテストを通しで実行し、既存のfail-open系テスト
+（`check-fail-open.test.sh`等）が全変更後も green であることを確認する。
+
+---
+
+## Part 3 — 仕様レビュー前セルフチェック（AI用）
+
+- UI変更なし（画面の見た目・操作感の変更ゼロ、サーバー内部のログ追加のみ）→ design スキルの
+  モック作成は対象外。Before/After比較も不要。
+- 新しい型・enum・statusフィールドの追加なし（既存の `DenialGuard`/`DenialReason` は変更しない）
+  → 判定基準・下流の反応・列挙の自己矛盾チェックは対象外。
+- 既存の判定ロジック（`if (!db) return`、`catch {}`）への変更はログ出力の追加のみで、
+  戻り値・例外の有無・呼び出し元から見た挙動（fail-open/fail-closed）は変えない
+  → 信号の意味変更なし。

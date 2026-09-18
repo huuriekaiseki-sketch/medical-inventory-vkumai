@@ -58,6 +58,11 @@ export interface AccessDenial {
 let cached: ReturnType<typeof createClient<Database>> | null | undefined
 
 function serviceRoleClient() {
+  // WHY(警告が 1 回で済む理由もここ): env が無いと cached は null で確定し、2 回目以降は
+  //      この行で返るので、下の警告には**プロセスにつき 1 回しか到達しない**。
+  //      専用のフラグは要らない（2026-09-18 に足したフラグは、外しても挙動が変わらないことを
+  //      実測して消した）。この早期 return を消すと警告が拒否のたびに出るようになるが、
+  //      それは「env 未設定時は初回だけ警告ログが出る」テストが落として知らせる
   if (cached !== undefined) return cached
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -65,6 +70,11 @@ function serviceRoleClient() {
   cached = url && key
     ? createClient<Database>(url, key, { auth: { autoRefreshToken: false, persistSession: false } })
     : null
+  // 初回だけ警告ログを出す（SPEC part 1、受け入れ条件1）。本番の設定漏れでも同じ経路を通るので、
+  // 「監査記録が全部消えている」ことにここで気づけるようにする
+  if (!cached) {
+    logServerError('access_denial_client_unavailable', new Error('SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL is not set'))
+  }
   return cached
 }
 
@@ -111,8 +121,11 @@ export async function recordAccessDenial(denial: AccessDenial): Promise<void> {
       () => ({ error: null }),
     )
     if (error) logServerError('record_access_denial', error)
-  } catch {
+  } catch (error) {
     // WHY: 記録の失敗は握りつぶす（上のコメント参照）。ここで throw すると
-    //      「記録できないと拒否できない」になり、可用性の穴になる
+    //      「記録できないと拒否できない」になり、可用性の穴になる。
+    //      ただし想定外の例外は（プロセス再起動の前兆の可能性があるため）ログに残す
+    //      （SPEC part 1、受け入れ条件3）
+    logServerError('record_access_denial_unexpected', error)
   }
 }

@@ -32,8 +32,9 @@ vi.mock('../LoginForm', () => ({
   default: () => <div>login-form</div>,
 }))
 
+const mockLogServerError = vi.fn()
 vi.mock('@/lib/log-safe', () => ({
-  logServerError: vi.fn(),
+  logServerError: (...args: unknown[]) => mockLogServerError(...args),
 }))
 
 describe('LoginPage(Server Component) — proxy の admin 拒否を記録する [P-063]', () => {
@@ -113,7 +114,7 @@ describe('LoginPage(Server Component) — proxy の admin 拒否を記録する 
     expect(mockRecordAccessDenial).not.toHaveBeenCalled()
   })
 
-  it('recordAccessDenialがthrowしてもLoginFormは描画される', async () => {
+  it('recordAccessDenialがthrowしてもLoginFormは描画され、logServerErrorが呼ばれる', async () => {
     mockCookieGet.mockReturnValue({
       value: encodeProxyDenial({ reason: 'unauthenticated', route: '/admin', method: 'GET' }),
     })
@@ -124,6 +125,7 @@ describe('LoginPage(Server Component) — proxy の admin 拒否を記録する 
     render(jsx)
 
     expect(screen.getByText('login-form')).toBeInTheDocument()
+    expect(mockLogServerError).toHaveBeenCalledWith('proxy_admin_denial_record_failed', expect.any(Error))
   })
 
   it('not_adminでgetUserが失敗しても記録をスキップしLoginFormは描画される', async () => {
