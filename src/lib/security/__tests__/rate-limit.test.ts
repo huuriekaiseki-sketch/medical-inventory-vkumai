@@ -169,6 +169,28 @@ describe('回数の上限（rate limit） [P-064][Q-002]', () => {
     expect(rpc).not.toHaveBeenCalled()
   })
 
+  // WHY(issue #793): ここは 2026-09-19 まで**黙って落ちていた**。数えないこと自体は fail-open の
+  //      仕様（上限は認可ではないので可用性の穴にしない）だが、**なぜ数えられないかが残らない**と
+  //      設定漏れに気づけない。「数えない」と「黙らない」を対で固定する。
+  it('env 未設定時は初回だけ警告ログが出る（黙って落とさない。issue #793）', async () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const m = await loadModule()
+
+      await m.consumeUserRequestQuota('user-1')
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(String(spy.mock.calls[0][0])).toContain('rate_limit_client_unavailable')
+
+      // 2 回目は出ない（全 route が通る経路なので、毎回出るとログが溢れる）
+      spy.mockClear()
+      await m.consumeUserRequestQuota('user-1')
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   // WHY(#757-31): これは requireAuth の中にあり **全 route が通る**。PostgREST を止めた実測で
   //      18 秒かかっていた。上限は認可ではないので、諦めたら通す（fail-open）。
   //      ただし**諦めたこと自体は記録に残す**

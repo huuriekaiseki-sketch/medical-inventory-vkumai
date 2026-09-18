@@ -1,8 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database.generated'
 import { recordAccessDenial } from '@/lib/security/access-denial'
 import { withJudgmentTimeout } from '@/lib/security/judgment-timeout'
 import { logServerError } from '@/lib/log-safe'
+import { createServiceRoleClientAccessor } from '@/lib/security/service-role-client'
 
 // WHY(#757-24 の残り「RLS が黙って 0 件を返す拒否」、2026-09-13): ID 指定で 1 件取る route は
 //      RLS で見えない行を「存在しない」と区別できず、404 を返すだけで痕跡が残らなかった
@@ -32,22 +31,15 @@ export interface HiddenRowDenial {
   actorId: string
 }
 
-// WHY(使い回す): access-denial.ts と同じ理由（毎回 createClient すると遅い。セッションを持たない）
-let cached: ReturnType<typeof createClient<Database>> | null | undefined
-
-function serviceRoleClient() {
-  if (cached !== undefined) return cached
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  cached = url && key
-    ? createClient<Database>(url, key, { auth: { autoRefreshToken: false, persistSession: false } })
-    : null
-  return cached
-}
+// WHY(共有ヘルパー、issue #793): ここは 2026-09-19 まで**env 未設定時に黙って null を返して**
+//      いた。上の WHY が「例外は飲み込んで logServerError に残す」と宣言しているのに、
+//      env が無い経路だけログが無く、記録がまるごと落ちていた。
+//      同じコピペが 4 ファイルにあったので service-role-client.ts へ一本化した。
+const client = createServiceRoleClientAccessor('hidden_row_denial_client_unavailable')
 
 /** 行があればその facility_id、無ければ・判定できなければ null */
 async function lookupFacilityId(
-  db: NonNullable<ReturnType<typeof serviceRoleClient>>,
+  db: NonNullable<ReturnType<typeof client.get>>,
   table: HiddenRowTable,
   id: string
 ): Promise<string | null> {
@@ -63,7 +55,7 @@ async function lookupFacilityId(
 
 export async function recordHiddenRowDenial(input: HiddenRowDenial): Promise<void> {
   try {
-    const db = serviceRoleClient()
+    const db = client.get()
     if (!db) return
     const facilityId = await withJudgmentTimeout<string | null>(
       'hidden-row.exists',

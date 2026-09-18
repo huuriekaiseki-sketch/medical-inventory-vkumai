@@ -22,8 +22,14 @@ const REPO_ROOT = path.resolve(__dirname, '../..')
 const SRC = path.join(REPO_ROOT, 'src')
 const RULEBOOK = 'docs/agents/privileged-write-rulebook.md'
 
-/** service_role クライアントを作る「工場」そのもの。ここは経路ではない */
-const FACTORY = 'src/lib/supabase/server.ts'
+/**
+ * service_role クライアントを作る「工場」そのもの。ここは経路ではない。
+ *
+ * WHY(2 つ目を足した、issue #793): `service-role-client.ts` は 4 経路にコピペされていた
+ *      クライアント生成を一本化したもので、それ自体は誰にも書き込まない。
+ *      **工場を経路として数えると「1 経路しかない」と読めてしまい、実際に書く 4 か所が表から消える。**
+ */
+const FACTORIES = new Set(['src/lib/supabase/server.ts', 'src/lib/security/service-role-client.ts'])
 
 function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
@@ -45,13 +51,24 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   return out
 }
 
-/** service_role クライアントを実際に作っているファイル（コメントでの言及は数えない） */
+/**
+ * service_role で書く経路（コメントでの言及は数えない）。
+ *
+ * WHY(取得口の呼び出しも数える、issue #793): クライアント生成を共有ヘルパーへ一本化したので、
+ *      呼び出し元からは `SUPABASE_SERVICE_ROLE_KEY` の文字列が消えた。
+ *      そこだけを見ていると**経路が 4 つとも表から消えて「宣言が陳腐化した」と出る**——
+ *      実際には経路は減っておらず、鍵を読む場所が移っただけ。取得口を呼ぶことも「使う」と数える。
+ */
 function serviceRoleFiles(): string[] {
   return sourceFiles(SRC)
-    .filter((rel) => rel !== FACTORY)
+    .filter((rel) => !FACTORIES.has(rel))
     .filter((rel) => {
       const code = stripComments(readFileSync(path.join(REPO_ROOT, rel), 'utf-8'))
-      return /createAdminSupabase\s*\(/.test(code) || /SUPABASE_SERVICE_ROLE_KEY/.test(code)
+      return (
+        /createAdminSupabase\s*\(/.test(code) ||
+        /SUPABASE_SERVICE_ROLE_KEY/.test(code) ||
+        /createServiceRoleClientAccessor\s*\(/.test(code)
+      )
     })
     .sort()
 }

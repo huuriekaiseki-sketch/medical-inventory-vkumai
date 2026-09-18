@@ -1,9 +1,8 @@
 import { headers } from 'next/headers'
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database.generated'
 import { DENIAL_METHOD_HEADER, DENIAL_ROUTE_HEADER } from '@/lib/security/denial-headers'
 import { logServerError } from '@/lib/log-safe'
 import { withJudgmentTimeout } from '@/lib/security/judgment-timeout'
+import { createServiceRoleClientAccessor } from '@/lib/security/service-role-client'
 
 // WHY: issue #757 の 24。拒否された操作は audit_log の行トリガーに来ないので、
 //      アプリの認可ガードが弾いた瞬間にここで記録する（P-063）。
@@ -52,31 +51,10 @@ export interface AccessDenial {
   method?: string | null
 }
 
-// WHY(使い回す): 拒否は総当たり攻撃のときに連続で起きる。そのたびに createClient すると
-//      内部の fetch 設定を毎回組み立てることになり、実測で統合テストの所要時間が 3 倍になった。
-//      クライアントはセッションを持たない（persistSession: false）ので使い回して問題ない。
-let cached: ReturnType<typeof createClient<Database>> | null | undefined
-
-function serviceRoleClient() {
-  // WHY(警告が 1 回で済む理由もここ): env が無いと cached は null で確定し、2 回目以降は
-  //      この行で返るので、下の警告には**プロセスにつき 1 回しか到達しない**。
-  //      専用のフラグは要らない（2026-09-18 に足したフラグは、外しても挙動が変わらないことを
-  //      実測して消した）。この早期 return を消すと警告が拒否のたびに出るようになるが、
-  //      それは「env 未設定時は初回だけ警告ログが出る」テストが落として知らせる
-  if (cached !== undefined) return cached
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  // 環境変数が無い実行環境（単体テスト等）では記録しない
-  cached = url && key
-    ? createClient<Database>(url, key, { auth: { autoRefreshToken: false, persistSession: false } })
-    : null
-  // 初回だけ警告ログを出す（SPEC part 1、受け入れ条件1）。本番の設定漏れでも同じ経路を通るので、
-  // 「監査記録が全部消えている」ことにここで気づけるようにする
-  if (!cached) {
-    logServerError('access_denial_client_unavailable', new Error('SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL is not set'))
-  }
-  return cached
-}
+// WHY(共有ヘルパー、issue #793): クライアントの生成・キャッシュ・env 未設定時の初回警告は
+//      4 ファイルに同じものがコピペされていた。service-role-client.ts へ一本化してある
+//      （使い回す理由・警告が 1 回で済む理由・fail-open の境界もそちらの WHY に集約）。
+const client = createServiceRoleClientAccessor('access_denial_client_unavailable')
 
 // proxy が付けたヘッダから経路を取る。Route Handler の外（テスト・スクリプト）では
 // headers() が使えないので、その場合は経路なしで記録する（記録自体は止めない）
@@ -91,7 +69,7 @@ async function routeFromHeaders(): Promise<{ route: string | null; method: strin
 
 export async function recordAccessDenial(denial: AccessDenial): Promise<void> {
   try {
-    const db = serviceRoleClient()
+    const db = client.get()
     if (!db) return
     const ctx =
       denial.route !== undefined || denial.method !== undefined

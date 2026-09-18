@@ -1,8 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database.generated'
 import { recordAccessDenial } from '@/lib/security/access-denial'
 import { logServerError } from '@/lib/log-safe'
 import { withJudgmentTimeout } from '@/lib/security/judgment-timeout'
+import { createServiceRoleClientAccessor } from '@/lib/security/service-role-client'
 import limitsConfig from '../../../aidd.config.json'
 
 // WHY: issue #757 の 32（量の上限、quota-inventory の Q-002）。
@@ -36,24 +35,15 @@ export interface RateLimitResult {
   unmeasured: boolean
 }
 
-// WHY(使い回す): 拒否と同じ理由。1 リクエストごとに createClient すると内部の fetch 設定を
-//      毎回組み立てることになり、実測で統合テストの所要時間が 3 倍になった（#757-24 のとき）。
-let cached: ReturnType<typeof createClient<Database>> | null | undefined
-
-function serviceRoleClient() {
-  if (cached !== undefined) return cached
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  cached = url && key
-    ? createClient<Database>(url, key, { auth: { autoRefreshToken: false, persistSession: false } })
-    : null
-  return cached
-}
-
-/** テスト用。環境変数を差し替えたあとに呼ぶ */
-export function resetRateLimitClientForTests(): void {
-  cached = undefined
-}
+// WHY(共有ヘルパー、issue #793): ここも 2026-09-19 まで**env 未設定時に黙って null を返して**
+//      いた。同じコピペが 4 ファイルにあったので service-role-client.ts へ一本化した
+//      （使い回す理由・警告が 1 回で済む理由もそちらの WHY に集約）。
+//
+// WHY(reset 関数を消した): `resetRateLimitClientForTests` はリポジトリ全体で**定義行以外に
+//      1 件も呼び出しが無かった**（2026-09-19 に `src` だけでなく `supabase/__tests__/` も含めて実測。
+//      同じ形の privileged-operation.ts のほうは統合テストが呼んでいたので、そちらは残してある）。
+//      この単体テストは `vi.resetModules()` + 動的 import でモジュールごと再評価している。
+const client = createServiceRoleClientAccessor('rate_limit_client_unavailable')
 
 /**
  * 固定窓で 1 回数え、上限内かを返す。
@@ -69,7 +59,7 @@ export async function consumeRateLimit(
 ): Promise<RateLimitResult> {
   const unmeasured: RateLimitResult = { allowed: true, hitCount: null, limit, resetAt: null, unmeasured: true }
   try {
-    const db = serviceRoleClient()
+    const db = client.get()
     if (!db) return unmeasured
     // WHY(#757-31): これは `requireAuth` の中にあり、**全 route が通る**。PostgREST を止めた実測で
     //      18 秒かかっていた（認可に関係ない読み取りまで巻き込まれる）。上限を過ぎたら諦め、
@@ -140,7 +130,7 @@ export async function consumeInviteQuota(adminUserId: string): Promise<RateLimit
  */
 export async function refundInviteQuota(adminUserId: string): Promise<boolean> {
   try {
-    const db = serviceRoleClient()
+    const db = client.get()
     if (!db) return false
     const { data, error } = await db.rpc('refund_rate_limit', {
       p_bucket: inviteBucket(adminUserId),
