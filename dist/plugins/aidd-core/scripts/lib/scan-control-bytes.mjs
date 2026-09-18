@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 制御バイト（TAB・LF・CR 以外の C0 制御文字と DEL）を探す。追跡中のテキストとコミットメッセージの ratchet。
+// 制御バイト（TAB・LF・CR 以外の C0 制御文字と DEL）を探す。作業ツリーのテキストとコミットメッセージの ratchet。
 //
 // WHY(2026-09-11): 2 本の .mjs の文字列に、区切りのつもりの NUL が**生のバイト**で入っていた。
 //      git がファイルを binary と判定するので diff / blame / 3-way merge が効かず、
@@ -26,6 +26,7 @@
 // 終了コード: 0 = 無い / 1 = ある（または免除が腐っている） / 2 = 走査できない（git が使えない・読めない）
 //
 // 限界:
+//   - **gitignore 済みのファイルは見ない**（--exclude-standard）。ignore されたまま動く生成物は対象外
 //   - binary は拡張子で外す（BINARY_EXT）。拡張子の無い binary やここに無い形式は誤検知しうる。
 //     そのときは拡張子を足すか、免除（aidd.config.json の controlBytes.allowedFiles）に理由つきで足す
 //   - コミットは **HEAD から辿れるもの**だけを見る。ほかのブランチは、そのブランチで回したときに見る
@@ -89,11 +90,20 @@ function allowanceProblems(allow, hitKeys) {
   }
 }
 
-/** 追跡中のテキストファイルを走査する */
-export function scanTrackedFiles(root, allow = {}) {
-  const listed = execFileSync('git', ['-C', root, 'ls-files', '-z'], { maxBuffer: 64 * 1024 * 1024 })
+/** 作業ツリーのテキストファイル（追跡中 + 未追跡。gitignore 済みは見ない）を走査する */
+export function scanWorkingTreeFiles(root, allow = {}) {
+  // WHY(未追跡も見る・2026-09-18、issue #785): 素の `git ls-files` は**追跡中のものしか返さない**。
+  //      新しく書いたファイルは add するまで走査対象にならないので、書いた直後にここを回しても
+  //      必ず緑になる。E-082（生の NUL）の再発をこの検査で 1 度取り逃がし、CI が拾った。
+  //      同じ穴は E-039 として check-secret-leak.test.sh でも起きており、そちらと同じ列挙に揃える。
+  //      --exclude-standard を付けるので gitignore 済み（node_modules・.next など）は入らない。
+  const listed = execFileSync(
+    'git',
+    ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+    { maxBuffer: 64 * 1024 * 1024 },
+  )
   // 区切りは NUL。**エスケープで書かず数値から作る**（上の WHY を参照）
-  const files = listed.toString('utf8').split(String.fromCharCode(0)).filter(Boolean)
+  const files = [...new Set(listed.toString('utf8').split(String.fromCharCode(0)).filter(Boolean))]
   const violations = []
   const hitKeys = new Set()
   let scanned = 0
@@ -168,7 +178,7 @@ if (process.argv[1] && process.argv[1].endsWith('scan-control-bytes.mjs')) {
     const allow = readAllow(flag('--allow'))
     const r = args.includes('--commits')
       ? scanCommitMessages(root, allow, flag('--rev') ?? 'HEAD')
-      : scanTrackedFiles(root, allow)
+      : scanWorkingTreeFiles(root, allow)
     writeLine(`scanned=${r.scanned}`)
     for (const v of r.violations) writeLine(`NG ${v.where}: ${describe(v.hits)}`)
     for (const k of r.unused) writeLine(`NG 免除 ${k} は一度も当たっていない（消すこと）`)

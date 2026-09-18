@@ -5,10 +5,11 @@
 #      同じ日にコミットメッセージの下書きでも起きたので、ファイルとメッセージの両方を見る。
 #
 #   (a) 走査器が制御バイトを見つける（NUL・BS・VT・FF・ESC・DEL）。TAB・LF・CR と日本語は通す
-#   (b) 追跡中のテキストファイルに制御バイトが無い（ratchet。2026-09-11 に 1,516 本で 0 本と実測して開始）
+#   (b) 作業ツリーのテキストファイルに制御バイトが無い（ratchet。2026-09-11 に 1,516 本で 0 本と実測して開始）
 #   (c) HEAD から辿れるコミットメッセージに制御バイトが無い（同日 707 件で 0 件）
 #   (d) 追跡ファイルとコミットの RED 方向、免除（aidd.config.json の controlBytes）の衛生（C-049）
-#   (e) 走査が空振りしていない・走査できないことを緑にしない（C-044 / C-025）
+#   (e) **add する前の未追跡ファイル**でも検知し、gitignore 済みは見ない（issue #785）
+#   (f) 走査が空振りしていない・走査できないことを緑にしない（C-044 / C-025）
 #
 # 限界: 詳しくは scripts/lib/scan-control-bytes.mjs の先頭。コミットの**前に**止めるのは
 #      git の commit-msg hook（scripts/git-hooks/commit-msg。bash scripts/install-git-hooks.sh で入る）で、
@@ -74,7 +75,7 @@ else
   assert_fail "許すべきものを制御バイトと読んだ" "$(cat "$WORK/out-ok.txt")"
 fi
 
-echo "=== scenario 2: 追跡中のテキストファイルに制御バイトが無い（ratchet） ==="
+echo "=== scenario 2: 作業ツリーのテキストファイルに制御バイトが無い（ratchet） ==="
 aidd_config_query '.controlBytes.allowedFiles // {}' '{}' "$REPO_ROOT" > "$WORK/allow-files.json"
 if OUT="$(node "$SCANNER" --files --root "$REPO_ROOT" --allow "$WORK/allow-files.json" 2>&1)"; then
   RC=0
@@ -95,13 +96,14 @@ fi
 #      0 本が普通で、持っていないだけで赤くなる（空のリポジトリで実測して発覚）。
 #      scenario 3 が「コミットが無い」を対象なしと言えているのと同じ扱いに揃える。
 #      「追跡ファイルが 1 本も無い」と「あるのに走査が 0 本」は別物なので分ける（C-025）。
-TRACKED_N="$(git -C "$REPO_ROOT" ls-files 2>/dev/null | grep -c . || true)"
-if [ "${TRACKED_N:-0}" -eq 0 ]; then
-  assert_ok "対象なし: この導入先はまだファイルを 1 つも追跡していない"
+# 走査器と同じ列挙（追跡中 + 未追跡、gitignore 済みは除く）で数える。片方だけ変えると空振り検知が狂う
+LISTED_N="$(git -C "$REPO_ROOT" ls-files --cached --others --exclude-standard 2>/dev/null | grep -c . || true)"
+if [ "${LISTED_N:-0}" -eq 0 ]; then
+  assert_ok "対象なし: この導入先には走査できるファイルが 1 つも無い"
 elif [ "${SCANNED:-0}" -ge 1 ]; then
   assert_ok "走査が空振りしていない（${SCANNED} 本）"
 else
-  assert_fail "追跡ファイルは ${TRACKED_N} 本あるのに走査できたのが 0 本（走査が壊れている疑い。C-044）"
+  assert_fail "対象は ${LISTED_N} 本あるのに走査できたのが 0 本（走査が壊れている疑い。C-044）"
 fi
 
 echo "=== scenario 3: HEAD から辿れるコミットメッセージに制御バイトが無い ==="
@@ -189,7 +191,30 @@ else
   assert_fail "コミットの免除が効かない"
 fi
 
-echo "=== scenario 5: 走査できないことを緑にしない（C-025） ==="
+echo "=== scenario 5: コミット前（未追跡）でも検知し、gitignore 済みは見ない（issue #785） ==="
+# WHY: 素の git ls-files は追跡中のものしか返さないので、**書いた直後にここを回すと必ず緑**になる。
+#      E-082 の再発（生の NUL）をこの検査が 1 度取り逃がし、CI が拾った。E-039 と同じ穴。
+UT="$WORK/ut"
+git init -q "$UT"
+printf 'ignored/\n' > "$UT/.gitignore"
+printf 'clean\n' > "$UT/tracked.txt"
+git -C "$UT" add .gitignore tracked.txt
+printf 'x\033[0my\n' > "$UT/untracked.txt"          # add していない（＝コミット前の状態）
+mkdir -p "$UT/ignored"
+printf 'z\033[0mw\n' > "$UT/ignored/generated.txt"  # gitignore 済み（走査対象外であるべき）
+if OUT_UT="$(node "$SCANNER" --files --root "$UT" 2>&1)"; then RC_UT=0; else RC_UT=$?; fi
+if [ "$RC_UT" -eq 1 ] && grep -q 'NG untracked.txt: 1 行 2 バイト目 0x1b' <<<"$OUT_UT"; then
+  assert_ok "add する前の未追跡ファイルでも検知する"
+else
+  assert_fail "未追跡ファイルを見逃す（rc=${RC_UT}）" "$OUT_UT"
+fi
+if grep -q 'ignored/generated.txt' <<<"$OUT_UT"; then
+  assert_fail "gitignore 済みのファイルまで走査した（生成物で赤くなる）" "$OUT_UT"
+else
+  assert_ok "gitignore 済みは見ない"
+fi
+
+echo "=== scenario 6: 走査できないことを緑にしない（C-025） ==="
 mkdir -p "$WORK/not-a-repo"
 if node "$SCANNER" --files --root "$WORK/not-a-repo" > "$WORK/out-na.txt" 2>&1; then
   RC=0
