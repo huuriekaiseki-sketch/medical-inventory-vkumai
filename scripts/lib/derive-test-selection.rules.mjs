@@ -149,7 +149,14 @@ export const RULES = [
       return { hit: hits.length > 0, why: `.claude/workflows に触れた: ${hits.join(', ')}` }
     },
     notRequiredReason: '.claude/workflows に触れていない',
-    commands: ['bash scripts/eval-workflow-prompts.sh <fixture>'],
+    // WHY(免除の書き方もここに出す、2026-09-18): CI（eval-runs-freshness-check.yml）は
+    //      **PR 本文の行頭 `eval-skip: <理由>`** しか免除と認めない。04 表に自然文で理由を
+    //      書いても通らない——実際にそれで落とした（issue #791 の PR）。ルールは test-matrix.md に
+    //      書いてあったが、**手を動かすときに見るのはこの出力**なので、ここに出さないと読まれない。
+    commands: [
+      'bash scripts/eval-workflow-prompts.sh <fixture>',
+      '(免除する場合) PR 本文の行頭に `eval-skip: <理由>` を書く。04 表の理由欄だけでは CI は通らない',
+    ],
   },
   {
     key: 'hook-live',

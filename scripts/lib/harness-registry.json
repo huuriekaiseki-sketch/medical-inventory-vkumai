@@ -43,6 +43,7 @@
         "scripts/check-subagent-model-force.test.sh",
         "scripts/check-test-matrix.test.sh",
         "scripts/check-workflow-interruption.test.sh",
+        "scripts/check-workflow-agent-type.test.sh",
         "scripts/check-workflow-nesting.test.sh",
         "scripts/codex-agents-sandbox.test.sh",
         "scripts/codex-config-separation.test.sh",

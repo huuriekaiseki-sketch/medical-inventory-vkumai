@@ -41,6 +41,7 @@ export const KNOWN_AGENT_TYPES = [
   'adversarial-verify',
   'completeness-critic',
   'contract-writer',
+  'spec-drafter',
 ] as const
 
 /**

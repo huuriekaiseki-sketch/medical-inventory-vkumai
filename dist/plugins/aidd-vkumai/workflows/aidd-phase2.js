@@ -138,6 +138,7 @@ function countLoggable(agentType) {
 const PROGRESS_LOGGABLE_AGENT_TYPES = new Set([
   'sweep-db', 'sweep-ui', 'sweep-types', 'sweep-data', 'implementer', 'reviewer',
   'integrator', 'judge-panel', 'proposer', 'adversarial-verify', 'completeness-critic', 'contract-writer',
+  'spec-drafter',
 ])
 let progressLoggableAgentCount = 0
 function countProgressLoggable(agentType) {

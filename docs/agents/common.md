@@ -150,7 +150,7 @@ AIDDフロー（`aidd-phase2.js` 等）は reviewer/implementer/judge-panel の�
 ### サブエージェント進捗の可視化（issue #18）
 
 サブエージェント（sweep-db/sweep-ui/sweep-types/sweep-data/implementer/reviewer/integrator/
-judge-panel/proposer/adversarial-verify/completeness-critic/contract-writer）は、
+judge-panel/proposer/adversarial-verify/completeness-critic/contract-writer/spec-drafter）は、
 作業の**開始時**と**終了時**（成功・失敗いずれも）に `scripts/log-agent-progress.sh` を呼び、
 `logs/agent-progress.jsonl` に進捗を記録すること。
 ```

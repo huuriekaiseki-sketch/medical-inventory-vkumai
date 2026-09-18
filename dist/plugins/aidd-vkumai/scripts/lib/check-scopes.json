@@ -14,6 +14,7 @@
     "check-node-version-pin.test.sh": "both",
     "check-rls-grant-gaps.test.sh": "both",
     "check-write-path-gaps.test.sh": "both",
+    "check-workflow-agent-type.test.sh": "both",
     "check-operation-contracts.test.sh": "both",
     "check-guard-regressions.test.sh": "both",
     "check-skip-scope.test.sh": "both"

@@ -98,6 +98,35 @@ function shouldContinueSweepLoop(dryRounds, round, maxRounds, minRemainingForRou
   return true
 }
 
+// ─── Phase 0: 開始時の木の姿を控える（issue #791） ────────────────────
+// WHY: このワークフローは**停止①より前**（調査と仕様書ドラフト）で、木を 1 バイトも変えてはいけない。
+//      2026-09-18 に、採点役が製品コード 4 ファイルを編集して git commit まで実行した。
+//      agentType を全役割に付けて手段を塞いだが、それは「うっかり」を止めるだけで、
+//      許可コマンド（bash scripts/*.sh 等）の副作用までは見ていない（check-readonly-bash.sh の限界）。
+//      **手段を塞ぐのと、結果を確かめるのは別の防御**なので、終了時に突き合わせる側も置く。
+//
+// 限界: 取れるのは開始時と終了時の 2 点だけで、途中で変えて戻された場合は分からない。
+//       agent() 経由でしか git を呼べない（Workflow DSL にファイル系 API が無い）ため、
+//       この 1 体が失敗すると `null` になる——そのときは「確かめられなかった」として扱い、
+//       合格にも違反にも数えない（C-025）。
+const TREE_STATE_SCHEMA = {
+  type: 'object',
+  properties: {
+    head: { type: 'string' },
+    dirty: { type: 'string' },
+  },
+  required: ['head', 'dirty'],
+}
+const captureTreeState = (label) =>
+  agent(
+    'リポジトリのルートで次の 2 つをそのまま実行し、結果だけを返してください。解釈や要約はしないこと。\n' +
+      '1. `git rev-parse HEAD` の出力（コミット SHA）を head に入れる\n' +
+      '2. `git status --porcelain` の出力全文を dirty に入れる（変更が無ければ空文字）',
+    { label, agentType: 'reviewer', phase: 'Sweep', schema: TREE_STATE_SCHEMA, model: 'haiku', effort: 'low' },
+  )
+
+const treeBefore = await captureTreeState('capture-tree:before')
+
 // ─── Phase 1-2: Sweep + Completeness Critic ──────────────────────────
 let round = 1
 let dryRounds = 0
@@ -221,7 +250,9 @@ const draftSpec = await agent(
 - pass: 仕様書ドラフトを生成できた
 - fail: 生成されたが調査結果を反映していない等明らかに不完全
 - blocked: Sweep結果が空でドラフト生成に着手できなかった`,
-  { label: 'draft-spec', phase: 'Draft Spec', model: 'sonnet', effort: 'medium', schema: AGENT_RESULT_SCHEMA_PFB }
+  // WHY(agentType、issue #791): 本文は detail で返す設計なので、この役割はファイルを書く必要が無い。
+  //      付けないと全ツール持ちになり、実際に SPEC.md を勝手に Write していた（2026-09-18）。
+  { label: 'draft-spec', agentType: 'spec-drafter', phase: 'Draft Spec', model: 'sonnet', effort: 'medium', schema: AGENT_RESULT_SCHEMA_PFB }
 )
 
 // 品質ゲート: deny-by-default（.claude/workflows/lib/quality-gate.js shouldBlockと同一発想）。
@@ -293,7 +324,10 @@ const FINDERS = [
 const findResults = await parallel(
   FINDERS.map(f => () => agent(
     `${f.prompt}、以下の仕様書ドラフトの問題点を列挙せよ。\n\n${draftSpec?.detail}`,
-    { label: `find:${f.lens}`, phase: 'Find', schema: FINDING_SCHEMA, model: 'haiku', effort: 'low' }
+    // WHY(agentType、issue #791): 付けないと「既定のワークフロー用サブエージェント」＝**全ツール持ち**
+    //      になり、`.claude/agents/*.md` の tools も PreToolUse の読み取り専用ガードも効かない。
+    //      ガードは agent_type が空だと素通りする（check-readonly-bash.sh）ので、**一度も発火しなかった**。
+    { label: `find:${f.lens}`, agentType: 'reviewer', phase: 'Find', schema: FINDING_SCHEMA, model: 'haiku', effort: 'low' }
   ))
 )
 
@@ -350,7 +384,7 @@ if (autoSurvivedMinor.length > 0) {
 const verdicts = await parallel(
   toVerify.map((f, i) => () => agent(
     `次の仕様指摘を反証しようとせよ。仕様書のどこかで既に対処されているか、問題が成立しない理由があれば refuted=true にせよ。不確かなら refuted=false にせよ（疑わしいものは生存させる）。\n\nタイトル: ${f.title}\n説明: ${f.description}\n\n仕様書ドラフト:\n${draftSpec?.detail}`,
-    { label: `verify:${i}`, phase: 'Adversarial Verify', schema: VERDICT_SCHEMA, model: 'opus', effort: 'medium' }
+    { label: `verify:${i}`, agentType: 'adversarial-verify', phase: 'Adversarial Verify', schema: VERDICT_SCHEMA, model: 'opus', effort: 'medium' }
   ))
 )
 
@@ -410,7 +444,7 @@ const CRITIC_SCHEMA = {
 
 const criticResult2 = await agent(
   `以下の仕様書ドラフトと生存した指摘リストを見て、まだ検証されていない領域・抜け漏れ・未回答の設計判断を指摘せよ。\n\n## 仕様書ドラフト\n${draftSpec?.detail}\n\n## 生存した指摘\n${survived.map(f => `- [${f.severity}] ${f.title}: ${f.description}`).join('\n')}`,
-  { label: 'completeness-critic-2', phase: 'Completeness Critic', schema: CRITIC_SCHEMA, model: 'sonnet', effort: 'medium' }
+  { label: 'completeness-critic-2', agentType: 'completeness-critic', phase: 'Completeness Critic', schema: CRITIC_SCHEMA, model: 'sonnet', effort: 'medium' }
 )
 
 const gaps = criticResult2?.gaps ?? []
@@ -452,7 +486,7 @@ const PROPOSERS = [
 const proposals = await parallel(
   PROPOSERS.map(p => () => agent(
     `${p.prompt}\n\n## 仕様書ドラフト\n${draftSpec?.detail}\n\n## 生存した問題点\n${survived.map(f => `- [${f.severity}] ${f.title}`).join('\n')}\n\n## ギャップ\n${gaps.map(g => `- ${g.area}: ${g.description}`).join('\n')}`,
-    { label: `propose:${p.stance}`, phase: 'Judge Panel', schema: PROPOSAL_SCHEMA, model: 'sonnet', effort: 'medium' }
+    { label: `propose:${p.stance}`, agentType: 'proposer', phase: 'Judge Panel', schema: PROPOSAL_SCHEMA, model: 'sonnet', effort: 'medium' }
   ))
 )
 
@@ -508,7 +542,10 @@ if (hasDivergence) {
       parallel(
         ['correctness', 'security', 'ux'].map(lens => () => agent(
           `次の設計案を「${lens}」の視点で採点せよ（各項目0-100、totalは加重平均）。\n\n## 案名: ${proposal.name}\n${proposal.description}\n\n主要判断:\n${proposal.keyDecisions.join('\n')}\n\nトレードオフ: ${proposal.tradeoffs}`,
-          { label: `score:${pi}:${lens}`, phase: 'Judge Panel', schema: SCORE_SCHEMA, model: 'haiku', effort: 'low' }
+          // WHY(agentType、issue #791): **この呼び出しが 2026-09-18 の事故の当事者**。
+          //      agentType が無いため採点役が全ツールを持ち、「その2経路を直して」という
+          //      ユーザー要求に従って製品コード 4 ファイルを編集し git commit まで実行した。
+          { label: `score:${pi}:${lens}`, agentType: 'judge-panel', phase: 'Judge Panel', schema: SCORE_SCHEMA, model: 'haiku', effort: 'low' }
         ))
       ).then(scores => {
         const validScores = scores.filter(Boolean)
@@ -540,8 +577,50 @@ phase('Synthesize')
 
 const synthesis = await agent(
   `以下の全検証結果を統合して、仕様書ドラフトへの具体的な修正提案を出力せよ。\n\n## 元の仕様書ドラフト\n${draftSpec?.detail}\n\n## 生存した問題点 (${survived.length}件)\n${survived.map(f => `- [${f.severity}][${f.category}] ${f.title}: ${f.description}`).join('\n')}\n\n## ギャップ (${gaps.length}件)\n${gaps.map(g => `- [${g.area}] ${g.description} → 提案: ${g.suggestion}`).join('\n')}\n\n## Judge Panel結果\n### 採用推奨案: ${winner?.proposal?.name} (スコア: ${Math.round(winner?.avgScore ?? 0)})\n${winner?.proposal?.description}\n主要判断: ${winner?.proposal?.keyDecisions?.join(' / ')}\n\n### 他案のグラフト候補\n${runnerUps.map(r => `- ${r.proposal?.name}: ${r.proposal?.keyDecisions?.join(' / ')}`).join('\n')}\n\n## 出力形式\n1. **必須修正** (critical/important の問題点)\n2. **推奨修正** (minor・ギャップ)\n3. **設計判断** (採用推奨アプローチとその理由)\n4. **未解決事項** (人間が判断すべきポイント)\n\n## status/detail\n上記の統合提案本文は detail に格納し、status も返すこと。\n- pass: 統合提案を生成できた\n- fail: 生成されたが必須修正等のセクションが欠落するなど明らかに不完全\n- blocked: survived/gaps/winnerのいずれかが揃わず統合に着手できなかった`,
-  { label: 'synthesize', phase: 'Synthesize', model: 'sonnet', effort: 'high', schema: AGENT_RESULT_SCHEMA_PFB }
+  { label: 'synthesize', agentType: 'judge-panel', phase: 'Synthesize', model: 'sonnet', effort: 'high', schema: AGENT_RESULT_SCHEMA_PFB }
 )
+
+// ─── 終了時の突き合わせ（issue #791） ────────────────────────────────
+// このワークフローは停止①より前なので、木は開始時と同じでなければならない。
+const treeAfter = await captureTreeState('capture-tree:after')
+
+let treeGuard
+if (!treeBefore || !treeAfter) {
+  // WHY(C-025): 「確かめられなかった」を「変わっていない」と読ませない
+  treeGuard = { status: 'unknown', reason: '木の姿を控える agent が結果を返さなかったため、比較できていません' }
+  log('木の突き合わせ: 確認不能（合格とは読まないこと）')
+} else if (treeBefore.head !== treeAfter.head) {
+  treeGuard = {
+    status: 'violated',
+    reason: `停止①より前なのに HEAD が動いています（${treeBefore.head.slice(0, 12)} → ${treeAfter.head.slice(0, 12)}）。いずれかのサブエージェントがコミットしました`,
+  }
+} else if ((treeBefore.dirty ?? '') !== (treeAfter.dirty ?? '')) {
+  treeGuard = {
+    status: 'violated',
+    reason: `停止①より前なのに作業ツリーが変わっています。\n--- 開始時 ---\n${treeBefore.dirty || '(変更なし)'}\n--- 終了時 ---\n${treeAfter.dirty || '(変更なし)'}`,
+  }
+} else {
+  treeGuard = { status: 'clean', reason: 'HEAD も作業ツリーも開始時のまま' }
+}
+
+if (treeGuard.status === 'violated') {
+  log(`品質ゲート: ${treeGuard.reason}`)
+  return {
+    sweepFindings: allFindings,
+    sweepConverged,
+    draftSpec,
+    survived,
+    gaps,
+    synthesis,
+    treeGuard,
+    blocked: true,
+    blockedAt: 'Tree Guard',
+    // 呼び出し元（Claude）への指示。このまま停止①へ進ませない
+    nextAction:
+      '**このワークフローの成果物をそのまま使わないこと。** 停止①（仕様レビュー）より前に木が変わっています。' +
+      '`git log` と `git status` で何が入ったかを確かめ、意図しない変更なら巻き戻してから、人に報告してください（issue #791）。',
+  }
+}
 
 return {
   sweepFindings: allFindings,
@@ -555,4 +634,5 @@ return {
   winnerScore: winner?.avgScore,
   synthesis,
   findAvPrecision,
+  treeGuard,
 }
