@@ -1,0 +1,122 @@
+#!/usr/bin/env node
+// 期待値（migration から導いた姿）と実環境（public.config_snapshot() が返す姿）を突き合わせる。
+//
+// WHY(issue #757 の 35): 「PR を通さずにダッシュボードから権限を足した」を見つけるための比較。
+//   スキーマドリフト検知（#305）が DB 内部のスナップショット同士を比べるのに対し、
+//   こちらは**リポジトリが正本**で、実環境がそこからずれていないかを見る。
+//
+// 署名なしの関数指定の扱い:
+//   migration には `GRANT EXECUTE ON FUNCTION get_admin_status TO ...`（署名なし）と
+//   `... get_admin_status() TO ...`（署名あり）が混在する。再生器が生きている署名へ展開するが、
+//   展開できなかったものは `name(*)` のまま来るので、ここで**同名のどの署名にも当たる**ものとして扱う。
+//   曖昧なまま黙って落とすと「差分なし」が嘘になるので、当たった相手を数えて報告する。
+import { writeLine } from './stdout-sync.mjs'
+
+// WHY(区切りは実行時に作る、E-082 / C-052): ソースにバックスラッシュ + u0000 の形で書くと、
+//      書き出しの経路で**実バイトの NUL になってファイルに入る**。
+//      replay-rls-policies.mjs の冒頭に同じ警告が書いてあるのに、2026-09-18 に
+//      このファイルで**3 回目**をやった（CI の制御バイト検査が止めた）。
+const SEP = String.fromCharCode(0)
+
+const key = (r) => `${r.object}${SEP}${r.role}`
+const sameSet = (a, b) => a.length === b.length && a.every((x, i) => x === b[i])
+
+/** name(*) は同名のどの署名にも当たる */
+function expandWildcards(expectedRows, actualRows) {
+  const actualNames = new Map()
+  for (const r of actualRows) {
+    const name = r.object.replace(/\(.*\)$/, '')
+    if (!actualNames.has(name)) actualNames.set(name, new Set())
+    actualNames.get(name).add(r.object)
+  }
+  const out = []
+  const notes = []
+  for (const row of expectedRows) {
+    if (!row.object.endsWith('(*)')) {
+      out.push(row)
+      continue
+    }
+    const name = row.object.slice(0, -3)
+    const matches = [...(actualNames.get(name) ?? [])]
+    if (matches.length === 0) {
+      out.push(row) // 相手がいない → 差分として出す
+      continue
+    }
+    notes.push(`${row.object} は実環境の ${matches.length} 件（${matches.join(', ')}）に当てました`)
+    for (const object of matches) out.push({ ...row, object })
+  }
+  return { rows: out, notes }
+}
+
+/** 同じ (object, role) の権限を足し合わせる（署名なし指定の展開で重複しうる） */
+function mergeRows(rows) {
+  const map = new Map()
+  for (const r of rows) {
+    const k = key(r)
+    const set = map.get(k) ?? new Set()
+    for (const p of r.privileges) set.add(p)
+    map.set(k, set)
+  }
+  return [...map.entries()].map(([k, set]) => {
+    const [object, role] = k.split(SEP)
+    return { object, role, privileges: [...set].sort() }
+  })
+}
+
+/**
+ * @returns {{missing:Array, extra:Array, different:Array, notes:string[]}}
+ *   missing = 期待にあるのに実環境に無い（migration を当て忘れている疑い）
+ *   extra   = 実環境にあるのに期待に無い（**PR を通さない変更の疑い。いちばん危ない**）
+ *   different = 両方にあるが権限が違う
+ */
+export function compareGrants(expected, actual) {
+  const { rows, notes } = expandWildcards(expected, actual)
+  const exp = new Map(mergeRows(rows).map((r) => [key(r), r]))
+  const act = new Map(mergeRows(actual).map((r) => [key(r), r]))
+
+  const missing = []
+  const extra = []
+  const different = []
+  for (const [k, e] of exp) {
+    const a = act.get(k)
+    if (!a) missing.push(e)
+    else if (!sameSet(e.privileges, a.privileges)) {
+      different.push({ object: e.object, role: e.role, expected: e.privileges, actual: a.privileges })
+    }
+  }
+  for (const [k, a] of act) if (!exp.has(k)) extra.push(a)
+  return { missing, extra, different, notes }
+}
+
+export function comparePolicies(expected, actual) {
+  const k = (r) => `${r.object}${SEP}${r.name}`
+  const exp = new Set(expected.map(k))
+  const act = new Set(actual.map(k))
+  return {
+    missing: expected.filter((r) => !act.has(k(r))),
+    extra: actual.filter((r) => !exp.has(k(r))),
+  }
+}
+
+/** 見つかった差分を人が読める行にする。0 件なら空配列 */
+export function formatFindings(label, result) {
+  const out = []
+  for (const r of result.missing ?? []) {
+    out.push(`  [${label}] 期待にあるが実環境に無い: ${r.object} / ${r.role ?? r.name}`)
+  }
+  for (const r of result.extra ?? []) {
+    out.push(`  [${label}] **実環境にあるが期待に無い**: ${r.object} / ${r.role ?? r.name}`)
+  }
+  for (const r of result.different ?? []) {
+    out.push(
+      `  [${label}] 権限が違う: ${r.object} / ${r.role} 期待=${r.expected.join(',')} 実環境=${r.actual.join(',')}`,
+    )
+  }
+  return out
+}
+
+const isMain = process.argv[1] && process.argv[1].endsWith('compare-config.mjs')
+if (isMain) {
+  writeLine('このファイルは scripts/check-config-drift.sh から読み込んで使います')
+  process.exit(2)
+}

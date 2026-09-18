@@ -8,6 +8,7 @@
     "check-dependency-change.test.sh": "self",
     "ai-check-suggest.test.sh": "self",
     "check-automode-config.test.sh": "self",
+    "check-config-drift.test.sh": "self",
     "lib/resolve-log-dir.test.sh": "self",
     "check-rls-mutation.test.sh": "self",
     "check-rls-grant-gaps.test.sh": "both",

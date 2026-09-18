@@ -1,0 +1,949 @@
+{
+  "_comment": "issue #757 の 35。migration と process.env.* の走査から導いた期待値。生成物なので手で編集しない（bash scripts/build-config-expected.sh）。",
+  "generatedFrom": {
+    "migrations": 89,
+    "grantStatements": 134,
+    "revokeStatements": 148,
+    "policyCreates": 122,
+    "policyDrops": 103
+  },
+  "unparsed": [],
+  "ambiguousFunctions": [],
+  "tableGrants": [
+    {
+      "object": "access_denials",
+      "role": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "object": "access_denials",
+      "role": "service_role",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "object": "audit_log",
+      "role": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "object": "audit_log",
+      "role": "service_role",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "object": "case_order_items",
+      "role": "authenticated",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "object": "case_order_items",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "case_orders",
+      "role": "authenticated",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "case_orders",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "categories",
+      "role": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "categories",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "consumable_order_items",
+      "role": "authenticated",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "object": "consumable_order_items",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "consumable_orders",
+      "role": "authenticated",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "consumable_orders",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "consumables",
+      "role": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "consumables",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "distributor_products",
+      "role": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "distributor_products",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "drift_alert_view",
+      "role": "anon",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "object": "drift_alert_view",
+      "role": "authenticated",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "object": "drift_alert_view",
+      "role": "service_role",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "object": "facilities",
+      "role": "authenticated",
+      "privileges": [
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "facilities",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "hospital_prices",
+      "role": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "hospital_prices",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "loan_order_items",
+      "role": "authenticated",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "object": "loan_order_items",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "loan_orders",
+      "role": "authenticated",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "loan_orders",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "loan_return_items",
+      "role": "authenticated",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "loan_return_items",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "loan_returns",
+      "role": "authenticated",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "loan_returns",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "price_histories",
+      "role": "authenticated",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "object": "price_histories",
+      "role": "service_role",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "object": "privileged_operations",
+      "role": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "object": "privileged_operations",
+      "role": "service_role",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "object": "product_compatibilities",
+      "role": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "object": "product_compatibilities",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "products",
+      "role": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "products",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "rate_limit_counters",
+      "role": "service_role",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "object": "schema_baseline_snapshots",
+      "role": "service_role",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "object": "schema_drift_log",
+      "role": "service_role",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "object": "user_facilities",
+      "role": "anon",
+      "privileges": [
+        "MAINTAIN",
+        "REFERENCES",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "object": "user_facilities",
+      "role": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "object": "user_facilities",
+      "role": "service_role",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "MAINTAIN",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    }
+  ],
+  "functionGrants": [
+    {
+      "object": "check_business_invariants()",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "check_denial_anomalies(integer,integer,integer)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "check_schema_drift()",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "config_snapshot()",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "consume_rate_limit(text,integer,integer)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "create_case_order_atomic(uuid,timestamp with time zone,text,text,text,text,text,jsonb,uuid)",
+      "role": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "create_case_order_atomic(uuid,timestamp with time zone,text,text,text,text,text,jsonb,uuid)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "create_consumable_order_atomic(uuid,jsonb,uuid)",
+      "role": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "create_consumable_order_atomic(uuid,jsonb,uuid)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "create_loan_order_atomic(uuid,text,text,jsonb,uuid)",
+      "role": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "create_loan_order_atomic(uuid,text,text,jsonb,uuid)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "create_loan_return_atomic(jsonb,jsonb)",
+      "role": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "create_loan_return_atomic(jsonb,jsonb)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "get_admin_status()",
+      "role": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "get_admin_status()",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "get_distributor_product_price_history(uuid)",
+      "role": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "get_distributor_product_price_history(uuid)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "get_news_feed(uuid,integer,integer)",
+      "role": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "get_order_amount_report(timestamp with time zone,timestamp with time zone)",
+      "role": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "get_order_amount_report(timestamp with time zone,timestamp with time zone)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "is_facility_member(uuid)",
+      "role": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "loan_outstanding_count(uuid)",
+      "role": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "record_access_denial(text,text,text,text,uuid,uuid)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "record_business_invariants()",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "record_denial_anomalies(integer,integer,integer)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "record_issue_url(uuid,text)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "record_privileged_operation(text,boolean,uuid,text,uuid,text,text,text)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "record_schema_drift()",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "refresh_schema_baseline_snapshot(text)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "refund_rate_limit(text,integer)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "resolve_denial_anomaly_subject(text)",
+      "role": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "resolve_denial_anomaly_subject(text)",
+      "role": "service_role",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "object": "resolve_jan_unit_price(text,uuid)",
+      "role": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    }
+  ],
+  "policies": [
+    {
+      "object": "access_denials",
+      "name": "access_denials_select"
+    },
+    {
+      "object": "audit_log",
+      "name": "audit_log_select"
+    },
+    {
+      "object": "case_order_items",
+      "name": "facility_member_or_admin"
+    },
+    {
+      "object": "case_orders",
+      "name": "facility_member_or_admin"
+    },
+    {
+      "object": "case_orders",
+      "name": "facility_writer_or_admin_update"
+    },
+    {
+      "object": "categories",
+      "name": "categories_select"
+    },
+    {
+      "object": "categories",
+      "name": "categories_write"
+    },
+    {
+      "object": "consumable_order_items",
+      "name": "facility_member_or_admin"
+    },
+    {
+      "object": "consumable_orders",
+      "name": "facility_member_or_admin"
+    },
+    {
+      "object": "consumable_orders",
+      "name": "facility_writer_or_admin_update"
+    },
+    {
+      "object": "consumables",
+      "name": "facility_member_or_admin"
+    },
+    {
+      "object": "consumables",
+      "name": "facility_writer_or_admin"
+    },
+    {
+      "object": "distributor_products",
+      "name": "distributor_products_select"
+    },
+    {
+      "object": "distributor_products",
+      "name": "distributor_products_write"
+    },
+    {
+      "object": "facilities",
+      "name": "admin_insert"
+    },
+    {
+      "object": "facilities",
+      "name": "facility_member_or_admin"
+    },
+    {
+      "object": "facilities",
+      "name": "facility_writer_or_admin_update"
+    },
+    {
+      "object": "hospital_prices",
+      "name": "facility_member_or_admin"
+    },
+    {
+      "object": "hospital_prices",
+      "name": "facility_writer_or_admin"
+    },
+    {
+      "object": "loan_order_items",
+      "name": "facility_member_or_admin"
+    },
+    {
+      "object": "loan_orders",
+      "name": "facility_member_or_admin"
+    },
+    {
+      "object": "loan_orders",
+      "name": "facility_writer_or_admin_update"
+    },
+    {
+      "object": "loan_return_items",
+      "name": "facility_member_or_admin"
+    },
+    {
+      "object": "loan_return_items",
+      "name": "facility_writer_or_admin_update"
+    },
+    {
+      "object": "loan_returns",
+      "name": "facility_member_or_admin"
+    },
+    {
+      "object": "loan_returns",
+      "name": "facility_writer_or_admin_update"
+    },
+    {
+      "object": "price_histories",
+      "name": "facility_member_or_admin"
+    },
+    {
+      "object": "privileged_operations",
+      "name": "privileged_operations_select"
+    },
+    {
+      "object": "product_compatibilities",
+      "name": "compat_select"
+    },
+    {
+      "object": "product_compatibilities",
+      "name": "compat_write_delete"
+    },
+    {
+      "object": "product_compatibilities",
+      "name": "compat_write_insert"
+    },
+    {
+      "object": "products",
+      "name": "products_select"
+    },
+    {
+      "object": "products",
+      "name": "products_write"
+    },
+    {
+      "object": "user_facilities",
+      "name": "admin_write"
+    },
+    {
+      "object": "user_facilities",
+      "name": "self_read"
+    }
+  ],
+  "envNames": [
+    "ADMIN_EMAILS",
+    "NEXT_PUBLIC_SITE_URL",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY"
+  ]
+}

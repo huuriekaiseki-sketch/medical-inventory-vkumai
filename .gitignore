@@ -33,6 +33,11 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.test.example
+# WHY(2026-09-18、issue #757 の 35): .env.example は**生成物**（scripts/build-config-expected.sh）で、
+# 値を持たず変数名だけを書く。コミットしないと「どの環境変数が要るか」の正本が無くなり、
+# 鮮度検査（--check）も clone 後に必ず落ちる。秘密が入っていないことは
+# scripts/check-secret-leak.test.sh が毎 PR で見る。
+!.env.example
 
 # vercel
 .vercel

@@ -1,101 +1,75 @@
-# SPEC: CSP を frame-ancestors だけの状態から nonce ベースへ広げる（issue #757 の 16 の残り）
+# SPEC: 設定ドリフト検知の「期待値」側を作る（issue #757 の 35 の手元側）
 
-証明フェーズ 2 本目。`docs/agents/harness-score.jsonl` に「止めた / 見逃した / 邪魔した」を記録する対象。
-
-## Part 0: 何が問題か
-
-現在の CSP は **`frame-ancestors 'none'` の 1 ディレクティブだけ**（`next.config.ts:14`）。
-`script-src` も `default-src` も無いため、**XSS が入った場合に実行を制限する仕組みが無い**。
-クリックジャッキングは防いでいるが、スクリプト実行は素通りする。患者情報を扱う製品としては薄い。
-
-`next.config.ts` のコメントに既に意図が書かれている:
-
-> CSP は frame-ancestors だけ: Next.js のインラインスクリプトは nonce 無しでは script-src を絞れず、
-> 'unsafe-inline' 付きの CSP は防御にならない。nonce 対応（proxy でヘッダ生成）は別 PR
-
-本 SPEC はその「別 PR」。
-
-## Part 1: 調査で分かったこと（すべて 2026-09-18 の実測）
+## Part 0: 調査で分かったこと（2026-09-18 の実測）
 
 | # | 事実 | 根拠 | 設計への影響 |
 | --- | --- | --- | --- |
-| 1 | **全 44 ルートが動的（ƒ）。静的ルートは 0 件** | `npm run build` の出力に `○ (Static)` が 1 件も無い | **nonce 方式の最大の代償が既に払い済み。** Next.js のドキュメントが警告する「静的化・ISR・CDN キャッシュの喪失」は、この製品では失うものが無い |
-| 2 | **53 ファイルがインライン `style={{...}}` 属性を使う** | `grep -rl "style={{" src/app src/components` | `style-src` を厳格化すると**UI が全壊する**。ここは緩める判断が要る（Part 2 の判断 A） |
-| 3 | ブラウザが Supabase へ直接接続する | `src/lib/supabase/client.ts` の `createBrowserClient` | `connect-src` に Supabase の URL が要る。抜けるとログイン・全データ取得が死ぬ |
-| 4 | フォントは `next/font/google` で自己ホスト | `src/app/layout.tsx`（Ubuntu / Oswald） | `font-src 'self'` で足りる。外部ドメインの許可は不要 |
-| 5 | `proxy.ts` が既に全リクエストを通る | `src/proxy.ts:176` の matcher（`_next/static`・画像を除く全部） | nonce 生成の置き場として自然。matcher の追加変更は不要 |
-| 6 | Next.js は CSP ヘッダから nonce を自動抽出し、フレームワークのスクリプトに付ける | `node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md` | 各タグへ手で nonce を付ける作業は不要 |
+| 1 | **`.env.example` が存在しない** | `git ls-files "*env*"` → あるのは `.env.test.example` だけ | issue の前提「migration と `.env.example` から作った期待値」の**片方が無い**。作るのも本 PR に含めるかの判断が要る（判断 A） |
+| 2 | 製品が使う実行時の環境変数は 5 つ | `process.env.*` の走査: `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` / `ADMIN_EMAILS` / `NEXT_PUBLIC_SITE_URL`（他は NODE_ENV・CI・TZ 等の基盤側と、検査スクリプト専用） | 期待値の中身はこの 5 つ。手で数えず走査で出す |
+| 3 | migration に GRANT 61 文 / REVOKE 72 文 | `supabase/migrations` の走査（88 ファイル） | **順に再生しないと現存集合が出ない**（REVOKE のほうが多い） |
+| 4 | **RLS ポリシーの再生器が既にある** | `scripts/lib/replay-rls-policies.mjs`（動的 DDL の展開まで対応。読めない行は名指しする） | 同じ型で GRANT/REVOKE を再生できる。**ゼロから作らない** |
+| 5 | Storage を使っていない | `docs/agents/data-lifecycle-inventory.md` の D-033「機能が無い」 | Storage policy は対象外（生えたら足す） |
+| 6 | DB スキーマのドリフトは既に検知済み | `schema-drift-check.yml` + pg_cron（issue #305） | **本件はその重複ではない**。あちらは「DB 内部のスナップショット比較」、こちらは「migration から導いた期待値と実環境の突合」 |
 
-## Part 2: 設計の判断
+## Part 1: 判断（**レビューしてほしい点**）
 
-### 判断 A: style-src をどうするか（**レビューしてほしい点 1**）
+### 判断 A: `.env.example` が無い問題をどうするか
 
 | 案 | 内容 | 評価 |
 | --- | --- | --- |
-| A-1 | `style-src 'self' 'unsafe-inline'` | 53 ファイルがそのまま動く。`<style>` 注入は防げない。**採用案** |
-| A-2 | `style-src 'self' 'nonce-X'` + `style-src-attr 'unsafe-inline'` | 属性は許し `<style>` 注入は防ぐ（厳密には上）。ただし `style-src-attr` を解さないブラウザは `style-src` に落ちて**UI が全壊**する |
-| A-3 | 53 ファイルのインライン style を CSS へ移す | 最も強い。**本 PR の範囲を超える**（別 issue） |
+| **A-1（採用案）** | 本 PR で `.env.example` を**生成物として**作る。`process.env.*` の走査から変数名を出し、`--check` で鮮度を見る | 期待値の出所が機械で保てる。値は書かず**名前と必須/任意だけ**。秘密は入らない |
+| A-2 | 手で `.env.example` を書く | 腐る。このリポジトリが繰り返し踏んできた型 |
+| A-3 | 環境変数は範囲外にして GRANT/RLS だけやる | issue の記述の半分を落とす |
 
-**A-1 を採る。** 理由: 守りたいのは第一にスクリプト実行であり、style の注入は深刻度が一段低い。
-A-2 はブラウザ差で画面が壊れる経路があり、医療現場で使う製品では受け入れにくい。A-3 は別 issue として起票する。
+**A-1 を採る。** ただし「必須か任意か」は走査から自動判定できない（`?? 既定値` の有無で近似はできるが誤る）ので、
+**`aidd.config.json` に宣言を置き、走査と突き合わせる**（宣言漏れ・幽霊の両方向を検査）。
 
-### 判断 B: CSP の置き場所
+### 判断 B: 「期待値」をいつ検証できるようにするか（**ここが本題**）
 
-`next.config.ts` の `headers()` から CSP を**外し**、`proxy.ts` が唯一の出所にする。
-両方に書くと二重定義になり、どちらが効いているか読めなくなる（`docs/agents/check-design-pitfalls.md` の
-「唯一の入口」の型）。**残り 6 ヘッダは `next.config.ts` に据え置く**（nonce に依存しないため）。
+issue は「Vercel / Supabase ダッシュボードの実値が要るので外部待ち」としているが、**ローカル Supabase には届く**。
 
-### 判断 C: 適用するディレクティブ
+| 案 | 内容 | 評価 |
+| --- | --- | --- |
+| **B-1（採用案）** | 期待値を出す側を作り、**比較相手をローカル Supabase にして端から端まで動かす**。本番の接続先は差し替え可能にしておく | 「期待値だけ作って比較は未検証」を避けられる。**比較の形が正しいことを実測できる** |
+| B-2 | 期待値の生成だけ作り、比較は本番に届く日まで書かない | 比較の形が正しいか永久に分からない。作った日が一番よく分かっているのに測らないのは C-022 の型 |
 
-```
-default-src 'self';
-script-src 'self' 'nonce-{nonce}' 'strict-dynamic'{dev: ' unsafe-eval'};
-style-src 'self' 'unsafe-inline';
-img-src 'self' blob: data:;
-font-src 'self';
-connect-src 'self' {NEXT_PUBLIC_SUPABASE_URL};
-object-src 'none';
-base-uri 'self';
-form-action 'self';
-frame-ancestors 'none';
-upgrade-insecure-requests;
-```
+**B-1 を採る。** 外部待ちなのは**本番という接続先**であって、**比較そのもの**ではない。
 
-`'unsafe-eval'` は開発時のみ（React が eval でデバッグ情報を作るため。ドキュメント記載）。
+### 判断 C: 生成物をコミットするか
+
+**する。** 既存の型（`harness-map.md`・`dist/plugins`・`aidd-graph`）に揃え、`--check` で鮮度を見る。
+コミットしないと「いつの姿に対する期待値か」が追えない。
+
+## Part 2: 作るもの
+
+- `scripts/lib/replay-grants.mjs` — migration を順に再生して GRANT の現存集合を出す（`replay-rls-policies.mjs` と同じ型。読めない行は名指しする）
+- `scripts/lib/build-config-expected.mjs` — 期待値を 1 つの JSON にまとめる（RLS ポリシー集合・GRANT 集合・環境変数名）
+- `docs/agents/config-expected.json` — 生成物（コミットする）
+- `.env.example` — 生成物（名前と必須/任意だけ。値は書かない）
+- `scripts/check-config-drift.sh` — 期待値と**実 DB** を突き合わせる。接続先は環境変数で差し替え（既定はローカル）
+- `scripts/check-config-drift.test.sh` — 回帰テスト（RED 方向を含む）
 
 ## Part 3: 受け入れ条件
 
-- [ ] `proxy.ts` がリクエストごとに異なる nonce を生成し、`x-nonce` と `Content-Security-Policy` の両方に載せる
-- [ ] `next.config.ts` の `securityHeaders` から `Content-Security-Policy` が消え、他の 6 ヘッダは変わらない
-- [ ] **CSP が緩んだら落ちる検査**（`script-src` から `nonce-` が消える・`'unsafe-inline'` が script-src に入る・ディレクティブが減る、のそれぞれで赤になること。RED 方向を実測する）
-- [ ] `connect-src` に Supabase の URL が入る（環境変数から組む。ハードコードしない）
-- [ ] **E2E が全件通る**（80 件）。特にログイン・MFA・発注・返却の画面が壊れていないこと
-- [ ] **ブラウザのコンソールに CSP violation が 1 件も出ない**ことを実測（E2E の console 監視か手動）
-- [ ] nonce が**リクエストごとに変わる**ことを実測（同じ値が 2 回出ない）
+- [ ] `replay-grants.mjs` が GRANT/REVOKE を順に再生し、**読めなかった行を黙って飛ばさず名指しする**
+- [ ] 期待値の JSON が決定的（2 回生成して一致）
+- [ ] `--check` で生成物の鮮度を見る（古ければ落ちる）
+- [ ] `.env.example` の変数名が `process.env.*` の走査と一致する。**宣言漏れも幽霊も両方向で検査**
+- [ ] **ローカル Supabase と突き合わせて、実際に差分を検出できることを実測**（わざとポリシーを 1 本落として落ちるか）
+- [ ] 差分が無ければ黙る。**接続できないときは「確認不能」と言う**（合格にしない）
+- [ ] 秘密の値が生成物に一切入らない（名前だけ）
 
-## Part 4: 危険なところ
+## Part 4: 対象外
 
-| リスク | 兆候 | 対処 |
-| --- | --- | --- |
-| **画面が真っ白／操作不能** | script がブロックされる | E2E 80 件で実測してからマージ。CSP violation をコンソールで確認 |
-| **Supabase に繋がらない** | ログインできない、データが出ない | `connect-src` の実測。env が無い環境での組み立ても確認 |
-| `'strict-dynamic'` で既存の script タグが落ちる | 一部機能だけ動かない | E2E で画面ごとに確認 |
-| dev と本番で挙動が違う | 手元で緑・本番で赤 | `isDev` の分岐を明示し、本番相当（`npm run build` + start）でも 1 度測る |
+- 本番 / staging への接続（**外部待ち**。接続先を差し替えられる形だけ作る）
+- GitHub のブランチ保護・権限の比較（`gh api` で取れるが、**有料化の判断（#757 の 6）と一体**なので分離）
+- Storage policy（機能が無い。生えたら足す）
 
-**このセッションで既に 4 件「手元は緑・CI だけ赤」を踏んでいる**ので、手元の E2E だけを根拠にしない。
+## Part 5: 危険なところ
 
-## Part 5: 対象外
-
-- インライン style の CSS 化（判断 A-3）→ 別 issue
-- CSP violation の report-uri / report-to による収集 → 本番の監視（#757 の 8）と一体。外部待ち
-- SRI（`experimental.sri`）→ 全ルートが動的なので nonce で足りる。実験的機能を増やさない
-
-## Part 6: 想定する変更ファイル
-
-- `src/proxy.ts` — nonce 生成と CSP 組み立て
-- `next.config.ts` — CSP を外す
-- `src/__tests__/proxy.test.ts` — nonce・ディレクティブの単体テスト（RED 方向を含む）
-- `src/__tests__/next-config-headers.test.ts` — CSP が消えたこと・他 6 ヘッダが残ることを固定
-- `e2e/` — CSP violation の監視（既存 spec に足すか新設かは実装時に判断）
-- `docs/agents/promise-catalog.md` — 新しい約束を作るなら 1 行
-- `docs/agents/harness-score.jsonl` — 証明フェーズの記録
+| リスク | 対処 |
+| --- | --- |
+| **秘密が生成物に混ざる** | 値を一切読まない（名前だけ）。`check-secret-leak.test.sh` が既に走る |
+| 再生の取りこぼしで「差分なし」の嘘 | 読めない行を名指しする（`replay-rls-policies.mjs` と同じ。C-044） |
+| 接続できないのを緑と読む | 「確認不能」と言って合格にしない |
+| 新しい検査 1 本ぶんの付帯作業 | 是正の登録簿・`plugin-layout.json`（配布層と `checkScopes`）・`harness-registry.json`・`build-plugin.sh` の再生成。**2026-09-18 に 6 回落ちて学んだ順序** |
