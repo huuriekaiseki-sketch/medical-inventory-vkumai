@@ -151,6 +151,11 @@
   },
   "supportScripts": {
     "aidd-check.sh": "aidd-vkumai",
+    "check-config-drift.sh": "aidd-vkumai",
+    "build-config-expected.sh": "aidd-vkumai",
+    "lib/replay-grants.mjs": "aidd-vkumai",
+    "lib/build-config-expected.mjs": "aidd-vkumai",
+    "lib/compare-config.mjs": "aidd-vkumai",
     "lib/validate-aidd-config.mjs": [
       "aidd-core",
       "aidd-vkumai"
@@ -404,6 +409,7 @@
     "check-harness-map.test.sh": "both",
     "check-hook-doc-pointers.test.sh": "both",
     "check-hooks-path-alive.test.sh": "self",
+    "check-config-drift.test.sh": "self",
     "check-integration-freshness.test.sh": "both",
     "check-local-main-freshness.test.sh": "self",
     "check-operation-contracts.test.sh": "both",
