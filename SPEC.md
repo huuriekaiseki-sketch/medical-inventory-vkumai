@@ -62,7 +62,10 @@ Part 1 に画面モックは不要（design スキルの対象外）。
 - 内容:
   1. `serviceRoleClient()` 内、`cached = url && key ? ... : null` の分岐で、
      `null` になった**最初の1回だけ** `logServerError('access_denial_client_unavailable', ...)` を出す。
-     「1回だけ」はモジュールスコープのフラグ（`warnedMissingEnv`）で持つ。
+     「1回だけ」は**既存のキャッシュ**が実現する（env が無いと `cached` は `null` で確定し、
+     2 回目以降は関数冒頭の `if (cached !== undefined) return cached` で返るので、警告の行に届かない）。
+     専用のフラグは持たない（初版は `warnedMissingEnv` を足していたが、外しても挙動が変わらないことを
+     1 行ずつ壊して実測し、消した）。
      - WHY設計判断: env の有無はプロセスが生きている間は変わらないので、粒度はプロセス単位で足りる。
        本番では「プロセス起動〜次のデプロイまで 1 回」、テストでは `vi.resetModules()` により
        「テストケースごとに 1 回」になる。これは意図した挙動として受け入れる。
