@@ -1,4 +1,9 @@
-# 仕様書ドラフト: アクセス拒否記録が黙って消える3経路を直す
+# 仕様書: アクセス拒否記録が黙って消える2経路（＋ログイン画面の保険 catch）を直す
+
+> **範囲（2026-09-18 に人が決めた）**: この PR は `access-denial.ts` の 2 経路と
+> `login/page.tsx` の保険 catch だけを直す。調査中に見つかった
+> `src/lib/security/hidden-row-denial.ts` の同じ欠陥（`serviceRoleClient()` がコピペで同一）と、
+> 警告を 1 か所にまとめる共有ヘルパーは**別 PR に分ける**（下の「この PR の範囲外」）。
 
 ## Part 1 — 仕様（人間レビュー用）
 
@@ -56,9 +61,12 @@ Part 1 に画面モックは不要（design スキルの対象外）。
 - 対象ファイル: `src/lib/security/access-denial.ts`
 - 内容:
   1. `serviceRoleClient()` 内、`cached = url && key ? ... : null` の分岐で、
-     `null` になった**最初の1回だけ** 共有ヘルパー（下記参照）を呼んで警告を出す。
-     - WHY設計判断: env未設定時の初回警告を共有関数に一本化し、3ファイル間での
-       ロジック重複を避けるため。
+     `null` になった**最初の1回だけ** `logServerError('access_denial_client_unavailable', ...)` を出す。
+     「1回だけ」はモジュールスコープのフラグ（`warnedMissingEnv`）で持つ。
+     - WHY設計判断: env の有無はプロセスが生きている間は変わらないので、粒度はプロセス単位で足りる。
+       本番では「プロセス起動〜次のデプロイまで 1 回」、テストでは `vi.resetModules()` により
+       「テストケースごとに 1 回」になる。これは意図した挙動として受け入れる。
+     - 共有ヘルパーへの一本化は `hidden-row-denial.ts` を直す別 PR で行う（この PR ではファイル内に閉じる）。
   2. 82-118行目の外側 `catch {}`（114-117行目）に `logServerError('record_access_denial_unexpected', error)`
      相当を追加する（`catch {}` → `catch (error) { logServerError(...) }`）。
      113行目の既存の `if (error) logServerError('record_access_denial', error)`（PostgREST戻り値の
@@ -83,34 +91,22 @@ Part 1 に画面モックは不要（design スキルの対象外）。
 - 型: 変更なし
 - データアクセス層: 変更なし（このcatchはUI表示に影響しないServer Component側のロジック）
 
-**セットC: `hidden-row-denial.ts` の修正**
-- 対象ファイル: `src/lib/security/hidden-row-denial.ts`
-- 内容: `serviceRoleClient()` の実装が `access-denial.ts` と同一のコピペのため、同じ欠陥を持つ。
-  セットAと同じパターンを適用する：
-  1. env未設定時に共有ヘルパーを呼ぶ（セットAと共通の警告ロジック）
-  2. 外側catchに `logServerError('hidden_row_denial_unexpected', error)` を追加
-- テスト観点:
-  - セットAと同じ観点。ただしファイル固有のcontext文字列（`hidden_row_denial_unexpected`）で
-    セットAと区別できるようにする
-- 型: 変更なし
-- データアクセス層: 変更なし
+### この PR の範囲外（別 PR に分ける）
 
-**共有ヘルパー関数**
-- 場所: `src/lib/security/` 配下に新規作成（ファイル名は実装時に決定）
-- 用途: env未設定時の初回警告を一本化。モジュールスコープのフラグにより
-  「プロセス起動〜デプロイまで1回」、テスト時は「テストケースごとに1回」を実現
-- 呼び元: セットAとセットCの `serviceRoleClient()` から呼び出す
+- **`src/lib/security/hidden-row-denial.ts`**: `serviceRoleClient()` が `access-denial.ts` と同一のコピペで、
+  同じ欠陥（env 未設定で無音・外側 catch が無音）を持つ。調査（2026-09-18）で見つかった。
+- **共有ヘルパー**: env 未設定時の初回警告を `src/lib/security/` 配下の 1 関数にまとめ、
+  `access-denial.ts` と `hidden-row-denial.ts` の両方から呼ぶ。
+- 分けた理由: 依頼は「2 経路」で、`hidden-row-denial.ts` は調査で後から見つかった別ファイル。
+  共有ヘルパーは両方を同時に触るので、`hidden-row-denial.ts` を直す PR でまとめて入れるほうが差分が読みやすい。
 
 ### 並列グループ宣言
 
 - セットA（`src/lib/security/access-denial.ts` + `src/lib/security/__tests__/access-denial.test.ts`）
-- セットB（`src/app/login/page.tsx` + 関連テスト、ファイル名は実装時に確認）
-- セットC（`src/lib/security/hidden-row-denial.ts` + 関連テスト）
-- 共有ヘルパー（セットAとセットCから依存されるため、最初に実装 or 共有グループとして
-  セットAとセットCと並列実装可）
+- セットB（`src/app/login/page.tsx` + `src/app/login/__tests__/page.test.tsx`）
 
-セットA・セットB・セットCは触るファイルが完全に重複しないため、**同一の波（3つ同時実装可）**とする。
-統合ゲートでは全3セットのテストを通しで実行し、既存のfail-open系テスト
+セットA・セットBは触るファイルが重複しないため、**同一の波（2つ同時実装可）**とする。
+統合ゲートでは両セットのテストを通しで実行し、既存のfail-open系テスト
 （`check-fail-open.test.sh`等）が全変更後も green であることを確認する。
 
 ---
