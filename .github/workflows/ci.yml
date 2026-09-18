@@ -82,6 +82,17 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # WHY(node と依存を入れる、2026-09-18): scripts/check-fixture-guard.test.sh は
+      # 「teardown の throw で実行が落ちるか」を思い込みで書かないため、vitest と playwright を
+      # 実際に起動して測る（node_modules/.bin/ を直接呼ぶ）。依存が無ければ黙って飛ばさず
+      # 「前提を測れない」と言って落ちる設計なので、このジョブにも npm ci が要る。
+      # ブラウザ本体は不要（プローブは page を使わない spec）。
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
       # 認証ファイル漏洩チェック（BSGではなくCI側で行う方針）。e2e.ymlがPR自動実行を
       # やめた(2026-08-25、無料枠対応)ため、PRごとに回る本ジョブへ移設した(軽量・数秒)
       - name: Check auth state files are not committed

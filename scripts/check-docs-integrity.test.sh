@@ -35,7 +35,9 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/docs/agents" "$WORK/scripts"
 git -C "$WORK" init -q
-printf 'ignored.local\n' > "$WORK/.gitignore"
+# ignored-dir/ は末尾 / のディレクトリ限定パターン。実体を作らないのが肝で、
+# 実体があると existsSync で抜けてしまい、gitignore 判定のバグが隠れる。
+printf 'ignored.local\n/supabase/.temp/\n' > "$WORK/.gitignore"
 printf '#!/bin/bash\n' > "$WORK/scripts/exists.sh"
 cat > "$WORK/docs/agents/target.md" <<'EOF'
 # 目次
@@ -55,6 +57,7 @@ cat > "$WORK/docs/agents/source.md" <<'EOF'
 - 歴史的マーカー付き: `scripts/old.sh`（削除済み、PR #1）
 - プレースホルダ: `scripts/...` と `scripts/<name>.sh`
 - git ignore 対象: `scripts/ignored.local`
+- git ignore 対象（ディレクトリ限定）: `supabase/.temp/`
 - 外部: [ext](https://example.com/x#y)
 
 ```bash
@@ -74,6 +77,7 @@ assert_not_contains "$OUT" "scripts/old.sh" "歴史的マーカー付きは誤�
 assert_not_contains "$OUT" "scripts/..." "プレースホルダは誤検知しない"
 assert_not_contains "$OUT" "scripts/<name>.sh" "山括弧プレースホルダは誤検知しない"
 assert_not_contains "$OUT" "scripts/ignored.local" "git ignore 対象は誤検知しない"
+assert_not_contains "$OUT" "supabase/.temp/" "ディレクトリ限定の git ignore パターンは誤検知しない"
 assert_not_contains "$OUT" "nope" "フェンス内は誤検知しない"
 assert_not_contains "$OUT" "example.com" "外部 URL は検査しない"
 

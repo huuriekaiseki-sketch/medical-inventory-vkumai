@@ -67,9 +67,16 @@ fi
 # WHY(件数まで見る、2026-09-09): 「通った」だけでは**全部回してしまったこと**に気づけない。
 #      並びを戻されたら 236 ファイル回る形へ黙って戻るので、**1 ファイルであること**を毎回測る。
 #      これ自体が C-031（数える単位）と C-022（戻ったら落ちるか）の対。
-if ! grep -qE 'Test Files +1 passed \(1\)' "$EMIT_LOG"; then
+# WHY(色を落としてから数える、2026-09-18 実測): GitHub Actions では vitest が色付きで出すため、
+#      `Test Files` と `1 passed` の間に ANSI のエスケープが挟まり、この grep が一致しなかった。
+#      手元は色が付かないので緑のまま隠れる（CI だけが落ちる）。色の有無に依らないよう、
+#      数える前にエスケープを落とす。NO_COLOR を渡す形は vitest の実装に依存するのでこちらにする。
+EMIT_PLAIN="$(mktemp)"
+trap 'rm -f "$API_JSON" "$EMIT_LOG" "$EMIT_PLAIN"' EXIT
+sed $'s/\033\\[[0-9;]*m//g' "$EMIT_LOG" > "$EMIT_PLAIN"
+if ! grep -qE 'Test Files +1 passed \(1\)' "$EMIT_PLAIN"; then
   echo "  NG: 抽出のための実行が 1 ファイルに絞れていない（位置引数がフラグに飲まれている疑い）"
-  grep -E 'Test Files' "$EMIT_LOG"
+  grep -E 'Test Files' "$EMIT_PLAIN"
   exit 1
 fi
 cp "$REPO_ROOT/.api-rules.json" "$API_JSON" 2>/dev/null || {
