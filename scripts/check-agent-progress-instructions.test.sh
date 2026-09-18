@@ -52,6 +52,8 @@ const root = process.argv[1]
 const EXPECT = path.join(root, ".claude/workflows/lib/agent-progress-expectation.js")
 const PHASE2 = path.join(root, ".claude/workflows/aidd-phase2.js")
 const CANONICAL = path.join(root, "scripts/lib/canonical-event.ts")
+// issue #797 で 4 つ目の複製ができた（deep ルートが期待件数を返せるようになった）
+const DEEPTASK = path.join(root, ".claude/workflows/aidd-1-1-deep-task.js")
 const AGENTS = path.join(root, ".claude/agents")
 const CONFIG = path.join(root, "aidd.config.json")
 
@@ -77,11 +79,13 @@ if (hasList) {
   if (!listed) console.log("parse-failed: agent-progress-expectation.js から一覧を読めなかった")
 }
 
-// (f) 一覧の複製が一致する。**3 か所ある**——
-//     Workflow DSL は require できないので aidd-phase2.js が手で写し、
-//     観測の復元（canonical-event.ts）は TS 側なのでさらにもう 1 つ持っている
+// (f) 一覧の複製が一致する。**4 か所ある**——
+//     Workflow DSL は require できないので aidd-phase2.js と aidd-1-1-deep-task.js が手で写し、
+//     観測の復元（canonical-event.ts）は TS 側なのでさらにもう 1 つ持っている。
+//     deep ルート側は issue #797 で増えた（それまで期待件数を返せていなかった）
 const copies = [
   [PHASE2, "PROGRESS_LOGGABLE_AGENT_TYPES", "phase2"],
+  [DEEPTASK, "PROGRESS_LOGGABLE_AGENT_TYPES", "deep-task"],
   [CANONICAL, "KNOWN_AGENT_TYPES", "canonical-event"],
 ]
 if (listed) {
@@ -224,7 +228,7 @@ else
   assert_ok "書き込みツールを持つ agent は deny 対象に入れない"
 fi
 
-echo "=== scenario 4: 一覧の 3 つの複製が食い違ったら落ちる ==="
+echo "=== scenario 4: 一覧の 4 つの複製が食い違ったら落ちる ==="
 # WHY: Workflow DSL は require できないので aidd-phase2.js が同じ集合をインラインで持ち、
 #      観測の復元（canonical-event.ts）はさらにもう 1 つ持っている。
 #      複製は必ずずれるのに、どれにも同期テストが無かった
