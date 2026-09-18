@@ -85,12 +85,38 @@ cp "$REPO_ROOT/.api-rules.json" "$API_JSON" 2>/dev/null || {
 }
 rm -f "$REPO_ROOT/.api-rules.json"
 
+# WHY(数値として読めなければ落とす、issue #776): この節は「走査が壊れていたら落とす」ための
+#      fail-open 防止なのに、**それ自身が fail-open していた**。
+#      件数を `console.log(n)` で出していたため、色が強制される環境（FORCE_COLOR=1）では
+#      node が数値を util.inspect の色付きで出し、`[ "$DB_COUNT" -lt 20 ]` が
+#      「integer expression expected」で非 0 を返す。`elif` も同じく落ち、**`else` の assert_ok に
+#      到達して必ず OK を返す**（2026-09-18 実測）。C-022（緑であることと守っていることは別）そのもの。
+#
+#      直し方は 2 つ重ねる:
+#        (1) **出す側で色を出さない**。console.log ではなく process.stdout.write(String(n)) を使う
+#        (2) **読めなかったら合格にしない**。数値でなければその場で落とす（else へ落とさない）
+#      (1) だけだと、別の経路で色や余計な出力が混ざったときにまた黙る。(2) が最後の砦。
+is_count() { [[ "${1:-}" =~ ^[0-9]+$ ]]; }
+
+echo "=== scenario 0: 件数の読み取りが壊れていたら落とす（この節自身の fail-open 防止。issue #776） ==="
+if is_count "61"; then assert_ok "素の数値は数値として読む"; else assert_fail "素の数値を読めない"; fi
+if is_count "$(printf '\033[33m61\033[39m')"; then
+  assert_fail "色付きの値を数値として通した（fail-open が再発している）"
+else
+  assert_ok "色付きの値は数値として読まない"
+fi
+if is_count ""; then assert_fail "空を数値として通した"; else assert_ok "空は数値として読まない"; fi
+
 echo "=== scenario 1: 両側から条件を取れている（fail-open 防止） ==="
-DB_COUNT="$(node "$DB_SCANNER" "$MIGRATIONS" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(Object.keys(JSON.parse(s)).length))')"
-API_COUNT="$(node -e 'const fs=require("fs");console.log(Object.keys(JSON.parse(fs.readFileSync(process.argv[1],"utf8"))).length)' "$API_JSON")"
-if [ "${DB_COUNT:-0}" -lt 20 ]; then
+DB_COUNT="$(node "$DB_SCANNER" "$MIGRATIONS" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(String(Object.keys(JSON.parse(s)).length)))')"
+API_COUNT="$(node -e 'const fs=require("fs");process.stdout.write(String(Object.keys(JSON.parse(fs.readFileSync(process.argv[1],"utf8"))).length))' "$API_JSON")"
+if ! is_count "$DB_COUNT"; then
+  assert_fail "DB の件数を数値として読めない（走査の出力に余計なものが混ざっている疑い）" "$(printf '%q' "$DB_COUNT")"
+elif ! is_count "$API_COUNT"; then
+  assert_fail "API の件数を数値として読めない（抽出の出力に余計なものが混ざっている疑い）" "$(printf '%q' "$API_COUNT")"
+elif [ "$DB_COUNT" -lt 20 ]; then
   assert_fail "DB の CHECK が少なすぎる（$DB_COUNT 列）。走査が壊れている疑い"
-elif [ "${API_COUNT:-0}" -lt 20 ]; then
+elif [ "$API_COUNT" -lt 20 ]; then
   assert_fail "API の規則が少なすぎる（$API_COUNT 件）。抽出が壊れている疑い"
 else
   assert_ok "DB $DB_COUNT 列 / API $API_COUNT 件を突き合わせる"
