@@ -416,6 +416,7 @@
       ],
       "checks": [
         "scripts/check-git-hooks.test.sh",
+        "scripts/check-hooks-path-alive.test.sh",
         "scripts/check-migration-lock-safety.test.sh",
         "scripts/check-migration-release-safety.test.sh",
         "scripts/rehearse-merge.test.sh"
