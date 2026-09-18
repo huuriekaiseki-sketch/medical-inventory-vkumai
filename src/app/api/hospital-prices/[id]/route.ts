@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
+import { recordHiddenRowDenial } from '@/lib/security/hidden-row-denial'
 import {
   getHospitalPrice,
   updateHospitalPrice,
@@ -21,6 +22,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   try { user = await requireAuth(db) } catch (e) { return authGuardError(e) }
   const price = await getHospitalPrice(db, id)
   if (!price) {
+    // WHY(#757-24 の残り): RLS で見えなかっただけなら「拒否」として access_denials に残す。
+    //      応答は 404 のまま（存在の有無を漏らさない）。記録の失敗は応答を変えない
+    await recordHiddenRowDenial({ table: 'hospital_prices', id, actorId: user.id })
     return NextResponse.json({ error: '病院別価格が見つかりません' }, { status: 404 })
   }
   try {

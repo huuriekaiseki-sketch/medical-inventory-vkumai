@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
   if (!parsed.ok) return parsed.response
   const { facility_id: facilityId, limit, offset } = parsed.data
   try {
-    await requireFacilityAccess(db, user, facilityId ?? null)
+    // WHY(facilityIdRequired): admin が facility_id を付けないと `.eq('facility_id', undefined)` で 500 になった（2026-09-13 実測）
+    await requireFacilityAccess(db, user, facilityId ?? null, { facilityIdRequired: true })
   } catch (e) {
     if (e instanceof Error && e.message === 'FACILITY_ID_REQUIRED') return apiError('facility_id は必須です', 400)
     return apiError('アクセス権限がありません', 403)

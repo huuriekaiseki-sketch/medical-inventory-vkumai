@@ -1,153 +1,75 @@
-'use client'
+import { headers } from 'next/headers'
+import LoginForm from './LoginForm'
+import { DENIAL_PAYLOAD_HEADER, parseProxyDenial } from '@/lib/security/denial-headers'
+import { recordAccessDenial } from '@/lib/security/access-denial'
+import { createServerSupabase } from '@/lib/supabase/server'
+import { logServerError } from '@/lib/log-safe'
 
-import { useState, Suspense, FormEvent, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-
-function LoginForm() {
-  const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const searchParams = useSearchParams()
-  const urlError = searchParams.get('error')
-
-  useEffect(() => {
-    const hash = window.location.hash
-    if (hash.includes('access_token=')) {
-      const params = new URLSearchParams(hash.slice(1))
-      const access_token = params.get('access_token')
-      const refresh_token = params.get('refresh_token')
-      if (access_token && refresh_token) {
-        const supabase = createSupabaseBrowserClient()
-        supabase.auth.setSession({ access_token, refresh_token }).then(({ error }) => {
-          // WHY: setSession が書いた認証 cookie を proxy.ts（middleware）に読ませるため、
-          //      クライアント遷移（router.push）ではなく意図的にフルリロードで '/' へ入り直す。
-          //      eslint-config-next 16.3 で追加されたルールはクライアント遷移を推奨するが、
-          //      ここでは cookie 反映後のサーバー側判定を確実にする方を優先する。
-          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-          if (!error) window.location.href = '/'
-        })
-      }
-    }
-  }, [])
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-
-    const supabase = createSupabaseBrowserClient()
-    const { error: signInError } = await supabase.auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
-      options: {
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/auth/callback`,
-      },
-    })
-
-    setLoading(false)
-    if (signInError) {
-      setError('メールの送信に失敗しました。メールアドレスを確認してください。')
-      return
-    }
-    setSent(true)
-  }
-
-  async function handleGoogleLogin() {
-    setError(null)
-    const supabase = createSupabaseBrowserClient()
-    const { error: signInError } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/auth/callback`,
-      },
-    })
-
-    if (signInError) {
-      setError('Googleログインに失敗しました。もう一度お試しください。')
-    }
-    // 成功時はSupabaseがGoogleの認証画面へリダイレクトするため、ここでの遷移処理は不要
-  }
-
-  if (sent) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#EDEADE' }}>
-        <div className="bg-white rounded-lg shadow p-8 max-w-md w-full text-center">
-          <h1 className="text-xl font-semibold mb-4" style={{ color: '#072C2C' }}>
-            メールを送信しました
-          </h1>
-          <p className="text-gray-600">
-            <strong>{email}</strong> にログインリンクを送信しました。<br />
-            メールを確認してリンクをクリックしてください。
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#EDEADE' }}>
-      <div className="bg-white rounded-lg shadow p-8 max-w-md w-full">
-        <h1 className="text-2xl font-bold mb-6 text-center" style={{ color: '#072C2C' }}>
-          Medical Inventory
-        </h1>
-        {(urlError || error) && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-            {error ?? '認証に失敗しました。もう一度お試しください。'}
-          </div>
-        )}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              メールアドレス
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
-              placeholder="example@example.com"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 rounded text-white text-sm font-medium transition-colors disabled:opacity-50"
-            style={{ backgroundColor: '#072C2C' }}
-          >
-            {loading ? '送信中...' : 'ログインリンクを送信'}
-          </button>
-        </form>
-
-        <div className="flex items-center gap-3 my-4">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400">または</span>
-          <div className="flex-1 h-px bg-gray-200" />
-        </div>
-
-        <button
-          type="button"
-          onClick={handleGoogleLogin}
-          className="w-full py-2 px-4 rounded border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-        >
-          Googleでログイン
-        </button>
-      </div>
-    </div>
-  )
+// WHY(#757-24): /login を Server Component（記録用の薄い皮）＋ Client Component（LoginForm、
+//      ロジック無変更）に分割した。proxy が admin ガードで /login へ跳ね返す際に載せる
+//      httpOnly cookie（印）の中身を、proxy が転送リクエストのヘッダ（DENIAL_PAYLOAD_HEADER）に
+//      載せ替えたものをここで読み、access_denials に 1 行残す。
+//
+// WHY(cookie を直接読まない): proxy は /login の応答で印の cookie を消すが、Next.js はその削除を
+//      同じリクエストの cookies() にも反映する。cookie を読むと常に空になり記録が 0 件になる
+//      （2026-09-13 の E2E で発覚。単体テストはモックで通っていた）。ヘッダは proxy が必ず
+//      上書き・削除するので、クライアントは偽装できない
+//
+// WHY(runtime を指定しない): access-denial.ts の serviceRoleClient() は
+//      SUPABASE_SERVICE_ROLE_KEY の有無だけを見る。Edge には持ち込めないので Node 既定のまま。
+//
+// WHY(fail-open を3層に分ける): 記録は付随情報であり、/login の表示を止めてはいけない。
+//      cookies() 自体の例外・印の parse 失敗・getUser() の失敗・recordAccessDenial の例外を
+//      それぞれ別の try/catch で捕まえ、logServerError に区別できる理由を残す
+//      （docs/agents/fail-open-inventory.md F-005）
+export default async function LoginPage() {
+  await recordProxyAdminDenialIfPresent()
+  return <LoginForm />
 }
 
-export default function LoginPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#EDEADE' }} />
-      }
-    >
-      <LoginForm />
-    </Suspense>
-  )
+async function recordProxyAdminDenialIfPresent(): Promise<void> {
+  let raw: string | undefined
+  try {
+    const h = await headers()
+    raw = h.get(DENIAL_PAYLOAD_HEADER) ?? undefined
+  } catch (error) {
+    logServerError('proxy_admin_denial_skip:header_unreadable', error)
+    return
+  }
+
+  if (!raw) return
+
+  let payload: ReturnType<typeof parseProxyDenial>
+  try {
+    payload = parseProxyDenial(raw)
+  } catch (error) {
+    logServerError('proxy_admin_denial_skip:payload_invalid', error)
+    return
+  }
+  if (!payload) return
+
+  let actorId: string | undefined
+  if (payload.reason === 'not_admin') {
+    try {
+      const supabase = await createServerSupabase()
+      const { data, error } = await supabase.auth.getUser()
+      if (error) throw error
+      actorId = data.user?.id
+    } catch (error) {
+      logServerError('proxy_admin_denial_skip:session_unavailable', error)
+      return
+    }
+  }
+
+  try {
+    await recordAccessDenial({
+      guard: 'proxy_admin',
+      reason: payload.reason,
+      route: payload.route,
+      method: payload.method,
+      actorId,
+    })
+  } catch {
+    // WHY: recordAccessDenial は内部で握りつぶす設計だが、ここでの追加の catch は保険
+  }
 }

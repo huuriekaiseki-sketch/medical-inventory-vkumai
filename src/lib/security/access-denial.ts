@@ -20,11 +20,16 @@ import { withJudgmentTimeout } from '@/lib/security/judgment-timeout'
 //      作れないようにするため（#757-32 の量の問題も同じ理由で防ぐ）。
 //
 // 既知の限界（migration 20260907000002 にも同じことを書いてある）:
-//   - proxy.ts が admin パスを /login へリダイレクトする経路は、Edge Runtime に
-//     service role を持ち込まないため未記録（guard='proxy_admin' は将来のために予約）
-//   - RLS が黙って 0 件を返す拒否はアプリから見えない
-//   - route / method は proxy が転送リクエストへ付けたヘッダから取る。proxy を通らない
-//     呼び出し（テスト・スクリプト）では null のまま
+//   - proxy.ts が admin パスを /login へリダイレクトする経路の記録は `/login` の
+//     Server Component（src/app/login/page.tsx）が proxy の付けた印（httpOnly cookie）を
+//     読んで行う（#757-24）。印は偽造できるが、actor_id は `/login` 側がそのリクエストの
+//     セッションから取るため、他人に濡れ衣を着せることはできない。MFA 未昇格の非 admin は
+//     admin 判定より先に MFA ガードで /mfa-challenge へ送られるため、この経路は未記録
+//   - RLS が黙って 0 件を返す拒否はアプリから見えない。ID 指定の 1 件取得（facilities /
+//     hospital_prices）だけは hidden-row-denial.ts が service_role で存在を確かめて記録する
+//     （2026-09-13、W-023）。一覧の空配列と PostgREST 直叩きは今も見えない
+//   - route / method は proxy が転送リクエストへ付けたヘッダ、または `/login` が印から
+//     直接渡した値から取る。どちらも通らない呼び出し（テスト・スクリプト）では null のまま
 
 export type DenialGuard = 'auth' | 'facility' | 'admin' | 'proxy_admin' | 'rate_limit'
 export type DenialReason =

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { createClient } from '@supabase/supabase-js'
 import {
   readCrossFacilityFixtures,
   CROSS_FACILITY_USER_A_AUTH_PATH,
@@ -177,5 +178,186 @@ test.describe('監査ログの画面（拒否された操作） [P-063]', () => 
 
     // 経路にクエリ文字列（施設 ID）が付いたまま残っていない（P-063 の「クエリ文字列が落ちる」）
     await expect(row, '拒否の記録に施設 ID が残っている').not.toContainText(fixtures!.facilityAId)
+  })
+})
+
+// WHY(#757-24): proxy が admin ガードで /login へ跳ね返す拒否は、単体では
+//      「proxy が印を付ける」「/login が印を読む」を別々にしか測れない（越境が単体の外にある）。
+//      ここで実際に redirect → /login 着地 → access_denials への記録までを 1 本で通す。
+test.describe('proxy の admin 拒否が access_denials に記録される [#757-24]', () => {
+  function serviceRoleClient() {
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+  }
+
+  async function countDenials(
+    guard: string,
+    reason: string,
+    route: string
+  ): Promise<number> {
+    const db = serviceRoleClient()
+    const { count, error } = await db
+      .from('access_denials')
+      .select('id', { count: 'exact', head: true })
+      .eq('guard', guard)
+      .eq('reason', reason)
+      .eq('route', route)
+    expect(error, `access_denials の集計に失敗: ${error?.message}`).toBeNull()
+    return count ?? 0
+  }
+
+  test('未ログインで /admin を開くと /login に着地し、記録が1件増える。再読み込みでは増えない', async ({
+    browser,
+  }) => {
+    // WHY(空の storageState を明示): browser.newContext() は playwright.config の use.storageState
+    //      （admin のログイン状態）を引き継ぐ。初回は引数なしで作ったため admin として /admin が
+    //      開けてしまい、このテスト自体が「未ログイン」を測れていなかった
+    const anon = await browser.newContext({ storageState: { cookies: [], origins: [] } })
+    const page = await anon.newPage()
+
+    const before = await countDenials('proxy_admin', 'unauthenticated', '/admin')
+
+    await page.goto('/admin')
+    await page.waitForLoadState('networkidle')
+    await expect(page).toHaveURL(/\/login/)
+
+    // WHY(記録がDB反映されるまでの猶予): recordAccessDenial はRPC呼び出しを含むため、
+    //      画面遷移の直後にはまだ書き込みが終わっていないことがある
+    await expect
+      .poll(() => countDenials('proxy_admin', 'unauthenticated', '/admin'), {
+        message: '未ログインで /admin にアクセスしても access_denials が増えない',
+      })
+      .toBe(before + 1)
+
+    // 続けて /login を再読み込みしても、印は proxy が既に消しているので増えない
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+    const afterReload = await countDenials('proxy_admin', 'unauthenticated', '/admin')
+    expect(afterReload, '/login の再読み込みで同じ拒否が二重に記録された').toBe(before + 1)
+
+    await anon.close()
+  })
+
+  test('非admin利用者が /admin を開くと reason=not_admin で記録され、actor_id が本人になる', async ({
+    browser,
+  }) => {
+    const userB = await browser.newContext({ storageState: CROSS_FACILITY_USER_B_AUTH_PATH })
+    const page = await userB.newPage()
+
+    const before = await countDenials('proxy_admin', 'not_admin', '/admin')
+
+    await page.goto('/admin')
+    await page.waitForLoadState('networkidle')
+    await expect(page).toHaveURL(/\/login/)
+
+    await expect
+      .poll(() => countDenials('proxy_admin', 'not_admin', '/admin'), {
+        message: '非admin利用者が /admin にアクセスしても access_denials が増えない',
+      })
+      .toBe(before + 1)
+
+    const db = serviceRoleClient()
+    const { data, error } = await db
+      .from('access_denials')
+      .select('actor_id')
+      .eq('guard', 'proxy_admin')
+      .eq('reason', 'not_admin')
+      .eq('route', '/admin')
+      .order('occurred_at', { ascending: false })
+      .limit(1)
+    expect(error, `access_denials の取得に失敗: ${error?.message}`).toBeNull()
+    expect(data?.[0]?.actor_id, 'actor_id が記録されていない（誰の拒否か分からない）').toBeTruthy()
+
+    await userB.close()
+  })
+
+  test('非adminは /admin/audit の「拒否された操作」からこの記録を読めない（RLS）', async ({
+    browser,
+  }) => {
+    const userB = await browser.newContext({ storageState: CROSS_FACILITY_USER_B_AUTH_PATH })
+    const page = await userB.newPage()
+
+    // 非admin自身が /admin/audit を開いても proxy に弾かれて /login へ送られる
+    await page.goto('/admin/audit')
+    await page.waitForLoadState('networkidle')
+    await expect(page, '非adminが /admin/audit を開けてしまう').toHaveURL(/\/login/)
+
+    await userB.close()
+  })
+})
+
+// WHY(#757-24 の残り「RLS が黙って 0 件を返す拒否」): ID 指定の 1 件取得は RLS で見えない行を
+//      「存在しない」と区別できず 404 を返すだけだった。存在するなら service role で確かめて
+//      拒否として残す（応答は 404 のまま）。単体はモックなので、実 RLS × 実 service role の越境をここで通す。
+test.describe('RLS で見えない 1 件取得が access_denials に残る [P-063]', () => {
+  test.skip(!fixtures?.facilityAId, 'cross-facility フィクスチャが生成されていない')
+
+  function serviceRoleClient() {
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+  }
+
+  async function countHiddenDenials(route: string, facilityId: string): Promise<number> {
+    const { count, error } = await serviceRoleClient()
+      .from('access_denials')
+      .select('id', { count: 'exact', head: true })
+      .eq('guard', 'facility')
+      .eq('reason', 'forbidden')
+      .eq('route', route)
+      .eq('facility_id', facilityId)
+    expect(error, `access_denials の集計に失敗: ${error?.message}`).toBeNull()
+    return count ?? 0
+  }
+
+  test('施設 B の利用者が施設 A の ID を直接指定すると 404 のまま、施設 A への拒否として 1 件残る', async ({ browser }) => {
+    const userB = await browser.newContext({ storageState: CROSS_FACILITY_USER_B_AUTH_PATH })
+    const route = `/api/facilities/${fixtures!.facilityAId}`
+    const before = await countHiddenDenials(route, fixtures!.facilityAId)
+
+    const res = await userB.request.get(route)
+    expect(res.status(), '施設 B の利用者が施設 A を読めてしまった').toBe(404)
+    // 存在の有無を本文で漏らさない（本当に無いときと同じ文言）
+    expect(await res.text()).toContain('施設が見つかりません')
+
+    await expect
+      .poll(() => countHiddenDenials(route, fixtures!.facilityAId), { message: '見えなかった施設の拒否が記録されない' })
+      .toBe(before + 1)
+    await userB.close()
+  })
+
+  test('施設 B の利用者が施設 A の院内価格 ID を直接指定すると 404 のまま、施設 A への拒否として 1 件残る', async ({ browser }) => {
+    const userB = await browser.newContext({ storageState: CROSS_FACILITY_USER_B_AUTH_PATH })
+    const route = `/api/hospital-prices/${fixtures!.facilityAHospitalPriceId}`
+    const before = await countHiddenDenials(route, fixtures!.facilityAId)
+
+    const res = await userB.request.get(route)
+    expect(res.status(), '施設 B の利用者が施設 A の院内価格を読めてしまった').toBe(404)
+
+    await expect
+      .poll(() => countHiddenDenials(route, fixtures!.facilityAId), { message: '見えなかった院内価格の拒否が記録されない' })
+      .toBe(before + 1)
+    await userB.close()
+  })
+
+  test('存在しない ID は 404 で、記録は増えない（本当に無いものは拒否ではない）', async ({ browser }) => {
+    const userB = await browser.newContext({ storageState: CROSS_FACILITY_USER_B_AUTH_PATH })
+    const nobody = '00000000-0000-4000-8000-000000000000'
+    const db = serviceRoleClient()
+    const { count: before } = await db
+      .from('access_denials').select('id', { count: 'exact', head: true }).eq('route', `/api/facilities/${nobody}`)
+
+    const res = await userB.request.get(`/api/facilities/${nobody}`)
+    expect(res.status()).toBe(404)
+    await new Promise(r => setTimeout(r, 1500))
+    const { count: after } = await db
+      .from('access_denials').select('id', { count: 'exact', head: true }).eq('route', `/api/facilities/${nobody}`)
+    expect(after ?? 0, '存在しない ID の 404 が拒否として記録された').toBe(before ?? 0)
+    await userB.close()
   })
 })

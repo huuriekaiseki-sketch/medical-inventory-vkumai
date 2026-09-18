@@ -191,3 +191,45 @@ describe('requireFacilityAccess (P-002)', () => {
     })
   })
 })
+
+// P-002 の補足（2026-09-13）: 一覧 route は admin でも facility_id を必須にできる（facilityIdRequired）。
+// 実測: admin が facility_id 無しで一覧 GET 5 本を呼ぶと、repository が `.eq('facility_id', undefined)` を
+// 組み立てて PostgREST の uuid 変換で 500 になっていた（/api/orders だけが 400、hospital-prices は 200 と不揃い）。
+describe('requireFacilityAccess の facilityIdRequired（一覧 route の契約） [P-002]', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('admin でも facilityIdRequired なら facilityId=null は FACILITY_ID_REQUIRED（拒否ではないので記録しない）', async () => {
+    const db = makeDb({ userIsAdmin: true, dbHasAdmin: true })
+    await expect(
+      requireFacilityAccess(db, makeUser('u-admin', 'admin@test.com'), null, { facilityIdRequired: true })
+    ).rejects.toThrow('FACILITY_ID_REQUIRED')
+    expect(recordAccessDenial).not.toHaveBeenCalled()
+  })
+
+  it('admin で facilityIdRequired でも facilityId があれば通る（RPC は呼ばない）', async () => {
+    const db = makeDb({ userIsAdmin: true, dbHasAdmin: true })
+    await expect(
+      requireFacilityAccess(db, makeUser('u-admin', 'admin@test.com'), FACILITY_ID, { facilityIdRequired: true })
+    ).resolves.toEqual({ facilityId: FACILITY_ID })
+    expect(db.rpc).not.toHaveBeenCalledWith('is_facility_member', expect.anything())
+  })
+
+  it('facilityIdRequired を渡さなければ admin の facilityId=null は今まで通り通る（hospital-prices / news の契約）', async () => {
+    const db = makeDb({ userIsAdmin: true, dbHasAdmin: true })
+    await expect(
+      requireFacilityAccess(db, makeUser('u-admin', 'admin@test.com'), null)
+    ).resolves.toEqual({ facilityId: null })
+  })
+
+  it('非 admin の facilityId=null は facilityIdRequired の有無に関わらず記録して FACILITY_ID_REQUIRED', async () => {
+    const db = makeDb({ isMember: true })
+    await expect(
+      requireFacilityAccess(db, makeUser('u-user', 'user@test.com'), null, { facilityIdRequired: true })
+    ).rejects.toThrow('FACILITY_ID_REQUIRED')
+    expect(recordAccessDenial).toHaveBeenCalledWith({
+      guard: 'facility', reason: 'facility_id_required', actorId: 'u-user',
+    })
+  })
+})

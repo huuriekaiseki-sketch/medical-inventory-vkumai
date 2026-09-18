@@ -35,6 +35,9 @@ const REASON_LABEL: Record<string, string> = {
   forbidden: '権限がない',
   not_admin: '管理者でない',
   rate_limited: '回数の上限を超えた',
+  // WHY(2026-09-13): DenialReason には 2026-09-07 から aal2_required があるのに、ここだけ無く
+  //      生文字列で出ていた（#757-24 の Sweep が独立に 2 回検出）。W-011 の実行直前の再確認で弾いた分
+  aal2_required: '追加認証（MFA）が必要',
 }
 
 function AuditPageInner() {

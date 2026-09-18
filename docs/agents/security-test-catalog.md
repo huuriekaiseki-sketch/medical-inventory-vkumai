@@ -39,7 +39,7 @@
 | ミューテーションテスト | RLS 条件・認可判定・hook の拒否条件を意図的に壊し、テストが検知するか | 実装済み（一部） | #757-7。TS は Stryker（認可の判断が書かれた 10 ファイル、2026-09-07 実測 95.80%、`thresholds.break` 94 のラチェット）、RLS は自作の `scripts/check-rls-mutation.sh`、ルールを守る hook は `scripts/check-rule-guard-effective.test.sh`（no-op 置換）。**人が打たないと動かない**（[`mutation-testing.md`](./mutation-testing.md) の「起動の引き金」）。対象に挙げていないコードは測っていない |
 | プロパティテスト | 入力をランダム生成し「他施設は返らない」「在庫は負にならない」を大量検証 | 実装済み（一部） | #757-6。数量（I-010）・単価（I-012）・状態遷移（I-020）を `supabase/__tests__/integration/invariant-properties.integration.test.ts` で。`fast-check@4.9.0`（dev のみ）。残りの I-xxx と「他施設は返らない」（P-xxx）は引き金付き。運用と限界は [`property-testing.md`](./property-testing.md) |
 | 未テスト経路の自動検出 | route・RPC・管理関数・古い migration を列挙し、守るテストの有無を出す | 実装済み（一部） | route は P-017、RPC は P-043（migration を畳み込んで公開関数を列挙、2026-09-06）。Storage policy・pg_cron は対象がまだ無い |
-| 差分テスト（UI / API / RPC / CLI） | 同じ操作の結果と拒否条件が経路で一致するか | 実装済み（一部） | `access-path-inventory.md`（X-xxx 17 経路、鍵の所在 8 種、2026-09-06、#757-26）。API Route / 画面 / PostgREST / RPC / migration / pg_cron / Auth hook / CI は同じ拒否条件を P-xxx で実測済み。service role・Studio・管理画面の「読み取りが記録されない」は #757-24、preview 環境と復元は #757-35・23 |
+| 差分テスト（UI / API / RPC / CLI） | 同じ操作の結果と拒否条件が経路で一致するか | 実装済み（一部） | `access-path-inventory.md`（X-xxx 17 経路、鍵の所在 8 種、2026-09-06、#757-26）。API Route / 画面 / PostgREST / RPC / migration / pg_cron / Auth hook / CI は同じ拒否条件を P-xxx で実測済み。service role・Studio の「読み取りが記録されない」は #757-24（残）。管理画面（proxy の admin 拒否）は #757-24 で `access_denials` への記録を実装済み、preview 環境と復元は #757-35・23 |
 | 状態遷移の網羅 | 招待中→有効→無効→再招待、注文の状態を全組み合わせで | 引き金付き | 招待フロー・注文状態を触る PR |
 | 時計ずれ・時間遷移 | 期限切れ・降格・日付境界・夏時間・UTC/JST | 実装済み（一部） | UTC/JST の日付境界と整形は `format-date.ts` + TZ=UTC のテストで固定（2026-09-06、#757-15）。期限切れ・降格は機能が無く、clock 注入はその機能を足すときに |
 | 権限モデルの形式検証 | 「施設が違えば読めない」を論理式にし、実装変更で破られないか | 引き金付き（**2026-09-13 に条件は満たされた**） | RLS ポリシーが 30 本を超えたら。**実測 35 本で既に超過**——`scripts/check-rls-policy-count.test.sh` が migration を順に再生して毎回数える（上限は `scripts/lib/rls-policy-budget.json`）。着手するかは人が決める。**`#757` の番号はまだ振らない**（GitHub 停止中に番号だけ作ると実体の無い印になる）。今は約束カタログ＋統合テスト＋RLS 変異計測で守っている |
@@ -56,7 +56,7 @@
 |---|---|---|---|
 | 検知そのもののテスト（カナリア操作） | 攻撃が起きたときアラートが発火するか | 計画 #757-8 の受け入れ条件 | 本番監視を入れるとき、拒否 N 回でアラートが出ることを実演 |
 | 安全性のモニタリング | 拒否率・権限エラー・再試行・データ取得量の異常 | 計画 #757-8 | 同上 |
-| 監査証跡の完全性 | 拒否・権限変更・admin 操作の記録、append-only | 実装済み（一部） | 変更の記録は audit_log（P-060〜P-062）。拒否の記録は `access_denials`（P-063、2026-09-07）。残り: proxy が /login へ返す admin 経路と、RLS が黙って 0 件を返す拒否は未記録（PostgREST / Supabase のログ側） |
+| 監査証跡の完全性 | 拒否・権限変更・admin 操作の記録、append-only | 実装済み（一部） | 変更の記録は audit_log（P-060〜P-062）。拒否の記録は `access_denials`（P-063、2026-09-07）。proxy が /login へ返す admin 経路は 2026-09-13 に記録を追加（印は偽造可能だが actor_id はセッション由来。MFA 未昇格の非 admin は未記録）。RLS が黙って 0 件を返す拒否は、ID 指定の 1 件取得 2 route だけ 2026-09-13 に service_role の存在確認で記録（W-023）。残り: 一覧の空配列と PostgREST 直叩きは未記録（PostgREST / Supabase のログ側。pgaudit・log_statement は未設定、保持期間は D-022 で未確認） |
 | 設定ドリフト検知 | staging と production の RLS・環境変数・Storage policy・GitHub 権限の定期比較 | 計画 #757-35 | スキーマドリフト検知の型 |
 | データ境界の可視化・PII 流出 | ログ・エラー・分析・メール本文に個人情報が流れないか | 実装済み（一部） | サーバー側ログは `log-safe.ts` で伏せ、eslint no-console で出口を 1 つに（2026-09-06、#757-5）。リポジトリ側はメールの許可ドメイン走査。残存先の全体は `data-lifecycle-inventory.md`（D-xxx、2026-09-06、#757-28）。未確認 4 件（Vercel / Supabase のログ保持期間、バックアップ、AI 観測ログの中身）はダッシュボード確認待ち |
 | 秘密情報の誤出力 | AI・hook・CI・エラーログに秘密らしい文字列を渡してマスクされるか | 実装済み（一部） | リポジトリ側は `scripts/check-secret-leak.test.sh`（JWT・秘密鍵・各種トークン、service role の参照場所、.env の gitignore。2026-09-06、#757-10）。エラーログの伏せ字は上と同じ経路。残り: git 履歴の走査、AI / hook の出力側のマスク |

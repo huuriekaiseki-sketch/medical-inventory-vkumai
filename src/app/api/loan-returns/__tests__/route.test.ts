@@ -209,3 +209,17 @@ describe('POST /api/loan-returns', () => {
     expect(body.error).toBe('この短貸発注は既に返却登録されています')
   })
 })
+
+// WHY(2026-09-13 の実測): admin × facility_id 省略で 500。判定は requireFacilityAccess の facilityIdRequired に寄せる
+describe('GET /api/loan-returns: admin × facility_id 省略', () => {
+  it('requireFacilityAccess に facilityIdRequired を渡し、admin でも 400 で止める', async () => {
+    authenticated()
+    mockRequireFacilityAccess.mockRejectedValue(new Error('FACILITY_ID_REQUIRED'))
+    const res = await GET(new NextRequest('http://localhost/api/loan-returns'))
+    expect(res.status).toBe(400)
+    expect(mockRequireFacilityAccess).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), null, { facilityIdRequired: true }
+    )
+    expect(mockListLoanReturns).not.toHaveBeenCalled()
+  })
+})

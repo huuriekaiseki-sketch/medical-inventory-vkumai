@@ -103,6 +103,7 @@
     "scripts/lib/canonical-event.ts": "249b3128795e3d2c20137b0fcb69a967332145fec842782dcceeacda99ea845f",
     "scripts/lib/check-catalog.mjs": "f653862d9980068ac5e56e37c39cf913dad8dc0d9cf0c040cd62be5194e8c6e7",
     "scripts/lib/check-detectors-effective.mjs": "c6b22a879b2b158754b406cd0c66a8da8f00b045c613c9ba4c643b11862b848f",
+    "scripts/lib/check-harness-score.mjs": "c7b70dd5d6a1cf3debd3fc79c241533664b3ff7d530f8de44c9222bee0a00576",
     "scripts/lib/check-roadmap-staleness.mjs": "69647b2bef4278272dd5ce90973782dd26da01907e6629e38ee48d6cc61f52f6",
     "scripts/lib/check-rule-guard-coverage.mjs": "7fbe62ed0a4ff2d0d30289645f7a5582e45b1be42fd2a9d773edccaa69ffed12",
     "scripts/lib/check-scopes.json": "ed5d41ccb635b630989b4f53e934163ccf9913bb5596cf072ac20b5a1ef588fb",

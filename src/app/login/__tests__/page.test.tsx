@@ -1,206 +1,142 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import LoginPage from '../page'
+import { render, screen } from '@testing-library/react'
+import { encodeProxyDenial } from '@/lib/security/denial-headers'
 
-// createSupabaseBrowserClient をモック
-const mockSignInWithOtp = vi.fn()
-const mockSignInWithOAuth = vi.fn()
-vi.mock('@/lib/supabase/client', () => ({
-  createSupabaseBrowserClient: vi.fn(() => ({
-    auth: {
-      signInWithOtp: mockSignInWithOtp,
-      signInWithOAuth: mockSignInWithOAuth,
-    },
-  })),
+// WHY(#757-24): page.tsx は async Server Component。await LoginPage() で返る JSX を
+//      render() に渡すことで、Next.js のフルランタイムなしに検証する
+
+// WHY: proxy が印の cookie の中身を x-aidd-denial ヘッダに載せ替えて渡す（cookie は応答で
+//      消され、cookies() には削除が先回りするため）。page は headers() を読む
+const mockHeaderGet = vi.fn()
+vi.mock('next/headers', () => ({
+  headers: vi.fn(() => Promise.resolve({ get: mockHeaderGet })),
+}))
+// 既存テストの記述を保つための薄い変換: { value } → ヘッダの文字列
+const mockCookieGet = {
+  mockReturnValue(v: { value: string } | undefined) {
+    mockHeaderGet.mockReturnValue(v?.value ?? null)
+  },
+}
+
+const mockRecordAccessDenial = vi.fn()
+vi.mock('@/lib/security/access-denial', () => ({
+  recordAccessDenial: (...args: unknown[]) => mockRecordAccessDenial(...args),
 }))
 
-// useSearchParams / useRouter をモック
-vi.mock('next/navigation', () => ({
-  useSearchParams: vi.fn(() => {
-    const params = new URLSearchParams()
-    return {
-      get: (key: string) => params.get(key),
-    }
-  }),
-  useRouter: vi.fn(() => ({
-    push: vi.fn(),
-    replace: vi.fn(),
-    back: vi.fn(),
-  })),
+const mockGetUser = vi.fn()
+vi.mock('@/lib/supabase/server', () => ({
+  createServerSupabase: vi.fn(() => Promise.resolve({ auth: { getUser: mockGetUser } })),
 }))
 
-describe('LoginPage', () => {
+vi.mock('../LoginForm', () => ({
+  default: () => <div>login-form</div>,
+}))
+
+vi.mock('@/lib/log-safe', () => ({
+  logServerError: vi.fn(),
+}))
+
+describe('LoginPage(Server Component) — proxy の admin 拒否を記録する [P-063]', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // NEXT_PUBLIC_SITE_URL 環境変数のセット
-    process.env.NEXT_PUBLIC_SITE_URL = 'http://localhost:3000'
+    mockCookieGet.mockReturnValue(undefined)
   })
 
-  describe('初期レンダリング', () => {
-    it('メールアドレス入力フォームが表示される', () => {
-      render(<LoginPage />)
-      expect(screen.getByLabelText('メールアドレス')).toBeInTheDocument()
-    })
+  it('印が無ければ recordAccessDenial は呼ばれず、LoginForm を描画する', async () => {
+    const LoginPage = (await import('../page')).default
+    const jsx = await LoginPage()
+    render(jsx)
 
-    it('送信ボタンが表示される', () => {
-      render(<LoginPage />)
-      expect(screen.getByRole('button', { name: 'ログインリンクを送信' })).toBeInTheDocument()
-    })
-
-    it('タイトル「Medical Inventory」が表示される', () => {
-      render(<LoginPage />)
-      expect(screen.getByText('Medical Inventory')).toBeInTheDocument()
-    })
-
-    it('初期状態でエラーメッセージは表示されない', () => {
-      render(<LoginPage />)
-      expect(screen.queryByText('メールの送信に失敗しました。メールアドレスを確認してください。')).not.toBeInTheDocument()
-    })
-
-    it('「Googleでログイン」ボタンが表示される', () => {
-      render(<LoginPage />)
-      expect(screen.getByRole('button', { name: 'Googleでログイン' })).toBeInTheDocument()
-    })
+    expect(screen.getByText('login-form')).toBeInTheDocument()
+    expect(mockRecordAccessDenial).not.toHaveBeenCalled()
   })
 
-  describe('Googleログイン', () => {
-    it('クリックするとsignInWithOAuthがprovider: googleで呼ばれる', async () => {
-      mockSignInWithOAuth.mockResolvedValueOnce({ error: null })
-
-      render(<LoginPage />)
-      fireEvent.click(screen.getByRole('button', { name: 'Googleでログイン' }))
-
-      await waitFor(() => {
-        expect(mockSignInWithOAuth).toHaveBeenCalledWith({
-          provider: 'google',
-          options: {
-            redirectTo: 'http://localhost:3000/auth/callback',
-          },
-        })
-      })
+  it('印がunauthenticatedなら guard=proxy_admin, actorId無しで記録する', async () => {
+    mockCookieGet.mockReturnValue({
+      value: encodeProxyDenial({ reason: 'unauthenticated', route: '/admin', method: 'GET' }),
     })
 
-    it('失敗時にエラーメッセージが表示される', async () => {
-      mockSignInWithOAuth.mockResolvedValueOnce({ error: new Error('oauth error') })
+    const LoginPage = (await import('../page')).default
+    const jsx = await LoginPage()
+    render(jsx)
 
-      render(<LoginPage />)
-      fireEvent.click(screen.getByRole('button', { name: 'Googleでログイン' }))
+    expect(mockRecordAccessDenial).toHaveBeenCalledWith({
+      guard: 'proxy_admin',
+      reason: 'unauthenticated',
+      route: '/admin',
+      method: 'GET',
+      actorId: undefined,
+    })
+    expect(mockGetUser).not.toHaveBeenCalled()
+    expect(screen.getByText('login-form')).toBeInTheDocument()
+  })
 
-      await waitFor(() => {
-        expect(screen.getByText('Googleログインに失敗しました。もう一度お試しください。')).toBeInTheDocument()
-      })
+  it('印がnot_adminならセッションからactorIdを取って記録する', async () => {
+    mockCookieGet.mockReturnValue({
+      value: encodeProxyDenial({ reason: 'not_admin', route: '/admin/settings', method: 'GET' }),
+    })
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } }, error: null })
+
+    const LoginPage = (await import('../page')).default
+    const jsx = await LoginPage()
+    render(jsx)
+
+    expect(mockRecordAccessDenial).toHaveBeenCalledWith({
+      guard: 'proxy_admin',
+      reason: 'not_admin',
+      route: '/admin/settings',
+      method: 'GET',
+      actorId: 'user-123',
     })
   })
 
-  describe('フォーム送信（成功）', () => {
-    it('成功時に「メールを送信しました」画面に切り替わる', async () => {
-      mockSignInWithOtp.mockResolvedValueOnce({ error: null })
+  it('印が壊れている（JSONでない）場合は記録されず、LoginFormは描画される', async () => {
+    mockCookieGet.mockReturnValue({ value: 'not-json' })
 
-      render(<LoginPage />)
+    const LoginPage = (await import('../page')).default
+    const jsx = await LoginPage()
+    render(jsx)
 
-      const input = screen.getByLabelText('メールアドレス')
-      await userEvent.type(input, 'test@example.com')
-
-      const button = screen.getByRole('button', { name: 'ログインリンクを送信' })
-      fireEvent.click(button)
-
-      await waitFor(() => {
-        expect(screen.getByText('メールを送信しました')).toBeInTheDocument()
-      })
-    })
-
-    it('成功時にメールアドレスが確認画面に表示される', async () => {
-      mockSignInWithOtp.mockResolvedValueOnce({ error: null })
-
-      render(<LoginPage />)
-
-      const input = screen.getByLabelText('メールアドレス')
-      await userEvent.type(input, 'test@example.com')
-
-      fireEvent.click(screen.getByRole('button', { name: 'ログインリンクを送信' }))
-
-      await waitFor(() => {
-        expect(screen.getByText('test@example.com')).toBeInTheDocument()
-      })
-    })
-
-    it('signInWithOtp が正しい引数で呼ばれる', async () => {
-      mockSignInWithOtp.mockResolvedValueOnce({ error: null })
-
-      render(<LoginPage />)
-
-      const input = screen.getByLabelText('メールアドレス')
-      await userEvent.type(input, 'TEST@EXAMPLE.COM')
-
-      fireEvent.click(screen.getByRole('button', { name: 'ログインリンクを送信' }))
-
-      await waitFor(() => {
-        expect(mockSignInWithOtp).toHaveBeenCalledWith({
-          email: 'test@example.com', // toLowerCase() されること
-          options: {
-            emailRedirectTo: 'http://localhost:3000/auth/callback',
-          },
-        })
-      })
-    })
+    expect(mockRecordAccessDenial).not.toHaveBeenCalled()
+    expect(screen.getByText('login-form')).toBeInTheDocument()
   })
 
-  describe('フォーム送信（失敗）', () => {
-    it('エラー時にエラーメッセージが表示される', async () => {
-      mockSignInWithOtp.mockResolvedValueOnce({ error: new Error('auth error') })
-
-      render(<LoginPage />)
-
-      const input = screen.getByLabelText('メールアドレス')
-      await userEvent.type(input, 'test@example.com')
-
-      fireEvent.click(screen.getByRole('button', { name: 'ログインリンクを送信' }))
-
-      await waitFor(() => {
-        expect(screen.getByText('メールの送信に失敗しました。メールアドレスを確認してください。')).toBeInTheDocument()
-      })
+  it('印のrouteが201文字の場合は記録されない', async () => {
+    mockCookieGet.mockReturnValue({
+      value: JSON.stringify({ reason: 'unauthenticated', route: '/' + 'a'.repeat(200), method: 'GET' }),
     })
 
-    it('エラー時に「メールを送信しました」画面に切り替わらない', async () => {
-      mockSignInWithOtp.mockResolvedValueOnce({ error: new Error('auth error') })
+    const LoginPage = (await import('../page')).default
+    const jsx = await LoginPage()
+    render(jsx)
 
-      render(<LoginPage />)
-
-      const input = screen.getByLabelText('メールアドレス')
-      await userEvent.type(input, 'test@example.com')
-
-      fireEvent.click(screen.getByRole('button', { name: 'ログインリンクを送信' }))
-
-      await waitFor(() => {
-        expect(screen.queryByText('メールを送信しました')).not.toBeInTheDocument()
-      })
-    })
+    expect(mockRecordAccessDenial).not.toHaveBeenCalled()
   })
 
-  describe('ローディング状態', () => {
-    it('送信中はボタンが無効化される', async () => {
-      // signInWithOtp が resolve するまで pending にする
-      let resolve: (value: { error: null }) => void
-      mockSignInWithOtp.mockReturnValueOnce(
-        new Promise<{ error: null }>((r) => { resolve = r })
-      )
-
-      render(<LoginPage />)
-
-      const input = screen.getByLabelText('メールアドレス')
-      await userEvent.type(input, 'test@example.com')
-
-      const button = screen.getByRole('button', { name: 'ログインリンクを送信' })
-      fireEvent.click(button)
-
-      // 送信中
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: '送信中...' })).toBeDisabled()
-      })
-
-      // 完了させる
-      resolve!({ error: null })
+  it('recordAccessDenialがthrowしてもLoginFormは描画される', async () => {
+    mockCookieGet.mockReturnValue({
+      value: encodeProxyDenial({ reason: 'unauthenticated', route: '/admin', method: 'GET' }),
     })
+    mockRecordAccessDenial.mockRejectedValue(new Error('db down'))
+
+    const LoginPage = (await import('../page')).default
+    const jsx = await LoginPage()
+    render(jsx)
+
+    expect(screen.getByText('login-form')).toBeInTheDocument()
+  })
+
+  it('not_adminでgetUserが失敗しても記録をスキップしLoginFormは描画される', async () => {
+    mockCookieGet.mockReturnValue({
+      value: encodeProxyDenial({ reason: 'not_admin', route: '/admin', method: 'GET' }),
+    })
+    mockGetUser.mockRejectedValue(new Error('session error'))
+
+    const LoginPage = (await import('../page')).default
+    const jsx = await LoginPage()
+    render(jsx)
+
+    expect(mockRecordAccessDenial).not.toHaveBeenCalled()
+    expect(screen.getByText('login-form')).toBeInTheDocument()
   })
 })

@@ -10,7 +10,13 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveIsAdmin } from '@/lib/admin-status'
-import { DENIAL_METHOD_HEADER, DENIAL_ROUTE_HEADER } from '@/lib/security/denial-headers'
+import {
+  DENIAL_COOKIE_NAME,
+  DENIAL_METHOD_HEADER,
+  DENIAL_PAYLOAD_HEADER,
+  DENIAL_ROUTE_HEADER,
+  encodeProxyDenial,
+} from '@/lib/security/denial-headers'
 
 const PUBLIC_PATHS = ['/login', '/auth/callback']
 
@@ -27,7 +33,51 @@ function forwardedHeaders(request: NextRequest): Headers {
   const headers = new Headers(request.headers)
   headers.set(DENIAL_ROUTE_HEADER, request.nextUrl.pathname)
   headers.set(DENIAL_METHOD_HEADER, request.method)
+  // WHY(#757-24): /login に印（cookie）が付いて来たときだけ、その中身をヘッダで Server Component へ
+  //      渡す。応答で cookie を消すと Next.js が同じリクエストの cookies() にも削除を反映するので、
+  //      cookie を直接読ませると記録が 0 件になる（E2E で発覚）。クライアントが同名ヘッダを
+  //      送ってきても、ここで必ず上書きするか削除する（印の cookie 自体の偽造は既知の限界）
+  const denial = request.nextUrl.pathname === '/login'
+    ? request.cookies.get(DENIAL_COOKIE_NAME)?.value
+    : undefined
+  if (denial) {
+    headers.set(DENIAL_PAYLOAD_HEADER, denial)
+  } else {
+    headers.delete(DENIAL_PAYLOAD_HEADER)
+  }
   return headers
+}
+
+// WHY(#757-24): admin パスへの未認可アクセスを /login へ跳ね返す際、「誰が・いつ・どの画面で
+//      弾かれたか」を access_denials に残すための印を httpOnly cookie で載せる。
+//      Route Handler は動かない（proxy が redirect で止めるため）ので、記録は /login の
+//      Server Component が行う。cookie を付ける処理自体が失敗しても redirect は返す
+//      （fail-open の層 1。docs/agents/fail-open-inventory.md F-005）。
+function redirectWithDenial(
+  request: NextRequest,
+  reason: 'unauthenticated' | 'not_admin'
+): NextResponse {
+  const response = NextResponse.redirect(new URL('/login', request.url))
+  try {
+    response.cookies.set(
+      DENIAL_COOKIE_NAME,
+      encodeProxyDenial({
+        reason,
+        route: request.nextUrl.pathname,
+        method: request.method,
+      }),
+      {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/login',
+        maxAge: 10,
+        secure: process.env.NODE_ENV === 'production',
+      }
+    )
+  } catch {
+    // WHY: 印の付与は付随情報。失敗しても拒否（redirect）そのものは変えない
+  }
+  return response
 }
 
 export async function proxy(request: NextRequest) {
@@ -60,8 +110,20 @@ export async function proxy(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
+  // WHY(#757-24): 未認証ガードより前に admin パスかどうかを判定する必要がある。
+  //      ケース A（未認証で /admin）の印は未認証ガードの分岐で付けなければならないため、
+  //      isAdminPath の判定を admin ガードから引き上げた
+  const isAdminPath =
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/') ||
+    pathname === '/api/admin' ||
+    pathname.startsWith('/api/admin/')
+
   // 未認証ガード
   if (!user && !PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
+    if (isAdminPath) {
+      return redirectWithDenial(request, 'unauthenticated')
+    }
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
@@ -83,21 +145,29 @@ export async function proxy(request: NextRequest) {
   }
 
   // admin ガード（middleware + 各 route で二重チェック）
-  const isAdminPath = pathname === '/admin' || pathname.startsWith('/admin/') || pathname === '/api/admin' || pathname.startsWith('/api/admin/')
+  // WHY: `!user` の分岐は上の未認証ガードで既に処理済みのため到達しない（デッドコードだったので削除）
   if (isAdminPath) {
-    if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-
     // WHY: resolveIsAdminはSupabaseClient(rpc呼び出し)+fetchのみに依存するため
     //      Edge RuntimeのmiddlewareでもService Role Keyなしに動作する。
-    const isAdmin = await resolveIsAdmin(supabase, user)
+    const isAdmin = await resolveIsAdmin(supabase, user!)
 
     if (!isAdmin) {
-      return NextResponse.redirect(new URL('/login', request.url))
+      return redirectWithDenial(request, 'not_admin')
     }
 
     return supabaseResponse
+  }
+
+  // WHY(#757-24): /login に印（拒否記録用の httpOnly cookie）が付いたまま来たら、
+  //      応答で消す（同じ拒否が二重に記録されないため）。Server Component は cookie を
+  //      書けないので、消す役は proxy にしか置けない。中身は forwardedHeaders() が
+  //      ヘッダに載せ替えて Server Component へ渡している（削除が cookies() に先回りするため）
+  if (pathname === '/login' && request.cookies.get(DENIAL_COOKIE_NAME)) {
+    try {
+      supabaseResponse.cookies.set(DENIAL_COOKIE_NAME, '', { maxAge: 0, path: '/login' })
+    } catch {
+      // WHY: 消去の失敗は付随情報。失敗しても /login の表示は続ける
+    }
   }
 
   return supabaseResponse

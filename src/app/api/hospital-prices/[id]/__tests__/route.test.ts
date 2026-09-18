@@ -193,3 +193,29 @@ describe('DELETE /api/hospital-prices/[id]', () => {
     expect(mockRequireFacilityAccess).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'f1')
   })
 })
+
+// WHY(#757-24 の残り、2026-09-13): RLS で見えない行は 404 のままだが、存在するなら拒否として残す
+const { mockRecordHiddenRowDenial } = vi.hoisted(() => ({ mockRecordHiddenRowDenial: vi.fn() }))
+vi.mock('@/lib/security/hidden-row-denial', () => ({
+  recordHiddenRowDenial: (...args: unknown[]) => mockRecordHiddenRowDenial(...args),
+}))
+
+describe('GET /api/hospital-prices/[id]: RLS で 0 件のとき [P-063]', () => {
+  it('0 件なら 404 のまま、存在確認と記録のヘルパーを要求 ID と本人 ID で呼ぶ', async () => {
+    authenticated()
+    mockGetHospitalPrice.mockResolvedValue(null)
+    const res = await GET(new Request('http://localhost') as never, context)
+    expect(res.status).toBe(404)
+    expect(mockRecordHiddenRowDenial).toHaveBeenCalledWith({ table: 'hospital_prices', id: 'hp1', actorId: 'u1' })
+    expect(mockRequireFacilityAccess).not.toHaveBeenCalled()
+  })
+
+  it('見つかればヘルパーは呼ばず、所属判定へ進む', async () => {
+    authenticated()
+    mockGetHospitalPrice.mockResolvedValue({ id: 'hp1', facilityId: 'f1' })
+    mockRequireFacilityAccess.mockResolvedValue({ facilityId: 'f1' })
+    const res = await GET(new Request('http://localhost') as never, context)
+    expect(res.status).toBe(200)
+    expect(mockRecordHiddenRowDenial).not.toHaveBeenCalled()
+  })
+})
