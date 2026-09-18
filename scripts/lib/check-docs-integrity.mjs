@@ -185,7 +185,10 @@ export function checkFile(root, absFile, opts = {}) {
       if (!/^[\w./@+-]+$/.test(relPath)) continue
       const abs = path.join(root, relPath)
       if (existsSync(abs)) continue
-      if (ignored(relPath)) continue
+      // .gitignore のディレクトリ限定パターン（末尾 /）は、スラッシュを落としたパスには一致しない。
+      // 実体のある手元では existsSync で抜けるため隠れるが、実体の無い CI では誤検知になる。
+      // 言及が `foo/` の形なら、その形のまま git に渡す。
+      if (ignored(/\/$/.test(text) ? `${relPath}/` : relPath)) continue
       violations.push({ file: rel, line: lineNo, kind: 'path', detail: `言及されたパスが存在しない: \`${text}\`` })
     }
   })
