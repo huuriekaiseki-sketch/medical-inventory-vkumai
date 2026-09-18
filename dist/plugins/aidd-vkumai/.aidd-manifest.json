@@ -55,7 +55,7 @@
     "scripts/lib/check-operation-contracts.mjs": "99a7c46c4235bee5601d748695d1198a493776adbc61918fc54bb7ebf64c57f8",
     "scripts/lib/check-scopes.json": "8717f5e7d9573b507fc74c6d948ec26ed037910ffc1517b5b0185c5594213b46",
     "scripts/lib/check-write-path-gaps.mjs": "e1fbe805d3d5de11c85f29ae1675c53861741b82f823c1c288c8d1bc6059ed50",
-    "scripts/lib/compare-config.mjs": "45db79edbdf5d0ff50c04a61168cee92f727dd506627d9923995bffe537fc4e0",
+    "scripts/lib/compare-config.mjs": "b5f77256c096d90a3dedf5feeae1af7a863205eb325cac2bff9567b10378e0da",
     "scripts/lib/compare-layers.mjs": "fa3c811ce4fc606272c1e9391ece09fc98ebb870b43deec79c03456143f2faf0",
     "scripts/lib/extract-api-rules.ts": "42277ee68e58b9d6df914e71ad1f17b1d40ca7fdb9725869ead763ec6ef14a26",
     "scripts/lib/fixture-guard.mjs": "dfc8ba2d7c61c1fb3a82c03beb53fe030a22f53fc63d48a032700bab63d15fd9",
