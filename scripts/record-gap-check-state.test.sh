@@ -111,6 +111,69 @@ assert_eq "$EXIT_CODE" "1" "非数値はexit 1"
 assert_contains "$OUT" "値が不正" "検証エラーメッセージが出る（生のjqエラーではない）"
 assert_eq "$(cat "$STATE")" "$BEFORE_STATE" "stateファイルが変更されていない"
 
+echo "=== scenario 9: git worktreeの中からbefore → 共有logs/の件数が記録され、after側と同じ場所を読む ==="
+# WHY: before側だけがcwd相対のlogs/を読み、after側（check-*-gap.sh）と記録側はresolve_log_dirで
+# 本体チェックアウトの共有logs/を読んでいた（issue #546の修正がbefore側に当たっていなかった）。
+# worktreeではbefore=0・after=全履歴になり、差分がexpectedと一致せず毎回警告が出る＝警告が
+# 記録漏れの有無を何も語らなくなる。env上書き（GAP_CHECK_*_LOG / AIDD_LOG_DIR）を使うと
+# 既定の解決経路を通らないので、このシナリオだけは使い捨ての実gitリポジトリ＋worktreeで確かめる。
+mkdir -p "$WORK_DIR/git-sandbox"
+# WHY: pwd -P で実体パスにする。macOSのmktempは/var（/private/varへのsymlink）配下を返し、
+# *-gap.js の `import.meta.url === file://argv[1]` 判定がsymlink経由だと一致せず、main()が
+# 走らないまま無出力・exit 0 になる（after側のassertが「何も出ない」で落ちて原因を見誤る）
+GIT_SANDBOX="$(cd "$WORK_DIR/git-sandbox" && pwd -P)"
+MAIN_REPO="$GIT_SANDBOX/main"
+LINKED_WT="$GIT_SANDBOX/wt"
+mkdir -p "$MAIN_REPO/scripts/lib" "$MAIN_REPO/.claude/workflows/lib"
+cp "$SCRIPT" "$SCRIPT_DIR/check-loop-observability-gap.sh" "$SCRIPT_DIR/check-agent-progress-gap.sh" \
+  "$MAIN_REPO/scripts/"
+cp "$SCRIPT_DIR/lib/resolve-log-dir.sh" "$MAIN_REPO/scripts/lib/"
+cp "$SCRIPT_DIR/../.claude/workflows/lib/loop-observability-gap.js" \
+  "$SCRIPT_DIR/../.claude/workflows/lib/agent-progress-gap.js" "$MAIN_REPO/.claude/workflows/lib/"
+git -C "$MAIN_REPO" init -q
+git -C "$MAIN_REPO" add -A
+git -C "$MAIN_REPO" -c user.name=test -c user.email=test@example.invalid -c core.hooksPath=/dev/null \
+  -c commit.gpgsign=false commit -q -m "sandbox"
+git -C "$MAIN_REPO" worktree add -q "$LINKED_WT" -b sandbox-wt
+
+# 共有logs/（本体チェックアウト側）: loop 3行、progressはdone/failedが2件
+mkdir -p "$MAIN_REPO/logs"
+printf '%s\n%s\n%s\n' '{"a":1}' '{"a":2}' '{"a":3}' > "$MAIN_REPO/logs/loop-observability.jsonl"
+printf '%s\n%s\n%s\n' \
+  '{"agent":"reviewer","status":"done"}' \
+  '{"agent":"reviewer","status":"running"}' \
+  '{"agent":"implementer","status":"failed"}' > "$MAIN_REPO/logs/agent-progress.jsonl"
+# おとり: worktree直下のlogs/（issue #546以前の死蔵ログに相当）。こちらを読んだら1/1になる
+mkdir -p "$LINKED_WT/logs"
+printf '%s\n' '{"a":"decoy"}' > "$LINKED_WT/logs/loop-observability.jsonl"
+printf '%s\n' '{"agent":"decoy","status":"done"}' > "$LINKED_WT/logs/agent-progress.jsonl"
+
+WT_STATE="$WORK_DIR/wt-state.json"
+set +e
+WT_OUT="$(env -u AIDD_LOG_DIR -u GAP_CHECK_LOOP_LOG -u GAP_CHECK_PROGRESS_LOG \
+  GAP_CHECK_STATE_FILE="$WT_STATE" bash "$LINKED_WT/scripts/record-gap-check-state.sh" before 2>&1)"
+WT_EXIT=$?
+set -e
+assert_eq "$WT_EXIT" "0" "worktree内のbeforeがexit 0"
+WT_BEFORE_LOOP="$(jq -r '.beforeLoopObservability // "null"' "$WT_STATE")"
+WT_BEFORE_PROGRESS="$(jq -r '.beforeAgentProgress // "null"' "$WT_STATE")"
+assert_eq "$WT_BEFORE_LOOP" "3" "共有logs/のloop行数=3（worktree直下のおとり=1ではない）"
+assert_eq "$WT_BEFORE_PROGRESS" "2" "共有logs/のdone/failed=2（worktree直下のおとり=1ではない）"
+
+# before側とafter側が同じ場所を読むなら、何も足していない時点の差分は0のはず（expected 0でgap無し）。
+# 片方の解決だけが変わる食い違いが再発すると、ここが hasGap:true で落ちる
+# WHY: after側はcdしないので resolve_log_dir は呼び出し時のcwdのgitリポジトリを見る（実運用では
+# Stop hookがプロジェクトルートへcdしてから呼ぶ）。cwdをサンドボックスのworktreeにしないと、
+# テストを起動した本物のリポジトリのlogs/を読んでしまう
+set +e
+WT_LOOP_GAP="$(cd "$LINKED_WT" && env -u AIDD_LOG_DIR bash scripts/check-loop-observability-gap.sh \
+  --before "$WT_BEFORE_LOOP" --expected 0 2>&1)"
+WT_PROGRESS_GAP="$(cd "$LINKED_WT" && env -u AIDD_LOG_DIR bash scripts/check-agent-progress-gap.sh \
+  --before "$WT_BEFORE_PROGRESS" --expected 0 2>&1)"
+set -e
+assert_contains "$WT_LOOP_GAP" '"hasGap":false' "before直後のloop-observability差分が0（beforeとafterが同じログを読む）"
+assert_contains "$WT_PROGRESS_GAP" '"hasGap":false' "before直後のagent-progress差分が0（beforeとafterが同じログを読む）"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
