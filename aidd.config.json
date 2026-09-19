@@ -107,7 +107,8 @@
     "invitesPerDay": 50,
     "authJudgmentTimeoutMs": 5000,
     "localLogRowsWarnAt": 800,
-    "pitfallTypesMinRows": 10
+    "pitfallTypesMinRows": 10,
+    "lotSearchLimit": 500
   },
   "stdoutSync": {
     "_comment": "出力してから process.exit() を呼ぶのに console.log のままでよいもの（C-051 / E-080）。scripts/lib/scan-stdout-exit.mjs が走査し、scripts/check-stdout-truncation.test.sh が「宣言に無い違反」「理由が空」「一度も当たらない宣言」を落とす。理由は『小さいから』で止めず、**なぜ今も要るか**が後から確かめられる形で書くこと",
