@@ -5,7 +5,10 @@ import Link from 'next/link'
 import type { LoanReturn, LoanReturnItem } from '@/types/order'
 import { formatJstDate, formatJstDateTime } from '@/lib/format-date'
 
-const STATUS_LABEL: Record<string, string> = {
+// WHY(Record<string, string>ではなくLoanReturn['status']を鍵にする、issue #809 レビュー指摘:
+//      型安全・データ層の整合 important): case-orders/page.tsx と同じ理由。union型を鍵にすれば
+//      status に新しい値が増えたときラベルの登録漏れをコンパイルエラーで検知できる
+const STATUS_LABEL: Record<LoanReturn['status'], string> = {
   draft: '下書き',
   returned: '返却済',
   cancelled: '取り消し済',
@@ -133,6 +136,7 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>返却日時</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>ステータス</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>作成日</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>詳細</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>操作</th>
               </tr>
             </thead>
@@ -146,6 +150,11 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
                   <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>{STATUS_LABEL[ret.status] ?? ret.status}</td>
                   <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                     {formatJstDate(ret.createdAt)}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <Link href={`/facilities/${id}/loan-returns/${ret.id}`} className="hover:underline" style={{ color: '#2563EB' }}>
+                      詳細を見る
+                    </Link>
                   </td>
                   <td className="px-6 py-4 text-sm">
                     {ret.status === 'cancelled' ? (
@@ -168,7 +177,7 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
                     折りたたまず常に出す（開く操作を挟むと「取り消せることに気づかない」） */}
                 {ret.items.length > 0 && (
                   <tr style={{ borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
-                    <td colSpan={4} className="px-6 py-3">
+                    <td colSpan={5} className="px-6 py-3">
                       <ul className="space-y-1">
                         {ret.items.map(item => (
                           <li key={item.id} className="flex items-center gap-4 text-sm" style={{ color: '#4B5563' }}>

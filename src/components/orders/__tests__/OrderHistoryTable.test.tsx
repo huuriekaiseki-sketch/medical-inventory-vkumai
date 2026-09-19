@@ -89,4 +89,39 @@ describe('OrderHistoryTable', () => {
     const { container } = render(<OrderHistoryTable items={[makeItem()]} />)
     expect(container.querySelector('.overflow-x-auto')).not.toBeNull()
   })
+
+  // WHY(issue #809 決定C=(3)): /orders は施設別一覧(最新50件)より古い記録も含む唯一の入口。
+  //      症例発注・短貸返却の行には詳細ページへのリンクを出す(item.facilityIdを使う)。
+  it('症例発注・短貸返却の行には詳細ページへのリンクを出す(item.facilityIdを使う)', () => {
+    render(
+      <OrderHistoryTable
+        items={[
+          makeItem({ id: 'o-1', kind: 'case_order', facilityId: 'f-9' }),
+          makeItem({ id: 'o-2', kind: 'loan_return', facilityId: 'f-9' }),
+        ]}
+      />
+    )
+
+    expect(screen.getAllByRole('link', { name: '詳細を見る' })[0]).toHaveAttribute(
+      'href',
+      '/facilities/f-9/case-orders/o-1'
+    )
+    expect(screen.getAllByRole('link', { name: '詳細を見る' })[1]).toHaveAttribute(
+      'href',
+      '/facilities/f-9/loan-returns/o-2'
+    )
+  })
+
+  it('消耗品発注・短貸発注の行には詳細リンクを出さない(対象外)', () => {
+    render(
+      <OrderHistoryTable
+        items={[
+          makeItem({ id: 'o-3', kind: 'consumable_order' }),
+          makeItem({ id: 'o-4', kind: 'loan_order' }),
+        ]}
+      />
+    )
+
+    expect(screen.queryByRole('link', { name: '詳細を見る' })).not.toBeInTheDocument()
+  })
 })

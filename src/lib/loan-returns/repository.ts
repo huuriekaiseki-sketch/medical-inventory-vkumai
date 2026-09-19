@@ -69,6 +69,23 @@ export function mapItem(row: LoanReturnItemRow): LoanReturnItem {
   }
 }
 
+// WHY(issue #809 Set A): 一覧・作成・単体取得の3箇所で同じ行→型の写しを書いていたのを
+//      1つに統合する（SPEC.md Part2「同じ写しを2か所に書かない」）。明細行は呼び出し元が
+//      抽出してから渡す（ネストのキー名が listLoanReturns は loan_return_items、
+//      createLoanReturn の RPC 応答は items と異なるため）
+export function mapLoanReturn(row: LoanReturnRow, itemRows: LoanReturnItemRow[]): LoanReturn {
+  return {
+    id: asString(row.id),
+    facilityId: asString(row.facility_id),
+    returnDatetime: asString(row.return_datetime),
+    status: asEnum(row.status, STATUSES, 'draft'),
+    items: itemRows.map(mapItem),
+    createdAt: asString(row.created_at),
+    updatedAt: asString(row.updated_at),
+    loanOrderId: asOptionalString(row.loan_order_id),
+  }
+}
+
 export async function listLoanReturns(
   db: SupabaseClient,
   facilityId: string,
@@ -103,16 +120,30 @@ export async function listLoanReturns(
     rows = rows.slice(offset, offset + limit)
   }
 
-  return rows.map(r => ({
-    id: asString(r.id),
-    facilityId: asString(r.facility_id),
-    returnDatetime: asString(r.return_datetime),
-    status: asEnum(r.status, STATUSES, 'draft'),
-    items: (r.loan_return_items ?? []).map(mapItem),
-    createdAt: asString(r.created_at),
-    updatedAt: asString(r.updated_at),
-    loanOrderId: asOptionalString(r.loan_order_id),
-  }))
+  return rows.map(r => mapLoanReturn(r, r.loan_return_items ?? []))
+}
+
+/**
+ * 1件取得（issue #809 Set A、詳細ページ用）。
+ *
+ * WHY(施設IDを引数に取らない「先引き」): SPEC.md Part2で、repository と route の認可の形が
+ *      両立しない2案で書かれていた指摘を受け、先引きに統一した。見つからない（存在しない・
+ *      RLSで見えない）場合はnullを返すだけで、施設境界の判定はroute側の
+ *      requireFacilityAccess(db, user, record.facilityId) に委ねる。
+ *
+ * WHY(maybeSingle): 0件はエラーではなくnullとして扱いたい（RLSで見えない行を「存在しない」と
+ *      区別しない。存在の有無を漏らさないため）。
+ */
+export async function getLoanReturn(db: SupabaseClient, id: string): Promise<LoanReturn | null> {
+  const { data, error } = await db
+    .from('loan_returns')
+    .select(`${LOAN_RETURN_COLUMNS}, loan_return_items(${LOAN_RETURN_ITEM_COLUMNS})`)
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return null
+  const row = data as LoanReturnRow & { loan_return_items?: LoanReturnItemRow[] }
+  return mapLoanReturn(row, row.loan_return_items ?? [])
 }
 
 // WHY: 「未返却」判定（issue #20）は loan_orders 側から loan_returns.loan_order_id への
@@ -189,16 +220,7 @@ export async function createLoanReturn(db: SupabaseClient, facilityId: string, i
   const r = data as LoanReturnRow & { items?: unknown }
   const itemRows = Array.isArray(r.items) ? (r.items as LoanReturnItemRow[]) : []
 
-  return {
-    id: asString(r.id),
-    facilityId: asString(r.facility_id),
-    returnDatetime: asString(r.return_datetime),
-    status: asEnum(r.status, STATUSES, 'draft'),
-    items: itemRows.map(mapItem),
-    createdAt: asString(r.created_at),
-    updatedAt: asString(r.updated_at),
-    loanOrderId: asOptionalString(r.loan_order_id),
-  }
+  return mapLoanReturn(r, itemRows)
 }
 
 /**

@@ -22,7 +22,10 @@ import { createServiceRoleClientAccessor } from '@/lib/security/service-role-cli
 //      （誤記録より漏れを選ぶ）。例外は飲み込んで logServerError に残す。
 //      docs/agents/privileged-write-rulebook.md の W-023。
 
-export type HiddenRowTable = 'facilities' | 'hospital_prices'
+// WHY(case_orders・loan_returns、issue #809): GET /api/case-orders/[id]・GET /api/loan-returns/[id]
+//      も「ID指定で1件取る」経路なので、facilities/hospital_pricesと同じ穴（RLSが黙って0件を
+//      返す拒否）を持つ。SPEC.md Part2 受け入れ条件に従い、この表に足す
+export type HiddenRowTable = 'facilities' | 'hospital_prices' | 'case_orders' | 'loan_returns'
 
 export interface HiddenRowDenial {
   table: HiddenRowTable
@@ -48,7 +51,7 @@ async function lookupFacilityId(
     if (error || !data) return null
     return data.id
   }
-  const { data, error } = await db.from('hospital_prices').select('facility_id').eq('id', id).maybeSingle()
+  const { data, error } = await db.from(table).select('facility_id').eq('id', id).maybeSingle()
   if (error || !data) return null
   return data.facility_id
 }
