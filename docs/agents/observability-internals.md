@@ -366,6 +366,56 @@ security/ux/performance5軸の再発見）の指摘であり、Sweepフェーズ
   ケースはこの指標では測れない）。Sweepの見落とし率（recall）を測る別issue（#431）との
   二本立ての片翼として扱うこと
 
+### baseline（2026-09-19 時点、issue #528 の 1 項目目）
+
+**これは閾値ではない。** issue #796 で Find のプロンプトを変えた（PR #801）ので、その**変更前**の値を
+比較の基準として git に残す。閾値の提案は、変更後の実行が数本たまってから人と決める（issue #528）。
+元データは `logs/find-av-precision.jsonl`（gitignore 対象）にあり、ここに書かないと失われうる。
+
+deep 実行 9 本（2026-07-21〜09-18）。「AV 生存」は `survivedCount - autoSurvivedMinorCount`
+（minor は AV に回らず自動で生存扱いになるので除く。`survivalRate` もこの数で計算されている）。
+
+| 実行日 | feature | runId | Find 指摘 | AV 検証 | AV 生存 | 生存率 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 07-21 | products-distributor-products-list | wf_65bfb38a-1cd | 69 | 45 | 15 | 33% |
+| 08-26 | admin-status-rpc | wf_afe413e9-6f4 | 55 | 43 | 17 | 40% |
+| 08-28 | issue-675-loan-return-duplicate | wf_b14041be-8ea | 71 | 61 | 34 | 56% |
+| 08-30 | issue-684-aal2-integration-test | wf_17165449-33b | 44 | 33 | 9 | 27% |
+| 08-30 | issue-674-stale-worktrees-hook | wf_a92ee6e9-561 | 43 | 33 | 15 | 45% |
+| 08-30 | issue-681-middleware-to-proxy | wf_610ef144-0d6 | 45 | 37 | 13 | 35% |
+| 09-13 | issue-757-24-proxy-admin-denial | wf_57bc218f-fe0 | 53 | 37 | 16 | 43% |
+| 09-18 | issue-791-access-denial-silent-drop | wf_c6165b63-34e | 44 | 32 | 5 | 16% |
+| 09-18 | issue-793-hidden-row-denial-env | wf_45c3967f-aca | 38 | 30 | 4 | 13% |
+| | **合計** | | 462 | 351 | 128 | **36%** |
+
+1 本あたり: AV 検証 30〜61 件（平均 39）、AV 生存 4〜34 件（平均 約 14）、生存率 13〜56%（中央値 35%）。
+
+| lens | AV 検証 | AV 生存 | 生存率 |
+| --- | --- | --- | --- |
+| security | 83 | 40 | 48% |
+| logic | 101 | 46 | 46% |
+| ux | 44 | 17 | 39% |
+| data | 70 | 19 | 27% |
+| performance | 53 | 6 | 11% |
+
+**PR #801 のあとに見ること**（`npm run find-av-precision-summary`）: 1 本あたりの AV 検証が
+20 前後まで下がり、AV 生存が上の水準（平均 約 14）から大きく下がらないこと。
+生存が大きく下がったら「安くしたが見つからなくなった」なので PR #801 を revert する。
+
+**この baseline の読み方の注意**:
+- **9 本中 8 本は後から復元した値**。当時は 1 本しか記録されていなかった。`aidd-phase1-router` 経由で
+  deep を起動すると戻り値が `result.result.findAvPrecision` に入る（直接起動なら `result.findAvPrecision`）。
+  2026-09-19 に `~/.claude/projects/*/workflows/wf_*.json` から取り出し、`runId`・`runStartedAt`・
+  `backfilledFrom` を付けて記録した。**記録漏れ検知の hook は warning-only で、8 回とも記録に結びつかなかった**
+  （hook が鳴ったかどうか自体は未確認）
+- `wf_b14041be-8ea` は resume のキャッシュ再生（AV 61 体がトークン 0）。裁定結果は有効だが費用の参考にはならない
+- 生存率は変更の性質に強く左右される。直近 2 本（`src/lib/security/` の小さな変更）は 13〜16% で、
+  これは Find の指摘数が変更規模と無関係にほぼ一定（38〜71 件）なため。**全体の 36% を
+  「Find の precision」として一般化しない**
+- #791 より前の一部の実行では、Find に渡った仕様書が要約版（「詳細は SPEC.md 記載」）で、AV は
+  ディスク上の完全版を読んで反駁していた。「仕様書に既に書いてある」型の反駁を水増ししている可能性がある
+- AV の反駁が正しいかは独立に検証していない（1 本ぶん 27 件の理由を読み、行番号つきで具体的だったことを確認したのみ）
+
 ## Sweep recallベンチマーク（issue #431）
 
 issue #419のような設定変更（effort/model）に対して「精度が落ちていないか」を検証する手段が
