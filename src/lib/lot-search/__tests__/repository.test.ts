@@ -3,21 +3,38 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { searchLotItems, LOT_SEARCH_LIMIT } from '@/lib/lot-search/repository'
 import { buildIlikeValueUnquoted } from '@/lib/search/like-pattern'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase のクエリビルダはメソッドチェーンで、実物の型（PostgrestFilterBuilder）はジェネリクスが深く、テスト用のモックでは再現できない。このモック関数の戻り値に限って any を使う
-function makeChainableQuery(result: { data: unknown; error: unknown }): any {
-  const builder: Record<string, unknown> = {
+type QueryResult = { data: unknown; error: unknown }
+
+// WHY(any を使わない): 実物の型（PostgrestFilterBuilder）はジェネリクスが深くモックでは再現できないが、
+//      このテストが使うのは「6 つのメソッドが自分自身を返すこと」と「await できること」だけ。
+//      その形だけを型にすれば足りる。最初は戻り値を any にして lint の無効化コメントを足していたが、
+//      逃がし口の上限（scripts/check-exemptions.test.sh）を 1 件超えて CI が落ちた。上限を上げずに逃がし口を消した。
+//      （この検査はコメントの中の文字列も数えるので、ここに無効化コメントの綴りそのものを書かないこと）
+type ChainMethod = ReturnType<typeof vi.fn<() => ChainableQuery>>
+type ChainableQuery = {
+  select: ChainMethod
+  eq: ChainMethod
+  not: ChainMethod
+  ilike: ChainMethod
+  order: ChainMethod
+  limit: ChainMethod
+  then: (resolve: (value: QueryResult) => unknown) => unknown
+}
+
+function makeChainableQuery(result: QueryResult): ChainableQuery {
+  const builder: ChainableQuery = {
     select: vi.fn(() => builder),
     eq: vi.fn(() => builder),
     not: vi.fn(() => builder),
     ilike: vi.fn(() => builder),
     order: vi.fn(() => builder),
     limit: vi.fn(() => builder),
-    then: (resolve: (value: { data: unknown; error: unknown }) => unknown) => resolve(result),
+    then: (resolve) => resolve(result),
   }
   return builder
 }
 
-type TableResults = Record<string, { data: unknown; error: unknown }>
+type TableResults = Record<string, QueryResult>
 
 function makeMockDb(tableResults: TableResults): {
   db: SupabaseClient

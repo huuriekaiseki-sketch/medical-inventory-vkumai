@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { optionalText, requiredText } from '@/lib/validation/text-limits'
+import { optionalText, requiredText, TEXT_LIMITS } from '@/lib/validation/text-limits'
 import { UUID_PATTERN } from '@/lib/validation/uuid'
 import { FACILITY_ROLES } from '@/types/role'
 
@@ -283,13 +283,19 @@ export const consumableOrderInputSchema = z.object({
  *      エラー表示」に反し、実質的に施設内の全ロットが検索結果として漏れる）。
  *      zod の `.trim()` はチェーン内で先に評価されるトランスフォームなので、ここで先に
  *      空白を落としてから min/max を判定すれば、空白だけの入力は 400 で弾かれる。
+ *
+ * WHY(上限を数字で書かない): 検索語の上限は**保存されている lot の上限と同じ**でなければ意味が無い
+ *      （保存値より短ければ引けないロットが出て、長ければ無駄に受ける）。出どころは
+ *      aidd.config.json の limits.textLength.lot の 1 か所で、`scripts/check-text-length-consistency.test.sh` が
+ *      ここに数字の直書きが増えたら落とす（最初の実装は 100 を直書きしていて、その検査に落ちた）
  */
+const LOT_LENGTH_MESSAGE = `1〜${TEXT_LIMITS.lot} 字で入力してください`
 export const lotSearchQuerySchema = z.object({
   lot: z
     .string({ error: 'ロット番号は必須です' })
     .trim()
-    .min(1, { error: '1〜100 字で入力してください' })
-    .max(100, { error: '1〜100 字で入力してください' }),
+    .min(1, { error: LOT_LENGTH_MESSAGE })
+    .max(TEXT_LIMITS.lot, { error: LOT_LENGTH_MESSAGE }),
 })
 
 export type ConsumableInputParsed = z.infer<typeof consumableInputSchema>
