@@ -149,7 +149,7 @@
     "scripts/otel-debug-collector.mjs": "57b1f14c3e3487326e43cd919cb87364fcc78b730865d89976f1c02e600da832",
     "scripts/queue-recovery-task.sh": "9d20fdd7060dc27cc909505c012d9f9d95a8fd928c73d210af85ff230d61677e",
     "scripts/queue-recovery-task.test.sh": "07f3d5f23a237997495d3bce1d34bcb128f4631bbe54ede712a965eef6b72b0e",
-    "scripts/record-gap-check-state.test.sh": "11366818b4d922375a0b8e4c0f7d20d9644029d7a7baa914cfdfe18e2c3ca502",
+    "scripts/record-gap-check-state.test.sh": "5d45a8c401cded8def0bf599ec6363b4f6d0d92bec936e5cb7e77465dc18109b",
     "scripts/record-test-failure.sh": "ca4414bb152debff8d4dea9a8c5839563da8bf62e7e9ec9c957cbd4ba55fefe8",
     "scripts/rehearse-merge.sh": "0a519045a7e5a979cc2cc84c891ee673e5233bd41bef25675593ddcc374e11ee",
     "scripts/rehearse-merge.test.sh": "0ceb319b46d9dc213542e3c473ff685ee3574d0935dfef262e2295035dc60347",

@@ -132,7 +132,7 @@ cp "$SCRIPT_DIR/../.claude/workflows/lib/loop-observability-gap.js" \
   "$SCRIPT_DIR/../.claude/workflows/lib/agent-progress-gap.js" "$MAIN_REPO/.claude/workflows/lib/"
 git -C "$MAIN_REPO" init -q
 git -C "$MAIN_REPO" add -A
-git -C "$MAIN_REPO" -c user.name=test -c user.email=test@example.invalid -c core.hooksPath=/dev/null \
+git -C "$MAIN_REPO" -c user.name=test -c user.email=test@example.com -c core.hooksPath=/dev/null \
   -c commit.gpgsign=false commit -q -m "sandbox"
 git -C "$MAIN_REPO" worktree add -q "$LINKED_WT" -b sandbox-wt
 
