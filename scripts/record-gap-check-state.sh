@@ -26,15 +26,25 @@ set -euo pipefail
 #
 # 環境変数（テスト用の注入ポイント）:
 #   GAP_CHECK_STATE_FILE   stateファイルパス（既定 .aidd/gap-check-state.json）
-#   GAP_CHECK_LOOP_LOG     loop-observabilityログ（既定 logs/loop-observability.jsonl）
-#   GAP_CHECK_PROGRESS_LOG agent-progressログ（既定 logs/agent-progress.jsonl）
+#   GAP_CHECK_LOOP_LOG     loop-observabilityログ（既定 <resolve_log_dir>/loop-observability.jsonl）
+#   GAP_CHECK_PROGRESS_LOG agent-progressログ（既定 <resolve_log_dir>/agent-progress.jsonl）
+#   AIDD_LOG_DIR           resolve_log_dir の差し替え（scripts/lib/resolve-log-dir.sh 参照）
 #   GAP_CHECK_NOW_EPOCH    現在時刻epoch秒の上書き
 
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
+
+# WHY(2026-09-19): 既定のログ位置はafter側（check-loop-observability-gap.sh /
+# check-agent-progress-gap.sh）と同じ resolve_log_dir で解決する。以前はcwd相対の logs/ を
+# 読んでいたため、git worktreeではbefore=worktree直下（ほぼ0件）・after=全worktree共有の
+# logs/（issue #546）と別々の場所を数え、差分がexpectedと決して一致しなかった。
+# cd の後でsourceするので、resolve_log_dir はこのスクリプトが属するリポジトリを見る
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+LOG_DIR="$(resolve_log_dir)"
 
 STATE_FILE="${GAP_CHECK_STATE_FILE:-.aidd/gap-check-state.json}"
-LOOP_LOG="${GAP_CHECK_LOOP_LOG:-logs/loop-observability.jsonl}"
-PROGRESS_LOG="${GAP_CHECK_PROGRESS_LOG:-logs/agent-progress.jsonl}"
+LOOP_LOG="${GAP_CHECK_LOOP_LOG:-$LOG_DIR/loop-observability.jsonl}"
+PROGRESS_LOG="${GAP_CHECK_PROGRESS_LOG:-$LOG_DIR/agent-progress.jsonl}"
 
 usage() {
   echo "Usage: $0 before" >&2

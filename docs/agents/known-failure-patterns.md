@@ -336,6 +336,35 @@ globパターン（`*`等を含むパス）を渡していないか確認する�
 足りないのは「PR を出す前に気づく」側で、`scripts/derive-test-selection.sh` の表は hook 回帰を
 「毎回（CI）」としか言わず、`.claude/workflows/` に触れたときに生成物の作り直しを名指ししない。
 
+### 前後の差分を取る検査で、before 側と after 側が別々の場所を数える（2026-09-19、gap check）
+
+**チェック内容:** 「実行前の件数」と「実行後の件数」の差で判定する検査は、**両側が同じ解決関数で
+同じファイルを読んでいるか**を確かめる。ログの位置は `scripts/lib/resolve-log-dir.sh` の
+`resolve_log_dir`（全 worktree 共有の `logs/`。issue #546）を唯一の入口にし、`logs/xxx.jsonl` を
+cwd 相対で直接書かない。共有の解決関数を後から入れたときは、**書く側・after 側だけでなく
+before 側（控える側）にも当たっているか**を `grep -rn -e 'logs/' scripts/` で洗う。
+
+**なぜ再発したか:** issue #546 で `logs/` を全 worktree 共有にしたとき、記録する側
+（`log-agent-progress.sh` 等）と after 側（`check-loop-observability-gap.sh` /
+`check-agent-progress-gap.sh`）など 13 本は `resolve_log_dir` に揃えたが、その 4 日前に入っていた
+`scripts/record-gap-check-state.sh`（issue #488）だけが置き換えから漏れ、既定値が cwd 相対の
+`logs/` のまま残った。
+git worktree では before が worktree 直下（ほぼ 0 件）、after が共有 `logs/`（2026-09-19 実測で
+3,421 行 / done・failed 346 件）を数えるので、差分が「全履歴」になり expected と**決して一致しない**。
+判定は `actual !== expected` なので、**記録漏れがあっても無くても同じ警告が毎回出る**
+——警告が記録漏れについて何も語らなくなり、本物の漏れが埋もれる。
+回帰テストは `GAP_CHECK_LOOP_LOG` / `GAP_CHECK_PROGRESS_LOG` を必ず注入していたので、
+**既定の解決経路は一度もテストを通っていなかった**（`check-design-pitfalls.md` の C-042:
+測る環境が実際に動く環境と違う）。本体チェックアウトでは cwd 相対と共有 `logs/` が同じ場所を
+指すため、worktree で回すまで差が出ない。
+
+**機械検知:** あり（`scripts/record-gap-check-state.test.sh` scenario 9）。使い捨ての git リポジトリと
+`git worktree add` した worktree を作り、env 上書き無しで before を実行して共有 `logs/` の件数が
+入ること（worktree 直下のおとりログを読まないこと）、続けて after 側の 2 本を `--expected 0` で
+回して差分が 0 になること（＝before と after が同じ場所を読むこと）を確かめる。片側の解決だけが
+変わるとここが落ちる。**限界:** この 2 本の組にしか効かない。別の「前後差分」検査を足したときに
+同じ食い違いを止める汎用の門は無い。
+
 ### hookスクリプトのパス正規化漏れとbashの単語境界表現の落とし穴
 
 **チェック内容:** リポジトリパスへの正規表現照合を書く場合、(a) `tool_input.file_path` の
