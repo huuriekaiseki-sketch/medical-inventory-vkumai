@@ -169,6 +169,11 @@
           "type": "integer",
           "minimum": 1,
           "description": "「検査の設計で間違えやすい型」の表（C-xxx）に、少なくとも何行あるかの下限。表の読み取りが壊れて 0 件になっても気づけるようにするための空振り防止で、**型を増やす目標値ではない**。導入先が実際に踏んで書き足した数に合わせて上げていく（ratchet）。この値を書かない導入先では、型の表そのものを持っていないものとして検査を飛ばす"
+        },
+        "lotSearchLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "ロット検索（issue #803）の結果件数の上限。既存の横断検索（KEYWORD_SCAN_LIMIT／KIND_LIMIT）と同じ 500 に揃えた値。`src/lib/lot-search/repository.ts` の `LOT_SEARCH_LIMIT` がここから読む（唯一の出どころ）"
         }
       }
     },

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { optionalText, requiredText } from '@/lib/validation/text-limits'
+import { optionalText, requiredText, TEXT_LIMITS } from '@/lib/validation/text-limits'
 import { UUID_PATTERN } from '@/lib/validation/uuid'
 import { FACILITY_ROLES } from '@/types/role'
 
@@ -265,6 +265,40 @@ export const consumableOrderInputSchema = z.object({
   clientRequestId,
 })
 
+/**
+ * ロット検索クエリ（issue #803 Set A）
+ *
+ * WHY(requiredText ではなく専用スキーマ): ロット番号は「1〜100字」という固定値。
+ *      他のテキスト入力（productName など）と違い、業務の変数ではなく
+ *      この検索機能の仕様に固い値。optionalText / requiredText の体系には入らない。
+ *      上限は決定 4 で「500 件（他の検索と揃える）」に決まった value の長さではなく、
+ *      入力フィールドの長さ制限。UI と API 両方で `normalizeLotInput` を呼ぶので、
+ *      長さの検査は route 側でもアプリ側でも弾ける。
+ *
+ * WHY(.trim() を .min()/.max() より先に置く): route は「スキーマ検証 → normalizeLotInput
+ *      （前後空白を落とす）」の順で処理する。ここで生の空白込み文字列の長さだけを見ると、
+ *      空白だけの入力（例: " "）が min(1) を通過してしまい、後段の trim で空文字列になる。
+ *      空文字列は buildIlikeValueUnquoted で `%%` になり、ILIKE のワイルドカードとして
+ *      「その施設の lot が非 NULL の全行」に一致してしまう（受け入れ条件「入力が空のときは
+ *      エラー表示」に反し、実質的に施設内の全ロットが検索結果として漏れる）。
+ *      zod の `.trim()` はチェーン内で先に評価されるトランスフォームなので、ここで先に
+ *      空白を落としてから min/max を判定すれば、空白だけの入力は 400 で弾かれる。
+ *
+ * WHY(上限を数字で書かない): 検索語の上限は**保存されている lot の上限と同じ**でなければ意味が無い
+ *      （保存値より短ければ引けないロットが出て、長ければ無駄に受ける）。出どころは
+ *      aidd.config.json の limits.textLength.lot の 1 か所で、`scripts/check-text-length-consistency.test.sh` が
+ *      ここに数字の直書きが増えたら落とす（最初の実装は 100 を直書きしていて、その検査に落ちた）
+ */
+const LOT_LENGTH_MESSAGE = `1〜${TEXT_LIMITS.lot} 字で入力してください`
+export const lotSearchQuerySchema = z.object({
+  lot: z
+    .string({ error: 'ロット番号は必須です' })
+    .trim()
+    .min(1, { error: LOT_LENGTH_MESSAGE })
+    .max(TEXT_LIMITS.lot, { error: LOT_LENGTH_MESSAGE }),
+})
+
 export type ConsumableInputParsed = z.infer<typeof consumableInputSchema>
 export type CaseOrderInputParsed = z.infer<typeof caseOrderInputSchema>
 export type LoanOrderInputParsed = z.infer<typeof loanOrderInputSchema>
+export type LotSearchQueryParsed = z.infer<typeof lotSearchQuerySchema>

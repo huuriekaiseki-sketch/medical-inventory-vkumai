@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { proxy } from '../proxy'
+import { proxy, config } from '../proxy'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Mock createServerClient
@@ -354,6 +354,49 @@ describe('proxy', () => {
 
       expect(response?.status).toBe(307)
       expect(response?.headers.get('location')).toContain('/mfa-challenge')
+    })
+
+    // WHY(issue #803 の受け入れ条件「aal1 で『0 件』を返さない」): 明細の SELECT ポリシーは has_aal2() を
+    //      要求するので、aal1 のセッションが route まで届くと RLS が全行を隠し、**エラーではなく空の結果**になる。
+    //      ロット検索で空は「該当なし」と読まれる＝リコールの取りこぼし。route は既存の施設スコープの
+    //      読み取り API と同じく aal を自分では見ないので、**届かせないのは proxy のこのガードだけ**。
+    //      このテストは proxy() を直接呼ぶので、**Next.js が呼ぶ前に当てる matcher は通らない**。
+    //      matcher が /api/* を含むことは、すぐ下の「matcher が API のパスを含む」が別に固定している
+    //      （DB 層で空になること自体は lot-search-rls-idor.integration.test.ts が対で固定している）
+    it('aal1→aal2が必要なユーザーがロット検索の API を直接呼ぶ→ route に届かず /mfa-challenge へ（0 件を返させない）', async () => {
+      const { createServerClient } = await import('@supabase/ssr')
+      vi.mocked(createServerClient).mockReturnValueOnce(
+        makeSupabaseClientWithAdminRpc(
+          { id: 'mfa-user', email: 'mfa@example.com' },
+          false,
+          false,
+          { currentLevel: 'aal1', nextLevel: 'aal2' }
+        ) as unknown as ReturnType<typeof createServerClient>
+      )
+
+      const response = await proxy(
+        new NextRequest(new URL('http://localhost:3000/api/facilities/f-1/lot-search?lot=ABC'))
+      )
+
+      expect(response?.status).toBe(307)
+      expect(response?.headers.get('location')).toContain('/mfa-challenge')
+    })
+
+    // WHY(issue #803): 上のテストを含め、このファイルのテストは全部 proxy() を直接呼ぶ。matcher から api が
+    //      外れると、**施設スコープの読み取り API すべてで MFA ガードが無音で外れる**（route は aal を見ず、
+    //      RLS は aal1 に空を返すだけなので、どのテストも落ちない）。matcher の中身そのものを見る。
+    //      Next.js の matcher は path-to-regexp だが、この 1 本は素の正規表現として読める形なので RegExp で当てる。
+    //      形が変わってこの読み方が成り立たなくなったら、下の「静的ファイルは外れる」の対照が先に落ちる
+    it('matcher が API のパスを含む（外れると全 API で MFA ガードが無音で外れる）', () => {
+      expect(config.matcher).toHaveLength(1)
+      const re = new RegExp(`^${config.matcher[0]}$`)
+
+      expect(re.test('/api/facilities/f-1/lot-search')).toBe(true)
+      expect(re.test('/api/case-orders')).toBe(true)
+      expect(re.test('/facilities/f-1/lot-search')).toBe(true)
+      // 対照: 除外しているものは外れる（何でも true を返す正規表現になっていないこと）
+      expect(re.test('/_next/static/chunk.js')).toBe(false)
+      expect(re.test('/logo.png')).toBe(false)
     })
 
     it('aal1→aal2が必要なユーザーが /mfa-challenge 自体にアクセス→ そのまま通す', async () => {

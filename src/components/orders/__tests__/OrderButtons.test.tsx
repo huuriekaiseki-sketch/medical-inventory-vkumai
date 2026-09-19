@@ -61,4 +61,26 @@ describe('OrderButtons', () => {
     expect(screen.queryByRole('link', { name: '症例発注' })).not.toBeInTheDocument()
     expect(screen.queryByText('閲覧のみの権限のため、発注・返却はできません。')).not.toBeInTheDocument()
   })
+
+  // WHY(issue #803 決定8=(a)): ロット検索は viewer にも許可。staff/admin と同じく
+  // 施設のメンバーであれば表示する(未所属nullでは表示しない)
+  it('viewerの場合、ロット検索リンクは表示される(issue #803)', () => {
+    render(<OrderButtons facilityId="f-1" role="viewer" />)
+    expect(screen.getByRole('link', { name: 'ロット検索' })).toHaveAttribute('href', '/facilities/f-1/lot-search')
+  })
+
+  it('staffの場合も、ロット検索リンクは表示される(issue #803)', () => {
+    render(<OrderButtons facilityId="f-1" role="staff" />)
+    expect(screen.getByRole('link', { name: 'ロット検索' })).toHaveAttribute('href', '/facilities/f-1/lot-search')
+  })
+
+  it('未所属(null)の場合、ロット検索リンクは表示されない(issue #803)', () => {
+    render(<OrderButtons facilityId="f-1" role={null} />)
+    expect(screen.queryByRole('link', { name: 'ロット検索' })).not.toBeInTheDocument()
+  })
+
+  it('role取得中(undefined)は、ロット検索リンクも表示されない(issue #803)', () => {
+    render(<OrderButtons facilityId="f-1" role={undefined} />)
+    expect(screen.queryByRole('link', { name: 'ロット検索' })).not.toBeInTheDocument()
+  })
 })
