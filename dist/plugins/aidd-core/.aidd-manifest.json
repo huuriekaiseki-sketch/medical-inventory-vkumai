@@ -23,7 +23,7 @@
     "bin/show-agent-status.sh": "bf6310e479e632bc1a0e5c8115d4f255645fd263d781703dd26f1b78ecdffdd2",
     "evidence/vkumai-2026-09-05.md": "7962b68d469c89879f2efd4b162537b158c782ea6ea9f2d31996e22c624bbc4e",
     "hooks/hooks.json": "c4a41fcc082c747a3c79a125f975009ab2735782a457dd28eba31e9f252094af",
-    "schema/aidd-config.schema.json": "7196890ef33d49fdc5996571bccc938f1e7a525fadf97ce5571dc6e0fe797f41",
+    "schema/aidd-config.schema.json": "c4817f8c438dcf3f3ef33681c5d560eeef773df08c200f1d4d37b836c6819b61",
     "scripts/check-access-review-staleness.sh": "4185028711c70e3d193ea43d1e54a07f22f90e1ef9e75da026814180e6dd72db",
     "scripts/check-access-review-staleness.test.sh": "5284958072ca48ef40a32c926da3bcbcf9044878b156bf7da99ef7442ed03def",
     "scripts/check-agent-output.test.sh": "ca359f7f245e6372ee6fffd4adfa16f33136c53da644fe127113ef5a81211a4b",

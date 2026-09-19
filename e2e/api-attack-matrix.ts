@@ -132,6 +132,11 @@ export const ATTACK_MATRIX: Record<string, RouteAttacks> = {
   '/api/facilities/[id]/my-role': {
     GET: { pathId: 'facilityA', note: '未所属なら role null。施設 A の存在は施設マスタとして非分離' },
   },
+  // ロット検索（issue #803）。認可は requireFacilityAccess のみ（ロールで分けない、決定8=(a)）。
+  // 施設 B の利用者が施設 A のロットを検索しても、患者情報を含む明細が一切出ないことを測る（P-013）
+  '/api/facilities/[id]/lot-search': {
+    GET: { pathId: 'facilityA', query: { lot: 'LOT' }, note: '施設 A の明細が施設 B の利用者には出ない（P-013）。応答は items/truncated のみで患者情報を含まない' },
+  },
 
   // 商品マスタ（参照は非分離、書き込みは admin のみ）。
   // WHY(2026-09-09 に weak をやめた): body に `ref` が無く入口の検証で 400 になっていたため、

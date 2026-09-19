@@ -303,3 +303,47 @@ export type OrdersApiResponse = {
 export type OrdersApiErrorResponse = {
   error: string
 }
+
+/**
+ * ロット検索の結果要素型（issue #803 Set A）
+ *
+ * WHY(患者フィールドなし): 決定 6 として「一覧に患者の情報を出さない」を採用。
+ *      症例発注と短貸返却、どちらから出た明細かは `kind` で区別。
+ *      出どころが 2 種類なので、親の ID も保持（行から元の発注/返却へ辿るため）
+ */
+export type LotSearchResultItem = {
+  kind: 'case_order' | 'loan_return'
+  itemId: string
+  parentId: string
+  lot: string
+  jan: string
+  quantity: number
+  /** 症例日時（case_orders.case_datetime）または返却日時（loan_returns.return_datetime）の ISO 文字列 */
+  occurredAt: string
+}
+
+/**
+ * GET /api/facilities/[id]/lot-search のクエリパラメータ（パース・バリデーション後の型）
+ * issue #803 Set B
+ */
+export type LotSearchApiQuery = {
+  facilityId: string
+  lot: string
+}
+
+/**
+ * GET /api/facilities/[id]/lot-search のレスポンス型（成功時）
+ * issue #803 Set B: route.ts が返すペイロード
+ */
+export type LotSearchApiResponse = {
+  items: LotSearchResultItem[]
+  truncated: boolean
+}
+
+/**
+ * GET /api/facilities/[id]/lot-search のエラーレスポンス型
+ * 400: lot 空・101字以上, 401: 未認証, 403: 非メンバー, 500: サーバーエラー
+ */
+export type LotSearchApiErrorResponse = {
+  error: string
+}
