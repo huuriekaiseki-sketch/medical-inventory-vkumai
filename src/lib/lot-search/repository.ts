@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { asString, asNumber } from '@/lib/mapping'
 import { buildIlikeValueUnquoted } from '@/lib/search/like-pattern'
-import type { LotSearchResultItem } from '@/types/order'
+import type { LotSearchCaseOrderItem, LotSearchLoanReturnItem, LotSearchResultItem } from '@/types/order'
 import limitsConfig from '../../../aidd.config.json'
 
 // WHY(決定4・SPEC Part1): 既存の横断検索（KIND_LIMIT）と同じ500件に揃える。
@@ -17,13 +17,24 @@ export const LOT_SEARCH_LIMIT: number = limitsConfig.limits.lotSearchLimit
 //      facility_id を明示的な条件として入れる。RLS（層1）は admin を全施設ぶん通すため、
 //      RLS だけに頼るとadminの検索結果が全施設になってしまう。ここは admin かどうかに関わらず
 //      常に効く JS 側の絞り込み。
+interface CaseOrderParentRow {
+  case_datetime?: unknown
+  patient_id?: unknown
+  patient_initials?: unknown
+}
+
 interface CaseOrderItemRow {
   id?: unknown
   case_order_id?: unknown
   jan?: unknown
   lot?: unknown
   quantity?: unknown
-  case_orders?: { case_datetime?: unknown } | { case_datetime?: unknown }[] | null
+  case_orders?: CaseOrderParentRow | CaseOrderParentRow[] | null
+}
+
+interface LoanReturnParentRow {
+  return_datetime?: unknown
+  status?: unknown
 }
 
 interface LoanReturnItemRow {
@@ -32,7 +43,8 @@ interface LoanReturnItemRow {
   jan?: unknown
   lot?: unknown
   quantity?: unknown
-  loan_returns?: { return_datetime?: unknown } | { return_datetime?: unknown }[] | null
+  status?: unknown
+  loan_returns?: LoanReturnParentRow | LoanReturnParentRow[] | null
 }
 
 // WHY: PostgRESTの多対1埋め込みは通常オブジェクト単体を返すが、クライアントの
@@ -43,11 +55,12 @@ function firstOf<T>(value: T | T[] | null | undefined): T | undefined {
   return value ?? undefined
 }
 
-// WHY(SPEC Part2 層3「患者情報を型とSELECT列の両方で持たない」): ここで組み立てる
-//      LotSearchResultItem には患者のフィールドが型として存在しない（コンパイル時に防ぐ）。
-//      加えて SELECT でも case_orders から取るのは facility_id（絞り込み専用・戻り値には含めない）
-//      と case_datetime のみで、patient_id 等は一切問い合わせていない（実行時にも防ぐ）。
-function mapCaseOrderItem(row: CaseOrderItemRow): LotSearchResultItem {
+// WHY(決定 6 = (b)。2026-09-19 に決め直した): 症例発注の行には、リコールで「どの患者に使ったか」を特定するための
+//      **患者 ID とイニシャルだけ**を載せる。医師名・性別・術式名は載せない。守り方は 2 段のまま:
+//      型に無い（LotSearchCaseOrderItem。コンパイル時）／SELECT で問い合わせない（実行時）。
+//      **フィールドを 1 つずつ写す**（`...parent` のように広げない）ので、仮に列が余分に返ってきても戻り値には入らない
+function mapCaseOrderItem(row: CaseOrderItemRow): LotSearchCaseOrderItem {
+  const parent = firstOf(row.case_orders)
   return {
     kind: 'case_order',
     itemId: asString(row.id),
@@ -55,11 +68,18 @@ function mapCaseOrderItem(row: CaseOrderItemRow): LotSearchResultItem {
     lot: asString(row.lot),
     jan: asString(row.jan),
     quantity: asNumber(row.quantity),
-    occurredAt: asString(firstOf(row.case_orders)?.case_datetime),
+    occurredAt: asString(parent?.case_datetime),
+    patientId: asString(parent?.patient_id),
+    patientInitials: asString(parent?.patient_initials),
   }
 }
 
-function mapLoanReturnItem(row: LoanReturnItemRow): LotSearchResultItem {
+// WHY(cancelled): 取り消しは「その返却の記録は誤りだった」＝実際には返していないかもしれない。
+//      区別なく「返した物」と出すと、リコールの担当者は返却済みと読んで、院内に残ったロットを取りこぼす。
+//      検索結果から**落とさず**に印を付ける（落とすと「記録はあったが取り消された」が見えなくなる）。
+//      取り消しは 2 段: 明細ごと（20260909000000）と、返却の回ごと（20260908060000）。どちらでも true
+function mapLoanReturnItem(row: LoanReturnItemRow): LotSearchLoanReturnItem {
+  const parent = firstOf(row.loan_returns)
   return {
     kind: 'loan_return',
     itemId: asString(row.id),
@@ -67,7 +87,8 @@ function mapLoanReturnItem(row: LoanReturnItemRow): LotSearchResultItem {
     lot: asString(row.lot),
     jan: asString(row.jan),
     quantity: asNumber(row.quantity),
-    occurredAt: asString(firstOf(row.loan_returns)?.return_datetime),
+    occurredAt: asString(parent?.return_datetime),
+    cancelled: asString(row.status) === 'cancelled' || asString(parent?.status) === 'cancelled',
   }
 }
 
@@ -79,7 +100,9 @@ async function searchCaseOrderItems(
 ): Promise<LotSearchResultItem[]> {
   const { data, error } = await db
     .from('case_order_items')
-    .select('id, case_order_id, jan, lot, quantity, case_orders!inner(facility_id, case_datetime)')
+    // WHY(列を名指しする。`*` にしない): 親から取るのは絞り込み用の facility_id・並び用の case_datetime・
+    //      特定用の patient_id / patient_initials だけ。医師名・性別・術式名は問い合わせない
+    .select('id, case_order_id, jan, lot, quantity, case_orders!inner(facility_id, case_datetime, patient_id, patient_initials)')
     .eq('case_orders.facility_id', facilityId)
     // WHY(受け入れ条件「lot が NULL の明細は検索対象にならない」): ILIKE は NULL に対して
     //      UNKNOWN を返すため既に自然に外れるが、意図を明示するため .not(is null) も付ける
@@ -106,7 +129,9 @@ async function searchLoanReturnItems(
 ): Promise<LotSearchResultItem[]> {
   const { data, error } = await db
     .from('loan_return_items')
-    .select('id, loan_return_id, jan, lot, quantity, loan_returns!inner(facility_id, return_datetime)')
+    // WHY(status を 2 つ取る): 取り消しは明細ごとと返却の回ごとの 2 段。片方だけ見ると、回ごと取り消した返却の明細
+    //      （明細の status は active のまま）を「返した物」と出してしまう。**絞り込みには使わない**（落とさず印を付ける）
+    .select('id, loan_return_id, jan, lot, quantity, status, loan_returns!inner(facility_id, return_datetime, status)')
     .eq('loan_returns.facility_id', facilityId)
     .not('lot', 'is', null)
     .ilike('lot', ilikeValue)

@@ -78,11 +78,7 @@ export default function CaseOrdersPage({ params }: { params: Promise<{ id: strin
             </thead>
             <tbody>
               {orders.map(order => (
-                // WHY(issue #803 ロット検索からの導線): ロット検索結果の「元へ」リンクは
-                //      #order-<id> のフラグメントでこの行へ直接遷移する（parentIdを使う）。
-                //      idを振るだけでブラウザの標準スクロールで辿り着けるので、追加の
-                //      JS状態は持たない。
-                <tr key={order.id} id={`order-${order.id}`} style={{ borderBottom: '1px solid #E5E7EB', scrollMarginTop: '1rem' }}>
+                <tr key={order.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
                   <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                     {order.caseDatetime ? formatJstDateTime(order.caseDatetime) : '-'}
                   </td>

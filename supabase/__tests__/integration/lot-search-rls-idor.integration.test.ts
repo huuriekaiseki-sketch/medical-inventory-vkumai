@@ -47,6 +47,7 @@ interface Fixtures {
   productId: string
   caseOrderItemAId: string
   loanReturnItemAId: string
+  loanReturnItemCancelledId: string
   lot: string
   aal: { email: string; userId: string; factorId: string; secret: string }
 }
@@ -123,6 +124,25 @@ async function seed(): Promise<Fixtures> {
     throw new Error(`[lot-search-rls-idor] loan_return_items シード作成失敗: ${loanReturnItemError?.message}`)
   }
 
+  // WHY(取り消し済みの明細): 同じ返却・同じロットでもう 1 行作り、active → cancelled へ進める
+  //      （戻せない一方向の遷移。20260909000000）。作成時に cancelled を直接入れず UPDATE するのは、
+  //      「作成時は必ず active」という実際の経路に合わせるため
+  const { data: cancelledItem, error: cancelledItemError } = await serviceClient
+    .from('loan_return_items')
+    .insert({ loan_return_id: loanReturn.id, jan, lot, quantity: 1 })
+    .select('id')
+    .single()
+  if (cancelledItemError || !cancelledItem) {
+    throw new Error(`[lot-search-rls-idor] 取り消し用 loan_return_items シード作成失敗: ${cancelledItemError?.message}`)
+  }
+  const { error: cancelError } = await serviceClient
+    .from('loan_return_items')
+    .update({ status: 'cancelled' })
+    .eq('id', cancelledItem.id)
+  if (cancelError) {
+    throw new Error(`[lot-search-rls-idor] loan_return_items の取り消し失敗: ${cancelError.message}`)
+  }
+
   // WHY(aal境界用ユーザー): 施設Aのメンバーとして、MFAを登録した専用ユーザーを作る。
   //      登録直後の enroll セッションではなく、毎回新しくサインインしたクライアントを
   //      aal1/aal2それぞれのテストで使う（既存の require-aal2-in-facility-writer-rls
@@ -157,6 +177,7 @@ async function seed(): Promise<Fixtures> {
     productId: product.id as string,
     caseOrderItemAId: caseOrderItem.id as string,
     loanReturnItemAId: loanReturnItem.id as string,
+    loanReturnItemCancelledId: cancelledItem.id as string,
     lot,
     aal: { email: aalEmail, userId: aalUserId, factorId, secret },
   }
@@ -231,12 +252,43 @@ describe('ロット検索 searchLotItems RLS/IDOR [P-013 P-015]', () => {
     expect(itemIds).toContain(fixtures.loanReturnItemAId)
   })
 
-  it('戻り値に患者情報の列が含まれない（決定6=(a)）', async () => {
+  // WHY(決定 6 を 2026-09-19 に (a)→(b) へ決め直した): 症例発注の行は患者 ID とイニシャルを持つ
+  //      （発注の詳細ページが無く、ここに出さないと「どの患者に使ったか」が分からなかった）。
+  //      実 DB で見るのは 2 つ: 特定に要る 2 つが**本当に取れること**（モックでは SELECT の綴り違いに気づけない）と、
+  //      要らないもの（医師名・術式名）が**混ざらないこと**
+  it('症例発注の行は患者 ID とイニシャルを持ち、医師名・術式名は含まない（決定6=(b)）', async () => {
     const result = await searchLotItems(fixtures.userA.client, fixtures.facilityA.id, fixtures.lot)
 
+    const caseRow = result.items.find((i) => i.itemId === fixtures.caseOrderItemAId)
+    expect(caseRow).toMatchObject({
+      kind: 'case_order',
+      patientId: 'IDOR-TEST-PATIENT-LOT',
+      patientInitials: 'IDORテスト患者',
+    })
     const json = JSON.stringify(result)
-    expect(json).not.toContain('IDOR-TEST-PATIENT-LOT')
-    expect(json.toLowerCase()).not.toContain('patient')
+    expect(json).not.toContain('IDORテスト医師')
+    expect(json).not.toContain('シード用術式')
+  })
+
+  it('短貸返却の行は患者のキーを持たない', async () => {
+    const result = await searchLotItems(fixtures.userA.client, fixtures.facilityA.id, fixtures.lot)
+
+    const returnRow = result.items.find((i) => i.itemId === fixtures.loanReturnItemAId)
+    expect(returnRow).toBeDefined()
+    expect(returnRow).not.toHaveProperty('patientId')
+    expect(returnRow).not.toHaveProperty('patientInitials')
+  })
+
+  // WHY(停止②で判明): 取り消しは「その返却の記録は誤りだった」＝実際には返していないかもしれない。
+  //      検索から**落とさず**、印を付けて返すことを実 DB で測る（status の列名・語彙の綴り違いはモックでは分からない）。
+  //      対照: 生きている明細は cancelled=false
+  it('取り消し済みの短貸返却の明細は、落とさずに cancelled=true で返る（対照: 生きている明細は false）', async () => {
+    const result = await searchLotItems(fixtures.userA.client, fixtures.facilityA.id, fixtures.lot)
+
+    const cancelledRow = result.items.find((i) => i.itemId === fixtures.loanReturnItemCancelledId)
+    const activeRow = result.items.find((i) => i.itemId === fixtures.loanReturnItemAId)
+    expect(cancelledRow).toMatchObject({ kind: 'loan_return', cancelled: true })
+    expect(activeRow).toMatchObject({ kind: 'loan_return', cancelled: false })
   })
 
   // WHY: **これは受け入れ条件そのものではない。受け入れ条件が守るべき危険の、DB 層での姿を固定するテスト。**

@@ -137,6 +137,8 @@ describe('LotSearchPage', () => {
         jan: '4901234567890',
         quantity: 2,
         occurredAt: '2026-01-05T01:00:00Z',
+        patientId: 'P-0001',
+        patientInitials: 'T.Y.',
       },
       {
         kind: 'loan_return',
@@ -146,6 +148,7 @@ describe('LotSearchPage', () => {
         jan: '4901234500000',
         quantity: 1,
         occurredAt: '2026-01-06T01:00:00Z',
+        cancelled: false,
       },
     ]
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse({ items, truncated: false }))))
@@ -157,14 +160,76 @@ describe('LotSearchPage', () => {
 
     expect(await screen.findByText('症例発注')).toBeInTheDocument()
     expect(screen.getByText('短貸返却')).toBeInTheDocument()
-    const links = screen.getAllByRole('link', { name: '元へ' })
-    // WHY(レビュー指摘の修正): parentId(元の発注・返却のid)未使用のまま一覧ページへの
-    //      固定リンクだったのを、#order-<parentId>/#return-<parentId> のフラグメントで
-    //      その行まで辿れるように修正した。
-    expect(links.some((l) => l.getAttribute('href') === '/facilities/f-1/case-orders#order-co-1')).toBe(true)
-    expect(links.some((l) => l.getAttribute('href') === '/facilities/f-1/loan-returns#return-lr-1')).toBe(true)
-    // 患者情報は一覧・DOMに出ない(決定6=(a))
-    expect(screen.queryByText(/患者/)).not.toBeInTheDocument()
+    // WHY(停止②で判明・人が (1) を選んだ): 行ごとの「元へ」は一覧ページの行（#order-<id>）へ飛ぶ作りだったが、
+    //      一覧が取るのは**最新 50 件だけ**で、それより古い発注の行はページに存在しない。リコールで調べるのは
+    //      たいてい過去の発注なので、いちばん使う場面で「踏んでも何も起きないリンク」になっていた。
+    //      特定に要る情報は行そのものに出すようにしたので（決定 6=(b)）、**存在しない行へ飛ぶ約束をやめ**、
+    //      種別ごとの一覧へのリンクだけを置く。確実に辿れる作り（ID 指定の取得と詳細ページ）は別 issue
+    expect(screen.queryByRole('link', { name: '元へ' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: '元へ' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '症例発注の一覧へ' })).toHaveAttribute('href', '/facilities/f-1/case-orders')
+    expect(screen.getByRole('link', { name: '短貸返却の一覧へ' })).toHaveAttribute('href', '/facilities/f-1/loan-returns')
+    // 行を指すフラグメントつきのリンクが残っていないこと（存在しない行へ飛ぶ約束をしない）
+    expect(screen.getAllByRole('link').every((l) => !(l.getAttribute('href') ?? '').includes('#'))).toBe(true)
+    // WHY(決定 6 を 2026-09-19 に (a)→(b) へ決め直した): 症例発注の行には患者 ID とイニシャルを出す。
+    //      発注の詳細ページが無く、ここに出さないと「どの患者に使ったか」が画面のどこからも分からなかった
+    expect(screen.getByRole('columnheader', { name: '患者ID' })).toBeInTheDocument()
+    expect(screen.getByText('P-0001')).toBeInTheDocument()
+    expect(screen.getByText('T.Y.')).toBeInTheDocument()
+    // 生きている返却には「取り消し済み」を出さない（対照）
+    expect(screen.queryByText('取り消し済み')).not.toBeInTheDocument()
+  })
+
+  // WHY(停止②で判明): 取り消しは「その返却の記録は誤りだった」＝実際には返していないかもしれない。
+  //      区別なく「短貸返却」と出すと、リコールの担当者は返却済みと読んで院内に残ったロットを取りこぼす。
+  //      色だけにせず文字で出す（受け入れ条件「種別は色だけでなく文字でも区別」と同じ理由）
+  it('取り消し済みの短貸返却は、行を落とさずに「取り消し済み」と文字で出す', async () => {
+    const items = [
+      {
+        kind: 'loan_return',
+        itemId: 'li-9',
+        parentId: 'lr-9',
+        lot: 'LOT-1',
+        jan: '4901234500000',
+        quantity: 1,
+        occurredAt: '2026-01-06T01:00:00Z',
+        cancelled: true,
+      },
+    ]
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse({ items, truncated: false }))))
+    const user = userEvent.setup()
+
+    render(<LotSearchPage params={params('f-1')} />)
+    await user.type(screen.getByLabelText('ロット番号'), 'LOT-1')
+    await user.click(screen.getByRole('button', { name: '検索する' }))
+
+    expect(await screen.findByText('短貸返却')).toBeInTheDocument()
+    expect(screen.getByText('取り消し済み')).toBeInTheDocument()
+    expect(screen.getByText(/実際には返却されていない可能性があります/)).toBeInTheDocument()
+  })
+
+  it('短貸返却の行の患者の欄は空欄ではなく「—」を出す（出し忘れと「該当なし」を見分けられるように）', async () => {
+    const items = [
+      {
+        kind: 'loan_return',
+        itemId: 'li-1',
+        parentId: 'lr-1',
+        lot: 'LOT-1',
+        jan: '4901234500000',
+        quantity: 1,
+        occurredAt: '2026-01-06T01:00:00Z',
+        cancelled: false,
+      },
+    ]
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse({ items, truncated: false }))))
+    const user = userEvent.setup()
+
+    render(<LotSearchPage params={params('f-1')} />)
+    await user.type(screen.getByLabelText('ロット番号'), 'LOT-1')
+    await user.click(screen.getByRole('button', { name: '検索する' }))
+
+    await screen.findByText('短貸返却')
+    expect(screen.getAllByText('—')).toHaveLength(2)
   })
 
   it('上限に当たったとき truncated の案内を表示する', async () => {

@@ -132,19 +132,35 @@ describe('GET /api/facilities/[id]/lot-search（issue #803 P-013・P-015 の適�
     expect(body.truncated).toBe(true)
   })
 
-  // WHY(決定6=(a)、受け入れ条件): 応答に患者のキーが含まれないことを固定する
-  it('応答に患者情報のキーが含まれない', async () => {
+  // WHY(決定 6 を 2026-09-19 に (a)→(b) へ決め直した): 症例発注の行は患者 ID とイニシャルを持つ。
+  //      **どの項目を出すかを決めるのは repository**（SELECT の列と型）で、そこは repository.test.ts と実 DB の統合テストが守る。
+  //      このテストは searchLotItems をモックにしているので、ここで「患者が含まれない／含まれる」を見ても
+  //      モックが返した値を見ているだけになる（最初の版はそうだった）。route について言えるのは
+  //      「repository の結果に**足しも引きもしない**」ことなので、それを固定する
+  it('repository が返した項目をそのまま返す（route は項目を足しも引きもしない）', async () => {
     authenticated()
-    mockSearchLotItems.mockResolvedValue({
-      items: [{ kind: 'case_order', itemId: 'i1', parentId: 'p1', lot: 'ABC', jan: '490001', quantity: 1, occurredAt: '2026-01-01T00:00:00Z' }],
-      truncated: false,
-    })
+    const items = [
+      { kind: 'case_order', itemId: 'i1', parentId: 'p1', lot: 'ABC', jan: '490001', quantity: 1, occurredAt: '2026-01-02T00:00:00Z', patientId: 'P-0001', patientInitials: 'T.Y.' },
+      { kind: 'loan_return', itemId: 'i2', parentId: 'p2', lot: 'ABC', jan: '490002', quantity: 2, occurredAt: '2026-01-01T00:00:00Z', cancelled: true },
+    ]
+    mockSearchLotItems.mockResolvedValue({ items, truncated: false })
     const res = await GET(new NextRequest('http://localhost/api/facilities/f1/lot-search?lot=ABC'), makeContext('f1'))
     const body = await res.json()
-    const keys = Object.keys(body.items[0])
-    expect(keys).toEqual(['kind', 'itemId', 'parentId', 'lot', 'jan', 'quantity', 'occurredAt'])
-    expect(body).not.toHaveProperty('patientId')
-    expect(JSON.stringify(body)).not.toMatch(/patient/i)
+    expect(body).toEqual({ items, truncated: false })
+  })
+
+  // WHY: 一覧には患者 ID を出すと決めたが、**エラー応答とログには出さない**のは変わらない。
+  //      PostgreSQL のエラー本文は行の中身を含みうる（`Failing row contains (...)`）ので、
+  //      repository が投げたエラーの本文が応答へ素通りしないことを固定する
+  it('repository のエラー本文に患者の情報が入っていても、エラー応答には出さない', async () => {
+    authenticated()
+    mockSearchLotItems.mockRejectedValue(new Error('Failing row contains (P-0001, T.Y., Dr. X)'))
+    const res = await GET(new NextRequest('http://localhost/api/facilities/f1/lot-search?lot=ABC'), makeContext('f1'))
+    expect(res.status).toBe(500)
+    const text = JSON.stringify(await res.json())
+    expect(text).not.toContain('P-0001')
+    expect(text).not.toContain('T.Y.')
+    expect(text).not.toContain('Dr. X')
   })
 
   it('lotが2つ指定された場合は400を返す（パラメータ汚染防止）', async () => {

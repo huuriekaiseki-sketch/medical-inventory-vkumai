@@ -139,9 +139,7 @@ export default function LoanReturnsPage({ params }: { params: Promise<{ id: stri
             <tbody>
               {returns.map(ret => (
                 <Fragment key={ret.id}>
-                {/* WHY(issue #803 ロット検索からの導線): ロット検索結果の「元へ」リンクは
-                    #return-<id> のフラグメントでこの行へ直接遷移する（parentIdを使う）。 */}
-                <tr id={`return-${ret.id}`} style={{ borderBottom: '1px solid #E5E7EB', scrollMarginTop: '1rem' }}>
+                <tr style={{ borderBottom: '1px solid #E5E7EB' }}>
                   <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                     {ret.returnDatetime ? formatJstDateTime(ret.returnDatetime) : '-'}
                   </td>
