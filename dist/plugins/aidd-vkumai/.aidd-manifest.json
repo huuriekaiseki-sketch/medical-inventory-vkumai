@@ -94,7 +94,7 @@
     "skills/e2e-runner/mock-capture.mjs": "ded8ecff3d50f00fbd3de7aebed434edd3dd70410fc94fb5dfc5a59c271fc2c3",
     "skills/e2e-runner/screenshot.sh": "78e56972be76c232e9d9f1904a592805e7f611477bb498cc4deac429d266e465",
     "skills/handoff-format/SKILL.md": "c86c0723a350f8231d4bd053af3be288b715a8032162d0c8e85cccf15ec15815",
-    "workflows/aidd-1-1-deep-task.js": "8831dcd8f7e2ed80e440a63757348876516c45492c7ffff7955b600fdd854b55",
+    "workflows/aidd-1-1-deep-task.js": "748e9e50a6fe1ab7d4190f6d665d6db4b12536b5c9a08bc061b9ca2404137cdf",
     "workflows/aidd-phase1-router.js": "832f82e96794a8ce76d05197967a55c2a0507060890754b9e58b30ae1dc207ac",
     "workflows/aidd-phase1.js": "d50247e390a3d15c9be631e82ba689e0190212f4044636f239d55558a270ecd2",
     "workflows/aidd-phase2.js": "bf4865f505ef246cde48dafdbf5cea278a11384160c94f3f8ffa9d481fe2fbfb",

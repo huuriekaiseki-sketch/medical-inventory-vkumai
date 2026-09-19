@@ -319,6 +319,23 @@ globパターン（`*`等を含むパス）を渡していないか確認する�
 
 詳細: [`decisions/aidd-pipeline.md`](./decisions/aidd-pipeline.md#issue-399の根本原因確定と修正workflowスクリプトのargs文字列化バグ)
 
+### ワークフローを変えたのに生成物（`dist/plugins/`）を作り直さず、CI の hooks-test だけが落ちる（2026-09-19、PR #801）
+
+**チェック内容:** `.claude/workflows/`・`.claude/agents/`・hook スクリプトなど、プラグインに同梱される
+ファイルを変えたら、コミット前に `bash scripts/build-plugin.sh` を回して `dist/plugins/` を作り直し、
+**同じ PR に含める**。確認は `bash scripts/build-plugin.test.sh`（scenario 4 が「コミット済みの生成物が最新か」）。
+
+**なぜ再発したか:** `npm test`・`npm run lint`・`npm run typecheck`・ワークフロー同期テストは全部緑だった。
+`dist/plugins/` の鮮度を見るのは `scripts/*.test.sh` の側（CI の hooks-test）だけで、
+**手元で「毎回」の行を回したつもりでも、この 1 本は `npm test` に入っていない**。
+引き継ぎメモの 04 表で hooks-test を「⬜ 未実施（CI が回すため）」にしたまま PR を出し、その行がそのまま当たった。
+なお CI のループは `bash -e` で最初の失敗で止まるので、**後続の `*.test.sh` は 1 本も走っていない**
+——1 本直して push しても、次の失敗が後ろに隠れている可能性がある。
+
+**機械検知:** あり（`scripts/build-plugin.test.sh` scenario 4、CI の hooks-test）。検知は効いている。
+足りないのは「PR を出す前に気づく」側で、`scripts/derive-test-selection.sh` の表は hook 回帰を
+「毎回（CI）」としか言わず、`.claude/workflows/` に触れたときに生成物の作り直しを名指ししない。
+
 ### hookスクリプトのパス正規化漏れとbashの単語境界表現の落とし穴
 
 **チェック内容:** リポジトリパスへの正規表現照合を書く場合、(a) `tool_input.file_path` の
