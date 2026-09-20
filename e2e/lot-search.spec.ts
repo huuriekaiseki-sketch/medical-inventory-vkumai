@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import limitsConfig from '../aidd.config.json'
 import {
   readCrossFacilityFixtures,
   CROSS_FACILITY_USER_A_AUTH_PATH,
@@ -12,6 +13,7 @@ import {
 //      作成した行のロットで検索する。
 
 const fixtures = readCrossFacilityFixtures()
+const LOT_LIMIT = limitsConfig.limits.textLength.lot
 
 function uniqueSuffix() {
   return Math.random().toString(36).slice(2, 8).padEnd(6, '0')
@@ -79,7 +81,9 @@ test.describe('ロット検索（画面から）', () => {
     await context.close()
   })
 
-  test('101字以上のロットでは検索が実行されず、入力エラーが表示される', async ({ browser }) => {
+  // WHY(issue #814): 上限を設定から読む（他の spec と同じ）。101・100 を直書きしていたときは、
+  //      設定の値を変えると、この spec だけ古い上限を「正しい挙動」として固定し続けていた
+  test('上限を 1 字超えたロットでは検索が実行されず、入力エラーが表示される', async ({ browser }) => {
     const context = await browser.newContext({ storageState: CROSS_FACILITY_USER_A_AUTH_PATH })
     const page = await context.newPage()
 
@@ -88,11 +92,11 @@ test.describe('ロット検索（画面から）', () => {
       if (req.url().includes('/api/') && req.url().includes('lot-search')) requested = true
     })
 
-    await searchLot(page, fixtures!.facilityAId, '1'.repeat(101))
+    await searchLot(page, fixtures!.facilityAId, '1'.repeat(LOT_LIMIT + 1))
     await page.waitForTimeout(500)
 
-    expect(requested, '101字でも検索APIが呼ばれた').toBe(false)
-    await expect(page.getByText('1〜100字で入力してください')).toBeVisible()
+    expect(requested, `${LOT_LIMIT + 1}字でも検索APIが呼ばれた`).toBe(false)
+    await expect(page.getByText(`1〜${LOT_LIMIT}字で入力してください`)).toBeVisible()
 
     await context.close()
   })

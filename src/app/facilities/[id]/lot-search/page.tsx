@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { LotSearchApiResponse, LotSearchResultItem } from '@/types/order'
 import { formatJstDateTime } from '@/lib/format-date'
 import { normalizeLotInput } from '@/lib/lot-search/normalize'
+import { LOT_LENGTH_ERROR_MESSAGE, LOT_MAX_LENGTH, LOT_MIN_LENGTH } from '@/lib/lot-search/limits'
 
 // WHY(issue #803 決定 6。2026-09-19 に (a)→(b) へ決め直した): 症例発注の行には**患者 ID とイニシャル**を出す。
 //      最初は「出さない。発注を開けば分かる」で承認されたが、発注の詳細ページは存在せず、登録後に患者の情報が出る画面は
@@ -30,9 +31,9 @@ const KIND_LIST_LINKS: { path: string; label: string }[] = [
 ]
 
 // WHY(決定4): 検証環境の500件上限と揃える。UI側は超過の有無(truncated)だけを見る。
-const LOT_MAX_LENGTH = 100
-const LOT_MIN_LENGTH = 1
-const LENGTH_ERROR_MESSAGE = '1〜100字で入力してください'
+// WHY(issue #814): 長さの上限はこの画面で持たない。設定（API 側と同じ値）との一致をテストで
+//      固定した定数を読む。理由と、設定を直接読まない事情は @/lib/lot-search/limits を参照
+const LENGTH_ERROR_MESSAGE = LOT_LENGTH_ERROR_MESSAGE
 const GENERIC_ERROR_MESSAGE = '検索に失敗しました'
 
 type SearchState =
