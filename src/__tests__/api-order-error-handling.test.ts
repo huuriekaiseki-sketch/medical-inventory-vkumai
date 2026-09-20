@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
+import limitsConfig from '../../aidd.config.json'
 
 vi.mock('@/lib/supabase/server', () => ({ createServerSupabase: vi.fn().mockResolvedValue({}) }))
 vi.mock('@/lib/supabase/require-auth', () => ({ requireAuth: vi.fn().mockResolvedValue({ id: 'u1' }) }))
@@ -146,4 +147,76 @@ describe('数量は 1 以上（I-010 を入口でも守る）', () => {
     )
     expect(res.status).toBe(201)
   })
+})
+
+// WHY(issue #813): スキーマの単体テスト（validation/__tests__/order-items-limit.test.ts）は「スキーマが止める」を
+//      見るだけ。利用者に届くのは route の応答なので、**400 と文言が返り、保存の処理まで進まない**ことをここで見る。
+//      4 種の route はそれぞれ別のファイルなので、1 つだけ見て残りを信じない
+describe('明細の件数の上限（issue #813。入口で 400、保存まで進まない）', () => {
+  const LIMIT = limitsConfig.limits.orderItemsMax
+  const janItems = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ jan: `49000000${String(i).padStart(5, '0')}`, quantity: 1 }))
+
+  const cases = [
+    {
+      name: 'case-orders',
+      post: caseOrderPOST,
+      create: createCaseOrder,
+      url: '/api/case-orders',
+      body: (n: number) => ({
+        facilityId: 'f1',
+        caseDatetime: '2026-06-25T00:00:00Z',
+        procedureName: 'PCI',
+        patientId: 'p1',
+        patientInitials: 'AB',
+        gender: 'male',
+        doctorName: 'Dr',
+        items: janItems(n),
+      }),
+    },
+    {
+      name: 'loan-orders',
+      post: loanOrderPOST,
+      create: createLoanOrder,
+      url: '/api/loan-orders',
+      body: (n: number) => ({
+        facilityId: 'f1',
+        procedureName: 'PCI',
+        maker: 'メーカー',
+        items: Array.from({ length: n }, (_, i) => ({ name: `品名${i}`, quantity: 1 })),
+      }),
+    },
+    {
+      name: 'loan-returns',
+      post: loanReturnPOST,
+      create: createLoanReturn,
+      url: '/api/loan-returns',
+      body: (n: number) => ({ facilityId: 'f1', returnDatetime: '2026-06-25T00:00:00Z', items: janItems(n) }),
+    },
+    {
+      name: 'consumable-orders',
+      post: consumableOrderPOST,
+      create: createConsumableOrder,
+      url: '/api/consumable-orders',
+      body: (n: number) => ({
+        facilityId: 'f1',
+        items: Array.from({ length: n }, () => ({ consumableId: 'c1', quantity: 1 })),
+      }),
+    },
+  ]
+
+  for (const c of cases) {
+    it(`${c.name}: 上限を 1 件超えると 400 で、何件までかが伝わり、保存の処理は呼ばれない`, async () => {
+      const res = await c.post(makeRequest(c.url, c.body(LIMIT + 1)))
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toBe(`明細は ${LIMIT} 件までです`)
+      expect(c.create).not.toHaveBeenCalled()
+    })
+
+    it(`${c.name}: ちょうど上限の件数は保存の処理まで進む（境界の内側。止めすぎていない）`, async () => {
+      await c.post(makeRequest(c.url, c.body(LIMIT)))
+      expect(c.create).toHaveBeenCalledTimes(1)
+    })
+  }
 })

@@ -21,6 +21,25 @@ export type TextLimitKey = keyof typeof LIMITS
 /** 決めた上限（読み取り専用）。テストと突合スクリプトが参照する */
 export const TEXT_LIMITS: Readonly<Record<TextLimitKey, number>> = LIMITS
 
+/**
+ * 1 件の発注・返却に入れられる明細の件数の上限（issue #813）。
+ *
+ * WHY: 文字数には上限があるのに、明細の**件数**には API・RPC・DB のどこにも上限が無かった。
+ *      1 回の登録で何万件でも受け取れ、詳細ページ（issue #809）は 1 件の明細を全件そのまま表に出すので、
+ *      応答も画面も際限なく大きくなる。値は人が決めたもので（2026-09-20）、文字数と同じく設定の 1 か所に置く。
+ *
+ * 限界: 効くのは API の入口だけ。RPC（create_*_atomic）を直接呼ぶ経路と DB には同じ上限が無い。
+ */
+export const ORDER_ITEMS_MAX: number = limitsConfig.limits.orderItemsMax
+
+/** 明細の配列に件数の上限を掛ける。4 種の発注スキーマが同じ文言で止まるよう、ここに 1 つだけ置く */
+export function limitedItems<T extends z.ZodTypeAny>(item: T) {
+  return z
+    .array(item)
+    .max(ORDER_ITEMS_MAX, { error: `明細は ${ORDER_ITEMS_MAX} 件までです` })
+    .default([])
+}
+
 /** 必須の自由入力。前後の空白を落とし、空文字と上限超過を弾く */
 export function requiredText(key: TextLimitKey, label: string) {
   return z

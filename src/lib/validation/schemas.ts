@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { optionalText, requiredText, TEXT_LIMITS } from '@/lib/validation/text-limits'
+import { limitedItems, optionalText, requiredText, TEXT_LIMITS } from '@/lib/validation/text-limits'
 import { UUID_PATTERN } from '@/lib/validation/uuid'
 import { FACILITY_ROLES } from '@/types/role'
 
@@ -185,7 +185,8 @@ export const caseOrderInputSchema = z.object({
     error: '性別は male / female / other のいずれかを指定してください',
   }),
   doctorName: requiredText('doctorName', '担当医師名'),
-  items: z.array(janItemSchema).default([]),
+  // WHY(limitedItems、issue #813): 明細の件数に上限を掛ける。発注 4 種とも同じ部品・同じ文言で止める
+  items: limitedItems(janItemSchema),
   clientRequestId,
 })
 
@@ -194,15 +195,13 @@ export const loanOrderInputSchema = z.object({
   facilityId,
   procedureName: requiredText('procedureName', '術式名'),
   maker: requiredText('productName', 'メーカー'),
-  items: z
-    .array(
-      z.object({
-        jan: optionalText('janOrRef', 'JAN'),
-        name: requiredText('productName', '品名'),
-        quantity,
-      })
-    )
-    .default([]),
+  items: limitedItems(
+    z.object({
+      jan: optionalText('janOrRef', 'JAN'),
+      name: requiredText('productName', '品名'),
+      quantity,
+    })
+  ),
   clientRequestId,
 })
 
@@ -220,7 +219,7 @@ export const loanReturnInputSchema = z.object({
   facilityId,
   returnDatetime: z.string({ error: '返却日時は必須です' }).min(1, { error: '返却日時は必須です' }),
   loanOrderId: z.string().optional(),
-  items: z.array(loanReturnItemSchema).default([]),
+  items: limitedItems(loanReturnItemSchema),
   clientRequestId,
 })
 
@@ -254,14 +253,12 @@ export const consumableRetireSchema = z.object({
 /** 消耗品発注（consumable_orders）。明細は消耗品の ID と数量だけ */
 export const consumableOrderInputSchema = z.object({
   facilityId,
-  items: z
-    .array(
-      z.object({
-        consumableId: id('消耗品'),
-        quantity,
-      })
-    )
-    .default([]),
+  items: limitedItems(
+    z.object({
+      consumableId: id('消耗品'),
+      quantity,
+    })
+  ),
   clientRequestId,
 })
 
