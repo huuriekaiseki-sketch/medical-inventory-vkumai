@@ -37,4 +37,19 @@ ACTUAL_COUNT=$(( AFTER_COUNT - BEFORE_COUNT ))
 
 # WHY: npx tsx はレジストリ依存で遅い日に数分かかる（harvest-journal-events.sh のコメント参照）。
 #      実体は .js（ESM）なので node で直接実行する
-node --experimental-detect-module --no-warnings "$SCRIPT_DIR/../scripts/workflow-lib/loop-observability-gap.js" --actual "$ACTUAL_COUNT" --expected "$EXPECTED_COUNT"
+#
+# WHY(issue #806、出力が空なら「漏れなし」と読まない): 判定は結果を必ず標準出力へ 1 行言う設計。何も言わずに
+# exit 0 で終わったなら、判定は**走っていない**（2026-09-19 に実際に起きた——symlink を含むパスで起動すると
+# main() が呼ばれず無出力で終わっていた）。「何も起きなかった」を合格に数えると、記録漏れがあっても黙って緑になる。
+# 合格にも違反にも数えず、確かめられなかったと言って非 0 で終える。Stop hook（check-gap-check-state.sh）は
+# 「非 0 かつ判定の出力が無い」を実行失敗・未判定として扱うので、ここでは判定の JSON を出さない
+set +e
+JUDGE_OUT="$(node --experimental-detect-module --no-warnings "$SCRIPT_DIR/../scripts/workflow-lib/loop-observability-gap.js" --actual "$ACTUAL_COUNT" --expected "$EXPECTED_COUNT")"
+JUDGE_EXIT=$?
+set -e
+if [ -z "$JUDGE_OUT" ]; then
+  echo "ERROR: loop-observability の gap 判定が何も出力しませんでした（exit=${JUDGE_EXIT}）。記録漏れの有無は確かめられていません（「漏れなし」ではありません）" >&2
+  exit 2
+fi
+printf '%s\n' "$JUDGE_OUT"
+exit "$JUDGE_EXIT"

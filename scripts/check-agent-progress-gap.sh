@@ -38,4 +38,16 @@ ACTUAL_COUNT=$(( AFTER_COUNT - BEFORE_COUNT ))
 
 # WHY: npx tsx はレジストリ依存で遅い日に数分かかる（harvest-journal-events.sh のコメント参照）。
 #      実体は .js（ESM）なので node で直接実行する（"type":"module" 無しの .js のため構文検出フラグを付ける）
-node --experimental-detect-module --no-warnings "$SCRIPT_DIR/../.claude/workflows/lib/agent-progress-gap.js" --actual "$ACTUAL_COUNT" --expected "$EXPECTED_COUNT"
+#
+# WHY(issue #806、出力が空なら「漏れなし」と読まない): check-loop-observability-gap.sh と同じ。判定が何も言わずに
+# exit 0 で終わったなら走っていない。合格にも違反にも数えず、確かめられなかったと言って非 0 で終える
+set +e
+JUDGE_OUT="$(node --experimental-detect-module --no-warnings "$SCRIPT_DIR/../.claude/workflows/lib/agent-progress-gap.js" --actual "$ACTUAL_COUNT" --expected "$EXPECTED_COUNT")"
+JUDGE_EXIT=$?
+set -e
+if [ -z "$JUDGE_OUT" ]; then
+  echo "ERROR: agent-progress の gap 判定が何も出力しませんでした（exit=${JUDGE_EXIT}）。記録漏れの有無は確かめられていません（「漏れなし」ではありません）" >&2
+  exit 2
+fi
+printf '%s\n' "$JUDGE_OUT"
+exit "$JUDGE_EXIT"
