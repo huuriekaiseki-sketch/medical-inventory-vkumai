@@ -14,8 +14,10 @@ export const meta = {
   ],
 }
 
-// args: { taskDescription?: string, maxRounds?: number }
+// args: { taskDescription?: string, maxRounds?: number, feature?: string }
 // taskDescription: 調査対象・機能の説明（例: 「ローン返却機能の追加」）
+// feature: 記録（進捗・loop-observability）に使う名前（例: 「issue-809-order-detail」）。
+//          英数字と . _ - だけ・64 字まで。未指定や形が違うものは unknown になる（issue #807）
 //
 // ── 完了後の手順（Claude が実行すること）──────────────────────────────
 // 1. synthesis の内容を反映して SPEC.md を確定させる
@@ -97,8 +99,35 @@ let progressLoggableAgentCount = 0
 //      ラッパー自身の中でだけ使う参照は別名にしておく。
 const rawAgent = agent
 
+// ─── 記録に使う feature 名（issue #807） ─────────────────────────────
+// WHY: このワークフローは feature 名を受け取らず、各エージェントにも渡していなかったので、記録の `--feature` を
+//      **各エージェントが自分で作っていた**。2026-09-20 の 1 回の実行（81 体）で 15 種類（`issue-809-order-detail` /
+//      `order-detail` / `issue #809` / `order-detail-809` …）になり、feature 別の集計が成り立たない。
+//
+// WHY(形を絞る): この名前は、エージェントが `--feature "<名前>"` としてシェルへ渡す。引用符・バッククォート・$() を
+//      含む名前をそのまま渡すと記録のコマンドが壊れる（か、別のコマンドとして解釈される）。通すのは
+//      英数字と . _ - だけ・64 字まで。**形が違う名前は直して通さず unknown に倒す**（直し方を誤って別の名前に
+//      化けるより、集計で「名前が渡っていない実行」と分かるほうがよい）。未指定も unknown——各エージェントに
+//      名前を作らせない（docs/agents/common.md の「feature 名が与えられていない場合は unknown」と同じ語）
+function resolveFeatureName(raw) {
+  if (typeof raw !== 'string') return 'unknown'
+  return /^[A-Za-z0-9._-]{1,64}$/.test(raw) ? raw : 'unknown'
+}
+const FEATURE_NAME = resolveFeatureName(parsedArgs?.feature)
+
+function buildFeatureLine(feature) {
+  return (
+    '\n\n## 記録に使う feature 名\n' +
+    `進捗（log-agent-progress.sh）・loop-observability（log-loop-observability.sh）を記録するときは、` +
+    `必ず \`--feature "${feature}"\` を使うこと。**自分で名前を作らない**（同じ実行の記録が別々の名前に散って、集計できなくなる）。`
+  )
+}
+
 /**
  * agent() の代わりに呼ぶ。起動した数をそのまま期待件数として数える。
+ *
+ * WHY(feature 名をここで足す、issue #807): 全起動がここを通るので、各プロンプトの文面を 1 つずつ書き換えず、
+ *      この 1 か所で足す。役を足したときに、足し忘れる道が無い。記録しない役（expectsLogs: false）には足さない。
  *
  * WHY(expectsLogs、issue #807): 期待件数は agentType から決めるが、agentType は**権限のために**付けている
  *      場合がある。木の状態を取るだけの補助役（capture-tree）は、読み取り専用ガードを効かせるために
@@ -114,7 +143,7 @@ function trackedAgent(prompt, opts, tracking) {
   const t = opts?.agentType
   if (expectsLogs && LOGGABLE_AGENT_TYPES.has(t)) loggableAgentCount++
   if (expectsLogs && PROGRESS_LOGGABLE_AGENT_TYPES.has(t)) progressLoggableAgentCount++
-  return rawAgent(prompt, opts)
+  return rawAgent(expectsLogs ? prompt + buildFeatureLine(FEATURE_NAME) : prompt, opts)
 }
 
 /** 戻り値に載せる stats。早期 return でもここを通す（途中まで起動した分は期待件数に入る） */
