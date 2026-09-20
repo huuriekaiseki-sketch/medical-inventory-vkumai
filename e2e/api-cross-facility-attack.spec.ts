@@ -63,6 +63,7 @@ interface Fx {
   secondProductId: string
   categoryId: string
   compatibilityId: string
+  caseOrderId: string
 }
 
 function substitute<T>(value: T, fx: Fx): T {
@@ -146,6 +147,7 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
       secondProductId: fixtures!.secondProductId!,
       categoryId: fixtures!.categoryId!,
       compatibilityId: fixtures!.compatibilityId!,
+      caseOrderId: fixtures!.caseOrderId!,
     }
     for (const [name, value] of Object.entries(fx)) {
       expect(value, `フィクスチャの ${name} が無い（攻撃が実在しない ID を叩いて空振りする）`).toBeTruthy()
@@ -191,6 +193,7 @@ test.describe('他施設ユーザーによる API Route 直接攻撃の総当た
             productA: fx.productId,
             categoryA: fx.categoryId,
             compatA: fx.compatibilityId,
+            caseOrderA: fx.caseOrderId,
             random: randomUUID(),
           }
           const pathId: PathId = c.pathId ?? 'random'

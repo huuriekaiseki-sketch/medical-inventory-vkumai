@@ -61,6 +61,29 @@ describe('RLS で見えない 1 件取得の記録（recordHiddenRowDenial） [P
     })
   })
 
+  // WHY(issue #809): GET /api/case-orders/[id]・GET /api/loan-returns/[id] も同じ穴を持つ
+  it('case_orders: 行があれば facility_id を行から取って記録する', async () => {
+    maybeSingle.mockResolvedValue({ data: { facility_id: 'fac-A' }, error: null })
+    const m = await loadModule()
+    await m.recordHiddenRowDenial({ table: 'case_orders', id: 'co-1', actorId: 'u-B' })
+    expect(from).toHaveBeenCalledWith('case_orders')
+    expect(chain.select).toHaveBeenCalledWith('facility_id')
+    expect(recordAccessDenial).toHaveBeenCalledWith({
+      guard: 'facility', reason: 'forbidden', actorId: 'u-B', facilityId: 'fac-A',
+    })
+  })
+
+  it('loan_returns: 行があれば facility_id を行から取って記録する', async () => {
+    maybeSingle.mockResolvedValue({ data: { facility_id: 'fac-A' }, error: null })
+    const m = await loadModule()
+    await m.recordHiddenRowDenial({ table: 'loan_returns', id: 'lr-1', actorId: 'u-B' })
+    expect(from).toHaveBeenCalledWith('loan_returns')
+    expect(chain.select).toHaveBeenCalledWith('facility_id')
+    expect(recordAccessDenial).toHaveBeenCalledWith({
+      guard: 'facility', reason: 'forbidden', actorId: 'u-B', facilityId: 'fac-A',
+    })
+  })
+
   it('行が無ければ記録しない（本当に存在しない 404）', async () => {
     const m = await loadModule()
     await m.recordHiddenRowDenial({ table: 'facilities', id: 'no-such', actorId: 'u-B' })

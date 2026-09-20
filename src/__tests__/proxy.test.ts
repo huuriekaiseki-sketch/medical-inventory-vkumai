@@ -394,6 +394,11 @@ describe('proxy', () => {
       expect(re.test('/api/facilities/f-1/lot-search')).toBe(true)
       expect(re.test('/api/case-orders')).toBe(true)
       expect(re.test('/facilities/f-1/lot-search')).toBe(true)
+      // WHY(issue #809): 詳細ページの GET は動的な区切り（[id]）を含む実際の形で通ることを見る。
+      //      matcher が /api/case-orders までしか拾わない書き方に戻ると、/api/case-orders/<uuid> は
+      //      ここが無音で外れ、aal1 が repository まで届いて RLS が空を返す（404 と区別がつかない）
+      expect(re.test('/api/case-orders/11111111-1111-4111-8111-111111111111')).toBe(true)
+      expect(re.test('/api/loan-returns/11111111-1111-4111-8111-111111111111')).toBe(true)
       // 対照: 除外しているものは外れる（何でも true を返す正規表現になっていないこと）
       expect(re.test('/_next/static/chunk.js')).toBe(false)
       expect(re.test('/logo.png')).toBe(false)

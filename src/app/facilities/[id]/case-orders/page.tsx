@@ -5,9 +5,16 @@ import Link from 'next/link'
 import type { CaseOrder } from '@/types/order'
 import { formatJstDate, formatJstDateTime } from '@/lib/format-date'
 
-const STATUS_LABEL: Record<string, string> = {
+// WHY(issue #809): 型には cancelled があるのにラベルが無く、一覧に英字のまま
+//      「cancelled」と出ていた既存バグ（SPEC Part1「4. 受け入れ条件」に明記）。
+// WHY(Record<string, string>ではなくCaseOrder['status']を鍵にする、レビュー指摘: 型安全・
+//      データ層の整合 important): `Record<string, string>` のままだと、まさに今回直した
+//      「型には値があるのにラベルが無い」を将来また黙って通す。union型を鍵にすれば、
+//      status に新しい値が増えたときコンパイルエラーで気づける
+const STATUS_LABEL: Record<CaseOrder['status'], string> = {
   draft: '下書き',
   submitted: '提出済',
+  cancelled: '取り消し済',
 }
 
 export default function CaseOrdersPage({ params }: { params: Promise<{ id: string }> }) {
@@ -74,6 +81,7 @@ export default function CaseOrdersPage({ params }: { params: Promise<{ id: strin
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>手技名</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>ステータス</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>作成日</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>詳細</th>
               </tr>
             </thead>
             <tbody>
@@ -86,6 +94,11 @@ export default function CaseOrdersPage({ params }: { params: Promise<{ id: strin
                   <td className="px-6 py-4 text-sm" style={{ color: '#4B5563' }}>{STATUS_LABEL[order.status] ?? order.status}</td>
                   <td className="px-6 py-4 text-sm" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                     {formatJstDate(order.createdAt)}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <Link href={`/facilities/${id}/case-orders/${order.id}`} className="hover:underline" style={{ color: '#2563EB' }}>
+                      詳細を見る
+                    </Link>
                   </td>
                 </tr>
               ))}

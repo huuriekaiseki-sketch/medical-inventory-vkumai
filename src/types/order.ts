@@ -367,3 +367,35 @@ export type LotSearchApiResponse = {
 export type LotSearchApiErrorResponse = {
   error: string
 }
+
+/**
+ * GET /api/case-orders/[id] のレスポンス型（成功時）
+ * issue #809 Set B: route.ts が返すペイロード。登録した症例発注の詳細を返す
+ */
+export type CaseOrderDetailApiResponse = {
+  caseOrder: CaseOrder
+}
+
+/**
+ * GET /api/case-orders/[id] のエラーレスポンス型
+ * 400: ID 形式不正, 401: 未認証, 404: 見つからない（存在しない・他施設）, 500: サーバーエラー
+ */
+export type CaseOrderDetailApiErrorResponse = {
+  error: string
+}
+
+/**
+ * GET /api/loan-returns/[id] のレスポンス型（成功時）
+ * issue #809 Set B: route.ts が返すペイロード。登録した短貸返却の詳細を返す
+ */
+export type LoanReturnDetailApiResponse = {
+  loanReturn: LoanReturn
+}
+
+/**
+ * GET /api/loan-returns/[id] のエラーレスポンス型
+ * 400: ID 形式不正, 401: 未認証, 404: 見つからない（存在しない・他施設）, 500: サーバーエラー
+ */
+export type LoanReturnDetailApiErrorResponse = {
+  error: string
+}

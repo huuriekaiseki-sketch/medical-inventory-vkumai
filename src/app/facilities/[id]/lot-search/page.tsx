@@ -20,15 +20,15 @@ const KIND_COLOR: Record<LotSearchResultItem['kind'], string> = {
   case_order: '#B03F00',
   loan_return: '#4B5563',
 }
-// WHY(行ごとの「元へ」リンクを置かない。停止②で人が決めた): 一覧ページの行（#order-<id>）へ飛ぶ作りにしていたが、
-//      一覧が取るのは**最新 50 件だけ**で、それより古い発注・返却の行はページに存在しない。リコールで調べるのは
-//      たいてい過去の記録なので、いちばん使う場面で「踏んでも何も起きないリンク」になっていた。
-//      特定に要る情報（患者 ID・日時・JAN・数量）は行そのものに出すので、存在しない行へ飛ぶ約束はせず、
-//      種別ごとの一覧へのリンクだけを置く。確実に辿るには ID を指定して 1 件を取る API と詳細ページが要る（別 issue）
-const KIND_LIST_LINKS: { path: string; label: string }[] = [
-  { path: 'case-orders', label: '症例発注の一覧へ' },
-  { path: 'loan-returns', label: '短貸返却の一覧へ' },
-]
+// WHY(issue #809 セットC): issue #803 でやめた行ごとのリンクを、詳細ページ宛てで復活させる。
+//      #803 当時は一覧ページの行（#order-<id>）へ飛ぶ作りで、一覧が最新50件だけしか持たないため
+//      「踏んでも何も起きないリンク」になっていた。今は ID を指定して1件だけ取る詳細ページがあるので、
+//      `parentId`（症例発注/短貸返却そのもののID）で確実に辿れる。`#` つきのリンクにはしない。
+//      種別ごとの一覧へのリンクは、詳細ページから一覧へ戻れるので外す（SPEC Part2 セットC）。
+const KIND_DETAIL_PATH: Record<LotSearchResultItem['kind'], string> = {
+  case_order: 'case-orders',
+  loan_return: 'loan-returns',
+}
 
 // WHY(決定4): 検証環境の500件上限と揃える。UI側は超過の有無(truncated)だけを見る。
 // WHY(issue #814): 長さの上限はこの画面で持たない。設定（API 側と同じ値）との一致をテストで
@@ -181,6 +181,7 @@ export default function LotSearchPage({ params }: { params: Promise<{ id: string
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>日付</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>患者ID</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>イニシャル</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={labelStyle}>詳細</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -215,27 +216,20 @@ export default function LotSearchPage({ params }: { params: Promise<{ id: string
                       <td className="px-6 py-4 text-sm" style={{ color: '#111827' }}>
                         {item.kind === 'case_order' ? item.patientInitials : '—'}
                       </td>
+                      <td className="px-6 py-4 text-sm">
+                        <Link
+                          href={`/facilities/${id}/${KIND_DETAIL_PATH[item.kind]}/${item.parentId}`}
+                          className="hover:underline"
+                          style={{ color: '#2563EB' }}
+                        >
+                          詳細を見る
+                        </Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
-
-          {state.items.length > 0 && (
-            <p className="mt-4 text-sm" style={{ color: '#4B5563' }}>
-              手技名などの詳細は一覧で確認してください（一覧に出るのは新しい順に 50 件までです）。
-              {KIND_LIST_LINKS.map((l) => (
-                <Link
-                  key={l.path}
-                  href={`/facilities/${id}/${l.path}`}
-                  className="ml-3 hover:underline"
-                  style={{ color: '#2563EB' }}
-                >
-                  {l.label}
-                </Link>
-              ))}
-            </p>
           )}
         </>
       )}

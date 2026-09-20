@@ -79,6 +79,13 @@ export interface CrossFacilityFixtures {
   loanReturnId?: string
   loanReturnItemId?: string
   /**
+   * 施設 A の症例発注（issue #809 追加）。
+   *
+   * WHY: `GET /api/case-orders/[id]` を攻撃表で測るには **実在する発注** が要る。
+   *      存在しない UUID では 404 で止まり、認可の判定（RLS → `requireFacilityAccess`）に届かない（weak）。
+   */
+  caseOrderId?: string
+  /**
    * 施設 A の消耗品（2026-09-09 追加）。
    *
    * WHY: 消耗品を直す・止める・消す道（`/api/consumables/[id]`）を攻撃表で測るには、
@@ -348,6 +355,24 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     throw new Error(`[E2E cross-facility auth] consumables シード失敗: ${consumableError?.message}`)
   }
 
+  // 施設 A の症例発注を 1 件作る（issue #809。GET /api/case-orders/[id] の攻撃で叩く実物）
+  const { data: caseOrder, error: caseOrderError } = await supabase
+    .from('case_orders')
+    .insert({
+      facility_id: facilityA.id,
+      case_datetime: new Date().toISOString(),
+      procedure_name: `クロス施設境界テスト用術式(症例発注)-${runId}`,
+      patient_id: `E2E-PATIENT-${runId}`,
+      patient_initials: 'XX',
+      gender: 'other',
+      doctor_name: `E2E医師-${runId}`,
+    })
+    .select('id')
+    .single()
+  if (caseOrderError || !caseOrder) {
+    throw new Error(`[E2E cross-facility auth] case_orders シード失敗: ${caseOrderError?.message}`)
+  }
+
   await signInAndSaveStorageState(supabase, emailA, CROSS_FACILITY_USER_A_AUTH_PATH)
   await signInAndSaveStorageState(supabase, emailB, CROSS_FACILITY_USER_B_AUTH_PATH)
 
@@ -372,6 +397,7 @@ export async function generateCrossFacilityAuthState(): Promise<void> {
     consumableName,
     hospitalPricesDistributorProductId: hpDistributorProduct.id as string,
     hospitalPricesDistributorProductName,
+    caseOrderId: caseOrder.id as string,
   }
   fs.writeFileSync(CROSS_FACILITY_FIXTURES_PATH, JSON.stringify(fixtures))
   console.log(`[E2E cross-facility auth] フィクスチャを書き出しました: ${CROSS_FACILITY_FIXTURES_PATH}`)

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createCaseOrder, listCaseOrders, mapItem } from '@/lib/case-orders/repository'
+import { createCaseOrder, listCaseOrders, getCaseOrder, mapItem } from '@/lib/case-orders/repository'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase のクエリビルダはメソッドチェーンで、実物の型（PostgrestFilterBuilder）はジェネリクスが深く、テスト用のモックでは再現できない。このモック関数の戻り値に限って any を使う
 function makeChainableQuery(result: { data: unknown; error: unknown }): any {
@@ -184,6 +184,70 @@ describe('listCaseOrders', () => {
   it('Supabaseエラー時に例外を投げる', async () => {
     const { db } = makeMockListDb({ data: null, error: { message: 'DB error' } })
     await expect(listCaseOrders(db, 'f-1')).rejects.toThrow('DB error')
+  })
+})
+
+// issue #809 Set A: 1件取得（詳細ページ用）。施設IDを引数に取らない「先引き」の形
+describe('getCaseOrder', () => {
+  function makeMockGetDb(result: { data: unknown; error: unknown }): SupabaseClient {
+    const builder: Record<string, unknown> = {
+      select: vi.fn(() => builder),
+      eq: vi.fn(() => builder),
+      maybeSingle: vi.fn().mockResolvedValue(result),
+    }
+    return { from: vi.fn(() => builder) } as unknown as SupabaseClient
+  }
+
+  const row = {
+    id: 'co-1', facility_id: 'f-1', case_datetime: '2026-06-24T10:00:00Z',
+    procedure_name: 'TAVI', patient_id: 'P001', patient_initials: 'T.S.',
+    gender: 'male', doctor_name: '田中医師', status: 'submitted',
+    created_at: '2026-06-24T00:00:00Z', updated_at: '2026-06-24T00:00:00Z',
+    case_order_items: [
+      { id: 'i-1', case_order_id: 'co-1', jan: '4901234567890', lot: 'L001', ubd: '2027-01', quantity: 2, unit_price: 100, created_at: '2026-06-24T00:00:00Z' },
+    ],
+  }
+
+  it('見つかった場合はCaseOrderを返す（明細も含む）', async () => {
+    const db = makeMockGetDb({ data: row, error: null })
+    const result = await getCaseOrder(db, 'co-1')
+    expect(result).not.toBeNull()
+    expect(result?.id).toBe('co-1')
+    expect(result?.procedureName).toBe('TAVI')
+    expect(result?.items).toHaveLength(1)
+    expect(result?.items[0].lot).toBe('L001')
+  })
+
+  it('見つからない場合はnullを返す（RLSで見えない場合も同じ）', async () => {
+    const db = makeMockGetDb({ data: null, error: null })
+    const result = await getCaseOrder(db, 'nonexistent')
+    expect(result).toBeNull()
+  })
+
+  it('明細が0件でも空配列で返る', async () => {
+    const db = makeMockGetDb({ data: { ...row, case_order_items: [] }, error: null })
+    const result = await getCaseOrder(db, 'co-1')
+    expect(result?.items).toEqual([])
+  })
+
+  it('取り消し済み(cancelled)の明細を落とさずに返す', async () => {
+    const db = makeMockGetDb({
+      data: {
+        ...row,
+        case_order_items: [
+          ...row.case_order_items,
+          { id: 'i-2', case_order_id: 'co-1', jan: '4909999999999', lot: 'L002', ubd: '2027-02', quantity: 1, unit_price: 50, created_at: '2026-06-24T00:00:00Z' },
+        ],
+      },
+      error: null,
+    })
+    const result = await getCaseOrder(db, 'co-1')
+    expect(result?.items).toHaveLength(2)
+  })
+
+  it('DBエラー時は例外を投げる', async () => {
+    const db = makeMockGetDb({ data: null, error: { message: 'DB error' } })
+    await expect(getCaseOrder(db, 'co-1')).rejects.toThrow('DB error')
   })
 })
 

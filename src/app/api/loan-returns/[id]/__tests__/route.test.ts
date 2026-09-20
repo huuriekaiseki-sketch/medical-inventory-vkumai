@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
-import { PATCH } from '../route'
+import { GET, PATCH } from '../route'
 import { ClientVisibleError } from '@/lib/client-visible-error'
 import {
   LOAN_RETURN_ALREADY_CANCELLED_ERROR,
@@ -10,6 +10,8 @@ import {
 const mockRequireAuth = vi.fn()
 const mockRequireFacilityAccess = vi.fn()
 const mockCancelLoanReturn = vi.fn()
+const mockGetLoanReturn = vi.fn()
+const mockRecordHiddenRowDenial = vi.fn()
 
 vi.mock('@/lib/supabase/server', () => ({
   createServerSupabase: async () => ({}),
@@ -25,8 +27,12 @@ vi.mock('@/lib/loan-returns/repository', async (importOriginal) => {
   return {
     ...actual,
     cancelLoanReturn: (...args: unknown[]) => mockCancelLoanReturn(...args),
+    getLoanReturn: (...args: unknown[]) => mockGetLoanReturn(...args),
   }
 })
+vi.mock('@/lib/security/hidden-row-denial', () => ({
+  recordHiddenRowDenial: (...args: unknown[]) => mockRecordHiddenRowDenial(...args),
+}))
 
 const FACILITY = '11111111-1111-4111-8111-111111111111'
 const context = { params: Promise.resolve({ id: 'lr-1' }) }
@@ -109,6 +115,92 @@ describe('PATCH /api/loan-returns/[id]（返却の取り消し・E-056）', () =
     expect(res.status).toBe(500)
     const body = await res.json()
     expect(body.error).toBe('返却の取り消しに失敗しました')
+    expect(JSON.stringify(body)).not.toContain('relation')
+  })
+})
+
+// WHY(issue #809 Set B): GET /api/loan-returns/[id]（詳細ページの土台）に
+//      route テストが1つも無かった（レビュー指摘: 正しさ critical）。
+//      case-orders/[id] の GET テストと同じ形で、先引き→施設判定を固定する。
+const VALID_ID = '22222222-2222-4222-8222-222222222222'
+const getContext = { params: Promise.resolve({ id: VALID_ID }) }
+
+function getRequest() {
+  return new NextRequest(`http://localhost/api/loan-returns/${VALID_ID}`)
+}
+
+const LOAN_RETURN = {
+  id: VALID_ID,
+  facilityId: 'f1',
+  returnDatetime: '2026-01-01T00:00:00Z',
+  status: 'returned',
+  items: [],
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+}
+
+describe('GET /api/loan-returns/[id]（issue #809）', () => {
+  it('未認証なら401（repositoryに進まない）', async () => {
+    mockRequireAuth.mockRejectedValue(new Error('UNAUTHORIZED'))
+    const res = await GET(getRequest(), getContext)
+    expect(res.status).toBe(401)
+    expect(mockGetLoanReturn).not.toHaveBeenCalled()
+  })
+
+  // WHY: SPEC.md 受け入れ条件「形式が不正なIDは404か400で、500にならない」。
+  //      実装は存在の有無も形式の正否も漏らさない側に倒し、404で統一している。
+  //      SPEC.md Part2「認可の形」の順序（requireAuth → ID の形式 → get*）どおり、
+  //      形式チェックの前に requireAuth は呼ばれる（未認証は形式によらず先に401で止める）
+  it('IDの形式が不正なら404（DBへ投げない。500にしない）', async () => {
+    const badContext = { params: Promise.resolve({ id: 'not-a-uuid' }) }
+    const res = await GET(getRequest(), badContext)
+    expect(res.status).toBe(404)
+    expect(mockGetLoanReturn).not.toHaveBeenCalled()
+    expect(mockRequireAuth).toHaveBeenCalled()
+  })
+
+  // WHY: SPEC.md Part2「認可の形」の順序どおり、未認証者は ID の形式が不正でも
+  //      404 ではなく 401 で止まる
+  it('未認証かつIDの形式も不正なら401（形式より先に認証で止まる）', async () => {
+    mockRequireAuth.mockRejectedValue(new Error('UNAUTHORIZED'))
+    const badContext = { params: Promise.resolve({ id: 'not-a-uuid' }) }
+    const res = await GET(getRequest(), badContext)
+    expect(res.status).toBe(401)
+    expect(mockGetLoanReturn).not.toHaveBeenCalled()
+  })
+
+  it('見つからない（RLSで見えない・存在しない）なら404で、拒否をrecordHiddenRowDenialに残す', async () => {
+    mockGetLoanReturn.mockResolvedValue(null)
+    const res = await GET(getRequest(), getContext)
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toBe('返却が見つかりません')
+    expect(mockRecordHiddenRowDenial).toHaveBeenCalledWith({ table: 'loan_returns', id: VALID_ID, actorId: 'u1' })
+    expect(mockRequireFacilityAccess).not.toHaveBeenCalled()
+  })
+
+  it('見つかっても他施設（requireFacilityAccessが失敗）なら404（403にしない。存在を漏らさない）', async () => {
+    mockGetLoanReturn.mockResolvedValue(LOAN_RETURN)
+    mockRequireFacilityAccess.mockRejectedValue(new Error('FORBIDDEN'))
+    const res = await GET(getRequest(), getContext)
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toBe('返却が見つかりません')
+  })
+
+  it('自施設のメンバーなら200で1件（ヘッダ+明細）を返す', async () => {
+    mockGetLoanReturn.mockResolvedValue(LOAN_RETURN)
+    const res = await GET(getRequest(), getContext)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ loanReturn: LOAN_RETURN })
+    expect(mockRequireFacilityAccess).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'f1')
+    expect(mockRecordHiddenRowDenial).not.toHaveBeenCalled()
+  })
+
+  it('repositoryが例外を投げたら500で、エラー本文を応答に出さない', async () => {
+    mockGetLoanReturn.mockRejectedValue(new Error('relation "loan_returns" does not exist'))
+    const res = await GET(getRequest(), getContext)
+    expect(res.status).toBe(500)
+    const body = await res.json()
+    expect(body.error).toBe('返却の取得に失敗しました')
     expect(JSON.stringify(body)).not.toContain('relation')
   })
 })

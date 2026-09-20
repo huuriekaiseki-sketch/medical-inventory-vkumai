@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createLoanReturn, listLoanReturns, LOAN_ORDER_NOT_FOUND_ERROR } from '@/lib/loan-returns/repository'
+import { createLoanReturn, listLoanReturns, getLoanReturn, LOAN_ORDER_NOT_FOUND_ERROR } from '@/lib/loan-returns/repository'
 import { ClientVisibleError } from '@/lib/client-visible-error'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase のクエリビルダはメソッドチェーンで、実物の型（PostgrestFilterBuilder）はジェネリクスが深く、テスト用のモックでは再現できない。このモック関数の戻り値に限って any を使う
@@ -247,5 +247,69 @@ describe('listLoanReturns', () => {
   it('Supabaseエラー時に例外を投げる', async () => {
     const { db } = makeMockListDb({ data: null, error: { message: 'DB error' } })
     await expect(listLoanReturns(db, 'f-1')).rejects.toThrow('DB error')
+  })
+})
+
+// issue #809 Set A: 1件取得（詳細ページ用）。施設IDを引数に取らない「先引き」の形
+describe('getLoanReturn', () => {
+  function makeMockGetDb(result: { data: unknown; error: unknown }): SupabaseClient {
+    const builder: Record<string, unknown> = {
+      select: vi.fn(() => builder),
+      eq: vi.fn(() => builder),
+      maybeSingle: vi.fn().mockResolvedValue(result),
+    }
+    return { from: vi.fn(() => builder) } as unknown as SupabaseClient
+  }
+
+  const row = {
+    id: 'lr-1', facility_id: 'f-1', return_datetime: '2026-06-24T15:00:00Z',
+    status: 'returned', created_at: '2026-06-24T00:00:00Z', updated_at: '2026-06-24T00:00:00Z',
+    loan_order_id: 'lo-1',
+    loan_return_items: [
+      { id: 'i-1', loan_return_id: 'lr-1', jan: '490001', lot: 'L001', ubd: '2027-01', quantity: 1, created_at: '2026-06-24T00:00:00Z', loan_order_item_id: null, status: 'active' },
+    ],
+  }
+
+  it('見つかった場合はLoanReturnを返す（明細も含む）', async () => {
+    const db = makeMockGetDb({ data: row, error: null })
+    const result = await getLoanReturn(db, 'lr-1')
+    expect(result).not.toBeNull()
+    expect(result?.id).toBe('lr-1')
+    expect(result?.loanOrderId).toBe('lo-1')
+    expect(result?.items).toHaveLength(1)
+    expect(result?.items[0].lot).toBe('L001')
+  })
+
+  it('見つからない場合はnullを返す（RLSで見えない場合も同じ）', async () => {
+    const db = makeMockGetDb({ data: null, error: null })
+    const result = await getLoanReturn(db, 'nonexistent')
+    expect(result).toBeNull()
+  })
+
+  it('明細が0件でも空配列で返る', async () => {
+    const db = makeMockGetDb({ data: { ...row, loan_return_items: [] }, error: null })
+    const result = await getLoanReturn(db, 'lr-1')
+    expect(result?.items).toEqual([])
+  })
+
+  it('取り消し済み(cancelled)の明細を落とさずに返す', async () => {
+    const db = makeMockGetDb({
+      data: {
+        ...row,
+        loan_return_items: [
+          ...row.loan_return_items,
+          { id: 'i-2', loan_return_id: 'lr-1', jan: '490002', lot: 'L002', ubd: '2027-02', quantity: 1, created_at: '2026-06-24T00:00:00Z', loan_order_item_id: null, status: 'cancelled' },
+        ],
+      },
+      error: null,
+    })
+    const result = await getLoanReturn(db, 'lr-1')
+    expect(result?.items).toHaveLength(2)
+    expect(result?.items.find(i => i.id === 'i-2')?.status).toBe('cancelled')
+  })
+
+  it('DBエラー時は例外を投げる', async () => {
+    const db = makeMockGetDb({ data: null, error: { message: 'DB error' } })
+    await expect(getLoanReturn(db, 'lr-1')).rejects.toThrow('DB error')
   })
 })

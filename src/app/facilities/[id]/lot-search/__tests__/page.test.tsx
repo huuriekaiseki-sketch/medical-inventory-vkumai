@@ -160,15 +160,13 @@ describe('LotSearchPage', () => {
 
     expect(await screen.findByText('症例発注')).toBeInTheDocument()
     expect(screen.getByText('短貸返却')).toBeInTheDocument()
-    // WHY(停止②で判明・人が (1) を選んだ): 行ごとの「元へ」は一覧ページの行（#order-<id>）へ飛ぶ作りだったが、
-    //      一覧が取るのは**最新 50 件だけ**で、それより古い発注の行はページに存在しない。リコールで調べるのは
-    //      たいてい過去の発注なので、いちばん使う場面で「踏んでも何も起きないリンク」になっていた。
-    //      特定に要る情報は行そのものに出すようにしたので（決定 6=(b)）、**存在しない行へ飛ぶ約束をやめ**、
-    //      種別ごとの一覧へのリンクだけを置く。確実に辿れる作り（ID 指定の取得と詳細ページ）は別 issue
-    expect(screen.queryByRole('link', { name: '元へ' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('columnheader', { name: '元へ' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '症例発注の一覧へ' })).toHaveAttribute('href', '/facilities/f-1/case-orders')
-    expect(screen.getByRole('link', { name: '短貸返却の一覧へ' })).toHaveAttribute('href', '/facilities/f-1/loan-returns')
+    // WHY(issue #809 セットC): issue #803 でやめた行ごとのリンクを、詳細ページ宛てで復活させる。
+    //      当時は一覧ページの行（#order-<id>）へ飛ぶ作りで、一覧が最新50件だけしか持たないため
+    //      「踏んでも何も起きないリンク」になっていた。今は parentId で1件だけ取る詳細ページがあるので、
+    //      確実に辿れる（# つきのリンクにはしない）。
+    const detailLinks = screen.getAllByRole('link', { name: '詳細を見る' })
+    expect(detailLinks[0]).toHaveAttribute('href', '/facilities/f-1/case-orders/co-1')
+    expect(detailLinks[1]).toHaveAttribute('href', '/facilities/f-1/loan-returns/lr-1')
     // 行を指すフラグメントつきのリンクが残っていないこと（存在しない行へ飛ぶ約束をしない）
     expect(screen.getAllByRole('link').every((l) => !(l.getAttribute('href') ?? '').includes('#'))).toBe(true)
     // WHY(決定 6 を 2026-09-19 に (a)→(b) へ決め直した): 症例発注の行には患者 ID とイニシャルを出す。

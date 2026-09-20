@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/supabase/require-auth'
 import { requireFacilityAccess } from '@/lib/supabase/require-facility-access'
 import {
   cancelLoanReturn,
+  getLoanReturn,
   LOAN_RETURN_ALREADY_CANCELLED_ERROR,
   LOAN_RETURN_NOT_FOUND_ERROR,
 } from '@/lib/loan-returns/repository'
@@ -12,6 +13,46 @@ import { ClientVisibleError } from '@/lib/client-visible-error'
 import type { RouteContext } from '@/types/route'
 import { parseBody } from '@/lib/validation/parse-body'
 import { loanReturnCancelSchema } from '@/lib/validation/schemas'
+import { recordHiddenRowDenial } from '@/lib/security/hidden-row-denial'
+import { isUuid } from '@/lib/validation/uuid'
+
+/**
+ * 短貸返却の詳細（issue #809）。認可の形は case-orders/[id] GET と同じ
+ * （先引き→施設判定。SPEC.md Part 2「認可の形」参照）。
+ *
+ * WHY(requireAuth を ID の形式チェックより先にする、SPEC.md Part 2「認可の形」):
+ *      「`requireAuth` → ID の形式 → `get*` → …」の順で書かれている。未認証者に対しては
+ *      形式の正否すら判定せず先に 401 で止める。
+ */
+export async function GET(_request: NextRequest, context: RouteContext) {
+  const { id } = await context.params
+  const db = await createServerSupabase()
+  let user
+  try {
+    user = await requireAuth(db)
+  } catch (e) {
+    return authGuardError(e)
+  }
+  if (!isUuid(id)) {
+    return apiError('返却が見つかりません', 404)
+  }
+  let loanReturn
+  try {
+    loanReturn = await getLoanReturn(db, id)
+  } catch (error) {
+    return repositoryError(error, '返却の取得に失敗しました')
+  }
+  if (!loanReturn) {
+    await recordHiddenRowDenial({ table: 'loan_returns', id, actorId: user.id })
+    return apiError('返却が見つかりません', 404)
+  }
+  try {
+    await requireFacilityAccess(db, user, loanReturn.facilityId)
+  } catch {
+    return apiError('返却が見つかりません', 404)
+  }
+  return NextResponse.json({ loanReturn })
+}
 
 /**
  * 返却の取り消し（E-056）。

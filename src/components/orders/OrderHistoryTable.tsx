@@ -1,8 +1,17 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import type { OrderKind, OrderListItem } from '@/types/order'
 import { formatJstDate } from '@/lib/format-date'
+
+// WHY(issue #809 決定C=(3)): `/orders` の行は施設別一覧の最新50件より古い記録も含む。
+//      古い記録の詳細を開く唯一の入口がここなので、種別ごとの詳細ページへのパスを持つ
+//      症例発注・短貸返却の行にだけリンクを出す（消耗品発注・短貸発注の詳細は対象外）。
+const DETAIL_PATH: Partial<Record<OrderKind, string>> = {
+  case_order: 'case-orders',
+  loan_return: 'loan-returns',
+}
 
 // WHY: issue #20 Part 2 Set E「ステータスラベルマップ」をそのまま踏襲。
 // 既存値（draft/submitted/returned）以外は想定外だが、フォールバックで生値を表示し画面を壊さない。
@@ -113,6 +122,7 @@ export function OrderHistoryTable({ items, facilityId, onCancelled }: Props) {
               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest whitespace-nowrap" style={labelStyle}>概要</th>
               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest whitespace-nowrap" style={labelStyle}>ステータス</th>
               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest whitespace-nowrap" style={labelStyle}>作成日</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest whitespace-nowrap" style={labelStyle}>詳細</th>
               {showActions && (
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest whitespace-nowrap" style={labelStyle}>操作</th>
               )}
@@ -146,6 +156,19 @@ export function OrderHistoryTable({ items, facilityId, onCancelled }: Props) {
                 </td>
                 <td className="px-6 py-4 text-sm whitespace-nowrap" style={{ color: '#4B5563', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                   {formatJstDate(item.createdAt)}
+                </td>
+                <td className="px-6 py-4 text-sm whitespace-nowrap">
+                  {DETAIL_PATH[item.kind] ? (
+                    <Link
+                      href={`/facilities/${item.facilityId}/${DETAIL_PATH[item.kind]}/${item.id}`}
+                      className="hover:underline"
+                      style={{ color: '#2563EB' }}
+                    >
+                      詳細を見る
+                    </Link>
+                  ) : (
+                    <span style={{ color: '#6B7280' }}>—</span>
+                  )}
                 </td>
                 {showActions && (
                   <td className="px-6 py-4 text-sm whitespace-nowrap">

@@ -32,6 +32,7 @@ export type PathId =
   | 'productA'
   | 'categoryA'
   | 'compatA'
+  | 'caseOrderA'
   | 'random'
 
 export interface AttackCase {
@@ -68,6 +69,7 @@ export const ATTACK_MATRIX: Record<string, RouteAttacks> = {
     POST: { body: { facilityId: FACILITY_A, procedureName: '攻撃テスト用術式', maker: '攻撃テスト用メーカー', items: [] } },
   },
   '/api/case-orders/[id]': {
+    GET: { pathId: 'caseOrderA', note: 'issue #809。施設 A の**実在する**症例発注を他施設の利用者が読めないこと（404、患者情報も本文に出ない）' },
     PATCH: { pathId: 'random', body: { facilityId: FACILITY_A, action: 'cancel' }, note: '施設 A の発注を勝手に取り消せない（E-056）。id は存在しない UUID で、認可が先に 403 を返すこと' },
   },
   '/api/case-orders': {
@@ -83,6 +85,7 @@ export const ATTACK_MATRIX: Record<string, RouteAttacks> = {
     POST: { body: { facilityId: FACILITY_A, returnDatetime: ISO, loanOrderId: LOAN_ORDER_A, items: [] }, note: '施設 A の実在する短貸発注に対する返却の詐称' },
   },
   '/api/loan-returns/[id]': {
+    GET: { pathId: 'loanReturnA', note: 'issue #809。施設 A の**実在する**短貸返却を他施設の利用者が読めないこと（404）' },
     PATCH: { pathId: 'random', body: { facilityId: FACILITY_A, action: 'cancel' }, note: '施設 A の返却を勝手に取り消せない（E-056）。id は存在しない UUID で、認可が先に 403 を返すこと' },
   },
   '/api/loan-returns/[id]/items/[itemId]': {

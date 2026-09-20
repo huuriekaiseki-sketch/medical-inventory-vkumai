@@ -47,6 +47,27 @@ export function mapItem(row: CaseOrderItemRow): CaseOrderItem {
   }
 }
 
+// WHY(issue #809 Set A): 一覧・作成・単体取得の3箇所で同じ行→型の写しを書いていたのを
+//      1つに統合する（SPEC.md Part2「同じ写しを2か所に書かない」）。明細行は呼び出し元が
+//      抽出してから渡す（ネストのキー名が listCaseOrders は case_order_items、
+//      createCaseOrder の RPC 応答は items と異なるため）
+export function mapCaseOrder(row: CaseOrderRow, itemRows: CaseOrderItemRow[]): CaseOrder {
+  return {
+    id: asString(row.id),
+    facilityId: asString(row.facility_id),
+    caseDatetime: asString(row.case_datetime),
+    procedureName: asString(row.procedure_name),
+    patientId: asString(row.patient_id),
+    patientInitials: asString(row.patient_initials),
+    gender: asEnum(row.gender, GENDERS, 'other'),
+    doctorName: asString(row.doctor_name),
+    status: asEnum(row.status, STATUSES, 'draft'),
+    items: itemRows.map(mapItem),
+    createdAt: asString(row.created_at),
+    updatedAt: asString(row.updated_at),
+  }
+}
+
 // WHY: 重複定義していたフィルタ型を src/lib/orders/list-filter.ts に統合（issue #20 レビュー指摘）
 export type CaseOrderListFilter = OrderRepositoryFilter
 
@@ -89,20 +110,31 @@ export async function listCaseOrders(
     rows = rows.slice(offset, offset + limit)
   }
 
-  return rows.map(o => ({
-    id: asString(o.id),
-    facilityId: asString(o.facility_id),
-    caseDatetime: asString(o.case_datetime),
-    procedureName: asString(o.procedure_name),
-    patientId: asString(o.patient_id),
-    patientInitials: asString(o.patient_initials),
-    gender: asEnum(o.gender, GENDERS, 'other'),
-    doctorName: asString(o.doctor_name),
-    status: asEnum(o.status, STATUSES, 'draft'),
-    items: (o.case_order_items ?? []).map(mapItem),
-    createdAt: asString(o.created_at),
-    updatedAt: asString(o.updated_at),
-  }))
+  return rows.map(o => mapCaseOrder(o, o.case_order_items ?? []))
+}
+
+/**
+ * 1件取得（issue #809 Set A、詳細ページ用）。
+ *
+ * WHY(施設IDを引数に取らない「先引き」): SPEC.md Part2で、repository と route の認可の形が
+ *      両立しない2案で書かれていた指摘を受け、先引きに統一した。見つからない（存在しない・
+ *      RLSで見えない）場合はnullを返すだけで、施設境界の判定はroute側の
+ *      requireFacilityAccess(db, user, record.facilityId) に委ねる。
+ *
+ * WHY(maybeSingle): 0件はエラーではなくnullとして扱いたい（RLSで見えない行を「存在しない」と
+ *      区別しない。存在の有無を漏らさないため）。single()だとPGRST116をエラー分岐で
+ *      拾う必要があり、コードが1つ増える分だけ間違えやすい。
+ */
+export async function getCaseOrder(db: SupabaseClient, id: string): Promise<CaseOrder | null> {
+  const { data, error } = await db
+    .from('case_orders')
+    .select('*, case_order_items(*)')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return null
+  const row = data as CaseOrderRow & { case_order_items?: CaseOrderItemRow[] }
+  return mapCaseOrder(row, row.case_order_items ?? [])
 }
 
 export async function createCaseOrder(db: SupabaseClient, facilityId: string, input: CaseOrderInput): Promise<CaseOrder> {
@@ -129,18 +161,5 @@ export async function createCaseOrder(db: SupabaseClient, facilityId: string, in
   const o = (data ?? {}) as CaseOrderRow & { items?: unknown }
   const itemRows = Array.isArray(o.items) ? (o.items as CaseOrderItemRow[]) : []
 
-  return {
-    id: asString(o.id),
-    facilityId: asString(o.facility_id),
-    caseDatetime: asString(o.case_datetime),
-    procedureName: asString(o.procedure_name),
-    patientId: asString(o.patient_id),
-    patientInitials: asString(o.patient_initials),
-    gender: asEnum(o.gender, GENDERS, 'other'),
-    doctorName: asString(o.doctor_name),
-    status: asEnum(o.status, STATUSES, 'draft'),
-    items: itemRows.map(mapItem),
-    createdAt: asString(o.created_at),
-    updatedAt: asString(o.updated_at),
-  }
+  return mapCaseOrder(o, itemRows)
 }
