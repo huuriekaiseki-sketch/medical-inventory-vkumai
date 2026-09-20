@@ -46,6 +46,7 @@ interface Fixtures {
   adminUser: SeededUser
   productId: string
   caseOrderItemAId: string
+  caseOrderItemCancelledId: string
   loanReturnItemAId: string
   loanReturnItemCancelledId: string
   lot: string
@@ -124,6 +125,43 @@ async function seed(): Promise<Fixtures> {
     throw new Error(`[lot-search-rls-idor] loan_return_items シード作成失敗: ${loanReturnItemError?.message}`)
   }
 
+  // WHY(取り消し済みの症例発注、issue #824): 症例発注の取り消しは親の1段のみ（case_orders.status）。
+  //      短貸返却と違い明細ごとの取り消しは無いので、親ごともう1件シードし submitted → cancelled へ進める
+  //      （20260908070000 で status に cancelled を許可した既存の遷移経路に合わせる）
+  const { data: caseOrderCancelled, error: caseOrderCancelledError } = await serviceClient
+    .from('case_orders')
+    .insert({
+      facility_id: facilityA.id,
+      case_datetime: new Date().toISOString(),
+      procedure_name: 'シード用術式',
+      patient_id: 'IDOR-TEST-PATIENT-LOT-CANCELLED',
+      patient_initials: 'IDORテスト患者2',
+      gender: 'other',
+      doctor_name: 'IDORテスト医師',
+    })
+    .select('id')
+    .single()
+  if (caseOrderCancelledError || !caseOrderCancelled) {
+    throw new Error(`[lot-search-rls-idor] 取り消し用 case_orders シード作成失敗: ${caseOrderCancelledError?.message}`)
+  }
+  const { data: caseOrderItemCancelled, error: caseOrderItemCancelledError } = await serviceClient
+    .from('case_order_items')
+    .insert({ case_order_id: caseOrderCancelled.id, jan, lot, quantity: 1 })
+    .select('id')
+    .single()
+  if (caseOrderItemCancelledError || !caseOrderItemCancelled) {
+    throw new Error(
+      `[lot-search-rls-idor] 取り消し用 case_order_items シード作成失敗: ${caseOrderItemCancelledError?.message}`
+    )
+  }
+  const { error: caseOrderCancelError } = await serviceClient
+    .from('case_orders')
+    .update({ status: 'cancelled' })
+    .eq('id', caseOrderCancelled.id)
+  if (caseOrderCancelError) {
+    throw new Error(`[lot-search-rls-idor] case_orders の取り消し失敗: ${caseOrderCancelError.message}`)
+  }
+
   // WHY(取り消し済みの明細): 同じ返却・同じロットでもう 1 行作り、active → cancelled へ進める
   //      （戻せない一方向の遷移。20260909000000）。作成時に cancelled を直接入れず UPDATE するのは、
   //      「作成時は必ず active」という実際の経路に合わせるため
@@ -176,6 +214,7 @@ async function seed(): Promise<Fixtures> {
     adminUser,
     productId: product.id as string,
     caseOrderItemAId: caseOrderItem.id as string,
+    caseOrderItemCancelledId: caseOrderItemCancelled.id as string,
     loanReturnItemAId: loanReturnItem.id as string,
     loanReturnItemCancelledId: cancelledItem.id as string,
     lot,
@@ -289,6 +328,18 @@ describe('ロット検索 searchLotItems RLS/IDOR [P-013 P-015]', () => {
     const activeRow = result.items.find((i) => i.itemId === fixtures.loanReturnItemAId)
     expect(cancelledRow).toMatchObject({ kind: 'loan_return', cancelled: true })
     expect(activeRow).toMatchObject({ kind: 'loan_return', cancelled: false })
+  })
+
+  // WHY(issue #824、停止②で判明した観点と同じ形で足す): 症例発注の取り消しは「その発注の記録は誤りだった」＝
+  //      実際には使っていないかもしれない。検索から**落とさず**、印を付けて返すことを実 DB で測る
+  //      （列名・語彙の綴り違いはモックでは分からない）。対照: 取り消していない明細は cancelled=false
+  it('取り消し済みの症例発注の明細は、落とさずに cancelled=true で返る（対照: 取り消していない明細は false）', async () => {
+    const result = await searchLotItems(fixtures.userA.client, fixtures.facilityA.id, fixtures.lot)
+
+    const cancelledRow = result.items.find((i) => i.itemId === fixtures.caseOrderItemCancelledId)
+    const activeRow = result.items.find((i) => i.itemId === fixtures.caseOrderItemAId)
+    expect(cancelledRow).toMatchObject({ kind: 'case_order', cancelled: true })
+    expect(activeRow).toMatchObject({ kind: 'case_order', cancelled: false })
   })
 
   // WHY: **これは受け入れ条件そのものではない。受け入れ条件が守るべき危険の、DB 層での姿を固定するテスト。**

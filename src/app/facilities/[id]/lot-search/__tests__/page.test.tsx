@@ -206,6 +206,37 @@ describe('LotSearchPage', () => {
     expect(screen.getByText(/実際には返却されていない可能性があります/)).toBeInTheDocument()
   })
 
+  // WHY(issue #824): 症例発注の取り消しも短貸返却と同様、区別なく出すと無関係の患者を巻き込む。
+  //      短貸返却側のテスト（直上）と対照になるケースとして、症例発注側も機械的に確認する
+  it('取り消し済みの症例発注は、行を落とさずに「取り消し済み」と文字で出す（患者IDとイニシャルは表示したまま）', async () => {
+    const items = [
+      {
+        kind: 'case_order',
+        itemId: 'ci-9',
+        parentId: 'co-9',
+        lot: 'LOT-1',
+        jan: '4901234567890',
+        quantity: 2,
+        occurredAt: '2026-01-05T01:00:00Z',
+        patientId: 'P-0009',
+        patientInitials: 'A.B.',
+        cancelled: true,
+      },
+    ]
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse({ items, truncated: false }))))
+    const user = userEvent.setup()
+
+    render(<LotSearchPage params={params('f-1')} />)
+    await user.type(screen.getByLabelText('ロット番号'), 'LOT-1')
+    await user.click(screen.getByRole('button', { name: '検索する' }))
+
+    expect(await screen.findByText('症例発注')).toBeInTheDocument()
+    expect(screen.getByText('取り消し済み')).toBeInTheDocument()
+    expect(screen.getByText(/実際には使用されていない可能性があります/)).toBeInTheDocument()
+    expect(screen.getByText('P-0009')).toBeInTheDocument()
+    expect(screen.getByText('A.B.')).toBeInTheDocument()
+  })
+
   it('短貸返却の行の患者の欄は空欄ではなく「—」を出す（出し忘れと「該当なし」を見分けられるように）', async () => {
     const items = [
       {

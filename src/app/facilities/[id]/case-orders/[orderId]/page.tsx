@@ -131,9 +131,15 @@ export default function CaseOrderDetailPage({
         <p className="mt-2 text-sm" style={{ color: '#4B5563' }}>
           {STATUS_LABEL[order.status] ?? order.status}
         </p>
+        {/* WHY(issue #824 決定A): 事実だけを書くと、リコールの担当者は「記録はあるが無効」としか読めず、
+            **その患者は無関係かもしれない**という次の行動に辿り着けない。短貸返却の詳細ページは
+            同じ論点で既に意味まで書いている（「実際には返却されていない可能性があります」）ので、
+            同じ重みに揃える。文言は返却と変える——返却は「院内に残っている」、発注は「使っていない」で
+            担当者が取るべき行動が逆向きになるため */}
         {order.status === 'cancelled' && (
           <p className="mt-1 text-sm" style={{ color: '#B91C1C' }}>
-            この発注は取り消されています
+            <strong className="font-semibold">この発注は取り消されています</strong>
+            <span className="block">実際には使用されていない可能性があります</span>
           </p>
         )}
       </div>

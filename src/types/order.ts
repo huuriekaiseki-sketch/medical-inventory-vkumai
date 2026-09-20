@@ -308,16 +308,15 @@ export type OrdersApiErrorResponse = {
  * ロット検索の結果要素型（issue #803 Set A）
  *
  * 症例発注と短貸返却、どちらから出た明細かは `kind` で区別する。出どころで持つ情報が違うので判別共用体にする
- * （症例発注の行に `cancelled` が、短貸返却の行に患者のフィールドが、型の上で存在しない）。
+ * （症例発注の行に`cancelled`が、短貸返却の行に患者のフィールドが、型の上で存在しない）。
  *
  * WHY(患者 ID とイニシャルを持つ。決定 6 を 2026-09-19 に (a)→(b) へ決め直した): 最初は「一覧に患者の情報を出さない。
  *      発注を開けば分かる」で承認されたが、発注の詳細ページは存在せず、登録後に患者の情報が出る画面は 1 つも無かった。
  *      リコール対応の目的は「どの患者に使ったか」の特定なので、症例発注の行に**特定に要る 2 つだけ**を持たせる。
  *      医師名・性別・術式名は持たない。施設のメンバーは既存の CaseOrder（一覧 API）で同じ情報を受け取れるので、見える人は増えない
  *
- * WHY(cancelled): 取り消しは「その返却の記録は誤りだった」＝実際には返していないかもしれない。
- *      落とさずに出して印を付ける。明細ごと（loan_return_items.status）と返却の回ごと（loan_returns.status）の
- *      どちらで取り消されていても true
+ * WHY(cancelled は LotSearchCaseOrderItem と LotSearchLoanReturnItem で定義): 取り消しの意味が異なるため
+ *      症例発注は1段のみ、短貸返却は2段あり。各型のJSDocを参照
  */
 type LotSearchResultBase = {
   itemId: string
@@ -333,10 +332,21 @@ export type LotSearchCaseOrderItem = LotSearchResultBase & {
   kind: 'case_order'
   patientId: string
   patientInitials: string
+  /**
+   * 症例発注の取り消し状態（issue #824）。取り消しは「その発注の記録は誤りだった」＝実際には使っていないかもしれない。
+   * 落とさずに出して印を付ける。症例発注は親の1段のみで取り消し（case_orders.status）。
+   * 明細ごとの取り消しは存在しない
+   */
+  cancelled: boolean
 }
 
 export type LotSearchLoanReturnItem = LotSearchResultBase & {
   kind: 'loan_return'
+  /**
+   * 短貸返却の取り消し状態（issue #803）。取り消しは「その返却の記録は誤りだった」＝実際には返していないかもしれない。
+   * 落とさずに出して印を付ける。短貸返却は2段の取り消しがあり、明細ごと（loan_return_items.status）と
+   * 返却の回ごと（loan_returns.status）のどちらで取り消されていても true
+   */
   cancelled: boolean
 }
 

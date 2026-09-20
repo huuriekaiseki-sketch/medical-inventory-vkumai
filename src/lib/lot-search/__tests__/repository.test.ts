@@ -179,16 +179,50 @@ describe('searchLotItems（issue #803 Set A: P-013/P-015 明細の施設境界�
 
     const result = await searchLotItems(db, 'f-1', 'LOT-A')
 
-    expect(result.items[0]).toMatchObject({ kind: 'case_order', patientId: 'P-0001', patientInitials: 'T.Y.' })
+    expect(result.items[0]).toMatchObject({ kind: 'case_order', patientId: 'P-0001', patientInitials: 'T.Y.', cancelled: false })
     expect(Object.keys(result.items[0]).sort()).toEqual(
-      ['kind', 'itemId', 'parentId', 'lot', 'jan', 'quantity', 'occurredAt', 'patientId', 'patientInitials'].sort()
+      ['kind', 'itemId', 'parentId', 'lot', 'jan', 'quantity', 'occurredAt', 'patientId', 'patientInitials', 'cancelled'].sort()
     )
     const json = JSON.stringify(result)
     expect(json).not.toContain('Dr. X')
     expect(json).not.toContain('PCI')
   })
 
-  it('症例発注の SELECT は患者 ID とイニシャルだけを親から取り、医師名・性別・術式名は問い合わせない', async () => {
+  // WHY(issue #824): 症例発注の取り消しは親の1段のみ（case_orders.status）。短貸返却の2段判定
+  //      （明細ごと/回ごとのOR）を症例発注に書かないことを対照ケースで固定する
+  it.each([
+    ['取り消し済み', 'cancelled', true],
+    ['提出済み（取り消していない）', 'submitted', false],
+    ['下書き（取り消していない）', 'draft', false],
+  ])('症例発注の取り消し状態を case_orders.status の1段だけで判定する: %s', async (_name, status, expected) => {
+    const { db } = makeMockDb({
+      case_order_items: {
+        data: [
+          {
+            id: 'coi-1', case_order_id: 'co-1', jan: '111', lot: 'LOT-A', quantity: 2,
+            case_orders: {
+              facility_id: 'f-1', case_datetime: '2026-09-01T00:00:00Z',
+              patient_id: 'P-0001', patient_initials: 'T.Y.', status,
+            },
+          },
+        ],
+        error: null,
+      },
+      loan_return_items: { data: [], error: null },
+    })
+
+    const result = await searchLotItems(db, 'f-1', 'LOT-A')
+
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]).toMatchObject({ kind: 'case_order', cancelled: expected })
+  })
+
+  // WHY(status を名指しで確かめる、issue #824): 上の cancelled 判定テストはモックが返す行に status を
+  //      含めているので、**SELECT から status が落ちても緑のまま**通る（実装中に実際に起きた: 型と
+  //      map だけ足されて SELECT が据え置かれ、cancelled が常に false になっていた）。
+  //      実 DB の統合テストなら落ちるが、そこまで行かずにここで落とせるように、問い合わせる列そのものを見る。
+  //      これが「取る列」の唯一の対照表になるので、載せる列・載せない列を両方向で書く
+  it('症例発注の SELECT は患者 ID・イニシャルと取り消し判定用の status を親から取り、医師名・性別・術式名は問い合わせない', async () => {
     const { db, queries } = makeMockDb(emptyResults())
 
     await searchLotItems(db, 'f-1', 'ABC')
@@ -196,6 +230,7 @@ describe('searchLotItems（issue #803 Set A: P-013/P-015 明細の施設境界�
     const select = String(queries.case_order_items.select.mock.calls[0]?.[0])
     expect(select).toContain('patient_id')
     expect(select).toContain('patient_initials')
+    expect(select).toContain('status')
     expect(select).not.toContain('doctor_name')
     expect(select).not.toContain('gender')
     expect(select).not.toContain('procedure_name')

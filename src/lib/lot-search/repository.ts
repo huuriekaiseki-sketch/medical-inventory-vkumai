@@ -21,6 +21,8 @@ interface CaseOrderParentRow {
   case_datetime?: unknown
   patient_id?: unknown
   patient_initials?: unknown
+  /** 症例発注の取り消し状態（issue #824）。親 `case_orders.status` を PostgREST の埋め込みで取る */
+  status?: unknown
 }
 
 interface CaseOrderItemRow {
@@ -55,10 +57,15 @@ function firstOf<T>(value: T | T[] | null | undefined): T | undefined {
   return value ?? undefined
 }
 
-// WHY(決定 6 = (b)。2026-09-19 に決め直した): 症例発注の行には、リコールで「どの患者に使ったか」を特定するための
-//      **患者 ID とイニシャルだけ**を載せる。医師名・性別・術式名は載せない。守り方は 2 段のまま:
+// WHY(決定 6 = (b)。2026-09-19 に決め直した。issue #824 で status を追加): 症例発注の行には、リコールで
+//      「どの患者に使ったか」を特定するための**患者 ID とイニシャル**、加えて取り消し判定用の **status** だけを
+//      載せる。status は個人情報ではなく取り消し済みか（case_orders.status === 'cancelled'）を判定するためだけに使う。
+//      医師名・性別・術式名は引き続き載せない。守り方は 2 段のまま:
 //      型に無い（LotSearchCaseOrderItem。コンパイル時）／SELECT で問い合わせない（実行時）。
 //      **フィールドを 1 つずつ写す**（`...parent` のように広げない）ので、仮に列が余分に返ってきても戻り値には入らない
+//
+// WHY(1 段だけで判定する): 症例発注の取り消しは親の status だけ。`case_order_items` に status 列は無いので、
+//      下の mapLoanReturnItem のような 2 段の OR を書き写すと、存在しない列を読んで常に false 側へ倒れる
 function mapCaseOrderItem(row: CaseOrderItemRow): LotSearchCaseOrderItem {
   const parent = firstOf(row.case_orders)
   return {
@@ -71,6 +78,7 @@ function mapCaseOrderItem(row: CaseOrderItemRow): LotSearchCaseOrderItem {
     occurredAt: asString(parent?.case_datetime),
     patientId: asString(parent?.patient_id),
     patientInitials: asString(parent?.patient_initials),
+    cancelled: asString(parent?.status) === 'cancelled',
   }
 }
 
@@ -101,8 +109,10 @@ async function searchCaseOrderItems(
   const { data, error } = await db
     .from('case_order_items')
     // WHY(列を名指しする。`*` にしない): 親から取るのは絞り込み用の facility_id・並び用の case_datetime・
-    //      特定用の patient_id / patient_initials だけ。医師名・性別・術式名は問い合わせない
-    .select('id, case_order_id, jan, lot, quantity, case_orders!inner(facility_id, case_datetime, patient_id, patient_initials)')
+    //      特定用の patient_id / patient_initials・取り消し判定用の status だけ。医師名・性別・術式名は問い合わせない
+    .select(
+      'id, case_order_id, jan, lot, quantity, case_orders!inner(facility_id, case_datetime, patient_id, patient_initials, status)'
+    )
     .eq('case_orders.facility_id', facilityId)
     // WHY(受け入れ条件「lot が NULL の明細は検索対象にならない」): ILIKE は NULL に対して
     //      UNKNOWN を返すため既に自然に外れるが、意図を明示するため .not(is null) も付ける

@@ -83,6 +83,33 @@ describe('CaseOrderDetailPage', () => {
     expect(await screen.findByText('取り消し済')).toBeInTheDocument()
   })
 
+  // WHY(issue #824 決定A): 事実（取り消された）だけでは、リコールの担当者は「その患者は無関係かもしれない」
+  //      という次の行動に辿り着けない。短貸返却の詳細ページと同じ重みで**意味**まで出ることを固定する。
+  //      文言が返却側（「返却されていない」）に揃えられてしまう取り違えも、ここで落ちる
+  it('取り消し済みのとき、事実だけでなく「実際には使用されていない可能性があります」と意味まで出す', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(jsonResponse({ caseOrder: makeCaseOrder({ status: 'cancelled' }) })))
+    )
+    render(<CaseOrderDetailPage params={params()} />)
+
+    expect(await screen.findByText('この発注は取り消されています')).toBeInTheDocument()
+    expect(screen.getByText('実際には使用されていない可能性があります')).toBeInTheDocument()
+    expect(screen.queryByText('実際には返却されていない可能性があります')).not.toBeInTheDocument()
+  })
+
+  it('取り消していない発注には、取り消しの文言を出さない（対照）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(jsonResponse({ caseOrder: makeCaseOrder({ status: 'submitted' }) })))
+    )
+    render(<CaseOrderDetailPage params={params()} />)
+
+    await screen.findByText('山田太郎')
+    expect(screen.queryByText('この発注は取り消されています')).not.toBeInTheDocument()
+    expect(screen.queryByText('実際には使用されていない可能性があります')).not.toBeInTheDocument()
+  })
+
   it('404のとき「見つかりません」と一覧へ戻るリンクを出す', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse({ error: 'not found' }, { status: 404 }))))
     render(<CaseOrderDetailPage params={params()} />)
