@@ -33,6 +33,11 @@ set -euo pipefail
 #       一致しないものは全て deny（未知のコマンドを許すと抜け道になる）。
 #
 # 見つけられること: 典型的な書き込み手段（上記）
+# 誤って拒否するもの（既知。安全側なので残している）: **引用符の中の改行**。分割は引用符を見ないので、
+#                     複数行の文字列（例: 複数行の grep パターン）の 2 行目以降を別のコマンドと読んで拒否する。
+#                     2026-09-20 の実行でも数件出た（'repositoryError"' などが「許可されないコマンド」になる）。
+#                     行の継続（バックスラッシュ + 改行）だけは issue #807 で直した。引用符まで解析するのは、
+#                     見分けを誤ったときに抜け道になるので、見送っている
 # 見つけられないこと: 許可コマンドの副作用（例: 許可した scripts/*.sh 自体が書き込む）。
 #                     難読化（base64 経由等）は対象外。この hook は「うっかり」を止めるもので、
 #                     悪意ある回避を防ぐものではない
@@ -59,10 +64,44 @@ READONLY_AGENT_TYPES="${READONLY_AGENT_TYPES:-${CONFIG_READONLY_AGENT_TYPES:-$DE
 READONLY_CMDS='cat head tail less more grep egrep fgrep rg find ls wc awk cut sort uniq tr diff stat file jq echo printf true false test [ which type man env printenv pwd cd basename dirname realpath readlink date tree du df column comm paste fold nl od xxd strings shasum sha256sum md5sum md5 sed'
 GIT_READONLY_SUBCMDS='status log diff show ls-files rev-parse grep blame branch describe cat-file rev-list shortlog remote tag worktree check-ignore ls-tree name-rev merge-base'
 
+# 行の継続（バックスラッシュ + 改行）を、bash の実際の意味どおり 1 行につなぐ（issue #807）。
+#
+# WHY: 改行を常にコマンドの区切りとして切っていたので、複数行に書いたコマンドの 2 行目以降
+#      （例: `--loop developer`）を「許可されないコマンド」として拒否していた。2026-09-20 の deep 実行で、
+#      loop-observability の記録を呼んだ 12 体のうち 5 体がこれで拒否され、gap check には記録漏れと出た。
+#      エージェントが記録を忘れたのではなく、止める仕組みが正しい呼び出しを止めていた。
+#
+# WHY(つなぐ条件を絞る): これは止める仕組みなので、つなぎ方を間違えると抜け道になる。
+#      **bash が本当に継続として扱う場合だけ**つなぎ、迷う形は従来どおり分割する（＝拒否側に倒す）:
+#      - 行末のバックスラッシュが**奇数個**のときだけ継続。偶数個（`\\`）はエスケープされたバックスラッシュで、
+#        そのあとの改行は本物の区切り。素朴につなぐと次の行の rm が引数に化けて通る
+#      - その行に `#` があればつながない。コメントの中のバックスラッシュ + 改行は継続にならないので、
+#        つなぐと次の行のコマンドがコメントに隠れて通る（引用符の中の # まで見分ける解析はしない。
+#        見分けを誤るより、つながずに拒否するほうが安全）
+#      つないだ結果は 1 つのセグメントとして従来の検査（先頭コマンド・リダイレクト・区切り）を通る
+join_line_continuations() {
+  local input="$1" out="" line trailing rest
+  while IFS= read -r line || [ -n "$line" ]; do
+    rest="$line"
+    trailing=0
+    while [ "${rest%\\}" != "$rest" ]; do
+      rest="${rest%\\}"
+      trailing=$((trailing + 1))
+    done
+    if [ $((trailing % 2)) -eq 1 ] && [[ "$line" != *"#"* ]]; then
+      # 継続: 末尾のバックスラッシュ 1 つを落とし、次の行と空白でつなぐ
+      out="${out}${line%\\} "
+    else
+      out="${out}${line}"$'\n'
+    fi
+  done <<<"$input"
+  printf '%s' "$out"
+}
+
 split_segments() {
   # 2>&1 / >&2 / &>/dev/null のような fd 複製は & で分割すると "1" が独立セグメントになるため
   # 先に除去する（リダイレクトの妥当性は呼び出し側で別途検査済み）
-  printf '%s' "$1" | sed -E 's/[0-9]?>&[0-9]//g; s/&>[^[:space:]]*//g' | tr ';&|`\n' $'\n\n\n\n\n' | sed 's/\$(/\n/g'
+  join_line_continuations "$1" | sed -E 's/[0-9]?>&[0-9]//g; s/&>[^[:space:]]*//g' | tr ';&|`\n' $'\n\n\n\n\n' | sed 's/\$(/\n/g'
 }
 
 # 先頭の環境変数代入（FOO=bar CMD）を取り除く
