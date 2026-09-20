@@ -66,12 +66,10 @@ has_before() {
   [ -f "$STATE_FILE" ] && jq -e '.beforeLoopObservability != null' "$STATE_FILE" >/dev/null 2>&1
 }
 
+# WHY(issue #812): 総行数ではなく「フローの記録」だけを数える。after 側と同じ関数を使う
+source "$SCRIPT_DIR/lib/count-flow-loop-records.sh"
 count_loop_lines() {
-  if [ -f "$LOOP_LOG" ]; then
-    wc -l < "$LOOP_LOG" | tr -d ' '
-  else
-    echo 0
-  fi
+  count_flow_loop_records "$LOOP_LOG"
 }
 
 # done/failed件数の判定はcommon.mdの手動手順（jqコマンド）と同一

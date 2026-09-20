@@ -28,7 +28,20 @@ export interface UsageEvent {
   cacheReadInputTokens: number
 }
 
-const NO_TRANSCRIPT_AGENTS = new Set(['human', 'e2e-runner'])
+// WHY(issue #812): 「サブエージェントではない書き手」の一覧は non-subagent-loop-agents.json の 1 か所に置く。
+//      gap check（scripts/lib/count-flow-loop-records.sh）も同じ一覧を読む。ここに自前で持っていたときは、
+//      gap check の側がこの区別を知らず、E2E の行をフローの記録として数えていた。
+// WHY(このファイルの場所の取り方): 本番は node の型剥がし（ESM。__dirname は無く import.meta.dirname がある）、
+//      テストは vitest（__dirname を注入する。import.meta.url は file: スキームにならず new URL では読めない——
+//      2026-09-20 に実際に落ちた）。どちらでも取れる形にする
+const HERE = typeof __dirname === 'string' ? __dirname : import.meta.dirname
+const NO_TRANSCRIPT_AGENTS = new Set<string>(
+  (
+    JSON.parse(readFileSync(join(HERE, 'non-subagent-loop-agents.json'), 'utf-8')) as {
+      agents: string[]
+    }
+  ).agents,
+)
 const EPOCH = '1970-01-01T00:00:00.000Z'
 
 export function computeWindow(

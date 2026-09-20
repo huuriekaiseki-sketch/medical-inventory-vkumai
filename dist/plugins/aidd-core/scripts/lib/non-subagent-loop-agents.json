@@ -1,0 +1,5 @@
+{
+  "_why": "loop-observability.jsonl に書くが、AIDD フローが起動したサブエージェントではない書き手。e2e-runner は E2E の reporter が 1 テストごとに 1 行書く。human は人の手動記録。gap check はこれらを除いて数え（issue #812）、usage の集計は transcript が無いので突合の対象から外す。一覧はここだけに置き、両方がここを読む",
+  "_limit": "reporter の agent 名は環境変数 LOOP_OBSERVABILITY_AGENT で変えられる。変えた名前で書かれた E2E の行は、ここに足さない限りフローの記録として数えられる",
+  "agents": ["human", "e2e-runner"]
+}

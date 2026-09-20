@@ -165,6 +165,8 @@
       "aidd-core",
       "aidd-vkumai"
     ],
+    "lib/count-flow-loop-records.sh": "aidd-core",
+    "lib/non-subagent-loop-agents.json": "aidd-core",
     "lib/record-eval-run.sh": [
       "aidd-core",
       "aidd-vkumai"
@@ -415,6 +417,7 @@
     "check-node-version-pin.test.sh": "both",
     "check-integration-freshness.test.sh": "both",
     "check-local-main-freshness.test.sh": "self",
+    "check-loop-observability-gap.test.sh": "self",
     "check-operation-contracts.test.sh": "both",
     "check-otel-collector-status.test.sh": "self",
     "check-pipe-assertion.test.sh": "both",

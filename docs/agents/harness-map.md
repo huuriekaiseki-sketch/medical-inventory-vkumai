@@ -33,7 +33,7 @@
 
 | 役割 | 何を守るか | 起動 | 入口 | 検査 |
 | --- | --- | --- | --- | --- |
-| ワークフロー（H-01） | 決めた順番（調査 → 仕様 → 実装 → 統合 → 検証）を飛ばさない。飛ばしたら気づく | **人**（フローの起動は人。**記録漏れの検知だけ**が Stop hook で機械化されている） | `.claude/workflows/aidd-phase1-router.js`<br>`.claude/workflows/aidd-phase2.js` | 35 本 |
+| ワークフロー（H-01） | 決めた順番（調査 → 仕様 → 実装 → 統合 → 検証）を飛ばさない。飛ばしたら気づく | **人**（フローの起動は人。**記録漏れの検知だけ**が Stop hook で機械化されている） | `.claude/workflows/aidd-phase1-router.js`<br>`.claude/workflows/aidd-phase2.js` | 36 本 |
 | データ（H-02） | テストのデータが互いを壊さない。消しすぎない・消し残さない | **機械**（統合テスト・E2E を回すたびに走行の前後で実測する（走らせるのは人だが、走れば必ず測る）） | `scripts/run-integration-tests.sh`<br>`scripts/run-e2e-tests.sh` | 4 本 |
 | 契約（H-03） | 決めたことと動くものが食い違わない（操作の契約・層の突合・入口の検証） | **機械**（npm test と hooks-test が毎回回す） | `npm test`<br>`bash scripts/check-operation-contracts.test.sh` | 43 本 |
 | 実装（H-04） | 書いたものが型として通り、単体で動き、ビルドできる | **機械**（npm test / npm run typecheck / npm run lint / next build） | `npm test`<br>`npm run typecheck`<br>`npm run lint` | 8 本 |
@@ -68,7 +68,7 @@
 | `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **88** |
 | `rls-mutants.json`#mutants.length | RLS・RPC の壊し方（H-06） | 件 | **20** |
 
-（ハーネス 8 件・検査 157 本・台帳 8 件。うち `scripts/**/*.test.sh` の 155 本は**この表で全数**——どこにも属さない検査があれば生成そのものが落ちる。残り 2 本は vitest 側から**手で足したもの**で、書き忘れは検知されない（限界の節））
+（ハーネス 8 件・検査 158 本・台帳 8 件。うち `scripts/**/*.test.sh` の 156 本は**この表で全数**——どこにも属さない検査があれば生成そのものが落ちる。残り 2 本は vitest 側から**手で足したもの**で、書き忘れは検知されない（限界の節））
 
 <!-- generated:harness-map end -->
 
