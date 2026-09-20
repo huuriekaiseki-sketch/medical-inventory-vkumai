@@ -31,6 +31,12 @@ if [[ "$LOG_FILE_GIVEN" -eq 0 ]]; then
   ARGS=(--log-file "$(resolve_log_dir)/agent-progress.jsonl" "${ARGS[@]}")
 fi
 
+# WHY(issue #805): 骨格ログも同じ。#546 のときに --log-file だけを共有側へ向け、こちらを渡し忘れていた。
+# TS 側の既定（logs/subagent-skeleton.jsonl）は cwd 相対なので、git worktree から動かすと
+# 自己申告は共有側・突き合わせる骨格は worktree 直下、と別々の場所を読んでいた。
+# このラッパーは --skeleton-log-file を引数として受けないので、常に共有側を渡す
+ARGS=(--skeleton-log-file "$(resolve_log_dir)/subagent-skeleton.jsonl" "${ARGS[@]}")
+
 # WHY: npx tsx はレジストリ依存で遅い日に数分かかる（harvest-journal-events.sh のコメント参照）。
 #      Node 標準の型除去で直接実行する
 node --experimental-strip-types --no-warnings "$SCRIPT_DIR/lib/verify-agent-progress-transcript.ts" "${ARGS[@]}"

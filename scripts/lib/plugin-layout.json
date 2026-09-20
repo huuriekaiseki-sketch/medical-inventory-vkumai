@@ -560,6 +560,7 @@
     "check-input-validation-coverage.test.sh": "src/app/api/ の route 構成とスキーマの置き場がこのスタック固有",
     "check-query-validation-coverage.test.sh": "同上（クエリ文字列側）。Next.js の searchParams を前提にしている",
     "check-layer-consistency.test.sh": "DB の CHECK と入口スキーマの突合。両方ともこのスタック固有",
+    "check-log-dir-resolution.test.sh": "中心リポジトリの `scripts/` の並び（hook と `lib/` が隣にある）を前提に、使い捨ての git worktree へスクリプトを写して動かす（issue #805）。配布物では一部が `bin/` に置かれるので同じ手順では写せない。cwd 相対の logs/ を落とす走査も、中心リポジトリの木を見る",
     "check-migration-lock-safety.test.sh": "supabase/migrations/ の実データを走査する",
     "check-migration-release-safety.test.sh": "同上（baseline のタイムスタンプもこのリポジトリの履歴に依存する）",
     "check-rate-limit-coverage.test.sh": "認証の入口が 1 か所という、このリポジトリの構成が前提",
@@ -592,8 +593,8 @@
     "check-suspense-gaps.test.sh": "同上。`scripts/eval-fixtures/sweep-ui` の実ケースを要求する（走査器は配る）",
     "check-file-intake-paths.test.sh": "src/ の実コードと依存名を走査する（ファイル・アーカイブ受け取りが生えた瞬間に落とす ratchet）。走査する印が Next.js の route と Supabase Storage というこのスタック固有のもので、引き出しの行（security-test-catalog）も名指しで要求する",
     "check-rls-policy-count.test.sh": "supabase/migrations/ を順に再生して現存ポリシー数を上限と突き合わせる。**再生器（lib/replay-rls-policies.mjs）は配る**が、上限の台帳（lib/rls-policy-budget.json）はこのリポジトリの実測値なので、検査ごとここに置く",
-    "check-cli-entry-guard.test.sh": "中心リポジトリのパス構成（`.claude/workflows/lib/` と `scripts/` の位置関係）を前提に、本物の gap 判定を symlink 経由で起動して確かめる（issue #806）。配布物では判定が `bin/` に置かれるので同じ手順では起動できない。素の比較を落とす走査も、中心リポジトリの木を見る",
-    "check-ci-path-filter.test.sh": "`.github/workflows/ci.yml` のジョブ（typecheck / lint / build / dependency-audit / test / hooks-test）を**名指しで**確かめ、supabase/ と src/ の実体から『docs を読むテストが在るか』を数える。CI の組み方も除外してよいパスも導入先ごとに違う（判定器 lib/classify-changed-paths.mjs も同じ理由でここには配らない）"
+    "check-ci-path-filter.test.sh": "`.github/workflows/ci.yml` のジョブ（typecheck / lint / build / dependency-audit / test / hooks-test）を**名指しで**確かめ、supabase/ と src/ の実体から『docs を読むテストが在るか』を数える。CI の組み方も除外してよいパスも導入先ごとに違う（判定器 lib/classify-changed-paths.mjs も同じ理由でここには配らない）",
+    "check-cli-entry-guard.test.sh": "中心リポジトリのパス構成（`.claude/workflows/lib/` と `scripts/` の位置関係）を前提に、本物の gap 判定を symlink 経由で起動して確かめる（issue #806）。配布物では判定が `bin/` に置かれるので同じ手順では起動できない。素の比較を落とす走査も、中心リポジトリの木を見る"
   },
   "checksSplittable": {
     "_comment": "**分ければ配れる**検査の層（2026-09-09 新設）。エンジンは汎用で、固有なのは対象・閾値・対応表だけ、というもの。`checksNotDistributed`（エンジン自体が固有で本当に配れない）とは別物で、ここは**返す当てのある借金**。増やさないことだけを機械で守る（減らすのは人が決める）。",

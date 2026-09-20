@@ -47,10 +47,24 @@ command -v jq >/dev/null 2>&1 || exit 0
 #   AIDD_STATS_CHECK_STATS_DIR        statsディレクトリ（既定 ~/.claude/aidd-session-stats）
 #   AIDD_STATS_CHECK_MARKER_FILE      警告済みマーカー（既定 .aidd/aidd-stats-warning-shown.json）
 
+# WHY(issue #805): 下の cd より前に、自分の場所を絶対パスで控える（相対パスで起動されると cd のあとでは辿れない）。
+#      変数名を SCRIPT_DIR にするのは、配布物の生成が "$SCRIPT_DIR/lib/…" の書き方を配布先のパスへ書き換えるため
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+
 # WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
 cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
-SKELETON_LOG="${AIDD_STATS_CHECK_SKELETON_LOG:-logs/subagent-skeleton.jsonl}"
+# WHY(issue #805): 書く側（log-subagent-hook-skeleton.sh）は全 worktree 共有の logs/ へ書く。ここが cwd 相対のままだと、
+# git worktree のセッションでは古い worktree 直下の骨格ログしか見えず、Workflow の形跡を見つけられない——
+# **start の呼び忘れがあっても常に黙っていた**（2026-09-20 に実測）。resolve_log_dir は cwd の git を見るので cd のあとで解決する
+if [ -f "$SCRIPT_DIR/lib/resolve-log-dir.sh" ]; then
+  source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+  AIDD_STATS_DEFAULT_SKELETON_LOG="$(resolve_log_dir)/subagent-skeleton.jsonl"
+else
+  # 部品が見つからない配置では従来の場所に倒す（hook は全経路 exit 0。ここで落とさない）
+  AIDD_STATS_DEFAULT_SKELETON_LOG="$(pwd)/logs/subagent-skeleton.jsonl"
+fi
+SKELETON_LOG="${AIDD_STATS_CHECK_SKELETON_LOG:-$AIDD_STATS_DEFAULT_SKELETON_LOG}"
 MARKER_FILE="${AIDD_STATS_CHECK_MARKER_FILE:-.aidd/aidd-stats-warning-shown.json}"
 
 # skeletonログが無ければWorkflow実行の形跡は取得不能 → 沈黙。

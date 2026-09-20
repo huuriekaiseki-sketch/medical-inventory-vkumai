@@ -30,9 +30,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-LOOP_OBS_FILE="logs/loop-observability.jsonl"
-SKELETON_FILE="logs/subagent-skeleton.jsonl"
-OTEL_DEBUG_FILE="logs/otel-debug-collector.jsonl"
+# WHY(issue #805): 書く側は全 worktree 共有の logs/ へ書く。ここが cwd 相対のままだと、git worktree から
+# 動かしたときに、ほぼ空の worktree 直下のログから baseline を作ってしまう（件数が実態と合わない baseline が残る）。
+# git リポジトリの外（テストのサンドボックス）では、resolve_log_dir は従来どおり cwd 相対の logs へ倒れる
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+LOG_DIR="$(resolve_log_dir)"
+LOOP_OBS_FILE="$LOG_DIR/loop-observability.jsonl"
+SKELETON_FILE="$LOG_DIR/subagent-skeleton.jsonl"
+OTEL_DEBUG_FILE="$LOG_DIR/otel-debug-collector.jsonl"
 
 mkdir -p "$OUT_DIR"
 OUT_FILE="$OUT_DIR/${DATE}.json"
