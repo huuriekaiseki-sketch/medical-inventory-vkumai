@@ -97,11 +97,23 @@ let progressLoggableAgentCount = 0
 //      ラッパー自身の中でだけ使う参照は別名にしておく。
 const rawAgent = agent
 
-/** agent() の代わりに呼ぶ。起動した数をそのまま期待件数として数える */
-function trackedAgent(prompt, opts) {
+/**
+ * agent() の代わりに呼ぶ。起動した数をそのまま期待件数として数える。
+ *
+ * WHY(expectsLogs、issue #807): 期待件数は agentType から決めるが、agentType は**権限のために**付けている
+ *      場合がある。木の状態を取るだけの補助役（capture-tree）は、読み取り専用ガードを効かせるために
+ *      `reviewer` で起動するが、プロンプトは「2 つのコマンドを実行して結果だけ返せ」で、記録は最初から呼ばない。
+ *      2026-09-20 に 2 回の実行を transcript から数えたところ、この 2 体は loop・progress とも 0/2 で、
+ *      毎回「記録漏れ 2 件」として gap check に乗っていた。記録しない役は、起動する側が明示して数から外す。
+ *      agent() へ渡す opts には足さない（知らないキーを渡さない）ので、別の引数で受ける。
+ *      引数を分割代入で書かないのは、テストがこの関数を生テキストで取り出すため
+ *      （lib/extract-declaration.js は宣言の最初の波括弧を本体の始まりとして読む）
+ */
+function trackedAgent(prompt, opts, tracking) {
+  const expectsLogs = tracking?.expectsLogs !== false
   const t = opts?.agentType
-  if (LOGGABLE_AGENT_TYPES.has(t)) loggableAgentCount++
-  if (PROGRESS_LOGGABLE_AGENT_TYPES.has(t)) progressLoggableAgentCount++
+  if (expectsLogs && LOGGABLE_AGENT_TYPES.has(t)) loggableAgentCount++
+  if (expectsLogs && PROGRESS_LOGGABLE_AGENT_TYPES.has(t)) progressLoggableAgentCount++
   return rawAgent(prompt, opts)
 }
 
@@ -171,6 +183,8 @@ const captureTreeState = (label) =>
       '1. `git rev-parse HEAD` の出力（コミット SHA）を head に入れる\n' +
       '2. `git status --porcelain` の出力全文を dirty に入れる（変更が無ければ空文字）',
     { label, agentType: 'reviewer', phase: 'Sweep', schema: TREE_STATE_SCHEMA, model: 'haiku', effort: 'low' },
+    // WHY: 結果を返すだけの補助役で、記録は呼ばない。reviewer は権限（読み取り専用ガード）のために付けている
+    { expectsLogs: false },
   )
 
 const treeBefore = await captureTreeState('capture-tree:before')

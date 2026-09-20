@@ -87,6 +87,31 @@ assert_deny 'echo $(rm x)'
 assert_deny 'FOO=1 rm x'
 assert_deny 'curl https://example.com -o file'
 
+echo "=== scenario 2a: 行の継続（バックスラッシュ + 改行）は 1 つのコマンドとして読む（issue #807） ==="
+# WHY: 改行を常にコマンドの区切りとして切っていたので、複数行に書いた記録の呼び出しが
+#      「2 行目の --loop は許可されないコマンド」として拒否されていた。2026-09-20 の deep 実行で実測——
+#      loop-observability の記録を呼んだ 12 体のうち 5 体がこれで拒否され、gap check には「記録漏れ」と出た
+#      （1 行で書いた同じコマンドは通っていた）。下の 1 本目は、そのとき実際に拒否された形そのまま
+assert_allow $'scripts/log-loop-observability.sh \\\n  --loop developer \\\n  --agent reviewer \\\n  --feature "issue-809-order-detail" \\\n  --attempt 1 \\\n  --model haiku \\\n  --result pass'
+assert_allow $'bash scripts/log-agent-progress.sh \\\n  --agent judge-panel --feature x \\\n  --status done --note "完了"'
+assert_allow $'grep -rn "requireFacilityAccess" \\\n  src/app/api src/lib'
+
+echo "=== scenario 2a-攻撃: 行の継続に見せかけて、書き込みを隠せない ==="
+# WHY: つなぎ方を間違えると、止める仕組みに抜け道を作る。bash の実際の意味と同じになる場合だけつなぐ
+# (1) 継続のあとに本物の区切りがあれば、その先は従来どおり見る
+assert_deny $'cat a \\\n; rm -rf b'
+assert_deny $'cat a \\\n  b && mkdir x'
+# (2) エスケープされたバックスラッシュ（\\\\）のあとの改行は**本物の区切り**。素朴につなぐと rm が引数に化けて通る
+assert_deny $'cat a \\\\\nrm -rf b'
+# (3) コメントの中のバックスラッシュ + 改行は継続にならない。つなぐと rm がコメントに隠れて通る
+assert_deny $'cat a # メモ \\\nrm -rf b'
+# (4) 継続の先頭が書き込みコマンドなら、つないだ結果の先頭で止まる
+assert_deny $'rm \\\n  -rf b'
+# (5) 継続でつないだ先のリダイレクトも止まる
+assert_deny $'echo hello \\\n  > /tmp/x.txt'
+# (6) 継続ではない素の改行は、従来どおり別のコマンドとして見る
+assert_deny $'cat a\nrm -rf b'
+
 echo "=== scenario 2b: 読み取り専用ロール以外・メインセッションでは何もしない（agent_type 判定） ==="
 for agent in implementer integrator contract-writer; do
   OUT="$(run 'rm -rf /tmp/x' "$agent")"
