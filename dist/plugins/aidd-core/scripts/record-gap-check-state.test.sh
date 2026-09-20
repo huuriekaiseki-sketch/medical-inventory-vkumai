@@ -127,7 +127,9 @@ LINKED_WT="$GIT_SANDBOX/wt"
 mkdir -p "$MAIN_REPO/scripts/lib" "$MAIN_REPO/.claude/workflows/lib"
 cp "$SCRIPT" "$SCRIPT_DIR/check-loop-observability-gap.sh" "$SCRIPT_DIR/check-agent-progress-gap.sh" \
   "$MAIN_REPO/scripts/"
-cp "$SCRIPT_DIR/lib/resolve-log-dir.sh" "$MAIN_REPO/scripts/lib/"
+# WHY(issue #812): 数え方の部品と、除く書き手の一覧も一緒に持っていく（before / after が source する）
+cp "$SCRIPT_DIR/lib/resolve-log-dir.sh" "$SCRIPT_DIR/lib/count-flow-loop-records.sh" \
+  "$SCRIPT_DIR/lib/non-subagent-loop-agents.json" "$MAIN_REPO/scripts/lib/"
 cp "$SCRIPT_DIR/../.claude/workflows/lib/loop-observability-gap.js" \
   "$SCRIPT_DIR/../.claude/workflows/lib/agent-progress-gap.js" "$MAIN_REPO/.claude/workflows/lib/"
 git -C "$MAIN_REPO" init -q

@@ -28,11 +28,10 @@ if [[ -z "$BEFORE_COUNT" || -z "$EXPECTED_COUNT" ]]; then
   usage
 fi
 
-if [[ ! -f "$LOG_FILE" ]]; then
-  AFTER_COUNT=0
-else
-  AFTER_COUNT="$(wc -l < "$LOG_FILE" | tr -d ' ')"
-fi
+# WHY(issue #812): 総行数ではなく「フローの記録」だけを数える（E2E の reporter も同じログに書く）。
+# before 側（record-gap-check-state.sh）と同じ関数を使う。別々に数えると差が合わない
+source "$SCRIPT_DIR/lib/count-flow-loop-records.sh"
+AFTER_COUNT="$(count_flow_loop_records "$LOG_FILE")"
 
 ACTUAL_COUNT=$(( AFTER_COUNT - BEFORE_COUNT ))
 

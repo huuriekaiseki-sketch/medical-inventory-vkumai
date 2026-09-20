@@ -13,6 +13,17 @@ AIDDフロー（`aidd-phase2.js` 等）は reviewer/implementer/judge-panel を�
 - **既知の限界**: gap check state（`record-gap-check-state.sh`）への記録自体は依然オーケストレーターの
   自己申告（Workflow DSLがfilesystem API不可のため）。「書いたのにcheckし忘れる」はStop hookで
   構造的に消えたが、「そもそも書き忘れる」は残る
+- **数えるのは総行数ではなく「フローのサブエージェントが書いた行」**（issue #812、2026-09-20）。同じログには
+  E2E の reporter も 1 テストごとに 1 行書く（`agent: e2e-runner`）ので、総行数の差で数えていたときは
+  フロー中に E2E が 1 回走るだけで必ず警告になり、それが記録漏れなのか E2E の行なのかを数字から
+  読み分けられなかった（実測: actual=140 / expected=21、うち 116 行が E2E）。除く書き手の一覧は
+  `scripts/lib/non-subagent-loop-agents.json` の 1 か所で、usage の集計（`aggregate-loop-observability-usage.ts`）も
+  同じ一覧を読む。数え方は `scripts/lib/count-flow-loop-records.sh` に置き、before（記録側）と after（判定側）が
+  共有する。**`loop` では絞らない**——reviewer の記録は E2E と同じ `developer` で書かれるので、
+  `agentic` だけ数えると reviewer が落ちる。
+  - **残る限界**: reporter の agent 名は環境変数 `LOOP_OBSERVABILITY_AGENT` で変えられる。変えた名前で書かれた
+    E2E の行は、一覧に足さない限りフローの記録として数えられる。他のセッションが同じ共有 `logs/` に書いた
+    フローの記録も区別できない（feature 名が体ごとにバラバラなので絞れない。issue #807）
 - これは「記録漏れを機械的に検知する」ものであり、記録そのものを保証する仕組みではない
   （エージェント任せの記録に依存する構造自体の解消は別途検討中）。
 - 記録漏れが発生した過去分は、`scripts/lib/reconstruct-loop-observability.ts` で
