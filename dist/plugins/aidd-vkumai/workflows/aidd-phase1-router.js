@@ -7,7 +7,7 @@ export const meta = {
   ],
 }
 
-// args: { taskDescription?: string, maxRounds?: number, changedFiles?: string[], riskConfig?: { keywords?, pathPrefixes?, domainKeywords?, metaPathPrefixes? } }
+// args: { taskDescription?: string, maxRounds?: number, changedFiles?: string[], feature?: string, riskConfig?: { keywords?, pathPrefixes?, domainKeywords?, metaPathPrefixes? } }
 // changedFiles: 変更対象ファイルパスの配列。Workflowスクリプト自体はgit diffを実行できない
 //   （filesystem/Node.js APIアクセス無し）ため、呼び出し側（Claude Code）が
 //   `git diff --name-only` や変更予定ファイルリストから取得して渡すこと。
@@ -172,6 +172,9 @@ const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
 const taskDescription = parsedArgs?.taskDescription ?? '現在のコードベース全体の調査'
 const maxRounds = parsedArgs?.maxRounds ?? 3
 const changedFiles = parsedArgs?.changedFiles ?? []
+// WHY(issue #807): 記録に使う feature 名。deep 側が受け取って全役のプロンプトへ足す（形の検査も deep 側）。
+//      ここでは判定に使わず、そのまま渡すだけ。未指定なら deep 側で unknown になる
+const feature = parsedArgs?.feature
 
 phase('Route')
 
@@ -261,7 +264,7 @@ log(
 )
 
 const result = isHighRisk
-  ? await workflow('aidd-vkumai:aidd-1-1-deep-task', { taskDescription, maxRounds })
+  ? await workflow('aidd-vkumai:aidd-1-1-deep-task', { taskDescription, maxRounds, feature })
   : await workflow('aidd-vkumai:aidd-phase1', { taskDescription })
 
 return {

@@ -23,7 +23,18 @@ AIDDフロー（`aidd-phase2.js` 等）は reviewer/implementer/judge-panel を�
   `agentic` だけ数えると reviewer が落ちる。
   - **残る限界**: reporter の agent 名は環境変数 `LOOP_OBSERVABILITY_AGENT` で変えられる。変えた名前で書かれた
     E2E の行は、一覧に足さない限りフローの記録として数えられる。他のセッションが同じ共有 `logs/` に書いた
-    フローの記録も区別できない（feature 名が体ごとにバラバラなので絞れない。issue #807）
+    フローの記録も区別できない（**2026-09-21 から deep は全役へ同じ feature 名を渡す**ので、名前で絞る道は開いた。
+    ただし gap check はまだ件数の差だけを見ており、feature では絞っていない。issue #807）
+- **deep の feature 名は、起動する側が渡す**（issue #807、2026-09-21）。`aidd-1-1-deep-task` の `args.feature` を
+  `trackedAgent` が全役のプロンプトの末尾へ 1 行として足し、「`--feature "<名前>"` を使い、自分で名前を作らない」と伝える。
+  router（`aidd-phase1-router`）も deep へそのまま引き渡す。**渡さないと `unknown`**——各エージェントに名前を作らせない
+  （渡さなかった 2026-09-20 の実行では、81 体で 15 種類の名前に散っていた）。
+  - 形は英数字と `. _ -` だけ・64 字まで。この名前はエージェントが `--feature "<名前>"` としてシェルへ渡すので、
+    引用符・バッククォート・`$()` を含む名前をそのまま通すと記録のコマンドが壊れる。**形が違うものは直さず `unknown` に倒す**
+    （直し方を誤って別の名前に化けるより、集計で「名前が渡っていない実行」と分かるほうがよい）
+  - **足す場所はラッパーの中**（`lib/prompts/*.js` ではない）。eval（`eval-workflow-prompts` / `eval-sweep-recall`）は
+    `lib/prompts/*.js` の関数を直接呼ぶので、この行は eval の測定対象に入らない。`lib/prompts/` 側へ移すと
+    eval の入力が変わって過去の記録と比べられなくなる（`__tests__/deep-task-expected-records.test.js` が固定している）
 - これは「記録漏れを機械的に検知する」ものであり、記録そのものを保証する仕組みではない
   （エージェント任せの記録に依存する構造自体の解消は別途検討中）。
 - 記録漏れが発生した過去分は、`scripts/lib/reconstruct-loop-observability.ts` で
