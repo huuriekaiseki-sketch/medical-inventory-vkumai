@@ -41,13 +41,28 @@ command -v jq >/dev/null 2>&1 || exit 0
 #   FIND_AV_PRECISION_CHECK_LOG_FILE         find-av-precisionログの代替（既定 logs/find-av-precision.jsonl）
 #   FIND_AV_PRECISION_CHECK_MARKER_FILE      警告済みマーカー（既定 .aidd/find-av-precision-warning-shown.json）
 
+# WHY(issue #805): 下の cd より前に、自分の場所を絶対パスで控える（相対パスで起動されると cd のあとでは辿れない）。
+#      変数名を SCRIPT_DIR にするのは、配布物の生成が "$SCRIPT_DIR/lib/…" の書き方を配布先のパスへ書き換えるため
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+
 # WHY(issue #420): プラグイン配布ではスクリプト位置がリポジトリ外になるため CLAUDE_PROJECT_DIR を優先する
 cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}"
 
 command -v jq >/dev/null 2>&1 || exit 0
 command -v python3 >/dev/null 2>&1 || exit 0
 
-LOG_FILE="${FIND_AV_PRECISION_CHECK_LOG_FILE:-logs/find-av-precision.jsonl}"
+# WHY(issue #805): 書く側（log-find-av-precision.sh）は全 worktree 共有の logs/ へ書く。ここが cwd 相対のままだと、
+# git worktree のセッションでは記録ファイルが見つからず、**記録してあっても「未記録」と警告していた**（2026-09-20 に実測）。
+# resolve_log_dir は cwd の git を見るので、上の cd のあとで解決する。
+# 自分の場所（SCRIPT_DIR）は cd の前に絶対パスで控えてある
+if [ -f "$SCRIPT_DIR/lib/resolve-log-dir.sh" ]; then
+  source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+  FIND_AV_DEFAULT_LOG="$(resolve_log_dir)/find-av-precision.jsonl"
+else
+  # 部品が見つからない配置では従来の場所に倒す（hook は全経路 exit 0。ここで落とさない）
+  FIND_AV_DEFAULT_LOG="$(pwd)/logs/find-av-precision.jsonl"
+fi
+LOG_FILE="${FIND_AV_PRECISION_CHECK_LOG_FILE:-$FIND_AV_DEFAULT_LOG}"
 MARKER_FILE="${FIND_AV_PRECISION_CHECK_MARKER_FILE:-.aidd/find-av-precision-warning-shown.json}"
 
 HOOK_INPUT=""

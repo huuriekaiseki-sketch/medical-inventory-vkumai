@@ -9,7 +9,11 @@ set -euo pipefail
 # 連続でfail_openなら警告してexit 1する。
 # 設計: docs/superpowers/specs/2026-07-14-verification-subagent-design.md の「効果測定」節
 
-LOG_FILE="logs/verify-claims-observability.jsonl"
+# WHY(issue #805): 書く側（verify-claims.sh）は全 worktree 共有の logs/ へ書く。ここが cwd 相対のままだと、
+# git worktree から動かしたときにほぼ空の worktree 直下を読み、連続 fail-open を見逃す（2026-09-20 に実測）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+LOG_FILE="$(resolve_log_dir)/verify-claims-observability.jsonl"
 STREAK_THRESHOLD=5
 
 usage() {

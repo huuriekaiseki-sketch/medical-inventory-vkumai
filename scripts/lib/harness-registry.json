@@ -141,6 +141,7 @@
         "scripts/check-input-validation-coverage.test.sh",
         "scripts/check-invariant-catalog.test.sh",
         "scripts/check-layer-consistency.test.sh",
+        "scripts/check-log-dir-resolution.test.sh",
         "scripts/check-no-registry-fetch.test.sh",
         "scripts/check-node-version-pin.test.sh",
         "scripts/check-operation-contracts.test.sh",

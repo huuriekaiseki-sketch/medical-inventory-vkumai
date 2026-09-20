@@ -560,6 +560,7 @@
     "check-input-validation-coverage.test.sh": "src/app/api/ の route 構成とスキーマの置き場がこのスタック固有",
     "check-query-validation-coverage.test.sh": "同上（クエリ文字列側）。Next.js の searchParams を前提にしている",
     "check-layer-consistency.test.sh": "DB の CHECK と入口スキーマの突合。両方ともこのスタック固有",
+    "check-log-dir-resolution.test.sh": "中心リポジトリの `scripts/` の並び（hook と `lib/` が隣にある）を前提に、使い捨ての git worktree へスクリプトを写して動かす（issue #805）。配布物では一部が `bin/` に置かれるので同じ手順では写せない。cwd 相対の logs/ を落とす走査も、中心リポジトリの木を見る",
     "check-migration-lock-safety.test.sh": "supabase/migrations/ の実データを走査する",
     "check-migration-release-safety.test.sh": "同上（baseline のタイムスタンプもこのリポジトリの履歴に依存する）",
     "check-rate-limit-coverage.test.sh": "認証の入口が 1 か所という、このリポジトリの構成が前提",
