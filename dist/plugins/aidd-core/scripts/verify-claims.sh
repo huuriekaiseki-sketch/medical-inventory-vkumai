@@ -58,6 +58,7 @@ TRANSCRIPT_PATH="$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')"
 
 # 7日より古い状態ファイルは掃除する（ai-check-suggest.shと同様のパターン）
 find "$STATE_DIR" -name '*.json' -mtime +7 -delete 2>/dev/null || true
+find "$STATE_DIR" -name '*.last-failure.txt' -mtime +7 -delete 2>/dev/null || true
 
 STATE_FILE="$STATE_DIR/${SESSION_ID}.json"
 SKIP_MARKER="$STATE_DIR/${SESSION_ID}.skip"
@@ -68,10 +69,55 @@ emit_pass() {
   exit 0
 }
 
+# WHY(警告モード、issue #815・2026-09-20 に人が決めた): このゲートは記録の開始(2026-07-15)から
+# 2,475 回中 2,461 回が fail_open で、2 か月ほぼ一度も判定を出していなかった。直した瞬間に
+# 「ターン終了をブロックするゲート」が急に効き始めると、誤検知の率が分からないまま作業が止まる。
+# そこで既定を warn(指摘は見せるがブロックしない)にして、率を見てから block に戻す。
+# 記録(log_event)は block のまま残すので、logs/verify-claims-observability.jsonl で率を数えられる。
+#   VERIFY_CLAIMS_ENFORCE        - warn(既定) | block(本来の設計: critical/important でブロック)
+#   VERIFY_CLAIMS_WARN_REVIEW_BY - 警告モードを見直す期限(YYYY-MM-DD)。過ぎたら毎回その旨を言う
+# WHY(期限を機械が言う): 「数日様子を見る」を人の記憶に任せると止まる。fail-open の連続を見る
+# 検知器(check-verify-claims-fail-open-streak.sh)は起動が人で、2 か月誰も呼ばなかった。
+ENFORCE_MODE="${VERIFY_CLAIMS_ENFORCE:-warn}"
+WARN_REVIEW_BY="${VERIFY_CLAIMS_WARN_REVIEW_BY:-2026-09-27}"
+
 emit_block() {
   local msg="$1"
+  if [ "$ENFORCE_MODE" != "block" ]; then
+    local note="(警告モード: ブロックしていません。issue #815)"
+    # YYYY-MM-DD は文字列の大小がそのまま日付の前後になる
+    if [[ "$(date -u +%Y-%m-%d)" > "$WARN_REVIEW_BY" ]]; then
+      note="${note} 警告モードの見直しの期限(${WARN_REVIEW_BY})を過ぎています。誤検知の率を見て VERIFY_CLAIMS_ENFORCE=block に戻すか、やめるかを決めてください。"
+    fi
+    emit_pass "$(printf '%s\n%s' "$msg" "$note")"
+  fi
   echo "$msg" >&2
   exit 2
+}
+
+# fail-open の連続を、fail-open したその場で言う(issue #815)。
+# WHY: 連続 fail-open の検知器は前からあり、手で呼べば正しく鳴った。しかし起動が人(issue #551 で
+# 設計どおりとしてクローズ)で、2 か月誰も呼ばなかった。ここから呼べば起動は機械になる。
+# log_event のあとに呼ぶこと(いま書いた 1 件を含めて数える)。検知器が無い・失敗しても判定は変えない。
+fail_open_streak_note() {
+  local checker="$SCRIPT_DIR/check-verify-claims-fail-open-streak.sh" warning
+  [ -f "$checker" ] || return 0
+  if ! warning="$(bash "$checker" --log-file "$OBS_LOG_FILE" 2>&1 >/dev/null)"; then
+    printf '\n%s 直近の生の出力: %s' "$warning" "$STATE_DIR/${SESSION_ID}.last-failure.txt"
+  fi
+}
+
+# 検証器が失敗した・出力を解析できなかったときだけ、生の出力を長さを切って残す(issue #815)。
+# WHY: stderr も stdout も捨てていたので、parse_error 1,721 回・verifier_error 740 回の原因を
+# 記録から追えなかった。上書きで 1 セッション 1 ファイル(状態ファイルと同じく 7 日で掃除する)。
+# 書き込みの失敗は判定に影響させない。
+save_failure_output() {
+  local reason="$1" exit_code="$2" output="$3"
+  {
+    printf 'reason=%s exit=%s at=%s\n' "$reason" "$exit_code" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    # WHY(パイプで head へ渡さない): head は読み切る前に終わるので、長い出力のときだけ送り手が壊れる(C-050)
+    printf '%s' "${output:0:4000}"
+  } > "$STATE_DIR/${SESSION_ID}.last-failure.txt" 2>/dev/null || true
 }
 
 write_state() {
@@ -310,7 +356,8 @@ run_verifier() {
 run_verifier_with_timeout() {
   local out_file
   out_file="$(mktemp)"
-  ( run_verifier > "$out_file" 2>/dev/null; echo $? > "${out_file}.exit" ) &
+  # WHY(issue #815): stderr を捨てると verifier_error の原因が追えない。失敗時だけ呼び出し元が読んで残す
+  ( run_verifier > "$out_file" 2>"$VERIFIER_STDERR_FILE"; echo $? > "${out_file}.exit" ) &
   local pid=$!
   local waited=0
   while kill -0 "$pid" 2>/dev/null; do
@@ -353,20 +400,52 @@ LOCK_ENTRY="$LOCK_DIR/$$"
 mkdir "$LOCK_ENTRY" 2>/dev/null || true
 trap 'rmdir "$LOCK_ENTRY" 2>/dev/null || true' EXIT
 
+VERIFIER_STDERR_FILE="$(mktemp)"
 VERIFIER_EXIT=0
 VERIFIER_OUTPUT="$(run_verifier_with_timeout)" || VERIFIER_EXIT=$?
+VERIFIER_STDERR="$(head -c 2000 "$VERIFIER_STDERR_FILE" 2>/dev/null || true)"
+rm -f "$VERIFIER_STDERR_FILE"
 
 if [ "$VERIFIER_EXIT" -ne 0 ]; then
   # インフラ障害時のfail-open: 検証プロセス自体の失敗はdeny-by-defaultの対象外とする
+  save_failure_output "verifier_error" "$VERIFIER_EXIT" "$(printf '[stdout]\n%s\n[stderr]\n%s' "$VERIFIER_OUTPUT" "$VERIFIER_STDERR")"
   log_event "fail_open" "true" "0" "false" "verifier_error" "false" "$CURRENT_HASH"
-  emit_pass "verify-claims: 検証エージェントの実行に失敗したため(exit=${VERIFIER_EXIT})、今回はスキップしました。"
+  emit_pass "verify-claims: 検証エージェントの実行に失敗したため(exit=${VERIFIER_EXIT})、今回はスキップしました。$(fail_open_streak_note)"
 fi
 
-FINDINGS_JSON="$(printf '%s' "$VERIFIER_OUTPUT" | jq -c '.findings' 2>/dev/null || echo "")"
+# 応答から findings を取り出す(issue #815)。
+# WHY: プロンプトに「コードフェンスや説明文は付けないこと」と書いてあっても、実機の Haiku は
+# ```json で包んで返す(2026-09-20 に同じ呼び方で再現して確定)。出力全体をそのまま jq に通していたので
+# 毎回 parse_error で fail-open し、2 か月ほぼ一度も検証していなかった。**指示が守られる前提で
+# パースしない**。緩い順に 3 段で試し、どれかで JSON として読めたものを使う:
+#   1. そのまま  2. ``` で始まる行を落とす  3. 最初の { から最後の } まで(前置き・後書きの説明文を落とす)
+# 3 段とも失敗したら従来どおり parse_error で fail-open する(壊れた出力を空の findings と読まない)。
+extract_findings() {
+  local raw="$1" candidate result
+  result="$(printf '%s' "$raw" | jq -c '.findings' 2>/dev/null || true)"
+  if [ -n "$result" ] && [ "$result" != "null" ]; then printf '%s' "$result"; return 0; fi
+
+  candidate="$(printf '%s\n' "$raw" | grep -v '^[[:space:]]*```' || true)"
+  result="$(printf '%s' "$candidate" | jq -c '.findings' 2>/dev/null || true)"
+  if [ -n "$result" ] && [ "$result" != "null" ]; then printf '%s' "$result"; return 0; fi
+
+  case "$raw" in
+    *"{"*"}"*)
+      candidate="{${raw#*\{}"
+      candidate="${candidate%\}*}}"
+      result="$(printf '%s' "$candidate" | jq -c '.findings' 2>/dev/null || true)"
+      if [ -n "$result" ] && [ "$result" != "null" ]; then printf '%s' "$result"; return 0; fi
+      ;;
+  esac
+  return 1
+}
+
+FINDINGS_JSON="$(extract_findings "$VERIFIER_OUTPUT" || echo "")"
 if [ -z "$FINDINGS_JSON" ] || [ "$FINDINGS_JSON" = "null" ]; then
   # 出力自体が壊れている場合も検証プロセスの不備として扱い、fail-open
+  save_failure_output "parse_error" "$VERIFIER_EXIT" "$(printf '[stdout]\n%s\n[stderr]\n%s' "$VERIFIER_OUTPUT" "$VERIFIER_STDERR")"
   log_event "fail_open" "true" "0" "false" "parse_error" "false" "$CURRENT_HASH"
-  emit_pass "verify-claims: 検証エージェントの出力を解析できなかったため、今回はスキップしました。"
+  emit_pass "verify-claims: 検証エージェントの出力を解析できなかったため、今回はスキップしました。$(fail_open_streak_note)"
 fi
 
 # deny-by-default: severity欠損・不明値はcriticalとして扱う

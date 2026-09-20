@@ -79,9 +79,11 @@ run_hook() {
     printf '%s' "$input" | \
       VERIFY_CLAIMS_REPO_DIR="$REPO" \
       VERIFY_CLAIMS_STATE_DIR="$STATE_DIR" \
-      VERIFY_CLAIMS_OBSERVABILITY_LOG="$OBS_LOG" \
+      VERIFY_CLAIMS_OBSERVABILITY_LOG="${OBS_LOG_OVERRIDE:-$OBS_LOG}" \
       VERIFY_CLAIMS_MAX_RETRIES=3 \
       VERIFY_CLAIMS_VERIFIER_CMD="$MOCK_VERIFIER" \
+      VERIFY_CLAIMS_ENFORCE="${VERIFY_CLAIMS_ENFORCE:-block}" \
+      VERIFY_CLAIMS_WARN_REVIEW_BY="${VERIFY_CLAIMS_WARN_REVIEW_BY:-2999-01-01}" \
       MOCK_CALL_LOG="$MOCK_CALL_LOG" \
       MOCK_FINDINGS_FILE="$MOCK_FINDINGS_FILE" \
       MOCK_SHOULD_FAIL="${MOCK_SHOULD_FAIL:-0}" \
@@ -396,6 +398,7 @@ STDOUT_OUT="$(
     VERIFY_CLAIMS_REPO_DIR="$REPO" \
     VERIFY_CLAIMS_STATE_DIR="$STATE_DIR" \
     VERIFY_CLAIMS_OBSERVABILITY_LOG="$IN_REPO_OBS_LOG" \
+    VERIFY_CLAIMS_ENFORCE=block \
     VERIFY_CLAIMS_MAX_RETRIES=3 \
     VERIFY_CLAIMS_VERIFIER_CMD="$MOCK_VERIFIER" \
     MOCK_CALL_LOG="$MOCK_CALL_LOG" \
@@ -414,6 +417,7 @@ STDOUT_OUT="$(
     VERIFY_CLAIMS_REPO_DIR="$REPO" \
     VERIFY_CLAIMS_STATE_DIR="$STATE_DIR" \
     VERIFY_CLAIMS_OBSERVABILITY_LOG="$IN_REPO_OBS_LOG" \
+    VERIFY_CLAIMS_ENFORCE=block \
     VERIFY_CLAIMS_MAX_RETRIES=3 \
     VERIFY_CLAIMS_VERIFIER_CMD="$MOCK_VERIFIER" \
     MOCK_CALL_LOG="$MOCK_CALL_LOG" \
@@ -426,6 +430,111 @@ assert_eq "$EXIT_CODE" "2" "2回目(同一diff、ログ追記後)も再ブロッ
 assert_eq "$(call_count)" "1" "2回目は検証エージェントを再度呼ばない(ログ追記でハッシュが変わっていないため、キャッシュ経路が機能する)"
 RETRY_COUNT_S27="$(jq -r '.retry_count' "$STATE_DIR/s27.json")"
 assert_eq "$RETRY_COUNT_S27" "2" "retry_countが2まで進む(キャッシュ経路でも正しくretryが消費される)"
+
+# --- issue #815: 2 か月で 2,475 回中 2,461 回が fail_open だった件 ---
+# WHY: プロンプトに「コードフェンスを付けるな」と書いてあっても、実機の Haiku は ```json で包んで返す
+#      （2026-09-20 に同じ呼び方で再現。下の fixture はそのときの stdout そのまま）。出力全体を jq に
+#      通していたので毎回 parse_error で fail-open し、呼ぶたびに費用だけ払って 1 回も検証していなかった。
+#      scenario 25 は「JSON でない出力」しか見ておらず、「JSON だが包まれている出力」を誰も測っていなかった。
+echo "=== scenario 28: コードフェンスで包まれた応答(実機の Haiku が返す形)を解析できる(issue #815) ==="
+rm -f "$MOCK_CALL_LOG"
+echo "line28" >> "$REPO/file.txt"
+printf '```json\n{"findings": []}\n```\n' > "$MOCK_FINDINGS_FILE"
+run_hook "s28"
+assert_eq "$EXIT_CODE" "0" "フェンスつきの空 findings は pass"
+assert_eq "$(log_field "s28" "pass" "event")" "pass" "fail_open ではなく pass として記録される(=実際に検証した)"
+assert_eq "$(jq -rs --arg sid "s28" '[.[] | select(.session_id == $sid and .event == "fail_open")] | length' "$OBS_LOG")" "0" "parse_error の fail_open が記録されない"
+
+echo "=== scenario 29: フェンス+前置きの説明文つきでも、中の critical finding を拾ってブロックする(issue #815) ==="
+# WHY: 包みを外せるだけでは足りない。外した中身が**判定に届く**ことを見る(空 findings だけだと、
+#      「解析に失敗して空扱い」でも scenario 28 は通ってしまう)
+rm -f "$MOCK_CALL_LOG"
+echo "line29" >> "$REPO/file.txt"
+printf '確認しました。結果は以下のとおりです。\n\n```json\n{"findings": [{"severity": "critical", "description": "フェンスの中の指摘", "evidence": "file.txt:1"}]}\n```\n' > "$MOCK_FINDINGS_FILE"
+run_hook "s29"
+assert_eq "$EXIT_CODE" "2" "フェンスの中の critical finding でブロックする"
+assert_contains "$STDERR_OUT" "フェンスの中の指摘" "指摘内容が stderr に出る"
+
+echo "=== scenario 30: 解析できなかった生の出力が残る(次に原因を追えるように。issue #815) ==="
+# WHY: stderr も生の出力も捨てていたので、parse_error 1,721 回・verifier_error 740 回の原因が
+#      記録から追えなかった。失敗したときだけ、長さを切って状態ディレクトリに残す
+rm -f "$MOCK_CALL_LOG"
+echo "line30" >> "$REPO/file.txt"
+echo 'not-json-output-s30' > "$MOCK_FINDINGS_FILE"
+run_hook "s30"
+assert_eq "$EXIT_CODE" "0" "解析できない出力は従来どおり fail-open"
+assert_contains "$(cat "$STATE_DIR/s30.last-failure.txt" 2>/dev/null || echo '(file missing)')" "not-json-output-s30" "生の出力が <session>.last-failure.txt に残る"
+assert_contains "$(cat "$STATE_DIR/s30.last-failure.txt" 2>/dev/null || echo '(file missing)')" "parse_error" "失敗の種類も一緒に残る"
+echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
+
+echo "=== scenario 31: 警告モード(既定)ではブロックせず、指摘を systemMessage で見せる(issue #815) ==="
+# WHY: 2 か月止まっていたゲートをいきなりブロックに戻すと、誤検知の率が分からないまま作業が止まる
+#      (2026-09-20 に人が決めた: 数日は警告だけ)。記録上は block のまま残すので、あとで率を数えられる
+rm -f "$MOCK_CALL_LOG"
+echo "line31" >> "$REPO/file.txt"
+echo '{"findings": [{"severity": "critical", "description": "警告モードの指摘", "evidence": "file.txt:1"}]}' > "$MOCK_FINDINGS_FILE"
+VERIFY_CLAIMS_ENFORCE=warn run_hook "s31"
+assert_eq "$EXIT_CODE" "0" "警告モードでは critical でも exit 0(ブロックしない)"
+assert_contains "$STDOUT_OUT" "警告モードの指摘" "指摘は systemMessage で見せる"
+assert_contains "$STDOUT_OUT" "警告モード" "ブロックしていない理由が分かる"
+assert_eq "$(log_field "s31" "block" "event")" "block" "記録は block のまま(誤検知の率をあとで数えるため)"
+echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
+
+echo "=== scenario 32: 既定は警告モード。見直しの期限を過ぎたら、そのことを毎回言う(issue #815) ==="
+# WHY: 「数日様子を見る」は人が思い出すことに依存すると止まる(fail-open streak の検知器がそうだった)。
+#      期限を機械が言い続ける
+DEFAULT_MODE_LINE="$(grep -n '^ENFORCE_MODE=' "$SCRIPT" || true)"
+assert_contains "$DEFAULT_MODE_LINE" ':-warn}' "VERIFY_CLAIMS_ENFORCE 未指定の既定は warn"
+rm -f "$MOCK_CALL_LOG"
+echo "line32" >> "$REPO/file.txt"
+echo '{"findings": [{"severity": "critical", "description": "期限切れの確認", "evidence": "file.txt:1"}]}' > "$MOCK_FINDINGS_FILE"
+VERIFY_CLAIMS_ENFORCE=warn VERIFY_CLAIMS_WARN_REVIEW_BY="2000-01-01" run_hook "s32"
+assert_contains "$STDOUT_OUT" "見直しの期限" "期限を過ぎていれば、その旨が systemMessage に出る"
+echo "line32b" >> "$REPO/file.txt"
+VERIFY_CLAIMS_ENFORCE=warn VERIFY_CLAIMS_WARN_REVIEW_BY="2999-01-01" run_hook "s32b"
+if grep -qF -- "見直しの期限" <<<"$STDOUT_OUT"; then
+  echo "  NG: 期限の前なのに期限切れの文言が出ている"
+  fail=1
+else
+  echo "  OK: 期限の前は期限切れの文言を出さない(出る側と出ない側の対)"
+fi
+echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
+
+echo "=== scenario 33: fail-open が続いたら、その場で「検証が機能していない」と言う(issue #815) ==="
+# WHY: 連続 fail-open の検知器(check-verify-claims-fail-open-streak.sh)は前からあり、手で呼べば
+#      正しく鳴った。しかし起動が人で、2 か月誰も呼ばなかった。fail-open したその場で機械が呼ぶ。
+#      他のシナリオの記録が混ざらないよう、このシナリオだけ別のログに書く
+OBS_LOG_OVERRIDE="$WORKDIR/streak-observability.jsonl"
+export OBS_LOG_OVERRIDE
+echo 'not-json-output-s33' > "$MOCK_FINDINGS_FILE"
+for i in 1 2 3 4; do
+  echo "line33-$i" >> "$REPO/file.txt"
+  run_hook "s33"
+done
+if grep -qF -- "連続でfail-open" <<<"$STDOUT_OUT"; then
+  echo "  NG: 閾値(5)に届く前(4 回目)なのに連続の警告が出ている"
+  fail=1
+else
+  echo "  OK: 4 回目までは連続の警告を出さない(出ない側)"
+fi
+echo "line33-5" >> "$REPO/file.txt"
+run_hook "s33"
+assert_eq "$EXIT_CODE" "0" "連続していても fail-open のまま(ブロックはしない)"
+assert_contains "$STDOUT_OUT" "連続でfail-open" "5 回連続で、検証が機能していない旨が systemMessage に出る(出る側)"
+echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
+echo "line33-6" >> "$REPO/file.txt"
+run_hook "s33"
+echo 'not-json-output-s33b' > "$MOCK_FINDINGS_FILE"
+echo "line33-7" >> "$REPO/file.txt"
+run_hook "s33"
+if grep -qF -- "連続でfail-open" <<<"$STDOUT_OUT"; then
+  echo "  NG: 間に pass が 1 回入ったのに連続の警告が出ている"
+  fail=1
+else
+  echo "  OK: 間に pass が入れば連続は切れる"
+fi
+unset OBS_LOG_OVERRIDE
+echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

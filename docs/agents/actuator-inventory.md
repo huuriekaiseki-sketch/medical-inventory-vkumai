@@ -50,7 +50,7 @@
 | Stop | `check-domain-decisions-suggest.sh` | warning-only | 高リスクドメイン変更時のドキュメント反映漏れ提案。**issue #685でagent型からcommand型へ置き換えた**（agent版は抑止条件に該当する場面でも毎ターンサブエージェントを起動し、「何も返さない」指示に反して判定理由を返し続けていた）。重複抑止はマーカーファイルで決定的に行い、「設計判断かどうか」の判断だけをメインループへ委ねる。**これによりagent型hookは0本になった** |
 | Stop | `ai-check-suggest.sh` | warning-only | `npm run ai:check`実行有無の警告 |
 | Stop | `check-handoff-format.sh` | warning-only | PR本文の引き継ぎフォーマット必須見出し（issue #524）、04表の4値（PR②）、package.json変更PRの「依存の変更」記述（2026-09-04）の欠如を警告。行・ファイルを名指しし、blockしない（blockすると書く側が行を削って合図が消えるため） |
-| Stop | `verify-claims.sh` | **block**（retry上限3回のエスケープ付き） | 未解消の指摘があれば`emit_block`で`exit 2`しStopをブロックする。3回試行しても解消しなければ人間介入待ちのメッセージでブロックし続ける |
+| Stop | `verify-claims.sh` | **block**（retry上限3回のエスケープ付き）。**2026-09-20 から期限つきで warning-only**（既定 `VERIFY_CLAIMS_ENFORCE=warn`。見直しの期限 2026-09-27） | 本来の設計は、未解消の指摘があれば`emit_block`で`exit 2`しStopをブロックする。3回試行しても解消しなければ人間介入待ちのメッセージでブロックし続ける。**ただし記録の開始から 2 か月、2,475 回中 2,461 回が fail_open で、この block は実質一度も働いていなかった**（E-095。応答のコードフェンスで解析に失敗していた）。直した瞬間にブロックが急に効き始めるので、誤検知の率を数えるまでは指摘を systemMessage で見せるだけにしている（記録は block のまま残る）。期限を過ぎると hook 自身が毎回その旨を言う。`VERIFY_CLAIMS_ENFORCE=block` で本来の設計に戻る |
 | Stop | `gate-effectiveness-monthly-check.sh` | warning-only | 品質ゲート月次サマリの提示 |
 | Stop | `check-aidd-stats-recorded.sh` | warning-only | AIDD stats `start`呼び忘れの警告（issue #495） |
 | Stop | `check-aidd-phase-stats-recorded.sh` | warning-only | AIDD stats phase1/phase2呼び忘れの警告（issue #524） |
