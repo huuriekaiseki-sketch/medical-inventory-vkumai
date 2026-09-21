@@ -33,7 +33,7 @@
 | SessionStart | `check-branch-tool-ownership.sh` | warning-only | ブランチ命名規約（codex/*・claude/*）と起動ツールの取り違えを警告。Claude/Codex両方のhook設定に登録される共有ガード（引数で自ツール名を渡す）。block不可のSessionStartのため意図的にwarning-only |
 | PreToolUse (Codex側・Bash/Write/Edit skipマーカー) | `codex-skip-marker-deny.sh` | **deny**（Codex側のみ） | `check-skip-marker-write.sh`（Claude側ask）のCodex用ラッパー。Codexはask未対応（実機確認済み）のためdenyへ読み替える。判定ロジックは共有正本に委譲し、出力契約の変換のみ担う |
 | SessionStart | `check-local-main-freshness.sh` | warning-only | ローカルmain鮮度の警告 |
-| SessionStart | `check-hooks-path-alive.sh` | warning-only | **git hook 自体が動いているか**の警告（issue #779 / E-092）。`core.hooksPath` が実在しないディレクトリを指すと git は黙って無視し、commit-msg も pre-push も動かない。worktree スコープの上書きも知らせる。**この検知を git hook で実装すると、検知したい故障と一緒に死ぬ**ので SessionStart に置く |
+| SessionStart | `check-hooks-path-alive.sh` | **自動復旧**（直す先が無ければ warning-only） | **git hook 自体が動いているか**（issue #779 / E-092）。`core.hooksPath` が実在しないディレクトリを指すと git は黙って無視し、commit-msg も pre-push も動かない。**2026-09-21 に warning-only から格上げ**——検知を入れた 3 日後に同じ形で 3 回目が起きた（直すのは毎回人の手だった）。worktree スコープの上書きを外し、`core.hooksPath` を相対の `scripts/git-hooks` に直す。**直す先がこのリポジトリに無ければ何も変えず警告だけ**（配布先を壊さない）。直したことは必ず report し、あわせて「直す前のコミット・push は hook を通っていない」ことを伝える。**この検知を git hook で実装すると、検知したい故障と一緒に死ぬ**ので SessionStart に置く |
 | SessionStart | `check-otel-collector-status.sh` | warning-only | OTel collector状態の情報提示 |
 | SessionStart | `check-automode-config.sh` | warning-only | autoMode(hard_deny)未設定の警告（個人設定のため機械強制不可） |
 | SessionStart | `check-blocked-issues-staleness.sh` | warning-only | `blocked`ラベル長期滞留issueの警告 |

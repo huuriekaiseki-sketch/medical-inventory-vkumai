@@ -71,16 +71,69 @@ if [ ${#PROBLEMS[@]} -eq 0 ]; then
   exit 0
 fi
 
-DETAIL=""
-for p in "${PROBLEMS[@]}"; do
-  DETAIL="${DETAIL}- ${p}
-"
-done
+# ── ここから自動復旧（2026-09-21。E-092 の 3 回目の再発を受けて warning-only から格上げ）──
+#
+# WHY: 2026-09-13 に手順を文書化し、2026-09-18 に機械検知（この検査）を入れたのに、
+#      2026-09-21 に**同じ形で 3 回目**が起きた。検知は出ていたが、直すのは毎回人の手だった。
+#      「気づける」ようにしただけでは、気づいた人が毎回同じ 3 コマンドを打つ運用が残る。
+#      docs/agents/check-design-pitfalls.md の「検知を賢くするより、間違えられる道を無くす」。
+#
+# 直す条件（厳しく持つ。勝手に環境を壊さないため）:
+#   - このリポジトリに直す先（scripts/git-hooks）が**実在する**ときだけ触る。
+#     無い導入先（プラグインとして配った先など）では、従来どおり警告だけして何も変えない。
+#
+# 直したことは**必ず report する**（黙って人の環境を変えない）。
+# あわせて「直す前に作ったコミット・push は hook を通っていない」ことを伝える——
+#   直った事実より、**すり抜けた分がある**ことのほうが後から効く。
+HOOKS_REL="scripts/git-hooks"   # scripts/install-git-hooks.sh と同じ値（入れ方の正本はあちら）
+CANONICAL="$TOPLEVEL/$HOOKS_REL"
 
-MSG="git hook が動いていない可能性があります（E-092）。
+BEFORE_DESC="$EFFECTIVE"
+RECOVERED=()
+if [ -d "$CANONICAL" ]; then
+  # 1) worktree スコープの上書きを外す。clone の相対設定に勝ってしまうのがこの事故の本体
+  if [ -n "$WORKTREE_OVERRIDE" ]; then
+    if git config --worktree --unset core.hooksPath 2>/dev/null; then
+      RECOVERED+=("worktree スコープの上書き \`$WORKTREE_OVERRIDE\` を外しました")
+    fi
+  fi
+  # 2) 外したあとの effective を**取り直して**から判定する。
+  #    上書きを外しただけで正しい相対設定が現れることもあるので、その場合は触らない
+  EFFECTIVE_AFTER="$(git config --get core.hooksPath 2>/dev/null || true)"
+  case "$EFFECTIVE_AFTER" in
+    /*) RESOLVED_AFTER="$EFFECTIVE_AFTER" ;;
+    "") RESOLVED_AFTER="" ;;
+    *)  RESOLVED_AFTER="$TOPLEVEL/$EFFECTIVE_AFTER" ;;
+  esac
+  if [ -z "$RESOLVED_AFTER" ] || [ ! -d "$RESOLVED_AFTER" ]; then
+    if git config core.hooksPath "$HOOKS_REL" 2>/dev/null; then
+      RECOVERED+=("core.hooksPath を相対の \`$HOOKS_REL\` に直しました（絶対パスは worktree で壊れます）")
+    fi
+  fi
+fi
+
+if [ ${#RECOVERED[@]} -gt 0 ]; then
+  FIXED=""
+  for r in "${RECOVERED[@]}"; do
+    FIXED="${FIXED}- ${r}
+"
+  done
+  MSG="git hook が動いていませんでした（E-092）。**この場で直しました**。
+${FIXED}直す前: \`core.hooksPath\` = \`${BEFORE_DESC}\`
+git は存在しない core.hooksPath を**黙って無視する**ため、それまで commit-msg も pre-push も動いていません。
+**このリポジトリで直前に作ったコミット・push は hook を通っていない可能性があります。**必要なら見直してください。
+確認: \`git config --show-scope --get-all core.hooksPath\`"
+else
+  DETAIL=""
+  for p in "${PROBLEMS[@]}"; do
+    DETAIL="${DETAIL}- ${p}
+"
+  done
+  MSG="git hook が動いていない可能性があります（E-092）。**自動では直せませんでした**（直す先 \`$HOOKS_REL\` がこのリポジトリにありません）。
 ${DETAIL}確認: \`git config --show-scope --get-all core.hooksPath\`
 入れ直し: このリポジトリの hook 導入手順（\`core.hooksPath\` は**相対**で向ける。絶対パスは worktree で壊れる）
 これを見逃すと、commit-msg・pre-push に載せた守りが**すべて無音で素通り**します。"
+fi
 
 jq -n --arg msg "$MSG" '{
   systemMessage: $msg,
