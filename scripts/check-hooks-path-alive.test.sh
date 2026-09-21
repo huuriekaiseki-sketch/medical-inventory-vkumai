@@ -121,7 +121,7 @@ W_AFTER="$(git -C "$R4" config --worktree --get core.hooksPath 2>/dev/null || tr
 if [ -z "$W_AFTER" ]; then
   assert_ok "worktree スコープの上書きを外す"
 else
-  assert_fail "worktree 上書きが残っている（$W_AFTER）" "$OUT"
+  assert_fail "worktree 上書きが残っている（${W_AFTER}）" "$OUT"
 fi
 E_AFTER="$(git -C "$R4" config --get core.hooksPath || true)"
 if [ "$E_AFTER" = "scripts/git-hooks" ]; then

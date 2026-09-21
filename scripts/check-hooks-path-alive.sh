@@ -85,7 +85,10 @@ fi
 # 直したことは**必ず report する**（黙って人の環境を変えない）。
 # あわせて「直す前に作ったコミット・push は hook を通っていない」ことを伝える——
 #   直った事実より、**すり抜けた分がある**ことのほうが後から効く。
-HOOKS_REL="scripts/git-hooks"   # scripts/install-git-hooks.sh と同じ値（入れ方の正本はあちら）
+# WHY(パス形式で書かない): 入れ方のスクリプト（install-git-hooks）はこのリポジトリにだけ置き、
+#      プラグインには同梱しない方針なので、ここにパスの形で書くと build-plugin の参照検査が
+#      「同梱されていない参照先」として落とす。値が重複している事実だけを言葉で残す。
+HOOKS_REL="scripts/git-hooks"   # 入れ方のスクリプトと同じ値。変えるときは両方直す
 CANONICAL="$TOPLEVEL/$HOOKS_REL"
 
 BEFORE_DESC="$EFFECTIVE"
