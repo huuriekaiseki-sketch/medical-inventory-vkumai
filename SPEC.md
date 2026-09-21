@@ -1,107 +1,193 @@
-# issue #793 仕様書: serviceRoleClient() の無音失敗の解消と共有ヘルパー化
+# SPEC: ロット検索で、取り消された症例発注に印を出す（issue #824）
 
-> AIDD deep ルート（`wf_45c3967f-aca`、67 体・293 万トークン）の調査・検証結果を反映した確定版。
-> **停止①（人間レビュー）待ち。** 承認を得るまで実装に着手しない。
+- feature: `lot-search-cancelled-case-orders`
+- baseCommit: `a760b01f57c1bc91426ce888a82752c5f5a15207`
+- ルート判定: `aidd-phase1`（light）。`matchedKeywords` / `matchedPaths` とも空
 
-## Part 1 — 仕様（人間レビュー用）
+---
 
-### 何ができるようになるか
+# Part 1 — 仕様（★人間がレビューする部分）
 
-運用者（開発者・インシデント対応者）向けの内部品質改善で、**エンドユーザーの画面挙動は変わらない**。
+## 何ができるようになるか
 
-いま `NEXT_PUBLIC_SUPABASE_URL` または `SUPABASE_SERVICE_ROLE_KEY` が未設定の環境では、
-拒否記録・特権操作記録・レート制限記録が**ログを一切出さずに落ちる**。
-本番の設定漏れでも同じ経路を通るので、「監査記録が全部消えている」ことに誰も気づけない。
+ロット検索の結果で、**取り消された症例発注**の行に「取り消し済み」の印が出るようになります。
 
-この変更で、その環境では**初回だけ警告ログが出る**ようになる。
+いまは短貸返却だけに印が出ていて、症例発注は取り消されていても**印なしで、普通に使った記録として**並びます。ロット検索はリコール対応（「このロットをどの患者に使ったか」の特定）のための画面なので、取り消された記録＝「実際には使っていないかもしれない」を使ったものとして読むと、**無関係の患者を巻き込みます**。
 
-### 調査で分かった、issue 本文との差（重要）
+## 画面イメージ
 
-issue #793 は「`hidden-row-denial.ts` の 2 経路」と書いているが、実コードを読むと範囲が違った。
+ロット検索の結果テーブル、左端の「種別」列の下に印が付きます（短貸返却と同じ位置・同じ赤文字）。
 
-| issue の記述 | 実態 |
+**Before（現状）**
+
+```
+種別            ロット      JAN           数量   日時
+─────────────────────────────────────────────────────
+症例発注        ABC123      4987...       1      2026-09-15 10:30     ← 取り消し済みでも印なし
+短貸返却        ABC123      4987...       2      2026-09-14 09:00
+  取り消し済み
+  実際には返却されていない可能性があります
+```
+
+**After（変更後）**
+
+```
+種別            ロット      JAN           数量   日時
+─────────────────────────────────────────────────────
+症例発注        ABC123      4987...       1      2026-09-15 10:30
+  取り消し済み                                                      ← 追加
+  実際には使用されていない可能性があります                          ← 追加（文言は返却と変える）
+短貸返却        ABC123      4987...       2      2026-09-14 09:00
+  取り消し済み
+  実際には返却されていない可能性があります                          ← 変えない
+```
+
+📸 撮影ポイント: ロット検索結果に、取り消し済みの症例発注と取り消し済みの短貸返却が両方並んだ状態
+
+## 文言をなぜ変えるか
+
+| 種別 | 取り消しの意味 | 文言 |
+| --- | --- | --- |
+| 短貸返却 | その返却の記録が誤り＝**実際には返していない**かもしれない → 院内に残っている | 実際には返却されていない可能性があります |
+| 症例発注 | その発注の記録が誤り＝**実際には使っていない**かもしれない → その患者は無関係かもしれない | 実際には使用されていない可能性があります |
+
+同じ「取り消し済み」でも、担当者が次に取るべき行動が逆向きなので、文言を分けます。
+
+## 受け入れ条件
+
+- [ ] 取り消し済み（`case_orders.status = 'cancelled'`）の症例発注の明細が、検索結果から**落とされずに**出てくる
+- [ ] その行が `cancelled: true` で返る
+- [ ] **対照**: 取り消していない症例発注の明細は `cancelled: false` で返る
+- [ ] 画面で、`cancelled: true` の症例発注の行に「取り消し済み」と「実際には使用されていない可能性があります」が**文字で**出る（色だけに頼らない）
+- [ ] 短貸返却の行の文言は「実際には返却されていない可能性があります」のまま変わらない
+- [ ] 症例発注の行には、患者 ID とイニシャル以外の親の列（医師名・性別・術式名）が**出ない**（既存の制約を壊さない）
+- [ ] 上記を**実 DB** の統合テストで測る。RLS が効く**一般メンバー**（admin ではない）のクライアントで測る
+
+## ★停止①で決めていただきたいこと（2件）
+
+### 決定A: 症例発注の詳細ページの文言に「意味」を足すか
+
+issue #824 の「補足（別の論点）」です。症例発注の詳細ページ（`case-orders/[orderId]/page.tsx:136`）は取り消しを
+
+> この発注は取り消されています
+
+と**事実だけ**書いています。短貸返却の詳細ページは
+
+> 取り消し済み／実際には返却されていない可能性があります
+
+と**意味**まで書いています。リコール担当者にとっては同じ重みの情報なので、症例発注側にも意味を足すか。
+
+- **案1**: 今回のPRに含める（詳細ページも「実際には使用されていない可能性があります」を足す）
+- **案2**: 別 issue に切る（このPRはロット検索だけに絞る）
+
+### 決定B: UIモックを作るか
+
+`feature-spec` スキルは UI 変更時に Claude Design の Before/After モック作成を求めています。今回は**既存の短貸返却の印と完全に同型**（同じ位置・同じ色・同じマークアップ、文言だけ違う）で新しいデザイン判断がないため、上のテキスト図で代替しました。
+
+- **案1**: このまま進む（モックなし）
+- **案2**: モックを作ってから実装に入る
+
+---
+
+# Part 2 — 実装計画（AI用・レビュー不要）
+
+## 前提（Phase 1 で実測済み）
+
+- `case_orders.status` の `'cancelled'` は `20260908070000_allow_cancelling_orders.sql` で CHECK 制約に追加済み。**DB 側の準備は完了している**
+- `CaseOrder` 型（`src/types/order.ts:10`）の status には既に `'cancelled'` がある（Phase 1 の data sweep は「無い」と報告したが**誤検知**。実測で確認済み）
+- **`case_order_items` に status 列は無い**。症例発注の取り消しは**親の1段のみ**。短貸返却の2段（明細ごと `20260909000000` ／回ごと `20260908060000`）を写さない
+- 既存の統合テスト `lot-search-rls-idor.integration.test.ts` は出荷関数 `searchLotItems` を呼んでおり、短貸返却の cancelled を一般メンバーで対照付きに測っている（285-291行）。同じ形で足せる
+
+## 判定基準（新しいフィールドの各値）
+
+`LotSearchCaseOrderItem.cancelled: boolean`
+
+| 値 | 判定基準 |
 | --- | --- |
-| 無音経路は `hidden-row-denial.ts` に 2 つ | **無音なのは env 未設定時の 1 経路だけ**。外側 catch には既に `logServerError('hidden_row_denial_skip', error)` がある |
-| コピペは 2 ファイル | **4 ファイル**（`access-denial` / `hidden-row-denial` / `privileged-operation` / `rate-limit`）。`access-denial.ts` だけが警告ログを持つ |
-| — | `route.ts` の fire-and-forget は**存在しない**。`facilities/[id]:29` / `hospital-prices/[id]:27` / `admin/users:113,151` は**全て `await` 済み**（実測）。当初の Sweep 指摘は誤り |
-| — | `resetPrivilegedOperationClientForTests` / `resetRateLimitClientForTests` は**デッドコード**。定義行以外に 1 件もヒットせず、テストは `vi.resetModules()` を使っている（実測） |
+| `true` | `case_orders.status === 'cancelled'` |
+| `false` | 上記以外（`'draft'` / `'submitted'`） |
 
-### 受け入れ条件
+明細ごとの取り消しは存在しないので、`mapLoanReturnItem` のような `row.status` との OR は**書かない**。
 
-- [ ] `hidden-row-denial.ts` / `privileged-operation.ts` / `rate-limit.ts` の 3 ファイルで、env 未設定時に**初回だけ** `logServerError` が出る
-  - logKey: `hidden_row_denial_client_unavailable` / `privileged_operation_client_unavailable` / `rate_limit_client_unavailable`
-  - `access-denial.ts` の既存キー `access_denial_client_unavailable` は**変えない**（運用ログの互換）
-- [ ] 4 ファイルの `serviceRoleClient()` が共有ヘルパー 1 本に置き換わり、`grep -rn "let cached" src/lib/security/` が **0 件**になる
-- [ ] 上記 grep を**構造テストとして機械検査する**（目視確認にしない）
-- [ ] 拒否そのものの fail-closed と、記録の fail-open 方針は**変えない**
-- [ ] DB / RLS / RPC（`record_access_denial` 等）は**変更しない**
+## 下流の反応
 
-### 変えないもの（意図的に）
+| 下流 | 反応 |
+| --- | --- |
+| `searchCaseOrderItems` の絞り込み | **使わない**（落とさず印を付ける。短貸返却と同じ方針） |
+| `truncated` 判定 | 影響なし（絞り込みに使わないので件数が変わらない） |
+| 並び順（`occurredAt` 降順） | 影響なし |
+| API route（`/api/facilities/[id]/lot-search`） | そのまま透過（型が広がるだけ） |
+| 画面 `lot-search/page.tsx` | `item.kind === 'case_order' && item.cancelled` で印を出す |
 
-- **キャッシュは呼び出し元ごとに独立させる**（プロセス全体のグローバル Singleton にしない）。
-  理由: 呼び出し元が増えたときに既存の生存期間とテスト分離へ影響を与えないため。
-  グローバル 1 個にすると「初回だけ警告」の粒度がプロセス全体になり、**先に呼ばれた方の logKey でしか警告が出ず、テストが実行順で揺れる**。
-- RPC のバッチング・SELECT 列の絞り込みなどの最適化は**本 issue では扱わない**（配管の共通化とは独立した話）。
+## 実装セット（依存順）
 
-## Part 2 — 実装計画
+### 波1（契約・単独）
 
-### セット1: 共有ヘルパー新設（直列・全セットの前提）
+**セット1: 型の契約**
+- 触るファイル: `src/types/order.ts`
+- `LotSearchCaseOrderItem` に `cancelled: boolean` を足す
+- `LotSearchResultBase` 上の JSDoc（「どちらで取り消されていても true」）は**短貸返却の2段の説明**なので、症例発注は1段であることが読み取れるよう書き分ける
 
-- 新規 `src/lib/security/service-role-client.ts`
-  ```ts
-  export function createServiceRoleClientAccessor(logKey: string): {
-    get(): ReturnType<typeof createClient<Database>> | null
-    resetForTests(): void
-  }
-  ```
-- **初版は `access-denial.ts` の現行コードのコピーとして作り、新規ロジックを書かない**（挙動差分ゼロを保証し、レビューを「コピペ一致確認」で済ませる）
-- キャッシュはファクトリが返すクロージャ内の変数（モジュールのトップレベル変数にしない）
-- WHY コメント: 使い回す理由（fetch 設定の再構築コストで統合テストが 3 倍になった実測）／警告が初回だけになる理由（`cached !== undefined` の早期 return で到達が 1 回に限られる）／fail-open と fail-closed の境界
-- テスト `service-role-client.test.ts`（新規）: env 未設定→null かつ `logServerError(logKey)` が 1 回だけ／env 設定済み→`createClient` が呼ばれキャッシュされる／`resetForTests()` 後は再評価される
+### 波2（セット1完了後・互いに別ファイルなので同時可）
 
-### セット2: `access-denial.ts` の移行（A1）
+**セット2: データ取得層**
+- 触るファイル: `src/lib/lot-search/repository.ts`
+- `CaseOrderParentRow` に `status?: unknown` を足す
+- `searchCaseOrderItems` の `.select()` に `case_orders.status` を足す（105行）
+- `mapCaseOrderItem` に `cancelled: asString(parent?.status) === 'cancelled'` を足す
+- **58-61行の WHY コメントを更新する**: 「取るのは患者ID・イニシャルだけ」という現行の記述に `status` が加わる。status は個人情報ではなく取り消し判定のためであることを明記し、医師名・性別・術式名を取らない方針は維持であることを書く（コメントと実装の食い違いを残さない）
 
-- ローカル実装を削除し `createServiceRoleClientAccessor('access_denial_client_unavailable')` を使う
-- 既存テスト（`access-denial.test.ts:111-128`）が**そのまま通る**ことを確認する
+**セット3: 画面**
+- 触るファイル: `src/app/facilities/[id]/lot-search/page.tsx`
+- 192-200行の既存ブロックの隣に、症例発注用の分岐を足す
+- 文言: 「取り消し済み」＋「実際には使用されていない可能性があります」
+- 既存の短貸返却ブロックは**変更しない**
 
-### セット3: 残り 3 ファイルの移行（A2 / A3 / A4）
+**セット4: モックテスト（TDD: 先に赤にする）**
+- 触るファイル: `src/lib/lot-search/__tests__/repository.test.ts`
+- 222行の「返るキーの集合」検証は `LotSearchLoanReturnItem` 用。症例発注版のキー集合検証を足す（`cancelled` を含む）
+- 取り消し済み／取り消していない の対照ケース
 
-- **着手条件（機械判定）**: `service-role-client.test.ts` と `access-denial.test.ts` が**両方 green** であること
-- 各ファイルのローカル実装を削除し、固有の logKey で共有ヘルパーを使う
-- 各 `__tests__/*.test.ts` に「env 未設定→初回だけ警告」を追加する。形は `access-denial.test.ts:111-128` と同型:
-  `loadModule()`（= `vi.resetModules()` + 動的 import）／`vi.spyOn(console, 'error')` で**呼び出し回数**と**文字列に logKey が含まれること**／2 回目は呼ばれないこと
+**セット5: 統合テスト（実DB）**
+- 触るファイル: `supabase/__tests__/integration/lot-search-rls-idor.integration.test.ts`
+- シード: 同じロットで症例発注をもう1件作り、`status` を `'cancelled'` へ UPDATE する（既存の短貸返却シード 127-141行と同じ作り方）
+- 検証: `searchLotItems(fixtures.userA.client, ...)` で、取り消し済みが `cancelled: true`、生きている方が `cancelled: false`
+- **afterAll で自分が作った行を必ず消す**（削除の戻り値のエラーを捨てない。`run-integration-tests.sh` が消し残しを数えて落とす）
 
-### セット4: 重複が消えたことの機械検査
+### 波3（統合ゲート）
 
-- `grep -rn "let cached" src/lib/security/` が 0 件であることを `npm test` 配下の構造テスト 1 本として追加する
-- **TypeScript のビルド通過だけでは「重複実装が本当に消えたか」は検知できない**ので、型検査に委ねない
+- `npm run typecheck` / `npm run lint` / `npm test`
+- `npm run test:integration`（実 DB。ローカル Supabase を起動 → 終わったら停止）
 
-### 並列グループ宣言
+## 決定Aを採用する場合の追加セット
 
-- 直列: セット1 → （A1）→ A2 / A3 / A4 は並列 → セット4
-- A1: `access-denial.ts` + その `__tests__`
-- A2: `hidden-row-denial.ts` + その `__tests__`
-- A3: `privileged-operation.ts` + その `__tests__`
-- A4: `rate-limit.ts` + その `__tests__`
+**セット6: 症例発注の詳細ページ**
+- 触るファイル: `src/app/facilities/[id]/case-orders/[orderId]/page.tsx`（136行付近）
+- 他のどのセットとも別ファイルなので波2に同居できる
 
-### 触らないもの
+---
 
-- `supabase/migrations/`、`src/lib/supabase/`、`src/app/**/route.ts`
-- 各呼び出し元のビジネスロジック（RPC のパラメータ・タイムアウト・エラーハンドリング）
+# Part 3 — 仕様レビュー前セルフチェック（AI用・レビュー不要）
 
-## 停止①で決まったこと（2026-09-19 承認）
+## UI変更のチェック
 
-1. **範囲は 4 ファイル**（`access-denial` / `hidden-row-denial` / `privileged-operation` / `rate-limit`）。
-   issue 本文の 2 ファイルではなく、実測で見つかった同じ穴をまとめて塞ぐ
-2. **reset 関数は「使われているものだけ残す」。**
-   承認時は「両方デッドコード」という前提だったが、**その判断は誤りだった**——
-   deep ルートの調査が `grep ... src` で確かめており、`supabase/__tests__/` を見ていなかった（C-040）。
-   実装中に型検査が捕まえた。
-   - `resetPrivilegedOperationClientForTests` … **残す**。
-     `privileged-operations-rls-idor.integration.test.ts:272,279` が呼んでいる。
-     統合テストは `vi.resetModules()` を使わず `import()` するので、キャッシュを捨てる口が要る
-   - `resetRateLimitClientForTests` … **消す**。リポジトリ全体で呼び出し元ゼロを再実測した
-   - 共有ヘルパーは `resetForTests()` を 1 本持ち、残す側だけが 1 行で re-export する
-3. **`onUnavailable` フックは作らない。** 使う当てのない予約引数は過剰実装
-4. **logKey は各ファイルに直書きする。** 呼び出し側を見れば分かる形を優先する
-5. **fire-and-forget の別 issue 化は不要。** 実測で全て `await` 済みだった（当初の Sweep 指摘が誤り）
+- モック未作成のまま文章のみで済ませていないか → **済ませている。意図的**。理由（既存と同型・デザイン判断ゼロ）を Part 1 の決定Bに明記し、人の判断に出した
+- 既存画面の変更なのに Before/After になっていないか → テキスト図で Before/After を並べた
+- インタラクティブなモックを動作未確認のまま貼っていないか → 該当なし（モックを貼っていない）
+
+## 新しい型・statusフィールドのチェック
+
+- 判定基準の欠落 → Part 2「判定基準」で `true` / `false` を1行ずつ明記した
+- 下流の反応の欠落 → Part 2「下流の反応」で5つの下流を表にした。**絞り込みに使わない**（＝件数・truncated・並び順が変わらない）ことを明示した
+- 列挙の自己矛盾 → 実装セットは波1に1件・波2に3件・波3に統合、決定A採用時に+1件。表形式で件数が数えられる形にした
+- 信号の意味変更 → 既存の `mapLoanReturnItem` の判定ロジックは**触らない**。短貸返却の2段判定をそのまま残し、症例発注は1段の別ロジックとして足す
+
+## 既知の失敗パターン（メモリ・known-failure-patterns）との突合
+
+| 型 | 今回の対処 |
+| --- | --- |
+| 受け入れ条件の逆向き書き換え | 「落とさない」「対照として false」を測れる形で書いた |
+| admin だけの IDOR テスト（RLSは一般メンバーでしか測れない） | 統合テストは `fixtures.userA.client`（一般メンバー）で測ると明記 |
+| 統合テストが出荷関数を呼ばず生クエリを手書き | `searchLotItems` を呼ぶ（既存テストが既にその形） |
+| C-047 直した門を隣へ広げていない | これ自体が C-047 の是正。決定Aで詳細ページまで広げるかを人に問う |
+| 統合テストの消し残し | afterAll で削除し、戻り値のエラーを捨てないと明記 |

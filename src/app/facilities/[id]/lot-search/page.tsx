@@ -198,6 +198,15 @@ export default function LotSearchPage({ params }: { params: Promise<{ id: string
                             <span className="block">実際には返却されていない可能性があります</span>
                           </span>
                         )}
+                        {/* WHY(issue #824): 症例発注の取り消しは「その発注の記録は誤りだった」＝実際には使っていない
+                            かもしれない。ロット検索はリコール対応（誰に使ったかの特定）が目的なので、区別なく
+                            出すと無関係の患者を巻き込む。短貸返却と同じ位置・同じ赤文字で、文言だけ変える */}
+                        {item.kind === 'case_order' && item.cancelled && (
+                          <span className="mt-1 block text-xs font-normal" style={{ color: '#B91C1C' }}>
+                            <strong className="font-semibold">取り消し済み</strong>
+                            <span className="block">実際には使用されていない可能性があります</span>
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm" style={{ color: '#111827', fontFamily: 'var(--font-ubuntu-mono), monospace' }}>
                         {item.lot}
