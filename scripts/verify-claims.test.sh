@@ -593,7 +593,7 @@ SEC37="$(log_field "s37" "fail_open" "verifier_seconds")"
 if [ "$SEC37" != "null" ] && [ "$SEC37" -le 2 ] 2>/dev/null; then
   echo "  OK: 打ち切りがタイムアウトどおりに効く(${SEC37} 秒。3 秒眠る検証器の終わりを待たない)"
 else
-  echo "  NG: 検証器の終わりを待っている(verifier_seconds=$SEC37、タイムアウト 1 秒)"
+  echo "  NG: 検証器の終わりを待っている(verifier_seconds=${SEC37}、タイムアウト 1 秒)"
   fail=1
 fi
 sleep 4
