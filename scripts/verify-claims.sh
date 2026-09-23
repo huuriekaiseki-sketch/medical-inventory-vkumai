@@ -44,7 +44,10 @@ cd "$REPO_DIR"
 
 STATE_DIR="${VERIFY_CLAIMS_STATE_DIR:-.claude/.verify-state}"
 MAX_RETRIES="${VERIFY_CLAIMS_MAX_RETRIES:-3}"
-TIMEOUT_SECONDS="${VERIFY_CLAIMS_TIMEOUT_SECONDS:-60}"
+# WHY(80 秒、2026-09-24): 同じ差分でも実測 13 秒と 35 秒以上とばらつき、60 秒では足りないことがあった。
+# hook 自体の上限(settings.json の timeout: 90)を超えると Claude Code が hook ごと殺して記録も残らないので、
+# 後処理の余裕を 10 秒残す。両者の大小は verify-claims.test.sh の scenario 38 が見る。
+TIMEOUT_SECONDS="${VERIFY_CLAIMS_TIMEOUT_SECONDS:-80}"
 MODEL="${VERIFY_CLAIMS_MODEL:-claude-haiku-4-5-20251001}"
 LOCK_DIR="${VERIFY_CLAIMS_LOCK_DIR:-.claude/.verify-lock}"
 MAX_CONCURRENT="${VERIFY_CLAIMS_MAX_CONCURRENT:-4}"
@@ -114,7 +117,7 @@ fail_open_streak_note() {
 save_failure_output() {
   local reason="$1" exit_code="$2" output="$3"
   {
-    printf 'reason=%s exit=%s at=%s\n' "$reason" "$exit_code" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    printf 'reason=%s exit=%s seconds=%s timeout=%s at=%s\n' "$reason" "$exit_code" "${VERIFIER_SECONDS:-?}" "$TIMEOUT_SECONDS" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
     # WHY(パイプで head へ渡さない): head は読み切る前に終わるので、長い出力のときだけ送り手が壊れる(C-050)
     printf '%s' "${output:0:4000}"
   } > "$STATE_DIR/${SESSION_ID}.last-failure.txt" 2>/dev/null || true
@@ -136,6 +139,10 @@ write_state() {
 #   $6 was_previously_blocked : true|false (pass時、直前状態がblockedだったか=このpassが「修正」を意味するか)
 #   $7 diff_hash            : sha256、または不明時は""(nullで記録)
 # ログ書き込みの失敗(ディスクフル等)は検証結果の判定に影響させない(末尾の`|| true`)。
+# verifier_seconds は引数ではなくグローバルの VERIFIER_SECONDS から取る(検証器を呼んでいない経路は空=null)。
+# WHY(2026-09-24): verifier_error は残った記録がどれも exit=124(タイムアウト)だったが、何秒かかっているかが
+# 記録に無く、タイムアウトを延ばすべきか・呼び方を変えるべきかを推測でしか決められなかった。
+VERIFIER_SECONDS=""
 log_event() {
   local event="$1" verifier_called="$2" retry_count="$3" retry_exhausted="$4"
   local fail_open_reason="$5" was_previously_blocked="$6" diff_hash="$7"
@@ -152,11 +159,13 @@ log_event() {
     --arg fail_open_reason "$fail_open_reason" \
     --argjson was_previously_blocked "$was_previously_blocked" \
     --arg diff_hash "$diff_hash" \
+    --arg verifier_seconds "$VERIFIER_SECONDS" \
     '{timestamp: $timestamp, session_id: $session_id, event: $event, verifier_called: $verifier_called,
       retry_count: $retry_count, retry_exhausted: $retry_exhausted,
       fail_open_reason: (if $fail_open_reason == "" then null else $fail_open_reason end),
       was_previously_blocked: $was_previously_blocked,
-      diff_hash: (if $diff_hash == "" then null else $diff_hash end)}' \
+      diff_hash: (if $diff_hash == "" then null else $diff_hash end),
+      verifier_seconds: (if $verifier_seconds == "" then null else ($verifier_seconds | tonumber) end)}' \
     >> "$OBS_LOG_FILE" 2>/dev/null || true
 }
 
@@ -351,6 +360,21 @@ run_verifier() {
     --no-session-persistence
 }
 
+# pid とその子孫をすべて止める。子から先に止める(親を先に止めると子が PPID=1 に付け替わり、辿れなくなる)。
+# WHY(2026-09-24): 包んでいるサブシェルだけを kill していたので、中の claude -p は孤児になって最後まで走っていた
+# (実測: タイムアウト 5 秒で hook は返ったが、Haiku は約 35 秒走り続けた)。結果は捨てるのに費用だけ払い、
+# 同時実行数の上限(ロックは hook 本体の PID)にも数えられない。
+# pgrep が無い環境では子を辿れないので、従来どおり pid だけを止める(fail-open と同じ扱い)。
+kill_tree() {
+  local pid="$1" child
+  if command -v pgrep >/dev/null 2>&1; then
+    for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+      kill_tree "$child"
+    done
+  fi
+  kill "$pid" 2>/dev/null || true
+}
+
 # ポータブルなタイムアウト実装（macOSにGNU coreutilsのtimeoutが無い前提で、
 # バックグラウンド実行+ポーリングkillで代替する）
 run_verifier_with_timeout() {
@@ -362,7 +386,7 @@ run_verifier_with_timeout() {
   local waited=0
   while kill -0 "$pid" 2>/dev/null; do
     if [ "$waited" -ge "$TIMEOUT_SECONDS" ]; then
-      kill "$pid" 2>/dev/null || true
+      kill_tree "$pid"
       wait "$pid" 2>/dev/null || true
       cat "$out_file" 2>/dev/null || true
       rm -f "$out_file" "${out_file}.exit"
@@ -402,7 +426,9 @@ trap 'rmdir "$LOCK_ENTRY" 2>/dev/null || true' EXIT
 
 VERIFIER_STDERR_FILE="$(mktemp)"
 VERIFIER_EXIT=0
+VERIFIER_STARTED_AT="$(date +%s)"
 VERIFIER_OUTPUT="$(run_verifier_with_timeout)" || VERIFIER_EXIT=$?
+VERIFIER_SECONDS="$(( $(date +%s) - VERIFIER_STARTED_AT ))"
 VERIFIER_STDERR="$(head -c 2000 "$VERIFIER_STDERR_FILE" 2>/dev/null || true)"
 rm -f "$VERIFIER_STDERR_FILE"
 
