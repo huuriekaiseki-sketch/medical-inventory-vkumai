@@ -35,6 +35,9 @@ cat > "$MOCK_VERIFIER" <<'MOCK_EOF'
 #!/usr/bin/env bash
 cat /dev/stdin > /dev/null
 echo "called" >> "$MOCK_CALL_LOG"
+sleep "${MOCK_SLEEP:-0}"
+# タイムアウトで打ち切られたなら、ここには届かない(scenario 37)
+[ -n "${MOCK_FINISHED_MARK:-}" ] && echo "finished" > "$MOCK_FINISHED_MARK"
 if [ "${MOCK_SHOULD_FAIL:-0}" = "1" ]; then
   exit 1
 fi
@@ -87,6 +90,9 @@ run_hook() {
       MOCK_CALL_LOG="$MOCK_CALL_LOG" \
       MOCK_FINDINGS_FILE="$MOCK_FINDINGS_FILE" \
       MOCK_SHOULD_FAIL="${MOCK_SHOULD_FAIL:-0}" \
+      MOCK_SLEEP="${MOCK_SLEEP:-0}" \
+      MOCK_FINISHED_MARK="${MOCK_FINISHED_MARK:-}" \
+      VERIFY_CLAIMS_TIMEOUT_SECONDS="${VERIFY_CLAIMS_TIMEOUT_SECONDS:-60}" \
       bash "$SCRIPT" 2>"$err_file"
   )"
   EXIT_CODE=$?
@@ -535,6 +541,86 @@ else
 fi
 unset OBS_LOG_OVERRIDE
 echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
+
+echo "=== scenario 34: 検証器にかかった秒数が記録される(2026-09-24) ==="
+# WHY: verifier_error の残った記録はどれも exit=124(タイムアウト)だったが、何秒かかったかが無く、
+#      タイムアウトを延ばすか呼び方を変えるかを推測でしか決められなかった
+rm -f "$MOCK_CALL_LOG"
+echo "line34" >> "$REPO/file.txt"
+MOCK_SLEEP=2 run_hook "s34"
+SEC="$(log_field "s34" "pass" "verifier_seconds")"
+if [ "$SEC" != "null" ] && [ "$SEC" -ge 2 ] 2>/dev/null; then
+  echo "  OK: 2 秒眠る検証器で verifier_seconds が 2 以上($SEC)"
+else
+  echo "  NG: verifier_seconds が 2 以上でない(actual=$SEC)"
+  fail=1
+fi
+
+echo "=== scenario 35: 検証器を呼ばない経路では verifier_seconds が null(出ない側の対) ==="
+run_hook "s34"
+assert_eq "$(jq -rs '[.[] | select(.session_id == "s34")] | length' "$OBS_LOG")" "1" "同一 diff の 2 回目は記録を増やさない(キャッシュ経路)"
+SEC_SKIP="$(log_field "s6" "skip_used" "verifier_seconds")"
+assert_eq "$SEC_SKIP" "null" "skip マーカー経路(検証器を呼ばない)は null"
+SEC_CB="$(log_field "s8" "fail_open" "verifier_seconds")"
+assert_eq "$SEC_CB" "null" "サーキットブレーカー経路(検証器を呼ばない)は null"
+
+echo "=== scenario 36: タイムアウトしたときは秒数とタイムアウト値が失敗記録に残る(2026-09-24) ==="
+rm -f "$MOCK_CALL_LOG"
+echo "line36" >> "$REPO/file.txt"
+MOCK_SLEEP=4 VERIFY_CLAIMS_TIMEOUT_SECONDS=1 run_hook "s36"
+assert_eq "$EXIT_CODE" "0" "タイムアウトは fail-open"
+assert_eq "$(log_field "s36" "fail_open" "fail_open_reason")" "verifier_error" "タイムアウトは verifier_error"
+SEC36="$(log_field "s36" "fail_open" "verifier_seconds")"
+if [ "$SEC36" != "null" ] && [ "$SEC36" -ge 1 ] 2>/dev/null; then
+  echo "  OK: タイムアウト時も verifier_seconds が記録される($SEC36)"
+else
+  echo "  NG: タイムアウト時の verifier_seconds が無い(actual=$SEC36)"
+  fail=1
+fi
+assert_contains "$(cat "$STATE_DIR/s36.last-failure.txt" 2>/dev/null || echo '(file missing)')" "exit=124" "失敗記録に exit=124 が残る"
+assert_contains "$(cat "$STATE_DIR/s36.last-failure.txt" 2>/dev/null || echo '(file missing)')" "timeout=1" "失敗記録にタイムアウト値が残る"
+
+echo "=== scenario 37: タイムアウトしたら検証器の子プロセスまで止める(2026-09-24) ==="
+# WHY: 包んでいるサブシェルだけを kill していたので、中の claude -p は孤児(PPID=1)になって最後まで走っていた
+#      (2026-09-24 実測: タイムアウト 5 秒で hook は返ったが、Haiku は約 35 秒走り続けた)。
+#      結果は捨てるのに費用だけ払い、同時実行数の上限(ロックは hook 本体の PID)にも数えられない
+MARK="$WORKDIR/s37.finished"
+rm -f "$MOCK_CALL_LOG" "$MARK"
+echo "line37" >> "$REPO/file.txt"
+MOCK_SLEEP=3 MOCK_FINISHED_MARK="$MARK" VERIFY_CLAIMS_TIMEOUT_SECONDS=1 run_hook "s37"
+assert_eq "$(log_field "s37" "fail_open" "fail_open_reason")" "verifier_error" "タイムアウトは verifier_error"
+SEC37="$(log_field "s37" "fail_open" "verifier_seconds")"
+if [ "$SEC37" != "null" ] && [ "$SEC37" -le 2 ] 2>/dev/null; then
+  echo "  OK: 打ち切りがタイムアウトどおりに効く(${SEC37} 秒。3 秒眠る検証器の終わりを待たない)"
+else
+  echo "  NG: 検証器の終わりを待っている(verifier_seconds=$SEC37、タイムアウト 1 秒)"
+  fail=1
+fi
+sleep 4
+if [ -f "$MARK" ]; then
+  echo "  NG: タイムアウト後も検証器が最後まで走った(子プロセスが止まっていない)"
+  fail=1
+else
+  echo "  OK: タイムアウト後に検証器は最後まで走らない(子プロセスまで止まった)"
+fi
+
+echo "=== scenario 38: 既定のタイムアウトは 80 秒で、hook 自体の上限より短い(2026-09-24) ==="
+# WHY: 同じ差分でも 13 秒と 35 秒以上とばらつき、60 秒では足りないことがあった。ただし hook の上限
+#      (settings.json の timeout)を超えると Claude Code が hook ごと殺し、記録すら残らない
+DEFAULT_TIMEOUT_LINE="$(grep -n '^TIMEOUT_SECONDS=' "$SCRIPT" || true)"
+assert_contains "$DEFAULT_TIMEOUT_LINE" ':-80}' "VERIFY_CLAIMS_TIMEOUT_SECONDS 未指定の既定は 80"
+SETTINGS="$SCRIPT_DIR/../.claude/settings.json"
+if [ -f "$SETTINGS" ]; then
+  HOOK_TIMEOUT="$(jq -r '[.hooks.Stop[]?.hooks[]? | select(.command | test("verify-claims\\.sh$")) | .timeout] | first // empty' "$SETTINGS")"
+  if [ -n "$HOOK_TIMEOUT" ] && [ "$HOOK_TIMEOUT" -gt 80 ]; then
+    echo "  OK: hook の上限($HOOK_TIMEOUT 秒)は検証器のタイムアウト(80 秒)より長い"
+  else
+    echo "  NG: hook の上限($HOOK_TIMEOUT)が検証器のタイムアウト(80 秒)以下。記録が残らないまま殺される"
+    fail=1
+  fi
+else
+  echo "  SKIP: settings.json が無い(配布先)。hook の上限は hooks.json 側で見る"
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
