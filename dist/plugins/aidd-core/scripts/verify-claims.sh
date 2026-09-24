@@ -444,12 +444,23 @@ fi
 # ```json で包んで返す(2026-09-20 に同じ呼び方で再現して確定)。出力全体をそのまま jq に通していたので
 # 毎回 parse_error で fail-open し、2 か月ほぼ一度も検証していなかった。**指示が守られる前提で
 # パースしない**。緩い順に 3 段で試し、どれかで JSON として読めたものを使う:
-#   1. そのまま  2. ``` で始まる行を落とす  3. 最初の { から最後の } まで(前置き・後書きの説明文を落とす)
-# 3 段とも失敗したら従来どおり parse_error で fail-open する(壊れた出力を空の findings と読まない)。
+#   1. そのまま  2. 最後のコードフェンスの中身だけ  3. ``` で始まる行を落とす
+#   4. 最初の { から最後の } まで(前置き・後書きの説明文を落とす)
+# どれも失敗したら従来どおり parse_error で fail-open する(壊れた出力を空の findings と読まない)。
+# WHY(2 をフェンスの外より先に試す, issue #833): 説明文に `${VAR:-80}` のような { } があると、3 は説明文ごと
+# jq に渡し、4 は説明文の { から切り出して壊れる。実機の Haiku は表で ${...} を引用したうえで末尾に
+# ```json を付けて返し、正しい判定なのに parse_error で素通しになった。フェンスの中だけなら説明文に左右されない。
+# 最後のフェンスを使うのは、答えの JSON は末尾に置かれ、途中のフェンスはコード片の引用であることが多いため。
 extract_findings() {
   local raw="$1" candidate result
   result="$(printf '%s' "$raw" | jq -c '.findings' 2>/dev/null || true)"
   if [ -n "$result" ] && [ "$result" != "null" ]; then printf '%s' "$result"; return 0; fi
+
+  candidate="$(printf '%s\n' "$raw" | awk '/^[[:space:]]*```/ { if (inb) { last = buf; inb = 0 } else { inb = 1; buf = "" }; next } inb { buf = buf $0 "\n" } END { printf "%s", last }')"
+  if [ -n "$candidate" ]; then
+    result="$(printf '%s' "$candidate" | jq -c '.findings' 2>/dev/null || true)"
+    if [ -n "$result" ] && [ "$result" != "null" ]; then printf '%s' "$result"; return 0; fi
+  fi
 
   candidate="$(printf '%s\n' "$raw" | grep -v '^[[:space:]]*```' || true)"
   result="$(printf '%s' "$candidate" | jq -c '.findings' 2>/dev/null || true)"

@@ -622,6 +622,31 @@ else
   echo "  SKIP: settings.json が無い(配布先)。hook の上限は hooks.json 側で見る"
 fi
 
+# --- issue #833: 前置きの説明文に `{` があると、正しい findings を読めず parse_error で fail-open した ---
+# WHY: 3 段目の「最初の { から最後の } まで」は、説明文の `${VAR:-80}` の { から切り出して壊れる。
+#      シェルの変数展開やコード片を話題にしたターンほど起きる。下の fixture は 2026-09-23 に実機の
+#      Haiku が返した stdout の形(表の中で ${...} を引用 → 末尾に ```json フェンス)をそのまま縮めたもの。
+#      scenario 29 の前置きには { が無かったので、この形を誰も測っていなかった。
+echo "=== scenario 39: 前置きの説明文に { があっても、フェンスの中の空 findings を読んで pass する(issue #833) ==="
+rm -f "$MOCK_CALL_LOG"
+echo "line39" >> "$REPO/file.txt"
+printf '検証完了。\n\n| 主張 | 確認結果 |\n|---|---|\n| 既定が 80 | `TIMEOUT_SECONDS="${VERIFY_CLAIMS_TIMEOUT_SECONDS:-80}"` ✓ |\n\n```json\n{"findings": []}\n```\n' > "$MOCK_FINDINGS_FILE"
+run_hook "s39"
+assert_eq "$EXIT_CODE" "0" "{ を含む前置き + フェンスつきの空 findings は pass"
+assert_eq "$(log_field "s39" "pass" "event")" "pass" "fail_open ではなく pass として記録される(=実際に検証した)"
+assert_eq "$(jq -rs --arg sid "s39" '[.[] | select(.session_id == $sid and .event == "fail_open")] | length' "$OBS_LOG")" "0" "parse_error の fail_open が記録されない"
+
+echo "=== scenario 40: 前後の説明文に { } があっても、フェンスの中の critical finding でブロックする(issue #833) ==="
+# WHY: 空 findings だけだと「読めずに空扱い」でも通ってしまう。中身が判定に届くことを見る(scenario 29 と同じ理由)。
+#      フェンスの後ろにも } を置き、「最後の }」がフェンスの外にある形も一緒に塞ぐ
+rm -f "$MOCK_CALL_LOG"
+echo "line40" >> "$REPO/file.txt"
+printf '`${HOME}` を確認しました。\n\n```json\n{"findings": [{"severity": "critical", "description": "説明文に波括弧があっても届く指摘", "evidence": "file.txt:1"}]}\n```\n\n補足: `if [ -n "${X}" ]; then { echo; }; fi`\n' > "$MOCK_FINDINGS_FILE"
+run_hook "s40"
+assert_eq "$EXIT_CODE" "2" "フェンスの中の critical finding でブロックする"
+assert_contains "$STDERR_OUT" "説明文に波括弧があっても届く指摘" "指摘内容が stderr に出る"
+echo '{"findings": []}' > "$MOCK_FINDINGS_FILE"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
