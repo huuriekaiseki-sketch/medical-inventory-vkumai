@@ -35,7 +35,7 @@ afterEach(() => {
  *      既定を staff にしておくと従来のテスト（登録フォームが見える）はそのまま通り、
  *      viewer のときの振る舞いは role を差し替えて測れる。
  */
-function setupFetch({ consumables = facilityConsumables, role = 'staff' } = {}) {
+function setupFetch({ consumables = facilityConsumables, role = 'staff', orders = [] as unknown[] } = {}) {
   // WHY(型に init も入れる): 呼び出しの検査（DELETE が飛んだか）で `calls[n][1]` を見るため。
   //      引数を 1 つしか宣言しないと TypeScript がタプル長 1 として弾き、
   //      使わない引数を書くと lint が落ちる。**型だけ**に持たせて両方を満たす
@@ -47,13 +47,45 @@ function setupFetch({ consumables = facilityConsumables, role = 'staff' } = {}) 
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ consumables }) })
     }
     if (typeof url === 'string' && url.startsWith('/api/consumable-orders')) {
-      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ orders: [] }) })
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ orders }) })
     }
     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) })
   })
 }
 
+function makeOrder(status: string) {
+  return {
+    id: 'o-1',
+    facilityId: 'f-1',
+    status,
+    items: [],
+    createdAt: '2026-01-05T01:00:00Z',
+    updatedAt: '2026-01-05T01:00:00Z',
+  }
+}
+
 describe('ConsumableOrdersPage', () => {
+  // WHY(issue #828): 取り消しの導線は消耗品発注にも出る(OrderHistoryTable)のに、この一覧だけ
+  //      cancelled のラベルが無く、英字のまま画面に出ていた(症例発注では直っていた。C-047)
+  describe('発注一覧のステータス表示（issue #828）', () => {
+    it('cancelledは英字のままでなく「取り消し済」と表示する', async () => {
+      global.fetch = setupFetch({ orders: [makeOrder('cancelled')] }) as unknown as typeof fetch
+      render(<ConsumableOrdersPage params={params()} />)
+
+      expect(await screen.findByText('取り消し済')).toBeInTheDocument()
+      expect(screen.queryByText('cancelled')).not.toBeInTheDocument()
+    })
+
+    // WHY(対照): 上のテストが「一覧が描画されていない」ことで通っていないことを、同じ組み立てで確かめる
+    it('submittedは「提出済」と表示する(対照)', async () => {
+      global.fetch = setupFetch({ orders: [makeOrder('submitted')] }) as unknown as typeof fetch
+      render(<ConsumableOrdersPage params={params()} />)
+
+      expect(await screen.findByText('提出済')).toBeInTheDocument()
+      expect(screen.queryByText('取り消し済')).not.toBeInTheDocument()
+    })
+  })
+
   it('消耗品登録フォームが表示される(AC1)', async () => {
     global.fetch = setupFetch() as unknown as typeof fetch
     render(<ConsumableOrdersPage params={params()} />)

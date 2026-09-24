@@ -5,9 +5,13 @@ import Link from 'next/link'
 import type { LoanOrder } from '@/types/order'
 import { formatJstDate } from '@/lib/format-date'
 
-const STATUS_LABEL: Record<string, string> = {
+// WHY(Record<LoanOrder['status'], ...>, issue #828): Record<string, ...> だと cancelled を足し忘れても
+//      型検査が通り、表示は `?? order.status` で英字のまま出ていた。状態の型で鍵を縛れば、
+//      状態が増えたときにラベルの足し忘れを型検査が落とす
+const STATUS_LABEL: Record<LoanOrder['status'], string> = {
   draft: '下書き',
   submitted: '提出済',
+  cancelled: '取り消し済',
 }
 
 export default function LoanOrdersPage({ params }: { params: Promise<{ id: string }> }) {
