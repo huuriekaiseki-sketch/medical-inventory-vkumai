@@ -361,6 +361,7 @@
       ],
       "checks": [
         "scripts/check-access-review-staleness.test.sh",
+        "scripts/aidd-codex-doctor.test.sh",
         "scripts/check-agent-baseline-freshness.test.sh",
         "scripts/check-agent-progress-instructions.test.sh",
         "scripts/check-blocked-issues-staleness.test.sh",
