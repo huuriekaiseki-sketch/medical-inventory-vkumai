@@ -3,7 +3,8 @@ set -euo pipefail
 
 # プラグイン v1 の生成（issue #420、docs/specs/plugin-v1/SPEC.md Part 2 セット C）。
 # 正本は .claude/ と scripts/ のまま、層の表（scripts/lib/plugin-layout.json）に従って
-# dist/plugins/aidd-core と dist/plugins/aidd-vkumai を機械生成する。本体は scripts/lib/build-plugin.mjs。
+# dist/plugins/aidd-core・aidd-vkumai と、Codex 用の hooks/scripts 配布物 aidd-codex を
+# 機械生成する。本体は scripts/lib/build-plugin.mjs。Codex 用の plugin.json はまだ作らない。
 #
 # 使い方:
 #   bash scripts/build-plugin.sh            # dist/plugins/ を再生成する（決定的。差分が出たらコミットする）

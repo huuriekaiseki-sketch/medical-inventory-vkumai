@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}\"/scripts/codex-skip-marker-deny.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}\"/scripts/check-branch-pr-status.sh",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}\"/scripts/check-branch-tool-ownership.sh codex",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}\"/scripts/check-local-main-freshness.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
