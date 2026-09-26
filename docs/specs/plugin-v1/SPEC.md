@@ -52,8 +52,9 @@ medical・facility・Supabase・npm の語を 1 つも残さない**（構造テ
 - クリーンな検証用リポジトリでのインストール → `aidd-phase1` 実走 → 検知 hook の実走ドリル
 
 **入れないもの（v1 の既知の制約として明記）**
-- Codex 向けの配布。Codex にはプラグイン機構が無いため、`.codex/hooks.json` と `.codex/agents/*.toml`
-  は導入先アダプターに手コピーのまま（v2 候補）
+- Codex 向けの配布。当時はプラグイン機構が無い前提で、`.codex/hooks.json` と `.codex/agents/*.toml`
+  を導入先アダプターへ手コピーする設計だった。2026-09-26 に前提が変わり、Codex 向けの共通 hook は
+  `docs/superpowers/specs/2026-09-26-aidd-codex-plugin-design.md` で別途設計した（agent 定義の配布は未確定）
 - marketplace への公開。配布形態は事業判断のため、v1 は「ローカルディレクトリ or 非公開 git リポジトリ」
 - `.mcp.json`・permissions・`logs/`・`docs/sessions/` の同梱（issue 本文どおり）
 - ホーム直下の個人スクリプト（`~/write_aidd_stats.sh`・`~/.claude/pending_issues.jsonl`）。

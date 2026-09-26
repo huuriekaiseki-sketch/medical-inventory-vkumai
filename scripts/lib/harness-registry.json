@@ -151,6 +151,7 @@
         "scripts/check-plugin-asset-coverage.test.sh",
         "scripts/check-plugin-check-coverage.test.sh",
         "scripts/check-plugin-integrity.test.sh",
+        "scripts/codex-plugin-layout.test.sh",
         "scripts/check-promise-catalog.test.sh",
         "scripts/check-query-validation-coverage.test.sh",
         "scripts/check-rule-guard-coverage.test.sh",
