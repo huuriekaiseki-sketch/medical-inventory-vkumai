@@ -29,7 +29,7 @@ if [ -d "$REPO_ROOT/dist/plugins" ]; then
 fi
 if [ -f "$REPO_ROOT/dist/plugins/aidd-codex/.aidd-manifest.json" ]; then
   COUNT="$(node -e 'const m=require(process.argv[1]); process.stdout.write(String(Object.keys(m.files ?? {}).length))' "$REPO_ROOT/dist/plugins/aidd-codex/.aidd-manifest.json")"
-  [ "$COUNT" -eq 6 ] && assert_ok "Codex の hooks.json とスクリプト5本を照合する" || assert_fail "Codex の manifest が6ファイルでない" "$COUNT"
+  [ "$COUNT" -eq 13 ] && assert_ok "Codex の hooks・scripts・manifest・docs・skill を照合する" || assert_fail "Codex の manifest が13ファイルでない" "$COUNT"
 fi
 OUT="$(bash "$CHECKER" 2>&1)"
 if [ $? -eq 0 ] && [ -z "$OUT" ]; then

@@ -227,6 +227,23 @@ function build(outRoot) {
       }
       copyText(CODEX_PLUGIN, `scripts/${name}`, `scripts/${name}`, null, 0o755)
     }
+    const codexMeta = layout.codexPlugin
+    if (codexMeta) {
+      // Portable Agent Plugins 1.0 manifest。OpenAI 固有の hook パスだけ extension に置く。
+      put(CODEX_PLUGIN, 'plugin.json', JSON.stringify({
+        $schema: 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
+        name: CODEX_PLUGIN,
+        version: codexMeta.version,
+        description: codexMeta.description,
+        extensions: { 'com.openai': { hooks: './hooks/hooks.json' } },
+      }, null, 2) + '\n')
+      for (const name of codexMeta.releaseDocs ?? []) {
+        copyText(CODEX_PLUGIN, `${codexMeta.sourceDir}/${name}`, name)
+      }
+      for (const name of codexMeta.skills ?? []) {
+        copyText(CODEX_PLUGIN, `${codexMeta.sourceDir}/skills/${name}/SKILL.md`, `skills/${name}/SKILL.md`)
+      }
+    }
   }
 
   for (const [name, plugin] of Object.entries(layout.agents)) {

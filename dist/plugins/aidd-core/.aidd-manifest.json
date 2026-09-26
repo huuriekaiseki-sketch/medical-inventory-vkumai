@@ -69,7 +69,7 @@
     "scripts/check-pipe-assertion.test.sh": "4c7597dfc00548879efb8cae74beb25bf2c6110be54ec25d926d32f88103bbaf",
     "scripts/check-pitfall-rulebook.test.sh": "1983b5e7c4684bf12154e7d5db24cfc3303a3a7a25a4d41767116683df11fce6",
     "scripts/check-plugin-integrity.sh": "0de4ff3cf33d956b0ca04a76176e396deb1831c0fc56517261766fbeaa2554fe",
-    "scripts/check-plugin-integrity.test.sh": "58404ae9e1bdc60849c96c5c443da7a78aede6ee277809edd21e0b037df4ed61",
+    "scripts/check-plugin-integrity.test.sh": "b0b54621a6e45813a9849a22a0b0a9c9d4bf5d9a1019906dad4d304c16c4eb8a",
     "scripts/check-precision-metrics.test.sh": "9a482e522cf18713a312b56bd778de844909e91f039aa4fb9fc639cd7b2511eb",
     "scripts/check-raw-error-response.test.sh": "709212402dc26aa7c2d098ed59cd763d6fe8f837dfa746b6fd30cd8544ec8d53",
     "scripts/check-recovery-queue.sh": "93b69da797d356fce416b9ede31cfeeb59c2cb4887e5ef96bc9efeb00439e3e8",

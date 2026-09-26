@@ -65,7 +65,12 @@ if [ -f "$CODEX_HOOKS" ]; then
   if grep -qE 'check-direct-ddl-execution|codex-dependency-change|codex-ai-check' <<<"$CODEX_COMMANDS"; then ng "固有 hook が混入"; else ok "固有 hook は出力しない"; fi
   if grep -qF '$(git rev-parse --show-toplevel)' <<<"$CODEX_COMMANDS"; then ng "project root 形式が残った"; else ok "project root 形式を残さない"; fi
   [ -f "$CODEX_DIR/.aidd-manifest.json" ] && ok "Codex 配布物に同一性 manifest がある" || ng "Codex 配布物の同一性 manifest が無い"
-  [ "$(find "$CODEX_DIR/scripts" -type f | wc -l | tr -d ' ')" -eq 5 ] && ok "Codex に正本5ファイルを同梱" || ng "Codex の scripts/ が5ファイルでない"
+  [ "$(find "$CODEX_DIR/scripts" -type f | wc -l | tr -d ' ')" -eq 7 ] && ok "Codex に正本6ファイルと doctor 検査を同梱" || ng "Codex の scripts/ が7ファイルでない"
+  jq -e '.["$schema"] == "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json" and .name == "aidd-codex" and .version == "0.1.0" and .extensions["com.openai"].hooks == "./hooks/hooks.json"' "$CODEX_DIR/plugin.json" >/dev/null && ok "公式形式の portable manifest を生成" || ng "portable manifest が違う"
+  [ -f "$CODEX_DIR/skills/aidd-doctor/SKILL.md" ] && ok "doctor スキルを生成" || ng "doctor スキルが無い"
+  for name in KNOWN-LIMITS.md COMPATIBILITY.md CHANGELOG.md; do
+    cmp -s "$CODEX_DIR/$name" "$REPO_ROOT/docs/plugin/codex/$name" && ok "$name を正本から生成" || ng "$name が正本と違う"
+  done
   for name in check-branch-pr-status.sh check-branch-tool-ownership.sh check-local-main-freshness.sh check-skip-marker-write.sh; do
     cmp -s "$CODEX_DIR/scripts/$name" "$WORK/a/aidd-core/scripts/$name" && ok "$name は core と同一" || ng "$name が core と異なる"
   done

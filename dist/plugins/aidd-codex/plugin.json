@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "aidd-codex",
+  "version": "0.1.0",
+  "description": "中心リポジトリから生成した AIDD の Codex 用 hook と環境診断",
+  "extensions": {
+    "com.openai": {
+      "hooks": "./hooks/hooks.json"
+    }
+  }
+}
