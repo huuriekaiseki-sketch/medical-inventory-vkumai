@@ -27,6 +27,7 @@ node "$BUILD" --out "$WORK/b" >/dev/null
 if diff -r "$WORK/a" "$WORK/b" >/dev/null; then ok "2 回の生成が一致"; else ng "生成が決定的でない" "$(diff -r "$WORK/a" "$WORK/b" | head -5)"; fi
 [ -f "$WORK/a/aidd-core/.claude-plugin/plugin.json" ] && ok "aidd-core の manifest がある" || ng "aidd-core の manifest が無い"
 [ -f "$WORK/a/aidd-vkumai/.claude-plugin/plugin.json" ] && ok "aidd-vkumai の manifest がある" || ng "aidd-vkumai の manifest が無い"
+[ -f "$WORK/a/aidd-codex/hooks/hooks.json" ] && ok "aidd-codex の hooks.json がある" || ng "aidd-codex の hooks.json が無い"
 if jq -e '.dependencies[0].name == "aidd-core"' "$WORK/a/aidd-vkumai/.claude-plugin/plugin.json" >/dev/null; then ok "aidd-vkumai は aidd-core に依存"; else ng "依存が書かれていない"; fi
 
 echo "=== scenario 2: 生成物の workflow は名前空間付きで、LOCAL 設定は空 ==="
@@ -50,6 +51,39 @@ done
 ok "hooks.json が指すスクリプトはすべて同梱されている（欠落があれば上に NG）"
 [ -x "$WORK/a/aidd-core/bin/log-agent-progress.sh" ] && ok "bin/ に進捗記録スクリプトがあり実行可能" || ng "bin/ が無い"
 if grep -q "scripts/log-agent-progress.sh" "$WORK/a/aidd-core/agents/reviewer.md"; then ng "agent 本文の scripts/ 参照が残る"; else ok "agent 本文の scripts/<bin> は裸の名前に書き換わる"; fi
+
+echo "=== scenario 3b: Codex hook は project 設定から4本だけ生成される ==="
+CODEX_DIR="$WORK/a/aidd-codex"
+CODEX_HOOKS="$CODEX_DIR/hooks/hooks.json"
+if [ -f "$CODEX_HOOKS" ]; then
+  CODEX_COMMANDS="$(jq -r '.. | .command? // empty' "$CODEX_HOOKS")"
+  [ "$(printf '%s\n' "$CODEX_COMMANDS" | grep -c .)" -eq 4 ] && ok "Codex hook は4本" || ng "Codex hook が4本でない" "$CODEX_COMMANDS"
+  for name in check-branch-pr-status.sh check-branch-tool-ownership.sh check-local-main-freshness.sh codex-skip-marker-deny.sh; do
+    grep -qF '"${PLUGIN_ROOT}"/scripts/'"$name" <<<"$CODEX_COMMANDS" && ok "$name のパスを変換" || ng "$name のパスが変換されていない"
+  done
+  grep -qF 'check-branch-tool-ownership.sh codex' <<<"$CODEX_COMMANDS" && ok "Codex 引数を維持" || ng "Codex 引数が落ちた"
+  if grep -qE 'check-direct-ddl-execution|codex-dependency-change|codex-ai-check' <<<"$CODEX_COMMANDS"; then ng "固有 hook が混入"; else ok "固有 hook は出力しない"; fi
+  if grep -qF '$(git rev-parse --show-toplevel)' <<<"$CODEX_COMMANDS"; then ng "project root 形式が残った"; else ok "project root 形式を残さない"; fi
+  [ -f "$CODEX_DIR/.aidd-manifest.json" ] && ok "Codex 配布物に同一性 manifest がある" || ng "Codex 配布物の同一性 manifest が無い"
+  [ "$(find "$CODEX_DIR/scripts" -type f | wc -l | tr -d ' ')" -eq 5 ] && ok "Codex に正本5ファイルを同梱" || ng "Codex の scripts/ が5ファイルでない"
+  for name in check-branch-pr-status.sh check-branch-tool-ownership.sh check-local-main-freshness.sh check-skip-marker-write.sh; do
+    cmp -s "$CODEX_DIR/scripts/$name" "$WORK/a/aidd-core/scripts/$name" && ok "$name は core と同一" || ng "$name が core と異なる"
+  done
+  [ -x "$CODEX_DIR/scripts/codex-skip-marker-deny.sh" ] && ok "Codex ラッパーが実行可能" || ng "Codex ラッパーが実行不能"
+  for name in check-branch-pr-status check-branch-tool-ownership check-local-main-freshness check-skip-marker-write codex-skip-marker-deny; do
+    if SCRIPT_UNDER_TEST="$CODEX_DIR/scripts/$name.sh" bash "$REPO_ROOT/scripts/$name.test.sh" >"$WORK/$name-plugin-test.log" 2>&1; then
+      ok "$name の既存テストがプラグイン内の本体で通る"
+    else
+      ng "$name の既存テストがプラグイン内の本体で失敗" "$(tail -5 "$WORK/$name-plugin-test.log")"
+    fi
+  done
+  CONSUMER="$WORK/codex-consumer"
+  git -C "$WORK" init -q -b main "$CONSUMER"
+  git -C "$CONSUMER" -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m init
+  git -C "$CONSUMER" checkout -q -b claude/consumer-check
+  CONTEXT_OUTPUT="$(cd "$CONSUMER" && PLUGIN_ROOT="$CODEX_DIR" bash "$CODEX_DIR/scripts/check-branch-tool-ownership.sh" codex)"
+  grep -qF 'claude/consumer-check' <<<"$CONTEXT_OUTPUT" && ok "作業対象のブランチを読む（PLUGIN_ROOT を Git root と誤認しない）" || ng "作業対象の Git root を読めない"
+fi
 
 echo "=== scenario 4: コミット済みの dist/plugins/ が最新（--check） ==="
 if node "$BUILD" --check >/dev/null 2>"$WORK/check.err"; then ok "dist/plugins/ は最新"; else ng "dist/plugins/ が古い（bash scripts/build-plugin.sh で更新）" "$(head -5 "$WORK/check.err")"; fi
@@ -193,6 +227,33 @@ if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allo
 mk_layout '{"scripts/lib/missing.sh": "導入先が持つので同梱しない"}' '0'
 if node "$BUILD" --source "$FX" --layout "$FX/layout2.json" --out "$WORK/fx-allow5" >/dev/null 2>"$WORK/allow5.err"; then ng "上限超過を検知できない"; else grep -q '上限 0 を超えた' "$WORK/allow5.err" && ok "上限超過を検知" || ng "失敗理由が違う" "$(cat "$WORK/allow5.err")"; fi
 printf '#!/usr/bin/env bash\nsource "$SCRIPT_DIR/lib/helper.sh"\necho ok\n' > "$FX/scripts/hook-a.sh"
+
+echo "=== scenario 7: Codex 用 command 形式の検査（RED 方向） ==="
+mkdir -p "$FX/.codex"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$FX/scripts/codex-hook.sh"
+node - "$FX/layout.json" "$FX/layout-codex.json" <<'NODE'
+const fs = require('node:fs')
+const layout = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))
+layout.codexHookScripts = { 'codex-hook.sh': 'aidd-codex' }
+fs.writeFileSync(process.argv[3], JSON.stringify(layout))
+NODE
+cat > "$FX/.codex/hooks.json" <<'EOF'
+{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"\"$(git rev-parse --show-toplevel)\"/scripts/codex-hook.sh codex"}]}]}}
+EOF
+if node "$BUILD" --source "$FX" --layout "$FX/layout-codex.json" --out "$WORK/fx-codex-ok" >/dev/null 2>"$WORK/codex-ok.err"; then
+  if jq -e '.hooks.SessionStart[0].hooks[0].command == "\"${PLUGIN_ROOT}\"/scripts/codex-hook.sh codex"' "$WORK/fx-codex-ok/aidd-codex/hooks/hooks.json" >/dev/null; then ok "Codex fixture の変換と引数を維持"; else ng "Codex fixture の変換結果が違う"; fi
+else
+  ng "正しい Codex fixture で失敗" "$(cat "$WORK/codex-ok.err")"
+fi
+cat > "$FX/.codex/hooks.json" <<'EOF'
+{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/scripts/codex-hook.sh"}]}]}}
+EOF
+if node "$BUILD" --source "$FX" --layout "$FX/layout-codex.json" --out "$WORK/fx-codex-bad" >/dev/null 2>"$WORK/codex-bad.err"; then
+  ng "Codex の想定外 command を拒否できない"
+else
+  grep -q '想定外の command 形式' "$WORK/codex-bad.err" && ok "Codex の想定外 command を拒否" || ng "拒否理由が違う" "$(cat "$WORK/codex-bad.err")"
+  [ ! -d "$WORK/fx-codex-bad" ] && ok "不正な入力から配布物を書かない" || ng "不正な入力で配布物を書いた"
+fi
 
 if [ "$fail" -ne 0 ]; then echo "FAILED"; exit 1; fi
 echo "ALL PASSED"

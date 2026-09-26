@@ -1,0 +1,12 @@
+{
+  "plugin": "aidd-codex",
+  "algorithm": "sha256",
+  "files": {
+    "hooks/hooks.json": "9a9e189b96a0df1388d351009fe4bc681f9516d76b5cdcea97e4054d9733a8b2",
+    "scripts/check-branch-pr-status.sh": "a747d4e4afc1210ff82450fcfd8ae3c1fc916620e8c643c7757d1c6810bab388",
+    "scripts/check-branch-tool-ownership.sh": "090f6f2f9fecf16b60dd0e79dc7470a09de2a10974d9eae249f79e5932210c3e",
+    "scripts/check-local-main-freshness.sh": "f0940bb7cb6858cb07db540210e32ffc49f3ec19d1a18a654f76712c8d48985f",
+    "scripts/check-skip-marker-write.sh": "9dfb1f3191640628f1c4c480625af7569d6679e3d46d87fa2e0573e0b9234213",
+    "scripts/codex-skip-marker-deny.sh": "d4129f1995f7bfe7ea7691bb3c2219070c1706aba5b118f1ceae96e30b90a6e2"
+  }
+}

@@ -7,7 +7,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="$SCRIPT_DIR/check-local-main-freshness.sh"
+SCRIPT="${SCRIPT_UNDER_TEST:-$SCRIPT_DIR/check-local-main-freshness.sh}"
 
 fail=0
 assert_contains() {

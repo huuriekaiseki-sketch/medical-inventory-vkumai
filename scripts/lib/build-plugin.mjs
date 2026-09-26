@@ -13,6 +13,7 @@
 //           （プラグインの bin/ は Bash の PATH に足される。導入先の scripts/ は存在しない）
 //        5. .claude/settings.json の hooks から hooks/hooks.json を生成し、
 //           $CLAUDE_PROJECT_DIR/scripts/ を "${CLAUDE_PLUGIN_ROOT}"/scripts/ に置き換える
+//           Codex 用は .codex/hooks.json と codexHookScripts から別経路で生成する
 //        6. 検査: 共通側の禁止語（コメント込み）、同梱閉包（参照先が同じプラグイン内にある）、
 //           名前空間の付け忘れ、決定性（--check で既存出力と一致）
 //
@@ -79,6 +80,9 @@ function sha(buf) { return createHash('sha256').update(buf).digest('hex') }
 // 「名前 → それを持つプラグイン」の逆引き
 const ownerOf = (table, name) => layout[table]?.[name]
 const pluginNames = Object.keys(layout.plugins)
+const CODEX_PLUGIN = 'aidd-codex'
+const codexHookScripts = Object.entries(layout.codexHookScripts ?? {}).filter(([name]) => !name.startsWith('_'))
+const outputPluginNames = codexHookScripts.length > 0 ? [...pluginNames, CODEX_PLUGIN] : pluginNames
 
 // 本文中の `scripts/<bin>` → `<bin>`（bin/ は PATH に足される）
 const binNames = Object.keys(layout.bin ?? {})
@@ -144,6 +148,31 @@ function buildHooksJson(settings, plugin) {
   return { hooks: out }
 }
 
+// .codex/hooks.json の project hook → Codex プラグインの hooks.json。
+// project 固有の hook も形式は検査し、配布対象だけを出力する。
+function buildCodexHooksJson(settings) {
+  const out = {}
+  for (const [event, sourceGroups] of Object.entries(settings.hooks ?? {})) {
+    const groups = []
+    for (const group of sourceGroups) {
+      const hooks = []
+      for (const hook of group.hooks ?? []) {
+        const match = /^"\$\(git rev-parse --show-toplevel\)"\/scripts\/([A-Za-z0-9_.-]+\.sh)([ \t].*)?$/.exec(hook.command ?? '')
+        if (!match) {
+          fail(`.codex/hooks.json ${event}: 想定外の command 形式: ${hook.command}`)
+          continue
+        }
+        const [, script, args = ''] = match
+        if (ownerOf('codexHookScripts', script) !== CODEX_PLUGIN) continue
+        hooks.push({ ...hook, command: `"\${PLUGIN_ROOT}"/scripts/${script}${args}` })
+      }
+      if (hooks.length > 0) groups.push({ ...group, hooks })
+    }
+    if (groups.length > 0) out[event] = groups
+  }
+  return { hooks: out }
+}
+
 // ---- 生成 ----
 function build(outRoot) {
   const settings = JSON.parse(readFileSync(path.join(SOURCE, '.claude/settings.json'), 'utf8'))
@@ -186,6 +215,18 @@ function build(outRoot) {
       metadata: { generatedBy: 'AIDD plugin build (issue #420). 生成物なので手で編集しない。正本は中心リポジトリの .claude/ と scripts/' },
     }, null, 2) + '\n')
     put(plugin, 'hooks/hooks.json', JSON.stringify(buildHooksJson(settings, plugin), null, 2) + '\n')
+  }
+
+  if (codexHookScripts.length > 0) {
+    const codexSettings = JSON.parse(readFileSync(path.join(SOURCE, '.codex/hooks.json'), 'utf8'))
+    put(CODEX_PLUGIN, 'hooks/hooks.json', JSON.stringify(buildCodexHooksJson(codexSettings), null, 2) + '\n')
+    for (const [name, owner] of codexHookScripts) {
+      if (owner !== CODEX_PLUGIN) {
+        fail(`codexHookScripts の ${name}: 所属は ${CODEX_PLUGIN} である必要がある`)
+        continue
+      }
+      copyText(CODEX_PLUGIN, `scripts/${name}`, `scripts/${name}`, null, 0o755)
+    }
   }
 
   for (const [name, plugin] of Object.entries(layout.agents)) {
@@ -346,7 +387,7 @@ function build(outRoot) {
   const closureSkip = layout.forbiddenWordsSkipPaths ?? []
   // bin/ はどのプラグインのものも Bash の PATH に足されるため、プラグインを跨いで参照してよい
   const allBin = new Set(Object.keys(layout.bin ?? {}).map(b => `bin/${b}`))
-  for (const plugin of pluginNames) {
+  for (const plugin of outputPluginNames) {
     const have = new Set((written[plugin] ?? []))
     for (const r of written[plugin] ?? []) {
       const p = path.join(outRoot, plugin, r)
@@ -435,7 +476,7 @@ function build(outRoot) {
   //    配布経路での差し替え・部分適用・手編集を検知する。
   //    written には入れない（禁止語・同梱閉包の検査対象にせず、内容も検査結果に影響させないため）。
   //    中身は sha256 とパスだけで、時刻・ホスト名・版などの揺れる値を入れない（決定性のため）。
-  for (const plugin of pluginNames) {
+  for (const plugin of outputPluginNames) {
     const files = {}
     for (const r of (written[plugin] ?? []).slice().sort()) {
       files[r] = sha(readFileSync(path.join(outRoot, plugin, r)))
@@ -478,7 +519,7 @@ try {
     }
     writeLine(`build-plugin --check: OK（${Object.keys(want).length} ファイル一致）`)
   } else {
-    for (const plugin of pluginNames) {
+    for (const plugin of outputPluginNames) {
       const dst = path.join(OUT, plugin)
       rmSync(dst, { recursive: true, force: true })
       mkdirSync(path.dirname(dst), { recursive: true })
@@ -525,9 +566,9 @@ try {
       ].join('\n')
       writeFileSync(path.join(repoRoot, 'README.md'), readme)
     }
-    const summary = Object.fromEntries(pluginNames.map(p => [p, (written[p] ?? []).length]))
+    const summary = Object.fromEntries(outputPluginNames.map(p => [p, (written[p] ?? []).length]))
     if (opts.json) writeLine(JSON.stringify({ out: OUT, files: summary }, null, 2))
-    else writeLine(`build-plugin: ${OUT} に生成（${pluginNames.map(p => `${p}: ${summary[p]} ファイル`).join(' / ')}）`)
+    else writeLine(`build-plugin: ${OUT} に生成（${outputPluginNames.map(p => `${p}: ${summary[p]} ファイル`).join(' / ')}）`)
   }
 } finally {
   rmSync(tmp, { recursive: true, force: true })

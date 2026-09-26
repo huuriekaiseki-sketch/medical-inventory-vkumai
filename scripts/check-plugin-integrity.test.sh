@@ -24,6 +24,13 @@ assert_fail() {
 }
 
 echo "=== scenario 1: コミット済みの dist/plugins/* は manifest と一致する ==="
+if [ -d "$REPO_ROOT/dist/plugins" ]; then
+  [ -f "$REPO_ROOT/dist/plugins/aidd-codex/.aidd-manifest.json" ] && assert_ok "aidd-codex も検査対象にある" || assert_fail "aidd-codex の manifest が無い"
+fi
+if [ -f "$REPO_ROOT/dist/plugins/aidd-codex/.aidd-manifest.json" ]; then
+  COUNT="$(node -e 'const m=require(process.argv[1]); process.stdout.write(String(Object.keys(m.files ?? {}).length))' "$REPO_ROOT/dist/plugins/aidd-codex/.aidd-manifest.json")"
+  [ "$COUNT" -eq 6 ] && assert_ok "Codex の hooks.json とスクリプト5本を照合する" || assert_fail "Codex の manifest が6ファイルでない" "$COUNT"
+fi
 OUT="$(bash "$CHECKER" 2>&1)"
 if [ $? -eq 0 ] && [ -z "$OUT" ]; then
   assert_ok "不一致なし"

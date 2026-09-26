@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Codex 用配布宣言だけを検査する。生成器と実配布物の検査は段階 2 で追加する。
+# Codex 用配布宣言を検査する。生成結果と実配布物は build-plugin.test.sh が検査する。
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
