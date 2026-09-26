@@ -18,8 +18,9 @@ const shared = [
   'check-skip-marker-write.sh',
 ]
 const adapter = 'codex-skip-marker-deny.sh'
+const doctor = 'aidd-codex-doctor.sh'
 
-assert.deepEqual(Object.keys(codex).sort(), [...shared, adapter].sort(), '段階 1 の対象は4 hook と判定本体の5ファイル')
+assert.deepEqual(Object.keys(codex).sort(), [...shared, adapter, doctor].sort(), '4 hook と判定本体、doctor の6ファイル')
 for (const name of Object.keys(codex)) {
   assert.equal(codex[name], 'aidd-codex', `${name} の Codex 所属`)
   assert.ok(fs.existsSync(path.join(root, 'scripts', name)), `${name} の正本が存在する`)
@@ -32,5 +33,5 @@ const source = JSON.stringify(JSON.parse(fs.readFileSync(path.join(root, '.codex
 for (const name of [...shared.slice(0, 3), adapter]) {
   assert.ok(source.includes(`/scripts/${name}`), `${name} は Codex の project hook に登録済み`)
 }
-console.log('Codex 用配布宣言: 5ファイル、既存所属、hook 登録を確認')
+console.log('Codex 用配布宣言: 6ファイル、既存所属、hook 登録を確認')
 NODE

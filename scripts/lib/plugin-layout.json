@@ -151,12 +151,20 @@
     "check-plugin-integrity.sh": "aidd-core"
   },
   "codexHookScripts": {
-    "_comment": "Codex 用プラグインの配布予定宣言（段階 1）。hookScripts は既存の Claude 用生成器が 1 ファイル 1 所属として読むため変更しない。両方に載るファイルは同じ正本から各プラグインへ生成する。Codex 用の生成経路は段階 2 で実装する。",
+    "_comment": "Codex 用プラグインに入れるスクリプトの宣言。hookScripts は既存の Claude 用生成器が 1 ファイル 1 所属として読むため変更しない。両方に載るファイルは同じ正本から各プラグインへ生成する。doctor は hook ではなくスキルから起動する。",
     "check-branch-pr-status.sh": "aidd-codex",
     "check-branch-tool-ownership.sh": "aidd-codex",
     "check-local-main-freshness.sh": "aidd-codex",
     "codex-skip-marker-deny.sh": "aidd-codex",
-    "check-skip-marker-write.sh": "aidd-codex"
+    "check-skip-marker-write.sh": "aidd-codex",
+    "aidd-codex-doctor.sh": "aidd-codex"
+  },
+  "codexPlugin": {
+    "version": "0.1.0",
+    "description": "中心リポジトリから生成した AIDD の Codex 用 hook と環境診断",
+    "sourceDir": "docs/plugin/codex",
+    "releaseDocs": ["KNOWN-LIMITS.md", "COMPATIBILITY.md", "CHANGELOG.md"],
+    "skills": ["aidd-doctor"]
   },
   "supportScripts": {
     "aidd-check.sh": "aidd-vkumai",
@@ -399,6 +407,7 @@
     "check-aidd-config-schema.test.sh": "both",
     "check-agent-output.test.sh": "self",
     "check-aidd-doctor.test.sh": "both",
+    "aidd-codex-doctor.test.sh": "self",
     "check-aidd-phase-stats-recorded.test.sh": "self",
     "check-aidd-stats-recorded.test.sh": "self",
     "check-automode-config.test.sh": "self",
@@ -474,6 +483,7 @@
   },
   "checks": {
     "_comment": "検査（*.test.sh）の層。check-x.sh に対する check-x.test.sh は自動で対象と同じプラグインへ付いていくので、ここに書くのは (1) 対象スクリプトを持たない構造テスト (2) 自動判定を上書きしたいもの の 2 つだけ。上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙（高リスクパスの例・ドメイン語・スタック名）で書かれている検査で、共通側の禁止語検査に引っかかるもの。 層は 3 つある: ここ（配る）／checksNotDistributed（エンジン自体が固有で配れない）／checksSplittable（**対象・閾値だけが固有で、登録簿へ出せば配れる**＝返す当てのある借金。件数の上限を機械で見る）。",
+    "aidd-codex-doctor.test.sh": "aidd-codex",
     "check-node-version-pin.test.sh": "aidd-vkumai",
     "check-session-start-matchers.test.sh": "aidd-core",
     "check-aidd-config-schema.test.sh": "aidd-core",
