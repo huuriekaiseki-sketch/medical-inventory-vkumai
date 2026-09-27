@@ -2,11 +2,11 @@
   "plugin": "aidd-codex",
   "algorithm": "sha256",
   "files": {
+    ".codex-plugin/plugin.json": "0bba995a412207a18229494b7cb3271d731100ea3c6e55f3c3f15a310a9fc6fb",
     "CHANGELOG.md": "d0c57786b4b3c43a1dffa467246b528a1a105ffb730839843799e301bae0babf",
     "COMPATIBILITY.md": "0cd8c4622ad9c97439aac49ce1872892e5fb128ffc65d2402f7382033a4c56d4",
-    "KNOWN-LIMITS.md": "002b19d1fbdd9cef8918de5554a6248b152b37a9ca9a65427011ee17665be330",
+    "KNOWN-LIMITS.md": "4ff98e27884d9be0d9d2f22942a05d9e664b0fad08255bf2f08f927491da2025",
     "hooks/hooks.json": "9a9e189b96a0df1388d351009fe4bc681f9516d76b5cdcea97e4054d9733a8b2",
-    "plugin.json": "6ab95a953e6e22596b1c9cf10ebf6aa6f56251e4a120fcaac849bb399485dccd",
     "scripts/aidd-codex-doctor.sh": "30281cf23aee4b456615781da9636ad3f53c376c87e344f292ba085c165e0068",
     "scripts/aidd-codex-doctor.test.sh": "06e20a59c0f7f4387fc03df629047c1aa7e2f150552bbbcddde1e9b3b900d46c",
     "scripts/check-branch-pr-status.sh": "a747d4e4afc1210ff82450fcfd8ae3c1fc916620e8c643c7757d1c6810bab388",

@@ -229,13 +229,13 @@ function build(outRoot) {
     }
     const codexMeta = layout.codexPlugin
     if (codexMeta) {
-      // Portable Agent Plugins 1.0 manifest。OpenAI 固有の hook パスだけ extension に置く。
-      put(CODEX_PLUGIN, 'plugin.json', JSON.stringify({
-        $schema: 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
+      // CLI 0.147.0 実測: ルート plugin.json があるだけで legacy 側の hook が消える。
+      // manifestPath は plugin-layout.json で固定し、配布物には実測済みの形式だけを出す。
+      put(CODEX_PLUGIN, codexMeta.manifestPath, JSON.stringify({
         name: CODEX_PLUGIN,
         version: codexMeta.version,
         description: codexMeta.description,
-        extensions: { 'com.openai': { hooks: './hooks/hooks.json' } },
+        hooks: './hooks/hooks.json',
       }, null, 2) + '\n')
       for (const name of codexMeta.releaseDocs ?? []) {
         copyText(CODEX_PLUGIN, `${codexMeta.sourceDir}/${name}`, name)

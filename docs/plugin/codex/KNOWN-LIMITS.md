@@ -1,7 +1,7 @@
 # AIDD Codex: 既知の制約
 
 - この配布物の hook は、Codex で利用者が信頼するまで実行されない。信頼状態を読み取る公開インターフェースを確認できないため、doctor は「不明」と報告する。「実行前提あり」は信頼済み・発火済み・保護済みを意味しない。導入手順では Codex の `/hooks` で対象 hook を確認・信頼することを必須ステップとし、その後に実発火を別途確認する。
-- 2026-09-27 の Codex CLI 0.147.0 では、`.codex-plugin/plugin.json` のトップレベル `hooks` を持ち、ルートに `plugin.json` を置かない個人コピーで4本が認識され、信頼後の発火も確認できた。ルート `plugin.json` があると、`extensions` を除いても4本は表示されなかった。公式ドキュメントの portable 形式（ルート `plugin.json` の `extensions.com.openai.hooks`）はこの環境で認識されていない。現行の生成物はルート manifest を含むため、配布物をそのまま導入する受け入れ条件は未達。詳細は中心リポジトリの `docs/plugin/codex/evidence/2026-09-27-verify.md` を参照。
+- 生成物は `.codex-plugin/plugin.json` のトップレベル `hooks` を持つ形式で、ルート `plugin.json` は出さない。公式推奨の portable 形式（ルート `plugin.json` と `extensions.com.openai.hooks`）は Codex CLI 0.147.0 で hook が認識されなかった。CLI 更新後に portable 形式へ戻すかは別途判断する。根拠は中心リポジトリの `docs/plugin/codex/evidence/2026-09-27-verify.md` の一変数実験 C'。
 - `codex-skip-marker-deny.sh` が守るのは Claude 側の verify-claims が使う `.claude/.verify-state/*.skip` への書き込みだけ。導入先が Claude 側の verify-claims を使わなければ、実質的に何も守らない。`jq` が無い場合は exit 2 で失敗する。
 - `check-branch-pr-status.sh` は GitHub remote、`gh` と認証、対象ブランチのマージ済み PR がなければ警告を出さない。`jq` が無い場合も静かに終了する。
 - `check-branch-tool-ownership.sh codex` は `claude/*` ブランチでのみ警告する。別の名前のブランチでは警告しない。`jq` または Git の情報が無ければ判定できない。
