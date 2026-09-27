@@ -162,6 +162,8 @@
   "codexPlugin": {
     "version": "0.1.0",
     "description": "中心リポジトリから生成した AIDD の Codex 用 hook と環境診断",
+    "manifestPath": ".codex-plugin/plugin.json",
+    "_manifestReason": "Codex CLI 0.147.0 ではルート plugin.json があるだけで4本の hook が認識されない。docs/plugin/codex/evidence/2026-09-27-verify.md の一変数実験 C' に従い、実測済みの .codex-plugin 形式だけを生成する。",
     "sourceDir": "docs/plugin/codex",
     "releaseDocs": ["KNOWN-LIMITS.md", "COMPATIBILITY.md", "CHANGELOG.md"],
     "skills": ["aidd-doctor"]
