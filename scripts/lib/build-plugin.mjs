@@ -60,6 +60,47 @@ const layout = JSON.parse(readFileSync(LAYOUT_FILE, 'utf8'))
 const errors = []
 const fail = (msg) => errors.push(msg)
 
+// ---- 版の整合（docs/plugin/RELEASE.md §1）----
+// WHY(2026-09-28): 版は層の表の 3 箇所（plugins.*.version / codexPlugin.version）と依存範囲に散っている。
+//   1 箇所だけ上げて配ると、導入先の依存解決（aidd-vkumai → aidd-core ^x.y.z）が新版と合わず失敗する。
+//   3 プラグインは同じ版を同時に上げる約束なので、揃っていなければ生成しない。
+function parseSemver(s) {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(s ?? '')
+  return m ? m.slice(1, 4).map(Number) : null
+}
+function caretSatisfies(range, version) {
+  // ^a.b.c: major が同じ（major 0 なら minor も同じ）で、a.b.c 以上
+  const m = /^\^(\d+\.\d+\.\d+)$/.exec(range ?? '')
+  const lo = m && parseSemver(m[1])
+  const v = parseSemver(version)
+  if (!lo || !v) return false
+  if (lo[0] !== v[0]) return false
+  if (lo[0] === 0 && lo[1] !== v[1]) return false
+  for (let i = 0; i < 3; i++) {
+    if (v[i] > lo[i]) return true
+    if (v[i] < lo[i]) return false
+  }
+  return true
+}
+{
+  const versions = Object.entries(layout.plugins).map(([n, p]) => [n, p.version])
+  if (layout.codexPlugin) versions.push(['codexPlugin', layout.codexPlugin.version])
+  for (const [n, v] of versions) if (!parseSemver(v)) fail(`${n} の version '${v}' は a.b.c の形でない`)
+  const distinct = new Set(versions.map(([, v]) => v))
+  if (distinct.size > 1) {
+    fail(`版が揃っていない: ${versions.map(([n, v]) => `${n}=${v}`).join(' / ')}（3 プラグインは同じ版を同時に上げる。docs/plugin/RELEASE.md §1）`)
+  }
+  for (const [n, p] of Object.entries(layout.plugins)) {
+    for (const dep of p.dependencies ?? []) {
+      const target = layout.plugins[dep.name]
+      if (!target) { fail(`${n} の依存 ${dep.name} が層の表に無い`); continue }
+      if (!caretSatisfies(dep.version, target.version)) {
+        fail(`${n} の依存範囲 ${dep.name}@${dep.version} が ${dep.name} の版 ${target.version} を含まない（版を上げるときは依存範囲も同時に更新する）`)
+      }
+    }
+  }
+}
+
 // ---- 補助 ----
 function listFiles(dir) {
   const out = []
@@ -552,30 +593,63 @@ try {
         owner: mp.owner,
         description: mp.description,
         metadata: { pluginRoot: `./${path.basename(OUT)}` },
+        // WHY(2026-09-28): version はエントリに書かない。公式は「plugin.json とエントリの両方に書くな」
+        //   （host-marketplace「Release a new version」）。版の正本は各プラグインの plugin.json。
         plugins: pluginNames.map(p => ({
           name: p,
           source: p,
           description: layout.plugins[p].description,
-          version: layout.plugins[p].version,
         })),
       }
       mkdirSync(path.join(repoRoot, '.claude-plugin'), { recursive: true })
       writeFileSync(path.join(repoRoot, '.claude-plugin/marketplace.json'), JSON.stringify(manifest, null, 2) + '\n')
+      // Codex 用カタログ（.agents/plugins/marketplace.json）。Claude 用とは別ファイルで同じリポジトリに同居する。
+      // source は実測済みの local + 相対 path（docs/plugin/codex/evidence/2026-09-27-verify.md）。
+      // policy / category は公式の必須項目（developers.openai.com/plugins/build/plugins）。Git 越しの解決は未実測（RELEASE.md §7）。
+      const hasCodex = outputPluginNames.includes(CODEX_PLUGIN) && layout.codexPlugin
+      if (hasCodex) {
+        const codexCatalog = {
+          name: mp.name,
+          plugins: [{
+            name: CODEX_PLUGIN,
+            description: layout.codexPlugin.description,
+            source: { source: 'local', path: `./${path.basename(OUT)}/${CODEX_PLUGIN}` },
+            policy: { installation: 'AVAILABLE' },
+            category: 'Developer tools',
+          }],
+        }
+        mkdirSync(path.join(repoRoot, '.agents/plugins'), { recursive: true })
+        writeFileSync(path.join(repoRoot, '.agents/plugins/marketplace.json'), JSON.stringify(codexCatalog, null, 2) + '\n')
+      }
       const readme = [
         `# ${mp.name}`,
         '',
         mp.description,
         '',
-        '## 使い方',
+        '## 使い方（Claude Code）',
         '',
         '```bash',
         `claude plugin marketplace add ${mp.repo}`,
         ...pluginNames.map(p => `claude plugin install ${p}@${mp.name}`),
         '```',
         '',
+        '新版は `claude plugin update <plugin>@' + mp.name + '` で取り込む（版の文字列が変わったときだけ届く）。',
+        '',
+        ...(hasCodex ? [
+          '## 使い方（Codex）',
+          '',
+          '```bash',
+          `codex plugin marketplace add ${mp.repo}`,
+          `codex plugin add ${CODEX_PLUGIN}@${mp.name}`,
+          '```',
+          '',
+          '導入後に Codex の `/hooks` で 4 本を確認して信頼する。新版は `codex plugin marketplace upgrade ' + mp.name + '` のあと remove → add で入れ直す。',
+          '',
+        ] : []),
         '## 中身',
         '',
         ...pluginNames.map(p => `- \`plugins/${p}\` ${layout.plugins[p].version}: ${layout.plugins[p].description}`),
+        ...(hasCodex ? [`- \`plugins/${CODEX_PLUGIN}\` ${layout.codexPlugin.version}: ${layout.codexPlugin.description}（Codex 用。カタログは \`.agents/plugins/marketplace.json\`）`] : []),
         '',
         '生成物。手で編集しない。正本は中心リポジトリの `.claude/` と `scripts/`、生成は `scripts/build-plugin.sh --marketplace --out <このリポジトリ>/plugins`。',
         '各プラグインのルートに COMPATIBILITY / CHANGELOG / KNOWN-LIMITS / MIGRATION / BREAKING と evidence/ がある。',

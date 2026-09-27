@@ -46,3 +46,10 @@
   あわせて `consumer` の 4 本（shell の 2 本・スキル本文の長さ・Codex 設定の分離）の根を
   `CLAUDE_PROJECT_DIR` 優先へ変え、**小さい導入先で意味の無い赤が出ない**ようにした
   （空振り防止の下限を 20 本 → 0 本、`.codex/` が無ければ対象なしで黙る）
+- **2026-09-28: 版を上げて配り直せる形に生成器を直した（`docs/plugin/RELEASE.md` §0）。**
+  `--marketplace` で Codex 用カタログ `.agents/plugins/marketplace.json` も生成し、`aidd-codex` を
+  同じ marketplace リポジトリから配れるようにした（それまで Claude 用の 2 本しか載っていなかった）。
+  Claude 用カタログのエントリから `version` を外した（公式は「plugin.json とエントリの両方に書くな」。
+  正本は plugin.json）。層の表の版 3 箇所（`plugins.*.version` / `codexPlugin.version`）と依存範囲が
+  揃っていなければ生成しない（1 箇所だけ上げると導入先の依存解決が失敗する）。README に
+  Claude / Codex それぞれの導入と更新の手順を書く。Git 越しの Codex カタログ解決は未実測（RELEASE.md §7）

@@ -144,8 +144,16 @@ if [ -n "$REVIEWED" ] && grep -q "$REVIEWED" "$WORK/a/aidd-core/COMPATIBILITY.md
 echo "=== scenario 4c: --marketplace で出力先の親に marketplace.json と README を書く（配布形態 (a)） ==="
 node "$BUILD" --marketplace --out "$WORK/mp/plugins" >/dev/null
 [ -f "$WORK/mp/.claude-plugin/marketplace.json" ] && ok "marketplace.json がある" || ng "marketplace.json が無い"
-if jq -e '.metadata.pluginRoot == "./plugins" and (.plugins | length) == 2 and (.plugins[0].version | length) > 0' "$WORK/mp/.claude-plugin/marketplace.json" >/dev/null; then ok "pluginRoot と 2 プラグイン・版がある"; else ng "marketplace.json の内容"; fi
+if jq -e '.metadata.pluginRoot == "./plugins" and (.plugins | length) == 2' "$WORK/mp/.claude-plugin/marketplace.json" >/dev/null; then ok "pluginRoot と 2 プラグインがある"; else ng "marketplace.json の内容"; fi
+# WHY(2026-09-28): 版の正本は plugin.json。エントリにも書くと公式が「両方に書くな」とする形になる（RELEASE.md §0）
+if jq -e '[.plugins[] | has("version")] | any | not' "$WORK/mp/.claude-plugin/marketplace.json" >/dev/null; then ok "エントリに version を書かない（正本は plugin.json）"; else ng "エントリに version が残っている"; fi
 [ -f "$WORK/mp/README.md" ] && ok "README がある" || ng "README が無い"
+# Codex 用カタログ: Claude 用とは別ファイルで、aidd-codex を実測済みの local + 相対 path で指す
+CODEX_CATALOG="$WORK/mp/.agents/plugins/marketplace.json"
+if [ -f "$CODEX_CATALOG" ] && jq -e '.name == "aidd-plugins" and (.plugins | length) == 1 and .plugins[0].name == "aidd-codex" and .plugins[0].source.source == "local" and .plugins[0].source.path == "./plugins/aidd-codex" and .plugins[0].policy.installation == "AVAILABLE" and (.plugins[0].category | length) > 0' "$CODEX_CATALOG" >/dev/null; then ok "Codex 用カタログ .agents/plugins/marketplace.json が aidd-codex を指す"; else ng "Codex 用カタログが無いか内容が違う"; fi
+[ -d "$WORK/mp/plugins/aidd-codex" ] && ok "marketplace 出力に aidd-codex の実体がある" || ng "aidd-codex が marketplace 出力に無い"
+grep -q 'codex plugin add aidd-codex@aidd-plugins' "$WORK/mp/README.md" && ok "README に Codex の導入手順がある" || ng "README に Codex の導入手順が無い"
+grep -q 'claude plugin update' "$WORK/mp/README.md" && ok "README に更新手順がある" || ng "README に更新手順が無い"
 if jq -e '.author.name and .metadata.generatedBy' "$WORK/mp/plugins/aidd-core/.claude-plugin/plugin.json" >/dev/null; then ok "plugin.json に author と metadata.generatedBy がある（validate の警告なし）"; else ng "plugin.json の author / metadata"; fi
 if jq -e 'has("hooks") | not' "$WORK/mp/plugins/aidd-core/.claude-plugin/plugin.json" >/dev/null; then ok "plugin.json に hooks を書かない（自動読み込みと重複するため）"; else ng "plugin.json に hooks が残っている"; fi
 
@@ -265,6 +273,34 @@ else
   grep -q '想定外の command 形式' "$WORK/codex-bad.err" && ok "Codex の想定外 command を拒否" || ng "拒否理由が違う" "$(cat "$WORK/codex-bad.err")"
   [ ! -d "$WORK/fx-codex-bad" ] && ok "不正な入力から配布物を書かない" || ng "不正な入力で配布物を書いた"
 fi
+
+echo "=== scenario 8: 版の整合（RED 方向。RELEASE.md §1: 3 プラグインは同じ版を同時に上げる） ==="
+# WHY(2026-09-28): 版は層の表の 3 箇所と依存範囲に散っている。1 箇所だけ上げて配ると導入先の
+#      依存解決が失敗する。揃っていない層の表では生成しないことを、壊して確かめる。
+mk_versions() { # $1=core 版 $2=addon 版 $3=addon→core 依存範囲 $4=codexPlugin 版（空なら書かない）
+  node - "$FX/layout-codex.json" "$FX/layout-ver.json" "$1" "$2" "$3" "$4" <<'NODE'
+const fs = require('node:fs')
+const [src, dst, coreV, addonV, depRange, codexV] = process.argv.slice(2)
+const layout = JSON.parse(fs.readFileSync(src, 'utf8'))
+layout.plugins.core.version = coreV
+layout.plugins.addon = { version: addonV, description: 'd', dependencies: [{ name: 'core', version: depRange }], forbiddenWords: false }
+if (codexV) layout.codexPlugin = { version: codexV, description: 'd', manifestPath: '.codex-plugin/plugin.json', sourceDir: 'docs/plugin/codex', releaseDocs: [], skills: [] }
+fs.writeFileSync(dst, JSON.stringify(layout))
+NODE
+}
+cat > "$FX/.codex/hooks.json" <<'EOF'
+{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"\"$(git rev-parse --show-toplevel)\"/scripts/codex-hook.sh codex"}]}]}}
+EOF
+mk_versions 0.2.0 0.2.0 '^0.2.0' 0.2.0
+if node "$BUILD" --source "$FX" --layout "$FX/layout-ver.json" --out "$WORK/fx-ver-ok" >/dev/null 2>"$WORK/ver-ok.err"; then ok "揃った版は通る"; else ng "揃った版で落ちた" "$(cat "$WORK/ver-ok.err")"; fi
+mk_versions 0.2.0 0.2.0 '^0.2.0' 0.1.0
+if node "$BUILD" --source "$FX" --layout "$FX/layout-ver.json" --out "$WORK/fx-ver-red1" >/dev/null 2>"$WORK/ver-red1.err"; then ng "codexPlugin だけ古い版を検知できない"; else grep -q '版が揃っていない' "$WORK/ver-red1.err" && ok "codexPlugin だけ古い版で失敗する" || ng "失敗理由が違う" "$(cat "$WORK/ver-red1.err")"; fi
+mk_versions 0.2.0 0.1.0 '^0.1.0' 0.2.0
+if node "$BUILD" --source "$FX" --layout "$FX/layout-ver.json" --out "$WORK/fx-ver-red2" >/dev/null 2>"$WORK/ver-red2.err"; then ng "core だけ上げた版を検知できない"; else grep -q '版が揃っていない' "$WORK/ver-red2.err" && ok "core だけ上げた版で失敗する" || ng "失敗理由が違う" "$(cat "$WORK/ver-red2.err")"; fi
+mk_versions 0.2.0 0.2.0 '^0.1.0' 0.2.0
+if node "$BUILD" --source "$FX" --layout "$FX/layout-ver.json" --out "$WORK/fx-ver-red3" >/dev/null 2>"$WORK/ver-red3.err"; then ng "依存範囲の更新漏れを検知できない"; else grep -q '依存範囲' "$WORK/ver-red3.err" && ok "依存範囲 ^0.1.0 が 0.2.0 を含まないので失敗する" || ng "失敗理由が違う" "$(cat "$WORK/ver-red3.err")"; fi
+mk_versions 1.2.0 1.2.0 '^1.0.0' 1.2.0
+if node "$BUILD" --source "$FX" --layout "$FX/layout-ver.json" --out "$WORK/fx-ver-ok2" >/dev/null 2>"$WORK/ver-ok2.err"; then ok "^1.0.0 は 1.2.0 を含む（対を置く）"; else ng "含む範囲で落ちた" "$(cat "$WORK/ver-ok2.err")"; fi
 
 if [ "$fail" -ne 0 ]; then echo "FAILED"; exit 1; fi
 echo "ALL PASSED"
