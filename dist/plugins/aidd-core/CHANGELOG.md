@@ -1,5 +1,17 @@
 # 変更履歴（7 項目の 7 の前半。既知の制約は KNOWN-LIMITS.md）
 
+## 0.1.1（2026-09-28）
+
+- 版上げ配布の初回実施（`docs/plugin/RELEASE.md` §7 の未実測を潰すため）。
+  **marketplace リポジトリに配った 0.1.0 は 2026-09-06 の生成物のまま**で、下記「0.1.0」節の
+  2026-09-07 以降の変更（検査の同梱・`aidd-check.sh`・proposer・wrapper 撤去・生成器修正）は
+  中心リポジトリと手元の clone にしか無かった。0.1.1 はそれらをすべて含む
+- `aidd-codex` の hook 定義（`hooks/hooks.json`）は段階 (5) で実測した形から不変。**Codex 側の再信頼は不要**
+  （RELEASE.md §4.3。ただし marketplace 名が検証用の `aidd-codex-configured` から `aidd-plugins` に変わるので、
+  検証用の個人設定を残している環境では信頼の鍵が変わり、初回のみ信頼が要る）
+- `aidd-codex` が marketplace リポジトリ `aidd-plugins` に初めて載る（Codex 用カタログ
+  `.agents/plugins/` 配下）
+
 ## 0.1.0（2026-09-05、v1.0 の検証版）
 
 - 初版。中心リポジトリの `scripts/build-plugin.sh` で `aidd-core` と `aidd-vkumai` を機械生成

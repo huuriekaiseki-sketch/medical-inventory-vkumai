@@ -68,7 +68,8 @@ if [ -f "$CODEX_HOOKS" ]; then
   [ "$(find "$CODEX_DIR/scripts" -type f | wc -l | tr -d ' ')" -eq 7 ] && ok "Codex に正本6ファイルと doctor 検査を同梱" || ng "Codex の scripts/ が7ファイルでない"
   [ ! -e "$CODEX_DIR/plugin.json" ] && ok "Codex 配布物のルートに plugin.json を出さない" || ng "ルート plugin.json が残っている"
   CODEX_MANIFEST="$CODEX_DIR/.codex-plugin/plugin.json"
-  if [ -f "$CODEX_MANIFEST" ] && jq -e 'keys == ["description", "hooks", "name", "version"] and .name == "aidd-codex" and .version == "0.1.0" and .description == "中心リポジトリから生成した AIDD の Codex 用 hook と環境診断" and .hooks == "./hooks/hooks.json"' "$CODEX_MANIFEST" >/dev/null; then
+  LAYOUT_CODEX_VERSION="$(jq -r '.codexPlugin.version' "$REPO_ROOT/scripts/lib/plugin-layout.json")"
+  if [ -f "$CODEX_MANIFEST" ] && jq -e --arg v "$LAYOUT_CODEX_VERSION" 'keys == ["description", "hooks", "name", "version"] and .name == "aidd-codex" and .version == $v and .description == "中心リポジトリから生成した AIDD の Codex 用 hook と環境診断" and .hooks == "./hooks/hooks.json"' "$CODEX_MANIFEST" >/dev/null; then
     ok "実測で動いた legacy manifest を生成"
   else
     ng "legacy manifest が実測済みの形と違う"
