@@ -1,5 +1,12 @@
 # AIDD Codex: 変更履歴
 
+## 0.1.1（2026-09-28）
+
+- 版上げ配布の初回実施。marketplace リポジトリ `aidd-plugins` に初めて載る（Codex 用カタログ経由）。
+- hook 定義（`hooks/hooks.json`）とスクリプト本体は 0.1.0（段階 (5) で実測した生成物）から不変。
+  同じ marketplace 名で導入していれば**再信頼は不要**。marketplace 名が変わると信頼の鍵が変わり初回のみ信頼が要る。
+- manifest は 0.1.0 と同じ `.codex-plugin/plugin.json` 形式（ルート `plugin.json` は出さない）。
+
 ## 0.1.0（2026-09-26）
 
 - `.codex/hooks.json` から共通 hook 4 本と判定本体を生成。

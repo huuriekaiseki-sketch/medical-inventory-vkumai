@@ -7,6 +7,7 @@
 | プラグイン版 | Claude Code（実測） | Claude Code（docs 確認） | Codex CLI | 備考 |
 |---|---|---|---|---|
 | 0.1.0 | 2.1.258 | 2.1.261 | 対象外（0.153.4 で docs 確認のみ） | 2026-09-05。名前空間・`${CLAUDE_PLUGIN_ROOT}`・プラグイン間呼び出し・InstructionsLoaded の出力無視を実測 |
+| 0.1.1 | 未実測（配布後に `claude plugin update` で実測し更新する） | 2.1.261 | `aidd-codex` 側は codex/COMPATIBILITY.md | 2026-09-28。中身は 0.1.0 と同じ。版上げ配布の手順（RELEASE.md）の初回実施 |
 
 ## 前提にしている Claude Code の挙動（変わると壊れる）
 
