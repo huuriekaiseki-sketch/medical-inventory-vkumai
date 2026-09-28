@@ -62,7 +62,7 @@
 | `integration-leak-baseline.json`#maxLeakedRows | 統合テストの消し残しの上限（H-02） | 緑の全件実行 1 回で業務表に残る行 | **0** |
 | `input-validation-baseline.json`#pending.length | 本文を検証せずに読む route（H-03） | route | **0** |
 | `query-validation-baseline.json`#pending.length | クエリを検証せずに読む route（H-03） | route | **0** |
-| `plugin-layout.json`#supportScriptsUnclassified.unclassifiedMax | 配る・配らないを決めていない支援スクリプト（上限）（H-03） | 本 | **24** |
+| `plugin-layout.json`#supportScriptsUnclassified.unclassifiedMax | 配る・配らないを決めていない支援スクリプト（上限）（H-03） | 本 | **22** |
 | `write-path-registry.json`#maxGaps | DB は書けるのにアプリに道が無い組み合わせ（H-05） | 組み合わせ | **0** |
 | `exemption-budget.json`#max.eslint-disable | 検査の逃がし口（上限。eslint-disable）（H-06） | 件 | **14** |
 | `check-mutants.json`#minMutants | 判定エンジンの壊し方（下限）（H-06） | 件 | **88** |
