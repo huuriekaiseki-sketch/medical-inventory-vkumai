@@ -3,6 +3,7 @@
 ## 0.1.2（2026-09-28）
 
 - 版を変えた更新の実測用。hook 定義・スクリプトは 0.1.1 から不変（差は文書のみ）。
+- 配布後: vkumai 固有の hook 4 本は別プラグイン `aidd-codex-vkumai` で配ることにした（このプラグインの中身は変わらない）。
 - 導入済み環境では `codex plugin marketplace upgrade aidd-plugins` **だけで** 0.1.2 に入れ替わり、
   `/hooks` の信頼 4 件は維持され、再信頼なしに SessionStart の hook が発火した（2026-09-28 実測。
   evidence 2026-09-28-version-update-verify.md）。remove / add は不要。

@@ -7,6 +7,11 @@
   （KNOWN-LIMITS「update は依存を連れて上がらない」、COMPATIBILITY の 0.1.1 実測値、Codex の実証記録）のみ
 - hook 定義（`hooks/hooks.json`）・スクリプト・エージェント・スキルは 0.1.1 から不変。**Codex 側の再信頼は不要**（見込み。この版で実測する）
 - 導入先の更新は `claude plugin update` を aidd-core / aidd-vkumai の 2 本とも回す（0.1.1 で実測した制約）
+- **2026-09-28（配布後）: Codex 用プラグインを 2 つに分けた。** vkumai 固有の Codex hook 4 本
+  （Supabase 直接 DDL の deny・npm 依存変更の deny・品質チェック未実行の警告 2 本）を `aidd-codex-vkumai` として
+  新設し、共通の `aidd-codex` には混ぜない（Claude 側の aidd-core / aidd-vkumai と同じ分け方）。
+  層の表の `codexPlugin`（単数）を `codexPlugins`（複数）に改名。`aidd-codex` の `hooks/hooks.json` は不変で、
+  導入済み環境の再信頼は不要。marketplace への配布は次の版で行う（この時点の marketplace は 0.1.2 の 3 プラグイン）
 
 ## 0.1.1（2026-09-28）
 

@@ -11,7 +11,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="$SCRIPT_DIR/check-direct-ddl-execution.sh"
+# SCRIPT_UNDER_TEST: プラグイン内に同梱したコピーに対して同じ検査を回すための注入口（build-plugin.test.sh が使う）
+SCRIPT="${SCRIPT_UNDER_TEST:-$SCRIPT_DIR/check-direct-ddl-execution.sh}"
 
 fail=0
 assert_contains() {
