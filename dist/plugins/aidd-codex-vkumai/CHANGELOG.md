@@ -1,5 +1,10 @@
 # AIDD Codex vkumai: 変更履歴
 
+## 0.1.3（2026-09-28）
+
+- marketplace `aidd-plugins` に初めて載る版。導入は `codex plugin add aidd-codex-vkumai@aidd-plugins` → `/hooks` で 4 本を信頼。
+- 中身は 0.1.2（新設時）と同じ。
+
 ## 0.1.2（2026-09-28）
 
 - 新設。vkumai の `.codex/hooks.json` のうち、製品固有の判定を含むため `aidd-codex` 初版から外していた 4 本

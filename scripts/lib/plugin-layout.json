@@ -12,13 +12,13 @@
   },
   "plugins": {
     "aidd-core": {
-      "version": "0.1.2",
+      "version": "0.1.3",
       "description": "AIDD パイプラインの共通機構: 検知 hook・証跡の記録・判定エンジン・汎用エージェント/スキル（中心リポジトリから機械生成。issue #420 v1）",
       "dependencies": [],
       "forbiddenWords": true
     },
     "aidd-vkumai": {
-      "version": "0.1.2",
+      "version": "0.1.3",
       "description": "vkumai アダプター: Next.js + Supabase 向けの Workflow・4 軸 Sweep・実装系エージェント・Supabase ガード（aidd-core に依存）",
       "dependencies": [
         {
@@ -168,7 +168,7 @@
   "codexPlugins": {
     "_comment": "Codex 用プラグインの一覧（2026-09-28 に codexPlugin（単数）から改名。aidd-codex-vkumai 追加に伴い複数化）。版は plugins.*.version と同じ値にする（build-plugin.mjs が揃っていなければ生成しない）。",
     "aidd-codex": {
-      "version": "0.1.2",
+      "version": "0.1.3",
       "description": "中心リポジトリから生成した AIDD の Codex 用 hook と環境診断",
       "manifestPath": ".codex-plugin/plugin.json",
       "_manifestReason": "Codex CLI 0.147.0 ではルート plugin.json があるだけで4本の hook が認識されない。docs/plugin/codex/evidence/2026-09-27-verify.md の一変数実験 C' に従い、実測済みの .codex-plugin 形式だけを生成する。",
@@ -177,7 +177,7 @@
       "skills": ["aidd-doctor"]
     },
     "aidd-codex-vkumai": {
-      "version": "0.1.2",
+      "version": "0.1.3",
       "description": "vkumai 固有の Codex 用 hook: Supabase 直接 DDL の deny・npm 依存変更の deny・品質チェック未実行の警告（Next.js + Supabase + npm 前提。aidd-codex と併用）",
       "manifestPath": ".codex-plugin/plugin.json",
       "sourceDir": "docs/plugin/codex-vkumai",
