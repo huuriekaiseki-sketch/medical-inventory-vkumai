@@ -14,7 +14,7 @@ set -uo pipefail
 #
 # 環境変数（テスト用の注入ポイント）:
 #   SUPABASE_BIN          supabase CLI のパス（既定: PATH の supabase）
-#   SUPABASE_MARKER_DIR   印の置き場（既定: <リポジトリ>/logs/supabase-started-by。logs/ は git 管理外）
+#   SUPABASE_MARKER_DIR   印の置き場（既定: 全 worktree 共有の logs/supabase-started-by。resolve_log_dir で解決、git 管理外）
 command -v jq >/dev/null 2>&1 || exit 0
 
 INPUT="$(cat)"
@@ -40,8 +40,10 @@ if "$SUPABASE_BIN" status >/dev/null 2>&1; then
   exit 0
 fi
 
-REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-MARKER_DIR="${SUPABASE_MARKER_DIR:-$REPO_ROOT/logs/supabase-started-by}"
+# 印は全 worktree で共有される logs/ に置く（ローカル Supabase は worktree をまたいで 1 つなので、印も 1 か所）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/resolve-log-dir.sh"
+MARKER_DIR="${SUPABASE_MARKER_DIR:-$(resolve_log_dir)/supabase-started-by}"
 mkdir -p "$MARKER_DIR" 2>/dev/null || exit 0
 printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$MARKER_DIR/$SESSION_ID" 2>/dev/null || true
 exit 0
