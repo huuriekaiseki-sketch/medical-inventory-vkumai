@@ -1,5 +1,13 @@
 # 変更履歴（7 項目の 7 の前半。既知の制約は KNOWN-LIMITS.md）
 
+## 0.1.2（2026-09-28）
+
+- 版を**変えた**更新の実測用（RELEASE.md §7 の残り: Codex で版が変わっても `trusted_hash` が維持されるか、
+  remove 無しの `add` で入れ替わるか）。中身の差は 0.1.1 配布後に書き戻した文書
+  （KNOWN-LIMITS「update は依存を連れて上がらない」、COMPATIBILITY の 0.1.1 実測値、Codex の実証記録）のみ
+- hook 定義（`hooks/hooks.json`）・スクリプト・エージェント・スキルは 0.1.1 から不変。**Codex 側の再信頼は不要**（見込み。この版で実測する）
+- 導入先の更新は `claude plugin update` を aidd-core / aidd-vkumai の 2 本とも回す（0.1.1 で実測した制約）
+
 ## 0.1.1（2026-09-28）
 
 - 版上げ配布の初回実施（`docs/plugin/RELEASE.md` §7 の未実測を潰すため）。

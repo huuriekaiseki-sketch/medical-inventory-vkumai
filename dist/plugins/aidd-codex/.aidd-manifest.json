@@ -2,9 +2,9 @@
   "plugin": "aidd-codex",
   "algorithm": "sha256",
   "files": {
-    ".codex-plugin/plugin.json": "47f11cb00b0666321a28b80ca93fd6530284a01c7fe36c3dbe7731e99a48df5a",
-    "CHANGELOG.md": "90d117b9f98c7984c8af4a8ca4d2a22126eeabb440d60a71c6a039564710eeb3",
-    "COMPATIBILITY.md": "7de8de9fabf2a57c7ccb8133b7cb3d1e0dcfcc40d1f3ad28a89d8c5955e5f173",
+    ".codex-plugin/plugin.json": "f62dc2570def05189794974c9e2cd47fe397388c27ab6600f5890611be89d7fb",
+    "CHANGELOG.md": "b8e7bee18d06c36ab69402c411b91df7a2cd21dc53a3f3a3fc1bb2a87fe3acca",
+    "COMPATIBILITY.md": "d66858bc07aeb3b03c5855218e91f7dd1a740626350a406432c89a363a8f072f",
     "KNOWN-LIMITS.md": "4ff98e27884d9be0d9d2f22942a05d9e664b0fad08255bf2f08f927491da2025",
     "hooks/hooks.json": "9a9e189b96a0df1388d351009fe4bc681f9516d76b5cdcea97e4054d9733a8b2",
     "scripts/aidd-codex-doctor.sh": "30281cf23aee4b456615781da9636ad3f53c376c87e344f292ba085c165e0068",
