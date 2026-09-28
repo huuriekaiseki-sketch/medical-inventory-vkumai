@@ -4,7 +4,7 @@
   "files": {
     ".codex-plugin/plugin.json": "95d854cd0cd3b48f47f23587f8dc72692d9f9a4138e8f7d738ec79a172bbe165",
     "CHANGELOG.md": "32a84c6e387b4231008081de902a27badf1a9c2acc807f27d8e126b3b23b9fcd",
-    "COMPATIBILITY.md": "108a7a0b235b9cfbed190cf2da81e077f79196abdd1305df9e79d8daa49bd708",
+    "COMPATIBILITY.md": "7e65f141533f303e16037b16d8c7306948d76058f1c3aef14b3fa31e76ae427e",
     "KNOWN-LIMITS.md": "9c95f9e6f703163145c4f914db1a4402e5afe63bb6970d0e8d129c3b9154763f",
     "hooks/hooks.json": "641117902fe1c0c4a255cc86c3b1c4a5202ce9944da7bb53dbadf2ab1142fffb",
     "scripts/check-dependency-change.sh": "ac2884b6d52bff8d1f473bcde877831e67e210b01cb6188fb9f958d385049dd9",

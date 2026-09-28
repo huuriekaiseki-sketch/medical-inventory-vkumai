@@ -139,12 +139,13 @@ codex plugin marketplace upgrade aidd-plugins
 | Codex: 版を変えたあとの信頼 | `config.toml` の `trusted_hash` 4 件が更新前と一致し、新規セッションで発火する | ✅ 4 件とも一致・`enabled = true` 維持。`verify/merged-head` の新規 `codex exec` セッション `01a0e591-…` の保存記録に (c) マージ済み PR の警告と (d) 「前回 fetch から約 26 時間経過」の警告が入った。`/hooks` の画面は見ていないが、信頼されていない hook は実行されないので発火が信頼の証拠になる |
 | Codex: 新プラグイン `aidd-codex-vkumai` の初回導入（0.1.3） | `marketplace upgrade` → `codex plugin add aidd-codex-vkumai@aidd-plugins` | ✅ 通った（2026-09-28）。`config.toml` に `enabled = true` が増え、`hooks.state` は無し（未信頼）。`codex plugin list` の `available` には出なかったが `add` は通る |
 | Codex: 未信頼の hook は動かない（対照） | 未信頼のまま `psql --version` を打たせる | ✅ 止まらず実行された（2026-09-28。信頼前は skip される、の実測） |
-| Codex: `aidd-codex-vkumai` の発火 | 信頼相当（`codex exec --dangerously-bypass-hook-trust`）で DDL deny と Stop 警告 | 🟡 DDL deny は `Command blocked by PreToolUse hook` で確認 ✅。Stop hook は実行された物証（状態ディレクトリ）のみで、警告文は exec では観測できない。`/hooks` での信頼操作と対話 CLI の表示は未検証（[実証記録](codex-vkumai/evidence/2026-09-28-first-install-verify.md)） |
+| Codex: `aidd-codex-vkumai` の信頼と発火 | `/hooks` で対象4本だけ信頼し、bypass 無しで DDL deny・Stop・PostToolUse を確認 | ✅ 2026-09-28、CLI 0.147.0 で4本の `trusted_hash` を記録。`psql --version` は PreToolUse に遮断され、未追跡 `.ts` に対する Stop 警告は対話 CLI に全文表示。`npm run typecheck` は `package.json` 不在で失敗したが、PostToolUse の `.hash` が作られ、同じセッションの Stop 警告は消えた（[実証記録](codex-vkumai/evidence/2026-09-28-trusted-fire-verify.md)） |
+| Codex: 未導入プラグインの `available` | `aidd-codex-vkumai` を remove して `codex plugin list --marketplace aidd-plugins --json` | ⚠️ `installed` は `aidd-codex` のみになったが、`available: []` を再現。直後の `add` は成功し、対象4本の信頼は維持。表示理由は未解明（[実証記録](codex-vkumai/evidence/2026-09-28-trusted-fire-verify.md)） |
 | Codex: `policy` / `category` 無しのカタログ | 一時 marketplace（local path）から `add` | ✅ 通った（2026-09-28）。エントリが name / description / source だけの `.agents/plugins/marketplace.json` を `codex plugin marketplace add <path>` → `codex plugin add aidd-codex@aidd-nopolicy-tmp` で 0.1.1 が入った。公式の「必須」は CLI 0.147.0 では強制されない。検証後に plugin と marketplace を remove し、`config.toml` に残骸なし |
 
 検証用リポジトリと clone（`/Users/masanori/雑談/aidd-codex-verify`）はこの目的で残してある。
 
-Codex 側の実測は CLI 0.147.0 と marketplace commit `be18c7d` で行った。CLI の既定モデル `gpt-6-sol` はこの ChatGPT アカウントで非対応だったため、発火確認には `gpt-5.5` を指定した。[実証記録](codex/evidence/2026-09-28-marketplace-verify.md)に導入・信頼・発火の証拠と未検証範囲を残した。検証用 clone はクリーン。個人環境には `aidd-plugins` marketplace と信頼済み `aidd-codex`（0.1.2 に更新済み）を残している（解除は `codex plugin remove aidd-codex@aidd-plugins` → `codex plugin marketplace remove aidd-plugins`。信頼記録は自動で消えるとは限らない）。
+Codex 側の初回実測は CLI 0.147.0 と marketplace commit `be18c7d` で行った。CLI の既定モデル `gpt-6-sol` はこの ChatGPT アカウントで非対応だったため、発火確認には `gpt-5.5` を指定した。[実証記録](codex/evidence/2026-09-28-marketplace-verify.md)に導入・信頼・発火の証拠と未検証範囲を残した。0.1.3 の追加実測は marketplace commit `bc49596` で行った。検証用 clone は追加実測後にクリーンへ戻した。個人環境には `aidd-plugins` marketplace と信頼済み `aidd-codex`・`aidd-codex-vkumai`（ともに 0.1.3）を残している（解除は各 `codex plugin remove`。信頼記録は自動で消えるとは限らない）。
 
 配布後にこの表へ書き戻した結果は、中心リポジトリの `dist/plugins` には入るが marketplace 上の同じ版には
 届かない（版の文字列が同じなので配り直さない。タグの内容も動かさない）。次の版で届く。
@@ -164,9 +165,9 @@ Codex 側の実測は CLI 0.147.0 と marketplace commit `be18c7d` で行った�
 5. Codex CLI 0.158 系（desktop 同梱）で `.codex-plugin` 形式が引き続き認識されるか。0.147.0 でしか実測していない ⬜。この環境の CLI は 0.147.0 のままなので、CLI を上げたときに測る。
 6. ChatGPT desktop app での更新導線 ⬜。
 7. `hooks.json` を**変えた**版で `/hooks` に「changed - review required」が出て、信頼するまで発火しないこと ⬜（公式資料の記述のみ。実測には hook 定義を変える版が要る）。**「信頼するまで発火しない」の側は 0.1.3 で実測** ✅（未信頼の `aidd-codex-vkumai` は psql を止めなかった）。
-8. `aidd-codex-vkumai` を `/hooks` で信頼したあとの発火（bypass 無し）⬜。CLI から信頼操作が出来ないので、人か Codex セッションが `/hooks` で 4 本を信頼してから (a) `psql` を打たせて止まるか、(b) `.ts` を触って終了し Stop の警告が表示されるかを見る。
-9. Stop hook の警告文が対話 CLI に表示されるか ⬜（`codex exec --json` では systemMessage を観測できない。実行の物証は状態ディレクトリのみ）。
-10. `codex plugin list` の `available` に、カタログにあって未導入のプラグインが出ない理由 ⬜（`add` は通る）。
+8. `aidd-codex-vkumai` を `/hooks` で4本だけ信頼したあとの発火（bypass 無し）は実測済み ✅。PreToolUse の DDL deny、PostToolUse の `.hash` 作成、Stop 警告を確認（[実証記録](codex-vkumai/evidence/2026-09-28-trusted-fire-verify.md)）。
+9. Stop hook の警告文は対話 CLI に全文表示された ✅。`codex exec --json` では観測できなかった表示経路との差がある。
+10. `codex plugin list` の `available: []` は対象プラグインを remove した状態でも再現した ✅。カタログに掲載され、`add` は通る。**表示されない理由は未解明** ⬜。
 
 Codex 側の 0.1.2 の記録は [実証記録](codex/evidence/2026-09-28-version-update-verify.md)。
 
