@@ -633,7 +633,13 @@ try {
         ...pluginNames.map(p => `claude plugin install ${p}@${mp.name}`),
         '```',
         '',
-        '新版は `claude plugin update <plugin>@' + mp.name + '` で取り込む（版の文字列が変わったときだけ届く）。',
+        // WHY(2026-09-28 実測): aidd-vkumai を update しても依存の aidd-core は上がらない（^0.1.0 を旧版が満たす）。
+        //   2 本とも明示する。
+        '新版は次で取り込む（版の文字列が変わったときだけ届く。**依存側は自動で上がらない**ので 2 本とも回す）:',
+        '',
+        '```bash',
+        ...pluginNames.map(p => `claude plugin update ${p}@${mp.name}`),
+        '```',
         '',
         ...(hasCodex ? [
           '## 使い方（Codex）',

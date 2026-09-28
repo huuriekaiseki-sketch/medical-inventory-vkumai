@@ -154,7 +154,10 @@ CODEX_CATALOG="$WORK/mp/.agents/plugins/marketplace.json"
 if [ -f "$CODEX_CATALOG" ] && jq -e '.name == "aidd-plugins" and (.plugins | length) == 1 and .plugins[0].name == "aidd-codex" and .plugins[0].source.source == "local" and .plugins[0].source.path == "./plugins/aidd-codex" and .plugins[0].policy.installation == "AVAILABLE" and (.plugins[0].category | length) > 0' "$CODEX_CATALOG" >/dev/null; then ok "Codex 用カタログ .agents/plugins/marketplace.json が aidd-codex を指す"; else ng "Codex 用カタログが無いか内容が違う"; fi
 [ -d "$WORK/mp/plugins/aidd-codex" ] && ok "marketplace 出力に aidd-codex の実体がある" || ng "aidd-codex が marketplace 出力に無い"
 grep -q 'codex plugin add aidd-codex@aidd-plugins' "$WORK/mp/README.md" && ok "README に Codex の導入手順がある" || ng "README に Codex の導入手順が無い"
-grep -q 'claude plugin update' "$WORK/mp/README.md" && ok "README に更新手順がある" || ng "README に更新手順が無い"
+# WHY(2026-09-28 実測): 依存側は update で自動に上がらないので、README は全プラグイン分の update を並べる
+for p in aidd-core aidd-vkumai; do
+  grep -qF "claude plugin update $p@aidd-plugins" "$WORK/mp/README.md" && ok "README に $p の更新手順がある" || ng "README に $p の更新手順が無い"
+done
 if jq -e '.author.name and .metadata.generatedBy' "$WORK/mp/plugins/aidd-core/.claude-plugin/plugin.json" >/dev/null; then ok "plugin.json に author と metadata.generatedBy がある（validate の警告なし）"; else ng "plugin.json の author / metadata"; fi
 if jq -e 'has("hooks") | not' "$WORK/mp/plugins/aidd-core/.claude-plugin/plugin.json" >/dev/null; then ok "plugin.json に hooks を書かない（自動読み込みと重複するため）"; else ng "plugin.json に hooks が残っている"; fi
 
