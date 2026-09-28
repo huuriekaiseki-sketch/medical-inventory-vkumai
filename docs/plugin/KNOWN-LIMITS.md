@@ -33,6 +33,9 @@
 - `InstructionsLoaded` の出力は無視される。常時ロード量の上限判定は SessionStart の
   `check-claude-md-size.sh` が担う
 - プラグイン同梱 subagent の frontmatter `hooks` / `permissionMode` / `mcpServers` は無視される
+- **`claude plugin update` は依存を連れて上がらない**（2026-09-28、0.1.1 で実測）。`aidd-vkumai` を
+  update しても `aidd-core` は導入時の版のまま。依存範囲 `^0.1.0` を旧版が満たすため。導入先は
+  2 本とも update する（README と `RELEASE.md` §4.1）
 
 ## 配った検査の回し方（2026-09-12）
 

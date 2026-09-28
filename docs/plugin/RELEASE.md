@@ -14,7 +14,7 @@
 | 版番号が `plugin-layout.json` の 3 箇所に散っている | 上げ忘れが出る | 3 箇所と依存範囲が揃っていなければ生成が失敗する ✅（`build-plugin.test.sh` scenario 8 で RED 方向を実測） |
 | Claude 用カタログのエントリと `plugin.json` の両方に `version` | 公式は「両方に書くな」📄 | エントリ側を消した。正本は `plugin.json` ✅（`validate` 通過） |
 
-**marketplace リポジトリ側はまだ 0.1.0 の生成物のまま。** 次に §3 を回したときに `aidd-codex` とカタログが初めて載る。
+**2026-09-28 に 0.1.1 で §2〜§3 を初めて回した。** marketplace リポジトリ be18c7d（タグ `aidd-core--v0.1.1` / `aidd-vkumai--v0.1.1` / `aidd-codex--v0.1.1`）。`aidd-codex` と Codex 用カタログはここで初めて載った。`claude plugin tag` は `.claude-plugin/plugin.json` を要求するので、`aidd-codex` のタグは `git tag -a` で同じ規約の名前を付けた。
 
 ## 1. 版番号の決め方
 
@@ -79,16 +79,21 @@ marketplace ルートに `.agents/plugins/marketplace.json` を置く 📄。1 �
 claude plugin tag ~/aidd-plugins/plugins/aidd-core --push
 ```
 
-`{name}--v{version}` のタグを 3 プラグイン分。`aidd-vkumai` の依存解決はこのタグを見る ✅（2026-09-05 に `resolvedVersion: 0.1.0` で実測）。`aidd-codex` のタグは Codex が読むわけではないが、版と commit の対応を残すために同じ規約で付ける。
+`{name}--v{version}` のタグを 3 プラグイン分。`aidd-codex` は Claude 用 manifest が無く `claude plugin tag` が拒否するので ✅ `git tag -a aidd-codex--v<version> -m "aidd-codex <version>"` → `git push origin <tag>` で同じ名前を付ける。`aidd-vkumai` の依存解決はこのタグを見る ✅（2026-09-05 に `resolvedVersion: 0.1.0` で実測）。`aidd-codex` のタグは Codex が読むわけではないが、版と commit の対応を残すために同じ規約で付ける。
 
 ## 4. 導入先で新版を取り込む
 
 ### 4.1 Claude Code 側 📄
 
 ```bash
+claude plugin update aidd-core@aidd-plugins
+```
+
+```bash
 claude plugin update aidd-vkumai@aidd-plugins
 ```
 
+- **依存側（aidd-core）は aidd-vkumai の update では上がらない** ✅（0.1.1 で実測。依存範囲 `^0.1.0` を旧版が満たすため）。2 本とも明示的に回す。`--scope project` で入れている導入先は同じ scope を付ける。
 - 導入先が受け取るのは **版の文字列が変わったときだけ**。版を上げずに push しても届かない。
 - 自動更新は marketplace ごとに利用者が `/plugin` → Marketplaces → Enable auto-update で入れる。既定はオフ。
 - 再起動が要る（`update` の出力に明記）。
@@ -131,13 +136,16 @@ codex plugin add aidd-codex@aidd-plugins
 
 | 確認 | やり方 | 状態 |
 | --- | --- | --- |
-| Claude: 新版が導入先に届く | 導入先で `claude plugin update` → `claude plugin list` の版が上がる | ⬜ |
-| Claude: 依存解決 | `aidd-vkumai` の update で `aidd-core` も新版になる | ⬜ |
+| Claude: 新版が導入先に届く | 導入先で `claude plugin update` → `claude plugin list` の版が上がる | ✅ 2026-09-28、0.1.1 で実測。`claude plugin update aidd-vkumai@aidd-plugins --scope project` → `0.1.0 → 0.1.1`、`claude plugin list` も 0.1.1。キャッシュは `~/.claude/plugins/cache/aidd-plugins/aidd-vkumai/0.1.1/` に版別で入る |
+| Claude: 依存解決 | `aidd-vkumai` の update で `aidd-core` も新版になる | ❌ **上がらない**（2026-09-28 実測）。`aidd-vkumai` を 0.1.1 にしても `aidd-core` は `0.1.0-256fd54e95c6` のまま。`^0.1.0` は 0.1.0 を満たすので更新の動機が無い。**依存側も `claude plugin update aidd-core@aidd-plugins` を明示的に回す**（README の手順に含める） |
 | Codex: 新版が導入先に届く | remove → add → `codex plugin list --json` の版 | ⬜ |
 | Codex: 信頼状態 | `/hooks` で 4 本が Trusted のまま（hooks.json 不変のとき） | ⬜（不変時に Trusted 維持は段階 (5) で 1 回実測 ✅。版を上げた状態では未実測） |
 | Codex: 発火 | 検証用リポジトリ `aidd-codex-verify` で (a)〜(d) のうち最低 1 つ | ⬜ |
 
 検証用リポジトリと clone（`/Users/masanori/雑談/aidd-codex-verify`）はこの目的で残してある。
+
+配布後にこの表へ書き戻した結果は、中心リポジトリの `dist/plugins` には入るが marketplace 上の同じ版には
+届かない（版の文字列が同じなので配り直さない。タグの内容も動かさない）。次の版で届く。
 
 ## 6. 戻し方
 
