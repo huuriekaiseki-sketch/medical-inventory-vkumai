@@ -148,7 +148,9 @@
     "check-escape-ledger.sh": "aidd-core",
     "check-dependency-update-staleness.sh": "aidd-vkumai",
     "check-access-review-staleness.sh": "aidd-core",
-    "check-plugin-integrity.sh": "aidd-core"
+    "check-plugin-integrity.sh": "aidd-core",
+    "mark-supabase-started.sh": "aidd-vkumai",
+    "stop-supabase-on-session-end.sh": "aidd-vkumai"
   },
   "codexHookScripts": {
     "_comment": "Codex 用プラグインに入れるスクリプトの宣言。値は codexPlugins のキー（aidd-codex＝共通、aidd-codex-vkumai＝vkumai 固有。Claude 側の aidd-core / aidd-vkumai と同じ分け方）。hookScripts は既存の Claude 用生成器が 1 ファイル 1 所属として読むため変更しない。両方に載るファイルは同じ正本から各プラグインへ生成する。doctor は hook ではなくスキルから起動する。",
@@ -423,6 +425,8 @@
     "check-access-review-staleness.test.sh": "both",
     "check-aidd-config-schema.test.sh": "both",
     "check-agent-output.test.sh": "self",
+    "mark-supabase-started.test.sh": "self",
+    "stop-supabase-on-session-end.test.sh": "self",
     "check-aidd-doctor.test.sh": "both",
     "aidd-codex-doctor.test.sh": "self",
     "check-aidd-phase-stats-recorded.test.sh": "self",

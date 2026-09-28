@@ -67,6 +67,28 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/mark-supabase-started.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/stop-supabase-on-session-end.sh",
+            "timeout": 60,
+            "statusMessage": "このセッションが起動したローカル Supabase を停止中..."
+          }
+        ]
       }
     ],
     "Stop": [

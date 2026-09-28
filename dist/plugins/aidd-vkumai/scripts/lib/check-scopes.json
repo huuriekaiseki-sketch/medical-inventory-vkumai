@@ -8,6 +8,8 @@
     "check-dependency-change.test.sh": "self",
     "ai-check-suggest.test.sh": "self",
     "check-automode-config.test.sh": "self",
+    "mark-supabase-started.test.sh": "self",
+    "stop-supabase-on-session-end.test.sh": "self",
     "check-config-drift.test.sh": "self",
     "lib/resolve-log-dir.test.sh": "self",
     "check-rls-mutation.test.sh": "self",

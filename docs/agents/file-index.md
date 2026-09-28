@@ -57,6 +57,7 @@
 | [`docs/agents/run-manifest.md`](./run-manifest.md) | AIDDフローのspecHash/baseCommit突合用Run Manifestのスキーマ |
 | `scripts/log-agent-progress.sh` / `scripts/show-agent-status.sh` | サブエージェント進捗の記録・一覧表示（issue #18） |
 | `aidd.config.json` / `scripts/lib/aidd-config.sh` | 導入先アダプター設定（issue #420）。TRI/RISK の固有語彙・読み取り専用ロール・検査コマンド・追記先 docs。判定エンジンと hook 4 本が読み、値は汎用既定値に足すだけで消せない |
+| `scripts/mark-supabase-started.sh` / `scripts/stop-supabase-on-session-end.sh` | ローカル Supabase の「使い終わったら必ず止める」の機械化（2026-09-28）。PreToolUse が `supabase start` の直前に「動いていなかった」ときだけ全 worktree 共有の `logs/supabase-started-by/<session_id>`（`resolve_log_dir` で解決）に印を残し、SessionEnd が印のあるセッションだけ `supabase stop` する。起動側でないセッション（印なし）は止めない。限界: 起動側が先に終わると、使っている別セッションのテストは落ちる。起動・停止・`db reset`（ローカル向け）の許可は `.claude/settings.json` に入れてある（`--linked` / `--db-url` は確認のまま） |
 | `scripts/build-plugin.sh` / `scripts/lib/plugin-layout.json` | プラグイン v1 の生成（issue #420）。層の表に従い `dist/plugins/` を機械生成し、禁止語・同梱閉包・決定性を検査。配布は `--marketplace --out ~/aidd-plugins/plugins`（版は `{plugin}--v{version}` タグ。Claude 用と Codex 用の 2 つのカタログが配布先リポジトリに出る。Codex 用は共通の `aidd-codex` と vkumai 固有の `aidd-codex-vkumai` の 2 本）。版を上げて配り直す手順は `docs/plugin/RELEASE.md`。`build-plugin.test.sh` が dist の鮮度を見る |
 | `scripts/lib/resolve-log-dir.sh` | `logs/`の書き込み先をworktree横断で単一のディレクトリ（メインworktree直下）に解決する。全`log-*.sh`/`check-*.sh`/`summarize-*.sh`が参照する（issue #546。worktreeごとに別の`logs/`へ書いて観測記録の約半数が死蔵していた対策） |
 | `scripts/lib/canonical-event.ts` | hook/journal/agent-progress/loop-observabilityの4ログを正規化する読み取り専用Adapter層（issue #569） |
