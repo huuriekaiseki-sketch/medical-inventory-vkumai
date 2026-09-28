@@ -36,6 +36,10 @@
       "Bash(supabase migration new *)",
       "Bash(supabase db diff*)",
       "Bash(supabase status*)",
+      "Bash(supabase start*)",
+      "Bash(supabase stop*)",
+      "Bash(supabase db reset)",
+      "Bash(supabase db reset --local*)",
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",
@@ -127,7 +131,8 @@
     ],
     "ask": [
       "Bash(supabase db push*)",
-      "Bash(supabase db reset*)",
+      "Bash(supabase db reset --linked*)",
+      "Bash(supabase db reset --db-url*)",
       "Bash(supabase db execute*)",
       "Bash(supabase functions deploy*)",
       "Bash(supabase secrets*)",
@@ -348,6 +353,28 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-readonly-bash.sh",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/mark-supabase-started.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/stop-supabase-on-session-end.sh",
+            "timeout": 60,
+            "statusMessage": "このセッションが起動したローカル Supabase を停止中..."
           }
         ]
       }

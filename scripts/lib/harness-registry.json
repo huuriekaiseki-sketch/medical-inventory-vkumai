@@ -241,6 +241,8 @@
       "checks": [
         "scripts/check-dependency-change.test.sh",
         "scripts/check-direct-ddl-execution.test.sh",
+        "scripts/mark-supabase-started.test.sh",
+        "scripts/stop-supabase-on-session-end.test.sh",
         "scripts/check-definer-authz-gaps.test.sh",
         "scripts/check-guard-regressions.test.sh",
         "scripts/check-lockfile-integrity.test.sh",
