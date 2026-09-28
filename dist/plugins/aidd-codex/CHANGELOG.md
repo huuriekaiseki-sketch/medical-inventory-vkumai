@@ -3,8 +3,9 @@
 ## 0.1.2（2026-09-28）
 
 - 版を変えた更新の実測用。hook 定義・スクリプトは 0.1.1 から不変（差は文書のみ）。
-- 導入済み環境では `codex plugin marketplace upgrade aidd-plugins` → `codex plugin add aidd-codex@aidd-plugins` で
-  0.1.2 に入れ替わるか、`/hooks` の信頼が維持されるかをこの版で測る（RELEASE.md §7）。
+- 導入済み環境では `codex plugin marketplace upgrade aidd-plugins` **だけで** 0.1.2 に入れ替わり、
+  `/hooks` の信頼 4 件は維持され、再信頼なしに SessionStart の hook が発火した（2026-09-28 実測。
+  evidence 2026-09-28-version-update-verify.md）。remove / add は不要。
 
 ## 0.1.1（2026-09-28）
 

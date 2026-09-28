@@ -105,18 +105,11 @@ claude plugin update aidd-vkumai@aidd-plugins
 codex plugin marketplace upgrade aidd-plugins
 ```
 
-これは Git marketplace のスナップショットを更新するだけ ✅（`--help` で確認）。その後にプラグイン本体を入れ直す:
+**これだけで新版に入れ替わる** ✅（2026-09-28、0.1.1 → 0.1.2 で実測。CLI 0.147.0）。`upgrade` は Git スナップショットを更新し、導入済みのプラグインをそのスナップショットから入れ直す。`--help` の説明「Refresh configured Git marketplace snapshots」より一段多く動く。remove も add も要らない。
 
-```bash
-codex plugin remove aidd-codex@aidd-plugins
-```
-
-```bash
-codex plugin add aidd-codex@aidd-plugins
-```
-
+- 実測: `codex plugin marketplace upgrade aidd-plugins --json` → `upgradedRoots` 1 件、`errors: []`。直後の `codex plugin list --marketplace aidd-plugins --json` は `version: 0.1.2`、キャッシュは `~/.codex/plugins/cache/aidd-plugins/aidd-codex/0.1.2/` だけになり、`0.1.1/` は消えた（版別ディレクトリは並ばない）。キャッシュの中身は配布物と `diff -r` で同一。
 - `codex plugin update` は存在しない ✅（CLI 0.147.0 の副コマンドは add / list / marketplace / remove）。
-- **remove せずに `add` し直すだけで新版に入れ替わるか**は未実測 ⬜。0.1.1 を導入済みの状態で同じ `add` を再実行すると成功し、0.1.1 のままだった ✅。版を変えた検証ではない。キャッシュのパスに版が入る（`~/.codex/plugins/cache/<marketplace>/aidd-codex/<version>/` ✅）。
+- remove → add の入れ直しは、`upgrade` で入れ替わらなかったときの手段として残す。同じ版の `add` 再実行は成功して版が変わらない ✅（0.1.1 で実測）。
 - ChatGPT desktop app 側の更新導線は未確認 ⬜。
 
 ### 4.3 Codex の hook 再信頼
@@ -127,7 +120,7 @@ codex plugin add aidd-codex@aidd-plugins
 | --- | --- | --- |
 | スクリプト本体だけ（`scripts/*.sh`） | 不要 | 同じ `hooks.json` を別パスに置いた 5 回の検証で hash が全て一致 ✅（hash は hook 定義の内容から計算され、スクリプトの中身は含まない） |
 | `hooks/hooks.json` の command / timeout / matcher | **必要**。`/hooks` に「changed - review required」で出る | 公式「new or changed hooks are marked for review and skipped until trusted」📄 |
-| 版番号だけ | 未検証 | 鍵に版が入っていないことは確認済み ✅。同じ `hooks.json` の 0.1.1 を remove → add した場合は再信頼不要だったが、異なる版の間では未実測 |
+| 版番号だけ | 不要 | 0.1.1 → 0.1.2（`hooks.json` 不変）を `marketplace upgrade` で入れ替えた前後で `trusted_hash` 4 件と `enabled = true` が完全一致 ✅。更新後の新規セッションで SessionStart の hook 2 本（マージ済み PR・古い FETCH_HEAD）が再信頼なしに発火 ✅（2026-09-28） |
 | marketplace の名前 | **必要**（鍵が変わり別 hook 扱い） | 鍵の形 ✅。検証用の `aidd-codex-configured` から本番の `aidd-plugins` へ移すときに 1 回起きる |
 
 再信頼が要る版は CHANGELOG に「hook 定義変更・`/hooks` で再信頼が必要」と書き、導入先の作業に含める。
@@ -141,10 +134,14 @@ codex plugin add aidd-codex@aidd-plugins
 | Codex: 新版が導入先に届く | Git marketplace から add → `codex plugin list --json` の版 | ✅ 2026-09-28、`codex plugin marketplace add huuriekaiseki-sketch/aidd-plugins` → `codex plugin add aidd-codex@aidd-plugins` で 0.1.1 を導入。`marketplaceSource.sourceType` は `git`、インストール先は `~/.codex/plugins/cache/aidd-plugins/aidd-codex/0.1.1`。Git snapshot の `source.path: ./plugins/aidd-codex` は解決された。旧版からの更新は未実測 |
 | Codex: 信頼状態 | `/hooks` で 4 本の状態を確認 | ✅ 新しい marketplace 名では4本とも信頼待ち。AIDD の4本だけ信頼後、同じ0.1.1を remove → add しても `trusted_hash` 4件が一致し、`/hooks` で Trusted/Active。別プラグインの信頼待ち2本は操作していない。**版を上げた状態での維持は未実測** |
 | Codex: 発火 | 検証用リポジトリ `aidd-codex-verify` で (a)〜(d) のうち最低 1 つ | ✅ (c) を実測。CLI 0.147.0、`verify/merged-head` の新規 `codex exec -m gpt-5.5` セッションで、保存記録の developer message にマージ済み PR #1 の警告が入った。doctor は4本を「含まれる」、gh 認証を「有効」と表示 |
+| Claude: **版を変えた**更新（0.1.1 → 0.1.2） | 2 本とも `claude plugin update` | ✅ 2026-09-28、Claude Code 2.1.270。`aidd-core` `0.1.1 → 0.1.2`、`aidd-vkumai` `0.1.1 → 0.1.2`。順に 2 本回した |
+| Codex: **版を変えた**更新（0.1.1 → 0.1.2） | `codex plugin marketplace upgrade` だけで入れ替わるか | ✅ 入れ替わった（§4.2）。remove / add 不要 |
+| Codex: 版を変えたあとの信頼 | `config.toml` の `trusted_hash` 4 件が更新前と一致し、新規セッションで発火する | ✅ 4 件とも一致・`enabled = true` 維持。`verify/merged-head` の新規 `codex exec` セッション `01a0e591-…` の保存記録に (c) マージ済み PR の警告と (d) 「前回 fetch から約 26 時間経過」の警告が入った。`/hooks` の画面は見ていないが、信頼されていない hook は実行されないので発火が信頼の証拠になる |
+| Codex: `policy` / `category` 無しのカタログ | 一時 marketplace（local path）から `add` | ✅ 通った（2026-09-28）。エントリが name / description / source だけの `.agents/plugins/marketplace.json` を `codex plugin marketplace add <path>` → `codex plugin add aidd-codex@aidd-nopolicy-tmp` で 0.1.1 が入った。公式の「必須」は CLI 0.147.0 では強制されない。検証後に plugin と marketplace を remove し、`config.toml` に残骸なし |
 
 検証用リポジトリと clone（`/Users/masanori/雑談/aidd-codex-verify`）はこの目的で残してある。
 
-Codex 側の実測は CLI 0.147.0 と marketplace commit `be18c7d` で行った。CLI の既定モデル `gpt-6-sol` はこの ChatGPT アカウントで非対応だったため、発火確認には `gpt-5.5` を指定した。[実証記録](codex/evidence/2026-09-28-marketplace-verify.md)に導入・信頼・発火の証拠と未検証範囲を残した。検証用 clone はクリーン。個人環境には `aidd-plugins` marketplace と信頼済み `aidd-codex` 0.1.1 を残している（解除は `codex plugin remove aidd-codex@aidd-plugins` → `codex plugin marketplace remove aidd-plugins`。信頼記録は自動で消えるとは限らない）。
+Codex 側の実測は CLI 0.147.0 と marketplace commit `be18c7d` で行った。CLI の既定モデル `gpt-6-sol` はこの ChatGPT アカウントで非対応だったため、発火確認には `gpt-5.5` を指定した。[実証記録](codex/evidence/2026-09-28-marketplace-verify.md)に導入・信頼・発火の証拠と未検証範囲を残した。検証用 clone はクリーン。個人環境には `aidd-plugins` marketplace と信頼済み `aidd-codex`（0.1.2 に更新済み）を残している（解除は `codex plugin remove aidd-codex@aidd-plugins` → `codex plugin marketplace remove aidd-plugins`。信頼記録は自動で消えるとは限らない）。
 
 配布後にこの表へ書き戻した結果は、中心リポジトリの `dist/plugins` には入るが marketplace 上の同じ版には
 届かない（版の文字列が同じなので配り直さない。タグの内容も動かさない）。次の版で届く。
@@ -152,16 +149,19 @@ Codex 側の実測は CLI 0.147.0 と marketplace commit `be18c7d` で行った�
 ## 6. 戻し方
 
 - Claude: marketplace リポジトリを前の commit に戻して push。導入先は `claude plugin update` で戻る（版の文字列が変われば届く）。ピン留めするならカタログのエントリに `ref` / `sha` 📄。
-- Codex: `codex plugin add` はスナップショット時点のものを入れるので、marketplace を戻して `upgrade` → remove → add。
+- Codex: marketplace を戻して `codex plugin marketplace upgrade aidd-plugins`。`upgrade` がスナップショットから入れ直すので remove / add は要らない（0.1.2 で実測した挙動の裏返し。戻す方向は未実測 ⬜）。
 - タグは消さない（依存解決の履歴になる）。
 
 ## 7. 未検証の一覧（実測してから本文へ）
 
 1. Git 経由の `local` + 相対パスは 0.1.1 で解決済み ✅。別の Git ホストや `git-subdir` 形式は未検証。
-2. `policy` / `category` を**含む**現行カタログで `add` が通ることは実測済み ✅。両項目が無い場合は未検証。
-3. remove 無しの `add` は**同じ 0.1.1** で成功した ✅。版が入れ替わるかは未検証。
-4. 版を上げたあとも `trusted_hash` が維持されるか（hooks.json 不変のとき）。
-5. Codex CLI 0.158 系（desktop 同梱）で `.codex-plugin` 形式が引き続き認識されるか。0.147.0 でしか実測していない。
-6. ChatGPT desktop app での更新導線。
+2. `policy` / `category` は有っても無くても `add` が通る ✅（0.1.2 で無しを実測）。
+3. 版を変えた入れ替えは `codex plugin marketplace upgrade` だけで起きる ✅（0.1.1 → 0.1.2）。remove 無しの `add` が要るかは、`upgrade` で足りるので測る意味が無くなった。
+4. 版を上げたあとも `trusted_hash` は維持され、hook は再信頼なしに発火する ✅（0.1.1 → 0.1.2、hooks.json 不変）。
+5. Codex CLI 0.158 系（desktop 同梱）で `.codex-plugin` 形式が引き続き認識されるか。0.147.0 でしか実測していない ⬜。この環境の CLI は 0.147.0 のままなので、CLI を上げたときに測る。
+6. ChatGPT desktop app での更新導線 ⬜。
+7. `hooks.json` を**変えた**版で `/hooks` に「changed - review required」が出て、信頼するまで発火しないこと ⬜（公式資料の記述のみ。実測には hook 定義を変える版が要る）。
+
+Codex 側の 0.1.2 の記録は [実証記録](codex/evidence/2026-09-28-version-update-verify.md)。
 
 根拠: [Claude Code: Host and maintain a marketplace](https://code.claude.com/docs/en/plugins/host-marketplace)、[OpenAI: Package your plugin](https://developers.openai.com/plugins/build/plugins)、[OpenAI: Hooks](https://learn.chatgpt.com/docs/hooks)、`docs/plugin/codex/evidence/2026-09-27-verify.md`、`~/.codex/config.toml` の `hooks.state`（2026-09-28 時点）。
