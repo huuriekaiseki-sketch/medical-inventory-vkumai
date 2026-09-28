@@ -1,5 +1,11 @@
 # AIDD Codex: 変更履歴
 
+## 0.1.2（2026-09-28）
+
+- 版を変えた更新の実測用。hook 定義・スクリプトは 0.1.1 から不変（差は文書のみ）。
+- 導入済み環境では `codex plugin marketplace upgrade aidd-plugins` → `codex plugin add aidd-codex@aidd-plugins` で
+  0.1.2 に入れ替わるか、`/hooks` の信頼が維持されるかをこの版で測る（RELEASE.md §7）。
+
 ## 0.1.1（2026-09-28）
 
 - 版上げ配布の初回実施。marketplace リポジトリ `aidd-plugins` に初めて載る（Codex 用カタログ経由）。
