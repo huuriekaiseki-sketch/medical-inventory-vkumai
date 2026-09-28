@@ -8,7 +8,7 @@
 |---|---|---|---|---|
 | 0.1.0 | 2.1.258 | 2.1.261 | 対象外（0.153.4 で docs 確認のみ） | 2026-09-05。名前空間・`${CLAUDE_PLUGIN_ROOT}`・プラグイン間呼び出し・InstructionsLoaded の出力無視を実測 |
 | 0.1.1 | 2.1.270（`claude plugin update` で 0.1.0 → 0.1.1 を実測。依存側は自動で上がらず個別 update） | 2.1.261 | `aidd-codex` 側は codex/COMPATIBILITY.md | 2026-09-28。中身は 0.1.0 と同じ。版上げ配布の手順（RELEASE.md）の初回実施 |
-| 0.1.2 | 未実測（配布後に 2 本の `claude plugin update` で実測し更新する） | 2.1.261 | `aidd-codex` 側は codex/COMPATIBILITY.md | 2026-09-28。差は文書のみ。版を変えた更新の実測用 |
+| 0.1.2 | 2.1.270（2 本の `claude plugin update` で 0.1.1 → 0.1.2 を実測） | 2.1.261 | `aidd-codex` 側は codex/COMPATIBILITY.md | 2026-09-28。差は文書のみ。版を変えた更新の実測用 |
 
 ## 前提にしている Claude Code の挙動（変わると壊れる）
 

@@ -649,7 +649,8 @@ try {
           `codex plugin add ${CODEX_PLUGIN}@${mp.name}`,
           '```',
           '',
-          '導入後に Codex の `/hooks` で 4 本を確認して信頼する。新版は `codex plugin marketplace upgrade ' + mp.name + '` のあと remove → add で入れ直す。',
+          // WHY(2026-09-28 実測): marketplace upgrade だけで導入済みプラグインが新版に入れ替わり、hooks.json 不変なら再信頼も不要
+          '導入後に Codex の `/hooks` で 4 本を確認して信頼する。新版は `codex plugin marketplace upgrade ' + mp.name + '` だけで入れ替わる（remove / add 不要。hook 定義が変わった版だけ `/hooks` で再信頼）。',
           '',
         ] : []),
         '## 中身',
