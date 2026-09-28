@@ -4,7 +4,7 @@
   "files": {
     ".codex-plugin/plugin.json": "a3eff7965dba77af32ffe4f386b619ceb53fd42368d0a899e794adbd2d9a9636",
     "CHANGELOG.md": "59f93608422abdbdd128e9b024ae591a6cc59dea8f582d86cf728698831d3861",
-    "COMPATIBILITY.md": "43af0d47e03f6d8c449a06037bf0db2ef08e1ac0924269881b8e2dce3439e363",
+    "COMPATIBILITY.md": "537ca6fec61a222e1e1eef129b2b8c482cd93d1656f5c0a19a9b4682721f72b7",
     "KNOWN-LIMITS.md": "c69d4b8f69d2369337c9226e4acbcc6384e8712241bbc4e32b228928e41c9f0a",
     "hooks/hooks.json": "9a9e189b96a0df1388d351009fe4bc681f9516d76b5cdcea97e4054d9733a8b2",
     "scripts/aidd-codex-doctor.sh": "30281cf23aee4b456615781da9636ad3f53c376c87e344f292ba085c165e0068",
