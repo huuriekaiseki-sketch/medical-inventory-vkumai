@@ -26,6 +26,11 @@ assert_fail() {
 echo "=== scenario 1: コミット済みの dist/plugins/* は manifest と一致する ==="
 if [ -d "$REPO_ROOT/dist/plugins" ]; then
   [ -f "$REPO_ROOT/dist/plugins/aidd-codex/.aidd-manifest.json" ] && assert_ok "aidd-codex も検査対象にある" || assert_fail "aidd-codex の manifest が無い"
+  # WHY(2026-09-28): Codex 用プラグインは複数になった。名指しせず、dist/plugins/ 直下の全ディレクトリに manifest があることを見る
+  #（このファイルは共通側に同梱されるので固有名は書けない）
+  for d in "$REPO_ROOT"/dist/plugins/*/; do
+    [ -f "$d/.aidd-manifest.json" ] && assert_ok "$(basename "$d") に manifest がある" || assert_fail "$(basename "$d") の manifest が無い"
+  done
 fi
 if [ -f "$REPO_ROOT/dist/plugins/aidd-codex/.aidd-manifest.json" ]; then
   COUNT="$(node -e 'const m=require(process.argv[1]); process.stdout.write(String(Object.keys(m.files ?? {}).length))' "$REPO_ROOT/dist/plugins/aidd-codex/.aidd-manifest.json")"

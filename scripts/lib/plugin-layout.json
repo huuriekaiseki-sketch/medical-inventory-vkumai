@@ -151,22 +151,39 @@
     "check-plugin-integrity.sh": "aidd-core"
   },
   "codexHookScripts": {
-    "_comment": "Codex 用プラグインに入れるスクリプトの宣言。hookScripts は既存の Claude 用生成器が 1 ファイル 1 所属として読むため変更しない。両方に載るファイルは同じ正本から各プラグインへ生成する。doctor は hook ではなくスキルから起動する。",
+    "_comment": "Codex 用プラグインに入れるスクリプトの宣言。値は codexPlugins のキー（aidd-codex＝共通、aidd-codex-vkumai＝vkumai 固有。Claude 側の aidd-core / aidd-vkumai と同じ分け方）。hookScripts は既存の Claude 用生成器が 1 ファイル 1 所属として読むため変更しない。両方に載るファイルは同じ正本から各プラグインへ生成する。doctor は hook ではなくスキルから起動する。",
     "check-branch-pr-status.sh": "aidd-codex",
     "check-branch-tool-ownership.sh": "aidd-codex",
     "check-local-main-freshness.sh": "aidd-codex",
     "codex-skip-marker-deny.sh": "aidd-codex",
     "check-skip-marker-write.sh": "aidd-codex",
-    "aidd-codex-doctor.sh": "aidd-codex"
+    "aidd-codex-doctor.sh": "aidd-codex",
+    "_comment_vkumai": "2026-09-28 に vkumai 固有の 4 本（仕様書 §3 で初版から外したもの）を aidd-codex-vkumai として配る。判定本体 check-direct-ddl-execution.sh / check-dependency-change.sh は Claude 側 aidd-vkumai と同じ正本からの複製。",
+    "check-direct-ddl-execution.sh": "aidd-codex-vkumai",
+    "codex-dependency-change-deny.sh": "aidd-codex-vkumai",
+    "check-dependency-change.sh": "aidd-codex-vkumai",
+    "codex-ai-check-track.sh": "aidd-codex-vkumai",
+    "codex-ai-check-suggest.sh": "aidd-codex-vkumai"
   },
-  "codexPlugin": {
-    "version": "0.1.2",
-    "description": "中心リポジトリから生成した AIDD の Codex 用 hook と環境診断",
-    "manifestPath": ".codex-plugin/plugin.json",
-    "_manifestReason": "Codex CLI 0.147.0 ではルート plugin.json があるだけで4本の hook が認識されない。docs/plugin/codex/evidence/2026-09-27-verify.md の一変数実験 C' に従い、実測済みの .codex-plugin 形式だけを生成する。",
-    "sourceDir": "docs/plugin/codex",
-    "releaseDocs": ["KNOWN-LIMITS.md", "COMPATIBILITY.md", "CHANGELOG.md"],
-    "skills": ["aidd-doctor"]
+  "codexPlugins": {
+    "_comment": "Codex 用プラグインの一覧（2026-09-28 に codexPlugin（単数）から改名。aidd-codex-vkumai 追加に伴い複数化）。版は plugins.*.version と同じ値にする（build-plugin.mjs が揃っていなければ生成しない）。",
+    "aidd-codex": {
+      "version": "0.1.2",
+      "description": "中心リポジトリから生成した AIDD の Codex 用 hook と環境診断",
+      "manifestPath": ".codex-plugin/plugin.json",
+      "_manifestReason": "Codex CLI 0.147.0 ではルート plugin.json があるだけで4本の hook が認識されない。docs/plugin/codex/evidence/2026-09-27-verify.md の一変数実験 C' に従い、実測済みの .codex-plugin 形式だけを生成する。",
+      "sourceDir": "docs/plugin/codex",
+      "releaseDocs": ["KNOWN-LIMITS.md", "COMPATIBILITY.md", "CHANGELOG.md"],
+      "skills": ["aidd-doctor"]
+    },
+    "aidd-codex-vkumai": {
+      "version": "0.1.2",
+      "description": "vkumai 固有の Codex 用 hook: Supabase 直接 DDL の deny・npm 依存変更の deny・品質チェック未実行の警告（Next.js + Supabase + npm 前提。aidd-codex と併用）",
+      "manifestPath": ".codex-plugin/plugin.json",
+      "sourceDir": "docs/plugin/codex-vkumai",
+      "releaseDocs": ["KNOWN-LIMITS.md", "COMPATIBILITY.md", "CHANGELOG.md"],
+      "skills": []
+    }
   },
   "supportScripts": {
     "aidd-check.sh": "aidd-vkumai",
@@ -300,16 +317,14 @@
   "supportScriptsUnclassified": {
     "_comment": "**まだ配る・配らないを決めていない**支援スクリプト（2026-09-12 新設）。値は空でよい——ここは判断を保留する場所で、理由を書けるなら supportScriptsNotDistributed か supportScripts へ移すべきだから。`unclassifiedMax` で件数を固定し、**増やせないが減らせる**（checksSplittable と同じ「返す当てのある借金」の形）。",
     "_howto": "決めたら supportScripts（配る）か supportScriptsNotDistributed（配らない・理由つき）へ移し、ここから消して unclassifiedMax を下げる。**上げるときは、なぜ判断を保留するのかをこの `_howto` の下に日付つきで書いてから上げる。**",
-    "_why_unresolved": "2026-09-12 に 25 本を実測で洗い出した時点では、配布方針（ドリルと計測をプラグインに含めるか・個人設定の statusline をどう扱うか）が要り、そこは製品の判断なので保留した。Codex 用 4 本の配布方針は codexHookScripts で決定済み。",
-    "unclassifiedMax": 24,
+    "_why_unresolved": "2026-09-12 に 25 本を実測で洗い出した時点では、配布方針（ドリルと計測をプラグインに含めるか・個人設定の statusline をどう扱うか）が要り、そこは製品の判断なので保留した。Codex 用 hook の配布方針は codexHookScripts で決定済み（2026-09-28 に codex-ai-check-* も aidd-codex-vkumai へ移し、上限を 24 → 22 に下げた）。",
+    "unclassifiedMax": 22,
     "aidd-fault-injection-setup.sh": "",
     "aidd-fault-injection-teardown.sh": "",
     "check-agent-baseline-freshness.sh": "",
     "check-constraint-coverage.sh": "",
     "check-flaky-tests.sh": "",
     "check-generated-supabase-types.sh": "",
-    "codex-ai-check-suggest.sh": "",
-    "codex-ai-check-track.sh": "",
     "create-worktree.sh": "",
     "eval-sweep-recall.sh": "",
     "eval-workflow-prompts.sh": "",
@@ -334,7 +349,7 @@
     "scripts/derive-test-selection.sh": "check-handoff-format.sh の警告文が導入先の derive を案内するだけ（実行しない）",
     "scripts/check-handoff-format.sh": "handoff-format スキル本文が Stop hook 名を説明するだけ",
     "scripts/summarize-gate-blocked.sh": "summarize-gate-passfail.sh のコメントが統合前の旧スクリプト名を示すだけ（削除済み）",
-    "scripts/codex-dependency-change-deny.sh": "check-dependency-change.sh のコメントが Codex 用ラッパーを示すだけ。判定本体は aidd-vkumai 所属なので、共通の aidd-codex には同梱しない",
+    "scripts/codex-dependency-change-deny.sh": "check-dependency-change.sh のコメントが Codex 用ラッパーを示すだけ。ラッパーは aidd-codex-vkumai に同梱するが、Claude 側の aidd-vkumai には無い（Codex 専用）",
     "scripts/check-skip-marker-write.sh": "check-direct-ddl-execution.sh のコメントが同型ゲートを示すだけ",
     "scripts/check-eval-runs-freshness.sh": "壊し方の登録簿（check-mutants.json）の CM-061 が対象にする。検査自体は eval-runs.jsonl の実データを見るので配らない（checksNotDistributed）",
     "scripts/check-eval-runs-freshness.test.sh": "同上（CM-061 の expect）",
@@ -486,6 +501,7 @@
   "checks": {
     "_comment": "検査（*.test.sh）の層。check-x.sh に対する check-x.test.sh は自動で対象と同じプラグインへ付いていくので、ここに書くのは (1) 対象スクリプトを持たない構造テスト (2) 自動判定を上書きしたいもの の 2 つだけ。上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙（高リスクパスの例・ドメイン語・スタック名）で書かれている検査で、共通側の禁止語検査に引っかかるもの。 層は 3 つある: ここ（配る）／checksNotDistributed（エンジン自体が固有で配れない）／checksSplittable（**対象・閾値だけが固有で、登録簿へ出せば配れる**＝返す当てのある借金。件数の上限を機械で見る）。",
     "aidd-codex-doctor.test.sh": "aidd-codex",
+    "check-dependency-change.test.sh": ["aidd-vkumai", "aidd-codex-vkumai"],
     "check-node-version-pin.test.sh": "aidd-vkumai",
     "check-session-start-matchers.test.sh": "aidd-core",
     "check-aidd-config-schema.test.sh": "aidd-core",
@@ -555,7 +571,7 @@
     "statusline.test.sh": "個人設定の statusline。配布対象外",
     "subagent-statusline.test.sh": "同上",
     "codex-skip-marker-deny.test.sh": "Codex 用ラッパーの検査。Codex 用の生成経路は段階 2 で実装するため、Claude 用 v1 の配布物には含めない",
-    "codex-ai-check.test.sh": "Codex の hooks.json と `.codex/` の実配置を見る中心リポジトリ固有の構造テスト。Codex 用プラグインは初版で汎用 hook だけを配り、このテストは導入先の構成に依存するため同梱しない",
+    "codex-ai-check.test.sh": "scenario 9・10 が中心リポジトリの `.codex/hooks.json` と `.gitignore` を名指しで見る構造テスト。hook 本体は aidd-codex-vkumai に同梱するが、このテストは導入先の構成に依存するため同梱しない（scenario 1〜8 の判定は build-plugin.test.sh がプラグイン内の本体に対して回す）",
     "codex-plugin-layout.test.sh": "中心リポジトリの配布宣言と .codex/hooks.json を突き合わせる構造テスト。導入先には中心リポジトリの層の表が無いため同梱しない",
     "check-codex-agents-generated.test.sh": "同上。`.claude/agents/` と `.codex/agents/` の実物を突き合わせるので、導入先の agent 構成に依存する",
     "check-branch-tool-ownership.test.sh": "ブランチ命名規約（codex/* claude/*）がこのリポジトリの運用",

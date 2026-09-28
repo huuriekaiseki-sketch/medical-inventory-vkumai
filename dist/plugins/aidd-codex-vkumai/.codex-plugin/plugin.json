@@ -1,0 +1,6 @@
+{
+  "name": "aidd-codex-vkumai",
+  "version": "0.1.2",
+  "description": "vkumai 固有の Codex 用 hook: Supabase 直接 DDL の deny・npm 依存変更の deny・品質チェック未実行の警告（Next.js + Supabase + npm 前提。aidd-codex と併用）",
+  "hooks": "./hooks/hooks.json"
+}

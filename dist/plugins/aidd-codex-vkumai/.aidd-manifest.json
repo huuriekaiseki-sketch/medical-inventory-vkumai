@@ -1,0 +1,17 @@
+{
+  "plugin": "aidd-codex-vkumai",
+  "algorithm": "sha256",
+  "files": {
+    ".codex-plugin/plugin.json": "ff4852916e9d07b1f49af81457a3abc0c1c9660bcfceca0e462b91f85d09e1ea",
+    "CHANGELOG.md": "7f7c535d7dfaa45e21fabe7963bd57e7d0b16fdce7ca2ca737c3a20e8d708a5e",
+    "COMPATIBILITY.md": "8d8311481ea4d7a3cbc2c3a7c0470949363cdd1e638e562445e36f0c228dc18b",
+    "KNOWN-LIMITS.md": "9c95f9e6f703163145c4f914db1a4402e5afe63bb6970d0e8d129c3b9154763f",
+    "hooks/hooks.json": "641117902fe1c0c4a255cc86c3b1c4a5202ce9944da7bb53dbadf2ab1142fffb",
+    "scripts/check-dependency-change.sh": "ac2884b6d52bff8d1f473bcde877831e67e210b01cb6188fb9f958d385049dd9",
+    "scripts/check-dependency-change.test.sh": "961f9e27568396367aaa031c297ac2b5c438bd048b2ca11dadb78638d5ff4295",
+    "scripts/check-direct-ddl-execution.sh": "d349e2973bc4e9a260d223f9151542b333db295ccb987cd07e6485d7da239247",
+    "scripts/codex-ai-check-suggest.sh": "0c90314f567a337aedba508f5e0871d13f3dd29ea1a1d11531c8ceb2988b6a05",
+    "scripts/codex-ai-check-track.sh": "2a95eca8a1fea8cb714a4130e5bc8217a7c7779a6b6015e357bafd9d6bff6f44",
+    "scripts/codex-dependency-change-deny.sh": "4b4758fbf05ecd83c0c16808523fa2f8402689c0cd6c4a88a928436c30a6c51a"
+  }
+}

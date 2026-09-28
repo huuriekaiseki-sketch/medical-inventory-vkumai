@@ -68,7 +68,7 @@ if [ -f "$CODEX_HOOKS" ]; then
   [ "$(find "$CODEX_DIR/scripts" -type f | wc -l | tr -d ' ')" -eq 7 ] && ok "Codex に正本6ファイルと doctor 検査を同梱" || ng "Codex の scripts/ が7ファイルでない"
   [ ! -e "$CODEX_DIR/plugin.json" ] && ok "Codex 配布物のルートに plugin.json を出さない" || ng "ルート plugin.json が残っている"
   CODEX_MANIFEST="$CODEX_DIR/.codex-plugin/plugin.json"
-  LAYOUT_CODEX_VERSION="$(jq -r '.codexPlugin.version' "$REPO_ROOT/scripts/lib/plugin-layout.json")"
+  LAYOUT_CODEX_VERSION="$(jq -r '.codexPlugins["aidd-codex"].version' "$REPO_ROOT/scripts/lib/plugin-layout.json")"
   if [ -f "$CODEX_MANIFEST" ] && jq -e --arg v "$LAYOUT_CODEX_VERSION" 'keys == ["description", "hooks", "name", "version"] and .name == "aidd-codex" and .version == $v and .description == "中心リポジトリから生成した AIDD の Codex 用 hook と環境診断" and .hooks == "./hooks/hooks.json"' "$CODEX_MANIFEST" >/dev/null; then
     ok "実測で動いた legacy manifest を生成"
   else
@@ -95,6 +95,49 @@ if [ -f "$CODEX_HOOKS" ]; then
   git -C "$CONSUMER" checkout -q -b claude/consumer-check
   CONTEXT_OUTPUT="$(cd "$CONSUMER" && PLUGIN_ROOT="$CODEX_DIR" bash "$CODEX_DIR/scripts/check-branch-tool-ownership.sh" codex)"
   grep -qF 'claude/consumer-check' <<<"$CONTEXT_OUTPUT" && ok "作業対象のブランチを読む（PLUGIN_ROOT を Git root と誤認しない）" || ng "作業対象の Git root を読めない"
+fi
+
+echo "=== scenario 3c: vkumai 固有の Codex hook は aidd-codex-vkumai に4本だけ生成される ==="
+# WHY(2026-09-28): 仕様書 §3 で初版から外した 4 本を、共通の aidd-codex に混ぜず別プラグインで配る
+#      （Claude 側の aidd-core / aidd-vkumai と同じ分け方）。共通側の hooks.json が不変であること
+#      （＝導入済み環境の再信頼が不要なこと）も対で確かめる。
+CV_DIR="$WORK/a/aidd-codex-vkumai"
+CV_HOOKS="$CV_DIR/hooks/hooks.json"
+if [ ! -f "$CV_HOOKS" ]; then
+  ng "aidd-codex-vkumai の hooks.json が無い"
+else
+  CV_COMMANDS="$(jq -r '.. | .command? // empty' "$CV_HOOKS")"
+  [ "$(printf '%s\n' "$CV_COMMANDS" | grep -c .)" -eq 4 ] && ok "vkumai 固有の Codex hook は4本" || ng "4本でない" "$CV_COMMANDS"
+  for name in check-direct-ddl-execution.sh codex-dependency-change-deny.sh codex-ai-check-track.sh codex-ai-check-suggest.sh; do
+    grep -qF '"${PLUGIN_ROOT}"/scripts/'"$name" <<<"$CV_COMMANDS" && ok "$name のパスを変換" || ng "$name のパスが変換されていない"
+  done
+  if grep -qE 'check-branch-|codex-skip-marker' <<<"$CV_COMMANDS"; then ng "共通 hook が固有側に混入"; else ok "共通 hook は固有側に出力しない"; fi
+  jq -e '.hooks.PreToolUse[0].matcher == "Bash|mcp__.*execute_sql"' "$CV_HOOKS" >/dev/null && ok "DDL hook の matcher（MCP execute_sql 含む）を維持" || ng "DDL hook の matcher が変わった"
+  jq -e '.hooks.Stop[0].hooks[0].statusMessage | length > 0' "$CV_HOOKS" >/dev/null && ok "Stop hook の statusMessage を維持" || ng "statusMessage が落ちた"
+  [ -f "$CV_DIR/.aidd-manifest.json" ] && ok "同一性 manifest がある" || ng "同一性 manifest が無い"
+  [ ! -e "$CV_DIR/plugin.json" ] && ok "ルートに plugin.json を出さない" || ng "ルート plugin.json が残っている"
+  CV_LAYOUT_VERSION="$(jq -r '.codexPlugins["aidd-codex-vkumai"].version' "$REPO_ROOT/scripts/lib/plugin-layout.json")"
+  jq -e --arg v "$CV_LAYOUT_VERSION" 'keys == ["description", "hooks", "name", "version"] and .name == "aidd-codex-vkumai" and .version == $v and .hooks == "./hooks/hooks.json"' "$CV_DIR/.codex-plugin/plugin.json" >/dev/null && ok "manifest は aidd-codex と同じ形式" || ng "manifest の形が違う"
+  for name in KNOWN-LIMITS.md COMPATIBILITY.md CHANGELOG.md; do
+    cmp -s "$CV_DIR/$name" "$REPO_ROOT/docs/plugin/codex-vkumai/$name" && ok "$name を正本から生成" || ng "$name が正本と違う"
+  done
+  for name in check-direct-ddl-execution.sh check-dependency-change.sh; do
+    cmp -s "$CV_DIR/scripts/$name" "$WORK/a/aidd-vkumai/scripts/$name" && ok "$name は aidd-vkumai と同一" || ng "$name が aidd-vkumai と異なる"
+  done
+  [ ! -e "$CV_DIR/skills" ] && ok "固有側にスキルは無い（doctor は aidd-codex 側）" || ng "固有側に skills/ がある"
+  # 同梱した判定本体とラッパーに対して既存テストを回す（scenario 3b と同型）
+  if bash "$CV_DIR/scripts/check-dependency-change.test.sh" >"$WORK/cv-dep-test.log" 2>&1; then
+    ok "check-dependency-change.test.sh がプラグイン内の本体とラッパーで通る"
+  else
+    ng "check-dependency-change.test.sh がプラグイン内で失敗" "$(tail -5 "$WORK/cv-dep-test.log")"
+  fi
+  if SCRIPT_UNDER_TEST="$CV_DIR/scripts/check-direct-ddl-execution.sh" bash "$REPO_ROOT/scripts/check-direct-ddl-execution.test.sh" >"$WORK/cv-ddl-test.log" 2>&1; then
+    ok "check-direct-ddl-execution.test.sh がプラグイン内の本体で通る"
+  else
+    ng "check-direct-ddl-execution.test.sh がプラグイン内で失敗" "$(tail -5 "$WORK/cv-ddl-test.log")"
+  fi
+  # 共通側の hooks.json はこの追加で変わらない（変わると導入済み環境で再信頼が要る。RELEASE.md §4.3）
+  cmp -s "$WORK/a/aidd-codex/hooks/hooks.json" "$REPO_ROOT/dist/plugins/aidd-codex/hooks/hooks.json" && ok "aidd-codex の hooks.json はコミット済みと同一（再信頼不要）" || ng "aidd-codex の hooks.json が変わった（導入先で再信頼が要る。CHANGELOG に書く）"
 fi
 
 echo "=== scenario 4: コミット済みの dist/plugins/ が最新（--check） ==="
@@ -151,9 +194,11 @@ if jq -e '[.plugins[] | has("version")] | any | not' "$WORK/mp/.claude-plugin/ma
 [ -f "$WORK/mp/README.md" ] && ok "README がある" || ng "README が無い"
 # Codex 用カタログ: Claude 用とは別ファイルで、aidd-codex を実測済みの local + 相対 path で指す
 CODEX_CATALOG="$WORK/mp/.agents/plugins/marketplace.json"
-if [ -f "$CODEX_CATALOG" ] && jq -e '.name == "aidd-plugins" and (.plugins | length) == 1 and .plugins[0].name == "aidd-codex" and .plugins[0].source.source == "local" and .plugins[0].source.path == "./plugins/aidd-codex" and .plugins[0].policy.installation == "AVAILABLE" and (.plugins[0].category | length) > 0' "$CODEX_CATALOG" >/dev/null; then ok "Codex 用カタログ .agents/plugins/marketplace.json が aidd-codex を指す"; else ng "Codex 用カタログが無いか内容が違う"; fi
+if [ -f "$CODEX_CATALOG" ] && jq -e '.name == "aidd-plugins" and (.plugins | length) == 2 and .plugins[0].name == "aidd-codex" and .plugins[0].source.source == "local" and .plugins[0].source.path == "./plugins/aidd-codex" and .plugins[0].policy.installation == "AVAILABLE" and (.plugins[0].category | length) > 0 and .plugins[1].name == "aidd-codex-vkumai" and .plugins[1].source.path == "./plugins/aidd-codex-vkumai"' "$CODEX_CATALOG" >/dev/null; then ok "Codex 用カタログ .agents/plugins/marketplace.json が aidd-codex と aidd-codex-vkumai を指す"; else ng "Codex 用カタログが無いか内容が違う"; fi
 [ -d "$WORK/mp/plugins/aidd-codex" ] && ok "marketplace 出力に aidd-codex の実体がある" || ng "aidd-codex が marketplace 出力に無い"
+[ -d "$WORK/mp/plugins/aidd-codex-vkumai" ] && ok "marketplace 出力に aidd-codex-vkumai の実体がある" || ng "aidd-codex-vkumai が marketplace 出力に無い"
 grep -q 'codex plugin add aidd-codex@aidd-plugins' "$WORK/mp/README.md" && ok "README に Codex の導入手順がある" || ng "README に Codex の導入手順が無い"
+grep -q 'codex plugin add aidd-codex-vkumai@aidd-plugins' "$WORK/mp/README.md" && ok "README に aidd-codex-vkumai の導入手順がある" || ng "README に aidd-codex-vkumai の導入手順が無い"
 # WHY(2026-09-28 実測): 依存側は update で自動に上がらないので、README は全プラグイン分の update を並べる
 for p in aidd-core aidd-vkumai; do
   grep -qF "claude plugin update $p@aidd-plugins" "$WORK/mp/README.md" && ok "README に $p の更新手順がある" || ng "README に $p の更新手順が無い"
@@ -258,6 +303,7 @@ node - "$FX/layout.json" "$FX/layout-codex.json" <<'NODE'
 const fs = require('node:fs')
 const layout = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))
 layout.codexHookScripts = { 'codex-hook.sh': 'aidd-codex' }
+layout.codexPlugins = { 'aidd-codex': { version: '0.0.1', description: 'd', manifestPath: '.codex-plugin/plugin.json', sourceDir: 'docs/plugin/codex', releaseDocs: [], skills: [] } }
 fs.writeFileSync(process.argv[3], JSON.stringify(layout))
 NODE
 cat > "$FX/.codex/hooks.json" <<'EOF'
@@ -278,17 +324,17 @@ else
   [ ! -d "$WORK/fx-codex-bad" ] && ok "不正な入力から配布物を書かない" || ng "不正な入力で配布物を書いた"
 fi
 
-echo "=== scenario 8: 版の整合（RED 方向。RELEASE.md §1: 3 プラグインは同じ版を同時に上げる） ==="
+echo "=== scenario 8: 版の整合（RED 方向。RELEASE.md §1: 全プラグインは同じ版を同時に上げる） ==="
 # WHY(2026-09-28): 版は層の表の 3 箇所と依存範囲に散っている。1 箇所だけ上げて配ると導入先の
 #      依存解決が失敗する。揃っていない層の表では生成しないことを、壊して確かめる。
-mk_versions() { # $1=core 版 $2=addon 版 $3=addon→core 依存範囲 $4=codexPlugin 版（空なら書かない）
+mk_versions() { # $1=core 版 $2=addon 版 $3=addon→core 依存範囲 $4=Codex プラグイン版（空なら書かない）
   node - "$FX/layout-codex.json" "$FX/layout-ver.json" "$1" "$2" "$3" "$4" <<'NODE'
 const fs = require('node:fs')
 const [src, dst, coreV, addonV, depRange, codexV] = process.argv.slice(2)
 const layout = JSON.parse(fs.readFileSync(src, 'utf8'))
 layout.plugins.core.version = coreV
 layout.plugins.addon = { version: addonV, description: 'd', dependencies: [{ name: 'core', version: depRange }], forbiddenWords: false }
-if (codexV) layout.codexPlugin = { version: codexV, description: 'd', manifestPath: '.codex-plugin/plugin.json', sourceDir: 'docs/plugin/codex', releaseDocs: [], skills: [] }
+if (codexV) layout.codexPlugins['aidd-codex'].version = codexV
 fs.writeFileSync(dst, JSON.stringify(layout))
 NODE
 }
@@ -298,7 +344,7 @@ EOF
 mk_versions 0.2.0 0.2.0 '^0.2.0' 0.2.0
 if node "$BUILD" --source "$FX" --layout "$FX/layout-ver.json" --out "$WORK/fx-ver-ok" >/dev/null 2>"$WORK/ver-ok.err"; then ok "揃った版は通る"; else ng "揃った版で落ちた" "$(cat "$WORK/ver-ok.err")"; fi
 mk_versions 0.2.0 0.2.0 '^0.2.0' 0.1.0
-if node "$BUILD" --source "$FX" --layout "$FX/layout-ver.json" --out "$WORK/fx-ver-red1" >/dev/null 2>"$WORK/ver-red1.err"; then ng "codexPlugin だけ古い版を検知できない"; else grep -q '版が揃っていない' "$WORK/ver-red1.err" && ok "codexPlugin だけ古い版で失敗する" || ng "失敗理由が違う" "$(cat "$WORK/ver-red1.err")"; fi
+if node "$BUILD" --source "$FX" --layout "$FX/layout-ver.json" --out "$WORK/fx-ver-red1" >/dev/null 2>"$WORK/ver-red1.err"; then ng "Codex プラグインだけ古い版を検知できない"; else grep -q '版が揃っていない' "$WORK/ver-red1.err" && ok "Codex プラグインだけ古い版で失敗する" || ng "失敗理由が違う" "$(cat "$WORK/ver-red1.err")"; fi
 mk_versions 0.2.0 0.1.0 '^0.1.0' 0.2.0
 if node "$BUILD" --source "$FX" --layout "$FX/layout-ver.json" --out "$WORK/fx-ver-red2" >/dev/null 2>"$WORK/ver-red2.err"; then ng "core だけ上げた版を検知できない"; else grep -q '版が揃っていない' "$WORK/ver-red2.err" && ok "core だけ上げた版で失敗する" || ng "失敗理由が違う" "$(cat "$WORK/ver-red2.err")"; fi
 mk_versions 0.2.0 0.2.0 '^0.1.0' 0.2.0

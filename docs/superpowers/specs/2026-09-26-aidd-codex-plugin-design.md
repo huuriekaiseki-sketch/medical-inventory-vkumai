@@ -75,6 +75,8 @@
 
 vkumai 固有の Codex hook 用パッケージ（`aidd-codex-vkumai` に相当するもの）は初版では作らない。固有のものは `.codex/hooks.json` に残す（§3）。
 
+> 2026-09-28 追記: 初版（0.1.0〜0.1.2）の配布と更新を実測したあと、§3 で「入れない」とした 4 本を `aidd-codex-vkumai` として新設した（`plugin-layout.json` の `codexPlugins` / `codexHookScripts`、`docs/plugin/codex-vkumai/`）。共通の `aidd-codex` には混ぜない。§6 の「共通化（パラメータ化）」は行っておらず、npm / Supabase 前提のまま配る。
+
 ### 2.2 正本と生成元
 
 - 正本はすべて中心リポジトリの `scripts/` と `plugin-layout.json`。`aidd-codex` に手で書くスクリプトは無い。

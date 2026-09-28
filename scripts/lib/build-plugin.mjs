@@ -61,7 +61,7 @@ const errors = []
 const fail = (msg) => errors.push(msg)
 
 // ---- 版の整合（docs/plugin/RELEASE.md §1）----
-// WHY(2026-09-28): 版は層の表の 3 箇所（plugins.*.version / codexPlugin.version）と依存範囲に散っている。
+// WHY(2026-09-28): 版は層の表の複数箇所（plugins.*.version / codexPlugins.*.version）と依存範囲に散っている。
 //   1 箇所だけ上げて配ると、導入先の依存解決（aidd-vkumai → aidd-core ^x.y.z）が新版と合わず失敗する。
 //   3 プラグインは同じ版を同時に上げる約束なので、揃っていなければ生成しない。
 function parseSemver(s) {
@@ -84,7 +84,9 @@ function caretSatisfies(range, version) {
 }
 {
   const versions = Object.entries(layout.plugins).map(([n, p]) => [n, p.version])
-  if (layout.codexPlugin) versions.push(['codexPlugin', layout.codexPlugin.version])
+  for (const [n, p] of Object.entries(layout.codexPlugins ?? {})) {
+    if (!n.startsWith('_')) versions.push([n, p.version])
+  }
   for (const [n, v] of versions) if (!parseSemver(v)) fail(`${n} の version '${v}' は a.b.c の形でない`)
   const distinct = new Set(versions.map(([, v]) => v))
   if (distinct.size > 1) {
@@ -121,9 +123,14 @@ function sha(buf) { return createHash('sha256').update(buf).digest('hex') }
 // 「名前 → それを持つプラグイン」の逆引き
 const ownerOf = (table, name) => layout[table]?.[name]
 const pluginNames = Object.keys(layout.plugins)
-const CODEX_PLUGIN = 'aidd-codex'
+// Codex 用プラグイン（複数）。WHY(2026-09-28): 共通の aidd-codex に加え、vkumai 固有の hook を
+//   aidd-codex-vkumai として配る。Claude 側の aidd-core / aidd-vkumai と同じ分け方（仕様書 §2.1 の「初版では作らない」を解消）。
+const codexPlugins = Object.fromEntries(Object.entries(layout.codexPlugins ?? {}).filter(([name]) => !name.startsWith('_')))
+const codexPluginNames = Object.keys(codexPlugins)
 const codexHookScripts = Object.entries(layout.codexHookScripts ?? {}).filter(([name]) => !name.startsWith('_'))
-const outputPluginNames = codexHookScripts.length > 0 ? [...pluginNames, CODEX_PLUGIN] : pluginNames
+// 生成するのは、hook を 1 本以上持つ Codex プラグインだけ（宣言だけで中身の無いプラグインは出さない）
+const activeCodexPlugins = codexPluginNames.filter(p => codexHookScripts.some(([, owner]) => owner === p))
+const outputPluginNames = [...pluginNames, ...activeCodexPlugins]
 
 // 本文中の `scripts/<bin>` → `<bin>`（bin/ は PATH に足される）
 const binNames = Object.keys(layout.bin ?? {})
@@ -190,8 +197,8 @@ function buildHooksJson(settings, plugin) {
 }
 
 // .codex/hooks.json の project hook → Codex プラグインの hooks.json。
-// project 固有の hook も形式は検査し、配布対象だけを出力する。
-function buildCodexHooksJson(settings) {
+// project 固有の hook も形式は検査し、その plugin に所属するものだけを出力する。
+function buildCodexHooksJson(settings, plugin) {
   const out = {}
   for (const [event, sourceGroups] of Object.entries(settings.hooks ?? {})) {
     const groups = []
@@ -204,7 +211,7 @@ function buildCodexHooksJson(settings) {
           continue
         }
         const [, script, args = ''] = match
-        if (ownerOf('codexHookScripts', script) !== CODEX_PLUGIN) continue
+        if (ownerOf('codexHookScripts', script) !== plugin) continue
         hooks.push({ ...hook, command: `"\${PLUGIN_ROOT}"/scripts/${script}${args}` })
       }
       if (hooks.length > 0) groups.push({ ...group, hooks })
@@ -260,29 +267,32 @@ function build(outRoot) {
 
   if (codexHookScripts.length > 0) {
     const codexSettings = JSON.parse(readFileSync(path.join(SOURCE, '.codex/hooks.json'), 'utf8'))
-    put(CODEX_PLUGIN, 'hooks/hooks.json', JSON.stringify(buildCodexHooksJson(codexSettings), null, 2) + '\n')
     for (const [name, owner] of codexHookScripts) {
-      if (owner !== CODEX_PLUGIN) {
-        fail(`codexHookScripts の ${name}: 所属は ${CODEX_PLUGIN} である必要がある`)
-        continue
+      if (!codexPluginNames.includes(owner)) {
+        fail(`codexHookScripts の ${name}: 所属 '${owner}' は codexPlugins に無い（${codexPluginNames.join(' / ')} のいずれか）`)
       }
-      copyText(CODEX_PLUGIN, `scripts/${name}`, `scripts/${name}`, null, 0o755)
     }
-    const codexMeta = layout.codexPlugin
-    if (codexMeta) {
+    for (const plugin of activeCodexPlugins) {
+      put(plugin, 'hooks/hooks.json', JSON.stringify(buildCodexHooksJson(codexSettings, plugin), null, 2) + '\n')
+      for (const [name, owner] of codexHookScripts) {
+        if (owner !== plugin) continue
+        copyText(plugin, `scripts/${name}`, `scripts/${name}`, null, 0o755)
+      }
+      const codexMeta = codexPlugins[plugin]
+      if (!codexMeta.manifestPath) { fail(`codexPlugins.${plugin}: manifestPath が無い`); continue }
       // CLI 0.147.0 実測: ルート plugin.json があるだけで legacy 側の hook が消える。
       // manifestPath は plugin-layout.json で固定し、配布物には実測済みの形式だけを出す。
-      put(CODEX_PLUGIN, codexMeta.manifestPath, JSON.stringify({
-        name: CODEX_PLUGIN,
+      put(plugin, codexMeta.manifestPath, JSON.stringify({
+        name: plugin,
         version: codexMeta.version,
         description: codexMeta.description,
         hooks: './hooks/hooks.json',
       }, null, 2) + '\n')
       for (const name of codexMeta.releaseDocs ?? []) {
-        copyText(CODEX_PLUGIN, `${codexMeta.sourceDir}/${name}`, name)
+        copyText(plugin, `${codexMeta.sourceDir}/${name}`, name)
       }
       for (const name of codexMeta.skills ?? []) {
-        copyText(CODEX_PLUGIN, `${codexMeta.sourceDir}/skills/${name}/SKILL.md`, `skills/${name}/SKILL.md`)
+        copyText(plugin, `${codexMeta.sourceDir}/skills/${name}/SKILL.md`, `skills/${name}/SKILL.md`)
       }
     }
   }
@@ -606,17 +616,17 @@ try {
       // Codex 用カタログ（.agents/plugins/marketplace.json）。Claude 用とは別ファイルで同じリポジトリに同居する。
       // source は実測済みの local + 相対 path（docs/plugin/codex/evidence/2026-09-27-verify.md）。
       // policy / category は公式の必須項目（developers.openai.com/plugins/build/plugins）。Git 越しの解決は未実測（RELEASE.md §7）。
-      const hasCodex = outputPluginNames.includes(CODEX_PLUGIN) && layout.codexPlugin
+      const hasCodex = activeCodexPlugins.length > 0
       if (hasCodex) {
         const codexCatalog = {
           name: mp.name,
-          plugins: [{
-            name: CODEX_PLUGIN,
-            description: layout.codexPlugin.description,
-            source: { source: 'local', path: `./${path.basename(OUT)}/${CODEX_PLUGIN}` },
+          plugins: activeCodexPlugins.map(p => ({
+            name: p,
+            description: codexPlugins[p].description,
+            source: { source: 'local', path: `./${path.basename(OUT)}/${p}` },
             policy: { installation: 'AVAILABLE' },
             category: 'Developer tools',
-          }],
+          })),
         }
         mkdirSync(path.join(repoRoot, '.agents/plugins'), { recursive: true })
         writeFileSync(path.join(repoRoot, '.agents/plugins/marketplace.json'), JSON.stringify(codexCatalog, null, 2) + '\n')
@@ -646,17 +656,17 @@ try {
           '',
           '```bash',
           `codex plugin marketplace add ${mp.repo}`,
-          `codex plugin add ${CODEX_PLUGIN}@${mp.name}`,
+          ...activeCodexPlugins.map(p => `codex plugin add ${p}@${mp.name}`),
           '```',
           '',
           // WHY(2026-09-28 実測): marketplace upgrade だけで導入済みプラグインが新版に入れ替わり、hooks.json 不変なら再信頼も不要
-          '導入後に Codex の `/hooks` で 4 本を確認して信頼する。新版は `codex plugin marketplace upgrade ' + mp.name + '` だけで入れ替わる（remove / add 不要。hook 定義が変わった版だけ `/hooks` で再信頼）。',
+          '導入後に Codex の `/hooks` で各プラグインの hook を確認して信頼する。新版は `codex plugin marketplace upgrade ' + mp.name + '` だけで入れ替わる（remove / add 不要。hook 定義が変わった版だけ `/hooks` で再信頼）。',
           '',
         ] : []),
         '## 中身',
         '',
         ...pluginNames.map(p => `- \`plugins/${p}\` ${layout.plugins[p].version}: ${layout.plugins[p].description}`),
-        ...(hasCodex ? [`- \`plugins/${CODEX_PLUGIN}\` ${layout.codexPlugin.version}: ${layout.codexPlugin.description}（Codex 用。カタログは \`.agents/plugins/marketplace.json\`）`] : []),
+        ...activeCodexPlugins.map(p => `- \`plugins/${p}\` ${codexPlugins[p].version}: ${codexPlugins[p].description}（Codex 用。カタログは \`.agents/plugins/marketplace.json\`）`),
         '',
         '生成物。手で編集しない。正本は中心リポジトリの `.claude/` と `scripts/`、生成は `scripts/build-plugin.sh --marketplace --out <このリポジトリ>/plugins`。',
         '各プラグインのルートに COMPATIBILITY / CHANGELOG / KNOWN-LIMITS / MIGRATION / BREAKING と evidence/ がある。',

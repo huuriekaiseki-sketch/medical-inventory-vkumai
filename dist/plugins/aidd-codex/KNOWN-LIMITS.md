@@ -8,5 +8,6 @@
 - `check-local-main-freshness.sh` は `origin/main` と `FETCH_HEAD` がある導入先で鮮度を近似する。`FETCH_HEAD` が無い場合は古い可能性を警告する。`origin/main` が無い場合は behind 数を測れず、`python3` が無い場合は fetch 時刻を測れない。実際のリモート最新状態はネットワーク照会しない。
 - project の `.codex/hooks.json` に同じ hook があると二重発火しうる。doctor は警告のみで設定を書き換えない。
 - doctor は実行記録を持たず、実発火の有無や効果を報告しない。
+- vkumai 固有の hook（Supabase 直接 DDL の deny・npm 依存変更の deny・品質チェック未実行の警告）はこのプラグインに入っていない。別プラグイン `aidd-codex-vkumai`（Next.js + Supabase + npm 前提）で配る。doctor はそちらの hook を診断しない。
 
 根拠: [OpenAI 公式のプラグイン構成と hook 信頼の説明](https://developers.openai.com/plugins/build/plugins)。

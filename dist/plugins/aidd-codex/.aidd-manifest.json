@@ -3,9 +3,9 @@
   "algorithm": "sha256",
   "files": {
     ".codex-plugin/plugin.json": "f62dc2570def05189794974c9e2cd47fe397388c27ab6600f5890611be89d7fb",
-    "CHANGELOG.md": "e3bdbb39bf06dad206062be40acbf75ee99ea62165dd2745987d709294f360ce",
+    "CHANGELOG.md": "de4a4c9c5c42481358fddcabfd6a34bc0a9e089ba606f1378fe4a8a1a9789d59",
     "COMPATIBILITY.md": "1cd9c2f65f3744c973c61b0e2d4139e60aaf74fbf638db80347dc4696de900cb",
-    "KNOWN-LIMITS.md": "4ff98e27884d9be0d9d2f22942a05d9e664b0fad08255bf2f08f927491da2025",
+    "KNOWN-LIMITS.md": "c69d4b8f69d2369337c9226e4acbcc6384e8712241bbc4e32b228928e41c9f0a",
     "hooks/hooks.json": "9a9e189b96a0df1388d351009fe4bc681f9516d76b5cdcea97e4054d9733a8b2",
     "scripts/aidd-codex-doctor.sh": "30281cf23aee4b456615781da9636ad3f53c376c87e344f292ba085c165e0068",
     "scripts/aidd-codex-doctor.test.sh": "06e20a59c0f7f4387fc03df629047c1aa7e2f150552bbbcddde1e9b3b900d46c",

@@ -1,6 +1,6 @@
 # 版を上げて配り直す手順（草案・2026-09-28）
 
-対象: `aidd-core` / `aidd-vkumai`（Claude Code）と `aidd-codex`（Codex）。
+対象: `aidd-core` / `aidd-vkumai`（Claude Code）と `aidd-codex` / `aidd-codex-vkumai`（Codex。共通と vkumai 固有。後者は 2026-09-28 に新設し、次の版で初めて配る）。
 現在はいずれも 0.1.2。ここに書くのは、次の版へ上げたときに導入済みの他リポジトリへ届けるための手順。
 
 **状態の印**: ✅ 実測済み / 📄 公式資料で確認 / ⬜ 未検証（実測してから本文に昇格する）
@@ -19,7 +19,7 @@
 ## 1. 版番号の決め方
 
 - semver。`BREAKING.md` の「破壊的」に当たる変更（設定キー・hook の入出力契約・ログ列・名前・層の移動）は **メジャーを上げる**。それ以外の機能追加はマイナー、直しだけならパッチ。
-- 3 プラグインは**同じ版を同時に上げる**（独立に上げると `aidd-vkumai` の依存範囲 `^0.1.0` が `aidd-core` の新版と合わなくなり、導入先の依存解決が失敗する 📄）。`aidd-vkumai.dependencies[].version` の範囲も同時に更新する。
+- 全プラグイン（Claude 用 2 本＋Codex 用 2 本）は**同じ版を同時に上げる**（独立に上げると `aidd-vkumai` の依存範囲 `^0.1.0` が `aidd-core` の新版と合わなくなり、導入先の依存解決が失敗する 📄）。`aidd-vkumai.dependencies[].version` の範囲も同時に更新する。揃っていなければ生成器が落とす ✅。
 - Codex 側の版は `codexPlugin.version`。Claude 側と同じ値にする（別々に管理する理由が無い）。
 
 ## 2. 中心リポジトリ（vkumai）での作業
@@ -37,7 +37,7 @@
    ```bash
    bash scripts/build-plugin.test.sh
    ```
-5. `dist/plugins/aidd-codex/hooks/hooks.json` の差分を見る。**ここが変わると導入先は再信頼が要る**（§4.3）。変わっていなければ CHANGELOG に「hook 定義は不変・再信頼不要」と書く。
+5. `dist/plugins/aidd-codex/hooks/hooks.json` と `dist/plugins/aidd-codex-vkumai/hooks/hooks.json` の差分を見る。**ここが変わると導入先は再信頼が要る**（§4.3）。変わっていなければ CHANGELOG に「hook 定義は不変・再信頼不要」と書く。
 6. PR を作り、必須 CI が success になってからマージする。
 
 ## 3. marketplace リポジトリへ配る
@@ -79,7 +79,7 @@ marketplace ルートに `.agents/plugins/marketplace.json` を置く 📄。1 �
 claude plugin tag ~/aidd-plugins/plugins/aidd-core --push
 ```
 
-`{name}--v{version}` のタグを 3 プラグイン分。`aidd-codex` は Claude 用 manifest が無く `claude plugin tag` が拒否するので ✅ `git tag -a aidd-codex--v<version> -m "aidd-codex <version>"` → `git push origin <tag>` で同じ名前を付ける。`aidd-vkumai` の依存解決はこのタグを見る ✅（2026-09-05 に `resolvedVersion: 0.1.0` で実測）。`aidd-codex` のタグは Codex が読むわけではないが、版と commit の対応を残すために同じ規約で付ける。
+`{name}--v{version}` のタグを全プラグイン分（4 本）。Codex 用の 2 本（`aidd-codex` / `aidd-codex-vkumai`）は Claude 用 manifest が無く `claude plugin tag` が拒否するので ✅ `git tag -a <name>--v<version> -m "<name> <version>"` → `git push origin <tag>` で同じ名前を付ける。`aidd-vkumai` の依存解決はこのタグを見る ✅（2026-09-05 に `resolvedVersion: 0.1.0` で実測）。`aidd-codex` のタグは Codex が読むわけではないが、版と commit の対応を残すために同じ規約で付ける。
 
 ## 4. 導入先で新版を取り込む
 
