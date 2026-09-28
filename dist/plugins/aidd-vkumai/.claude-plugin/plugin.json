@@ -1,6 +1,6 @@
 {
   "name": "aidd-vkumai",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "vkumai アダプター: Next.js + Supabase 向けの Workflow・4 軸 Sweep・実装系エージェント・Supabase ガード（aidd-core に依存）",
   "dependencies": [
     {

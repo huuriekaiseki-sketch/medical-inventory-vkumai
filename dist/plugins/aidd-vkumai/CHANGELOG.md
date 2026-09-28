@@ -1,5 +1,14 @@
 # 変更履歴（7 項目の 7 の前半。既知の制約は KNOWN-LIMITS.md）
 
+## 0.1.3（2026-09-28）
+
+- **Codex 用プラグイン `aidd-codex-vkumai` を初めて marketplace に載せる**（PR #851 で新設。vkumai 固有の
+  Codex hook 4 本: Supabase 直接 DDL の deny・npm 依存変更の deny・品質チェック未実行の警告 2 本）。
+  Codex 用カタログ `.agents/plugins/` 配下は 2 エントリになる
+- `aidd-core` / `aidd-vkumai` / `aidd-codex` の中身は 0.1.2 から文書のみの差。`aidd-codex` の hook 定義は不変で
+  **再信頼不要**。`aidd-codex-vkumai` は新規導入なので `/hooks` で 4 本の信頼が要る
+- 版は 4 プラグインで揃える（生成器が揃っていなければ生成しない）
+
 ## 0.1.2（2026-09-28）
 
 - 版を**変えた**更新の実測用（RELEASE.md §7 の残り: Codex で版が変わっても `trusted_hash` が維持されるか、
