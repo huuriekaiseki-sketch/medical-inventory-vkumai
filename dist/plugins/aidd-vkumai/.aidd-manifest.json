@@ -4,7 +4,7 @@
   "files": {
     ".claude-plugin/plugin.json": "29bbfaedf536d853ab3d62eef37746401aa86d6f057f189de026e8f9e8d6e3da",
     "BREAKING.md": "b2dc718fc5915f849f6c440a1497eda16380d0caf7e1f5208f7108a60eeac6ac",
-    "CHANGELOG.md": "ba5152434ce365bd44ea06dfe2a37c47e806fb947778d4542f3d771d10d6bebb",
+    "CHANGELOG.md": "bb044c5e2a098cff443a113f0adcd69934735193e1de9b3e7bdcb06b0e4469f2",
     "COMPATIBILITY.md": "d09d48633a3ec2f8f02341708c49733a598a81d3bf3d4ba41b434d75710ff993",
     "KNOWN-LIMITS.md": "ba7df99ae13af635a6935633bcc718cbcdb634f6f09f570acefd55305d767a11",
     "MIGRATION.md": "ed96a1db2d1a72fdc50d5c68066b728a349616ac8d741c82d84bd84550ce34a0",
@@ -51,7 +51,7 @@
     "scripts/lib/agent-output.mjs": "50211f1d4d6b73c6ed62986b23feca6f82a325b4194cef948b94cbd04773d1ee",
     "scripts/lib/aidd-config.sh": "602a4dbea32a067cf69ea486f41bfc354c380f5fe5dbb47e667eecb7417bc6c0",
     "scripts/lib/build-config-expected.mjs": "4928ccf037b3446786edf9f45aa785ce2dff88678987bcfc585115596257f2eb",
-    "scripts/lib/catalog-registry.json": "79c56c03f72c11df6fd24bc43e54c7276632ed5e525196338bf2c7e897cac743",
+    "scripts/lib/catalog-registry.json": "a85afdeca0466f9eacc04f40061eb1511bff33dee4022fa36d17bb63879a964a",
     "scripts/lib/check-catalog.mjs": "f653862d9980068ac5e56e37c39cf913dad8dc0d9cf0c040cd62be5194e8c6e7",
     "scripts/lib/check-mutants.json": "4d20ee1ea1aa85506e6dd328d2fee156fabd9079b0bca719db70c343b96466d2",
     "scripts/lib/check-operation-contracts.mjs": "2abf971c351b8dd83aa1c5cdf55bb0cc6521560c271f8def0cfe18b22bf3063d",
