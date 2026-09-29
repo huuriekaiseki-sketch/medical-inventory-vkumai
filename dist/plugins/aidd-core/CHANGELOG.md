@@ -1,5 +1,16 @@
 # 変更履歴（7 項目の 7 の前半。既知の制約は KNOWN-LIMITS.md）
 
+## 未リリース（次の版で配る）
+
+- 判定本体 `check-skip-marker-write.sh`（aidd-core / aidd-codex）と `check-dependency-change.sh`
+  （aidd-vkumai / aidd-codex-vkumai）が、Codex のファイル編集（`apply_patch`）を読むようにした。
+  0.1.3 までは Codex がファイルを直接編集すると 2 本とも素通りしていた
+  （仕様書 `docs/specs/codex-hook-parity/01-apply-patch.md`）
+- **Claude Code 側の判定は変わらない**（`apply_patch` は Codex だけが使うツール名）
+- hook 定義（`hooks/hooks.json`）は 4 プラグインとも不変。**Codex 側の再信頼は不要**
+- Codex CLI 0.147.0 の実機で deny を実測した（`docs/plugin/codex/evidence/2026-09-29-apply-patch-verify.md`。
+  0.1.3 のキャッシュの判定本体を一時的に差し替えて測った。配布した版そのものでの発火は、配ってから測る）
+
 ## 0.1.3（2026-09-28）
 
 - **Codex 用プラグイン `aidd-codex-vkumai` を初めて marketplace に載せる**（PR #851 で新設。vkumai 固有の

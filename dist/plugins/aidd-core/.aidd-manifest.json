@@ -4,7 +4,7 @@
   "files": {
     ".claude-plugin/plugin.json": "97b33e3663fa1b1831d267cedda4c864c946fd8f716e97419f70cd2067c99c8b",
     "BREAKING.md": "6f48497efff720061dc9866f54c530a592a970b39b63938ae7c27324d8002c22",
-    "CHANGELOG.md": "a18f39c4b8ae65a61fcb610f04953a0c9ed5de54fd6a674ebab9f54795d63b4a",
+    "CHANGELOG.md": "f70a6820ef931e78b7214a830f53ab2c2ac7866c0f50bae6e95c09b5b32a2511",
     "COMPATIBILITY.md": "5fdc16522007a777b5ea7147b6e021cd6973ab33df9aa4641291eb8283682973",
     "KNOWN-LIMITS.md": "c1df0711ca0f70ff012064db6999d961b63015ca293ebfe13bc0c24fcfe5e4c6",
     "MIGRATION.md": "ed96a1db2d1a72fdc50d5c68066b728a349616ac8d741c82d84bd84550ce34a0",
@@ -81,7 +81,7 @@
     "scripts/check-shell-expansion-safety.test.sh": "47354c128aa8e3b3f892a347d05f0d4e5a242c96a2d5a948d7f805e4279b913a",
     "scripts/check-shell-locale-safety.test.sh": "7413a8d55f27fd2a953383a4f4fff32167b4c3a9be1e176d540907407421b548",
     "scripts/check-skill-size.test.sh": "45b1da7e064124a7f59059fc5a0132339706ee2f2e82632b641874f607b82a21",
-    "scripts/check-skip-marker-write.sh": "9dfb1f3191640628f1c4c480625af7569d6679e3d46d87fa2e0573e0b9234213",
+    "scripts/check-skip-marker-write.sh": "b7f4bc4630fbd0df1d72058a6704f98add4ed3f89c69a34ded07d12020fabea5",
     "scripts/check-stale-worktrees.sh": "9915dbeb6baeec068cee7c37e1d3fb14d282f097a86a076010d52dc960c08d6c",
     "scripts/check-stale-worktrees.test.sh": "310da292b09e304d1db3bb48c99e85e604f942cc7339189c244dd55b69257c7e",
     "scripts/check-stdout-truncation.test.sh": "010e30fd4ba3b6818c05cbe5a23232f1339c193a103713bbb46eb38c83c457fc",

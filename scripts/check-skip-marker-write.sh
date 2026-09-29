@@ -34,7 +34,8 @@ command -v jq >/dev/null 2>&1 || { echo "jq not found: check-skip-marker-write.s
 #    スラッシュを含まない(=相対パスらしい)".skip"トークンが含まれる場合も対象とする。
 #
 # 対象ツール: Bash / Write / Edit / MultiEdit(いずれもtool_input.file_pathまたはcommandに
-# 書き込み先パスが現れる)。.claude/settings.jsonのmatcherと本スクリプトのcase文の両方を
+# 書き込み先パスが現れる)と、Codex のファイル編集 apply_patch(Codex 側の matcher では
+# Edit / Write がそのエイリアスとして効く)。.claude/settings.jsonのmatcherと本スクリプトのcase文の両方を
 # 揃える必要がある(片方だけ直しても検知が効かない)。NotebookEdit等、file_path以外の
 # パラメータ名で書き込み先を指定するツールが将来追加された場合は同様に追随が必要。
 #
@@ -52,11 +53,26 @@ DIR_REFERENCE_PATTERN='(^|[;&[:space:]])cd[[:space:]]+\.claude/\.verify-state([/
 CWD_PATTERN='(^|/)\.claude/\.verify-state($|/)'
 RELATIVE_SKIP_TOKEN_PATTERN='[^/[:space:]]+\.skip'
 
+# WHY(apply_patch): Codex はファイル編集を tool_name: "apply_patch" で渡し、書き込み先は
+# tool_input.file_path ではなく tool_input.command（パッチ本文）のヘッダ行に入る。Claude の形
+# （Write / Edit + file_path）しか知らなかったため、Codex のファイル編集は下の `*) exit 0` に落ちて
+# 丸ごと素通りしていた（2026-09-29 実測。docs/specs/codex-hook-parity/01-apply-patch.md）。
+# ヘッダ行だけを読み、本文（+ / - / 空白で始まる行）は見ない。本文まで見ると、説明文書に
+# このパスを書くだけの編集を止めてしまう。
+# 限界: ヘッダが 1 行も取れない apply_patch は沈黙する（判定不能を止める側に倒すと、
+# Codex のファイル編集が全部止まる）。パッチの書式が変わったらここが先に外れる。
+extract_patch_paths() {
+  printf '%s\n' "$1" \
+    | sed -n -E 's/^\*\*\* (Add File|Update File|Delete File|Move to): (.*)$/\2/p' \
+    | sed -E 's/[[:space:]]+$//'
+}
+
 INPUT="$(cat)"
 TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')"
 CWD="$(printf '%s' "$INPUT" | jq -r '.cwd // ""')"
 
 TARGET=""
+MATCHED=0
 case "$TOOL_NAME" in
   Bash)
     TARGET="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')"
@@ -64,12 +80,27 @@ case "$TOOL_NAME" in
   Write|Edit|MultiEdit)
     TARGET="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""')"
     ;;
+  apply_patch)
+    # WHY(cwd と繋いでから見る): パッチのパスは cwd からの相対で書かれる。cwd が .claude や
+    # .claude/.verify-state のときは、パス単体には ".claude/.verify-state/" が現れない。
+    PATCH_PATHS="$(extract_patch_paths "$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')")"
+    while IFS= read -r PATCH_PATH; do
+      [ -z "$PATCH_PATH" ] && continue
+      case "$PATCH_PATH" in
+        /*) RESOLVED="$PATCH_PATH" ;;
+        *)  RESOLVED="${CWD:+$CWD/}$PATCH_PATH" ;;
+      esac
+      if [[ "$RESOLVED" =~ $FULL_PATH_PATTERN ]]; then
+        MATCHED=1
+        break
+      fi
+    done <<< "$PATCH_PATHS"
+    ;;
   *)
     exit 0
     ;;
 esac
 
-MATCHED=0
 if [[ "$TARGET" =~ $FULL_PATH_PATTERN ]]; then
   MATCHED=1
 fi

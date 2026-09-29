@@ -103,6 +103,50 @@ OUT="$(jq -n '{tool_name: "Bash", tool_input: {command: "npm ci"}}' | bash "$COD
 set -e
 assert_empty "$OUT" "沈黙はそのまま"
 
+# --- Codex のファイル編集（apply_patch）。docs/specs/codex-hook-parity/01-apply-patch.md ---
+# WHY: Codex はファイル編集を tool_name: "apply_patch" で渡し、パスは tool_input.command（パッチ本文）の
+# ヘッダ行に入る。scenario 3 の Edit / Write + file_path は Claude の形で、Codex では来ない。
+run_patch() { # $1=パッチ本文 $2=対象スクリプト（省略時は判定本体）
+  set +e
+  OUT="$(jq -n --arg c "$1" '{tool_name: "apply_patch", tool_input: {command: $c}, cwd: "/repo"}' | bash "${2:-$SCRIPT}" 2>/dev/null)"
+  EXIT_CODE=$?
+  set -e
+}
+
+echo "=== scenario 7: apply_patch で package.json / package-lock.json を触る → ask ==="
+run_patch $'*** Begin Patch\n*** Update File: package.json\n@@\n-  "a": "1"\n+  "a": "1",\n+  "left-pad": "1.3.0"\n*** End Patch'
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_eq "$(decision)" "ask" "Update File package.json は ask"
+assert_contains "$OUT" "package.json への直接編集" "理由は Edit / Write のときと同じ文"
+run_patch $'*** Begin Patch\n*** Add File: web/package.json\n+{}\n*** End Patch'
+assert_eq "$(decision)" "ask" "サブディレクトリの package.json も ask"
+run_patch $'*** Begin Patch\n*** Delete File: package-lock.json\n*** End Patch'
+assert_eq "$(decision)" "ask" "Delete File package-lock.json は ask"
+run_patch $'*** Begin Patch\n*** Update File: tmp/p.json\n*** Move to: package.json\n@@\n-1\n+2\n*** End Patch'
+assert_eq "$(decision)" "ask" "Move to（移動先が package.json）は ask"
+run_patch $'*** Begin Patch\n*** Update File: src/a.ts\n@@\n-1\n+2\n*** Update File: package.json\n@@\n-1\n+2\n*** Update File: docs/b.md\n@@\n-1\n+2\n*** End Patch'
+assert_eq "$(decision)" "ask" "複数ファイルのうち 1 つだけ該当でも全体が ask"
+run_patch $'*** Begin Patch\r\n*** Update File: package.json\r\n@@\r\n-1\r\n+2\r\n*** End Patch\r\n'
+assert_eq "$(decision)" "ask" "行末が CRLF でも ask"
+
+echo "=== scenario 8: apply_patch の対照 → 何も出ない ==="
+run_patch $'*** Begin Patch\n*** Update File: src/lib/package.ts\n@@\n-1\n+2\n*** End Patch'
+assert_empty "$OUT" "package.json 以外は沈黙"
+run_patch $'*** Begin Patch\n*** Update File: docs/packages.json\n@@\n-1\n+2\n*** End Patch'
+assert_empty "$OUT" "似た名前（packages.json）は沈黙"
+run_patch $'*** Begin Patch\n*** Update File: docs/setup.md\n@@\n-old\n+package.json に scripts を足す\n+*** Update File: package.json\n*** End Patch'
+assert_empty "$OUT" "本文（+ 行）にファイル名とヘッダもどきが出るだけでは沈黙"
+run_patch 'ヘッダの無い文字列'
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "ヘッダが 1 行も無ければ沈黙（全編集を止めない）"
+
+echo "=== scenario 9: Codex 用ラッパー経由の apply_patch → deny ==="
+run_patch $'*** Begin Patch\n*** Update File: package.json\n@@\n-1\n+2\n*** End Patch' "$CODEX_WRAPPER"
+assert_eq "$(decision)" "deny" "ask → deny"
+assert_contains "$OUT" "Codexはask未対応" "Bash で止めたときと同じ読み替えの注記が付く"
+run_patch $'*** Begin Patch\n*** Update File: src/a.ts\n@@\n-1\n+2\n*** End Patch' "$CODEX_WRAPPER"
+assert_empty "$OUT" "無関係なパッチは沈黙のまま"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

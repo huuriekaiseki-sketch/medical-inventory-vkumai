@@ -19,6 +19,8 @@ command -v jq >/dev/null 2>&1 || { echo "jq not found: check-dependency-change.s
 #   引数がフラグだけ（`npm install`、`npm install --package-lock-only`）や `npm ci` は lockfile
 #   どおりに入れ直すだけなので対象外。which / man / grep / git grep 等の読み取り系も対象外
 # - Write / Edit / MultiEdit: package.json / package-lock.json への書き込み
+# - apply_patch（Codex のファイル編集）: 同上。Codex 側の matcher では Edit / Write が
+#   apply_patch のエイリアスとして効くので、matcher は変えていない
 #
 # 判定はコマンド文字列を実行単位（; & | $( `）に分割してセグメント先頭で行う
 # （check-direct-ddl-execution.sh と同型、issue #633）。難読化への完全対策は目的にしない。
@@ -63,6 +65,37 @@ has_package_arg() {
   return 1
 }
 
+# WHY(apply_patch): Codex はファイル編集を tool_name: "apply_patch" で渡し、書き込み先は
+# tool_input.file_path ではなく tool_input.command（パッチ本文）のヘッダ行に入る。Claude の形
+# （Write / Edit + file_path）しか知らなかったため、Codex が package.json を直接編集しても
+# 下の `*) exit 0` に落ちて素通りしていた（2026-09-29 実測。
+# docs/specs/codex-hook-parity/01-apply-patch.md）。
+# ヘッダ行だけを読み、本文（+ / - / 空白で始まる行）は見ない。本文まで見ると、説明文書に
+# 「package.json」と書くだけの編集を止めてしまう。
+# 限界: ヘッダが 1 行も取れない apply_patch は沈黙する（判定不能を止める側に倒すと、
+# Codex のファイル編集が全部止まる）。
+# check-skip-marker-write.sh にも同じ関数がある（split_segments と同じく、配布の単位が別なので
+# 共有 lib にせず 2 本に置く）。片方を直したらもう片方も直す。
+extract_patch_paths() {
+  printf '%s\n' "$1" \
+    | sed -n -E 's/^\*\*\* (Add File|Update File|Delete File|Move to): (.*)$/\2/p' \
+    | sed -E 's/[[:space:]]+$//'
+}
+
+# 書き込み先が package.json / package-lock.json なら ASK と REASON を立てて 0 を返す
+check_manifest_path() {
+  local base
+  base="$(basename "$1")"
+  case "$base" in
+    package.json|package-lock.json)
+      ASK=1
+      REASON="$base への直接編集は依存関係の変更です（scripts の変更だけであっても、依存に触れていないことを人が確認します）。依存を足す場合は用途・代替案・権限/環境変数/DB への影響・固定する版と出所を報告して承認を得てから進めてください（docs/agents/known-failure-patterns.md「依存関係層」）。"
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 INPUT="$(cat)"
 TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')"
 
@@ -88,13 +121,16 @@ case "$TOOL_NAME" in
     ;;
   Write|Edit|MultiEdit)
     FILE_PATH="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""')"
-    BASENAME="$(basename "$FILE_PATH")"
-    case "$BASENAME" in
-      package.json|package-lock.json)
-        ASK=1
-        REASON="$BASENAME への直接編集は依存関係の変更です（scripts の変更だけであっても、依存に触れていないことを人が確認します）。依存を足す場合は用途・代替案・権限/環境変数/DB への影響・固定する版と出所を報告して承認を得てから進めてください（docs/agents/known-failure-patterns.md「依存関係層」）。"
-        ;;
-    esac
+    check_manifest_path "$FILE_PATH" || true
+    ;;
+  apply_patch)
+    # 1 つのパッチに複数のファイルが入る。Codex は編集の一部だけを止められないので、
+    # 1 つでも該当したら全体を ask にする。
+    PATCH_PATHS="$(extract_patch_paths "$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')")"
+    while IFS= read -r PATCH_PATH; do
+      [ -z "$PATCH_PATH" ] && continue
+      check_manifest_path "$PATCH_PATH" && break
+    done <<< "$PATCH_PATHS"
     ;;
   *)
     exit 0
