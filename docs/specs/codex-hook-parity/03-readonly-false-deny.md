@@ -2,7 +2,7 @@
 
 - feature: `codex-hook-parity-03-readonly-false-deny`
 - 重要度: 低 / 影響: **Claude Code と Codex の両方**
-- 状態: 2026-09-29 承認（決めてほしいこと 3 件はおすすめの通り）。スクリプトとテストは実装済み。実機（Claude Code / Codex）での確認は未実施
+- 状態: 2026-09-29 承認（決めてほしいこと 3 件はおすすめの通り）。スクリプトとテストは実装済み（PR #862）。配布した 0.1.4 の Codex 実機で確認済み（`docs/plugin/codex/evidence/2026-09-29-release-0.1.4-verify.md`）。Claude Code 側の実機では未確認
 
 ---
 
