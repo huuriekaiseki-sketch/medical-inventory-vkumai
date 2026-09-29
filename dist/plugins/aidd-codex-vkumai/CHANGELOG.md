@@ -15,6 +15,9 @@
 - `check-direct-ddl-execution.sh` / `check-dependency-change.sh` が、前置き付きのコマンドを止めるようにした
   （`PGPASSWORD=… psql`、`sudo npm install foo`、`bash -c "psql …"`、`npm --prefix web install foo` など。
   0.1.3 までは素通り。仕様書 `docs/specs/codex-hook-parity/02-command-prefix.md`）。**止まる範囲が広がる。**
+- `check-direct-ddl-execution.sh` が、`psql --version` / `-V` / `--help` / `-?` だけのときは止めないようにした。
+  **守りを緩める変更**（仕様書 `docs/specs/codex-hook-parity/03-readonly-false-deny.md`）。
+  これまで実機確認に使っていた `psql --version` は止まらなくなるので、確認には `psql -c "select 1"` などを使う。
 - hook 定義（`hooks/hooks.json`）は不変。**再信頼不要**。
 - Codex CLI 0.147.0 の実機で deny を実測した（`docs/plugin/codex/evidence/2026-09-29-apply-patch-verify.md`。
   0.1.3 のキャッシュの判定本体を一時的に差し替えて測った。配布した版そのものでの発火は、配ってから測る）。

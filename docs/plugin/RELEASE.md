@@ -143,6 +143,10 @@ codex plugin marketplace upgrade aidd-plugins
 | Codex: 未導入プラグインの `available` | `aidd-codex-vkumai` を remove して `codex plugin list --marketplace aidd-plugins --json` | ⚠️ `installed` は `aidd-codex` のみになったが、`available: []` を再現。直後の `add` は成功し、対象4本の信頼は維持。表示理由は未解明（[実証記録](codex-vkumai/evidence/2026-09-28-trusted-fire-verify.md)） |
 | Codex: `policy` / `category` 無しのカタログ | 一時 marketplace（local path）から `add` | ✅ 通った（2026-09-28）。エントリが name / description / source だけの `.agents/plugins/marketplace.json` を `codex plugin marketplace add <path>` → `codex plugin add aidd-codex@aidd-nopolicy-tmp` で 0.1.1 が入った。公式の「必須」は CLI 0.147.0 では強制されない。検証後に plugin と marketplace を remove し、`config.toml` に残骸なし |
 
+**上の表の `psql --version` は 0.1.3 までの確認手順。** 次の版からは版の確認だけの `psql` は止まらない
+（仕様書 `docs/specs/codex-hook-parity/03-readonly-false-deny.md`）ので、DDL の deny を確かめるときは
+`psql -c "select 1"` などを使う。未信頼の hook が動かないことの対照も同じコマンドで取る。
+
 検証用リポジトリと clone（`/Users/masanori/雑談/aidd-codex-verify`）はこの目的で残してある。
 
 Codex 側の初回実測は CLI 0.147.0 と marketplace commit `be18c7d` で行った。CLI の既定モデル `gpt-6-sol` はこの ChatGPT アカウントで非対応だったため、発火確認には `gpt-5.5` を指定した。[実証記録](codex/evidence/2026-09-28-marketplace-verify.md)に導入・信頼・発火の証拠と未検証範囲を残した。0.1.3 の追加実測は marketplace commit `bc49596` で行った。検証用 clone は追加実測後にクリーンへ戻した。個人環境には `aidd-plugins` marketplace と信頼済み `aidd-codex`・`aidd-codex-vkumai`（ともに 0.1.3）を残している（解除は各 `codex plugin remove`。信頼記録は自動で消えるとは限らない）。

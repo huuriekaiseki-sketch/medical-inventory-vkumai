@@ -3,13 +3,13 @@
   "algorithm": "sha256",
   "files": {
     ".codex-plugin/plugin.json": "95d854cd0cd3b48f47f23587f8dc72692d9f9a4138e8f7d738ec79a172bbe165",
-    "CHANGELOG.md": "4289caa1b145d76119d066e323c554417fa4e4bf35659e3a2496f56a5a1c21c1",
+    "CHANGELOG.md": "c5f6bb1db403f94afe72756232edada6a68eca815351c760a0fad5acf6529dc4",
     "COMPATIBILITY.md": "7e65f141533f303e16037b16d8c7306948d76058f1c3aef14b3fa31e76ae427e",
-    "KNOWN-LIMITS.md": "5df6eea93922b090615f550460c2bb549b7fb3c3e5695fdbd2a3320dd7b57be9",
+    "KNOWN-LIMITS.md": "1a4681077b4164ee001a17c3d0ffcabc0fa0f6b1c106260af8b710bdd2631b84",
     "hooks/hooks.json": "641117902fe1c0c4a255cc86c3b1c4a5202ce9944da7bb53dbadf2ab1142fffb",
     "scripts/check-dependency-change.sh": "a3c09472ed8bc7fe3f444cab392e767f6c341185c55cfda92fdbea639af43e79",
     "scripts/check-dependency-change.test.sh": "a81618a47e65f74b4db5025eda48f68af471cbc4850cb0b00e5ad79756f8c057",
-    "scripts/check-direct-ddl-execution.sh": "04967199557323eceb47e70b24ac7d107d97f57593cb95cf29a96acdbdead0d6",
+    "scripts/check-direct-ddl-execution.sh": "88ed2e38042374f6ca222a6ff8d0fe3905f72a906b8f01e1d1bd84bc60e63a53",
     "scripts/codex-ai-check-suggest.sh": "0441b34b83b5b7abde31f80a5073ef04b6b7ba38458106a4675650e0e028791a",
     "scripts/codex-ai-check-track.sh": "8b4f95bf07df9add8a2643a87e29c4a28b39b1a243739125d6066ddc71726f9d",
     "scripts/codex-dependency-change-deny.sh": "4797d6b95fa71cda6f7f79cbe0ac091e623541699cb42e7ac6d78155356331dd"
