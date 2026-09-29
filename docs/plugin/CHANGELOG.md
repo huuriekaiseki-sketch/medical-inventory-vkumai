@@ -7,6 +7,10 @@
   `bash x.sh` のように実行系を前に置いた登録には求めない。出力の最後の行に `notExecutable=N` が増える
   （中心リポジトリで 3 本が約 3 週間動いていなかった。`docs/agents/escaped-defects.md` の E-099）
 - **配布物は元から実行ビット付きで生成されるので、導入先の hook の動きは変わらない**
+- aidd-vkumai の登録簿（`scripts/lib/catalog-registry.json`）で、取りこぼし台帳の番号帯に 10x を足した
+  （09x が E-099 で埋まった）。導入先の台帳の検査で、E-100〜E-109 を書けるようになる
+- Codex のセッション開始時の入口（`codex-session-start.sh`、PR #868）は**配っていない**。
+  中心リポジトリの `.codex/hooks.json` にだけ登録している
 
 ## 0.1.4（2026-09-29）
 
