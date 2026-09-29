@@ -11,6 +11,7 @@
 | 0.1.2 | 2.1.270（2 本の `claude plugin update` で 0.1.1 → 0.1.2 を実測） | 2.1.261 | `aidd-codex` 側は codex/COMPATIBILITY.md | 2026-09-28。差は文書のみ。版を変えた更新の実測用 |
 | 0.1.3 | 2.1.270（2 本の `claude plugin update` で 0.1.2 → 0.1.3 を実測） | 2.1.261 | Codex 側は codex/ と codex-vkumai/ の COMPATIBILITY.md | 2026-09-28。差は文書のみ。`aidd-codex-vkumai` の marketplace 初掲載 |
 | 0.1.4 | 2.1.270（2 本の `claude plugin update` で 0.1.3 → 0.1.4 を実測）。**版が上がることだけを確認。導入先での hook の発火は未実測**（導入先ではプラグインが disabled）。中心リポジトリでは同じスクリプトが project hook として動いている | 2.1.261 | Codex 側は codex/ と codex-vkumai/ の COMPATIBILITY.md | 2026-09-29。Codex の hook を Claude Code と同じ仕様に揃える 6 件。初めてスクリプトの中身が変わる版 |
+| 0.1.5 | 未実測（配ってから、2 本の `claude plugin update` で測る） | 2.1.261 | Codex 側は codex/ と codex-vkumai/ の COMPATIBILITY.md | 2026-09-30。Claude Code 用の 2 本は hook の定義が不変。Codex 用の aidd-codex-vkumai に hook が 1 本増える |
 
 ## 前提にしている Claude Code の挙動（変わると壊れる）
 

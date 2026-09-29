@@ -128,6 +128,8 @@ const pluginNames = Object.keys(layout.plugins)
 const codexPlugins = Object.fromEntries(Object.entries(layout.codexPlugins ?? {}).filter(([name]) => !name.startsWith('_')))
 const codexPluginNames = Object.keys(codexPlugins)
 const codexHookScripts = Object.entries(layout.codexHookScripts ?? {}).filter(([name]) => !name.startsWith('_'))
+// Codex 用 hook が使う部品（scripts/lib/ の関数・一覧など）。hook ではないので登録はされない
+const codexSupportFiles = Object.entries(layout.codexSupportFiles ?? {}).filter(([name]) => !name.startsWith('_'))
 // 生成するのは、hook を 1 本以上持つ Codex プラグインだけ（宣言だけで中身の無いプラグインは出さない）
 const activeCodexPlugins = codexPluginNames.filter(p => codexHookScripts.some(([, owner]) => owner === p))
 const outputPluginNames = [...pluginNames, ...activeCodexPlugins]
@@ -272,11 +274,24 @@ function build(outRoot) {
         fail(`codexHookScripts の ${name}: 所属 '${owner}' は codexPlugins に無い（${codexPluginNames.join(' / ')} のいずれか）`)
       }
     }
+    for (const [name, owner] of codexSupportFiles) {
+      if (!codexPluginNames.includes(owner)) {
+        fail(`codexSupportFiles の ${name}: 所属 '${owner}' は codexPlugins に無い（${codexPluginNames.join(' / ')} のいずれか）`)
+      }
+    }
     for (const plugin of activeCodexPlugins) {
       put(plugin, 'hooks/hooks.json', JSON.stringify(buildCodexHooksJson(codexSettings, plugin), null, 2) + '\n')
       for (const [name, owner] of codexHookScripts) {
         if (owner !== plugin) continue
         copyText(plugin, `scripts/${name}`, `scripts/${name}`, null, 0o755)
+      }
+      // WHY(2026-09-30、仕様書 08): hook が使う部品（scripts/lib/ の関数・一覧・判定の本体）を運ぶ道が
+      //      Codex 用には無かった。それまでの Codex 用 hook は 1 ファイルで完結していたので要らなかった。
+      //      supportScripts に相乗りしないのは、あちらは検査（*.test.sh）を自動で連れてくるため——
+      //      Codex 用の配布物に、Claude 用の前提で書かれた検査が混ざる。
+      for (const [name, owner] of codexSupportFiles) {
+        if (owner !== plugin) continue
+        copyText(plugin, `scripts/${name}`, `scripts/${name}`, null, name.endsWith('.sh') ? 0o755 : undefined)
       }
       const codexMeta = codexPlugins[plugin]
       if (!codexMeta.manifestPath) { fail(`codexPlugins.${plugin}: manifestPath が無い`); continue }
