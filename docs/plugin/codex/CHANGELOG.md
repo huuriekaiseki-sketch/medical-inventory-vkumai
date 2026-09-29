@@ -5,6 +5,9 @@
 - `check-skip-marker-write.sh` が Codex のファイル編集（`apply_patch`）を読むようにした。0.1.3 までは
   ファイル編集で `.claude/.verify-state/*.skip` を作っても止まらなかった（仕様書
   `docs/specs/codex-hook-parity/01-apply-patch.md`）。
+- `codex-skip-marker-deny.sh` が、判定本体が無い・失敗した・読めない結果を返したときに exit 2 で止める側に
+  倒すようにした（0.1.3 までは rc=127 などで抜けるだけ）。doctor は `部品` 行で、スクリプトのファイルが
+  あるか・実行できるかを報告する（仕様書 `docs/specs/codex-hook-parity/04-wrapper-fail-closed.md`）。
 - hook 定義（`hooks/hooks.json`）は不変。**再信頼不要**。
 - Codex CLI 0.147.0 の実機で deny を実測した（evidence 2026-09-29-apply-patch-verify.md。0.1.3 のキャッシュの
   判定本体を一時的に差し替えて測った。配布した版そのものでの発火は、配ってから測る）。
