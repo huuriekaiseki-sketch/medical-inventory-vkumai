@@ -21,6 +21,11 @@
   `>` も `tee` も含まないもの）と、`psql --version` / `-V` / `--help` / `-?` だけの実行を止めないようにした
   （仕様書 `docs/specs/codex-hook-parity/03-readonly-false-deny.md`）。Codex の実機確認に使っていた
   `psql --version` は止まらなくなるので、確認には `psql -c "select 1"` などを使う
+- **Claude Code 側の文言も変わる:** 警告文・理由文 5 つ（ブランチ関係 3、依存変更 2）から、中心リポジトリの
+  文書への案内（`docs/agents/…参照`）を外した。導入先にその文書は無い
+  （仕様書 `docs/specs/codex-hook-parity/06-message-pointers.md`）。Codex 用の 2 プラグインについては、
+  配布物の警告文に案内が残っていないことを `build-plugin.test.sh` scenario 3d が見る。
+  **Claude 用の 2 プラグインのほかの hook には、同じ形の案内がまだ残っている**（今回の対象外）
 - hook 定義（`hooks/hooks.json`）は 4 プラグインとも不変。**Codex 側の再信頼は不要**
 - Codex CLI 0.147.0 の実機で deny を実測した（`docs/plugin/codex/evidence/2026-09-29-apply-patch-verify.md`。
   0.1.3 のキャッシュの判定本体を一時的に差し替えて測った。配布した版そのものでの発火は、配ってから測る）
