@@ -127,6 +127,8 @@ codex plugin marketplace upgrade aidd-plugins
 | `hooks/hooks.json` の command / timeout / matcher | **必要**。`/hooks` に「changed - review required」で出る | 公式「new or changed hooks are marked for review and skipped until trusted」📄 |
 | 版番号だけ | 不要 | 0.1.1 → 0.1.2（`hooks.json` 不変）を `marketplace upgrade` で入れ替えた前後で `trusted_hash` 4 件と `enabled = true` が完全一致 ✅。更新後の新規セッションで SessionStart の hook 2 本（マージ済み PR・古い FETCH_HEAD）が再信頼なしに発火 ✅（2026-09-28） |
 | marketplace の名前 | **必要**（鍵が変わり別 hook 扱い） | 鍵の形 ✅。検証用の `aidd-codex-configured` から本番の `aidd-plugins` へ移すときに 1 回起きる |
+| hook を足す（既存の hook の位置は変えない） | 足した hook だけ**必要**。既存の hook は不要の見込み | リポジトリの `.codex/hooks.json` の末尾に 1 本足したとき、足した hook は `New hook - review required` で出て、信頼の記録は足した 1 本の鍵（`session_start:0:3`）だけが増えた ✅（2026-09-30）。**既存の hook の信頼が保たれることは、プラグインでは未実測** ⬜（0.1.5 の配布で測る） |
+| hook を足す・消す・並べ替えて、既存の hook の位置（`<i>:<j>`）が変わる | 未実測 ⬜ | 鍵に位置が入っているので、位置がずれた hook は別の hook として扱われる可能性がある。足すときは、組の末尾か、新しい組の末尾に足す |
 
 再信頼が要る版は CHANGELOG に「hook 定義変更・`/hooks` で再信頼が必要」と書き、導入先の作業に含める。
 
@@ -161,6 +163,16 @@ Codex 側の初回実測は CLI 0.147.0 と marketplace commit `be18c7d` で行�
 
 配布後にこの表へ書き戻した結果は、中心リポジトリの `dist/plugins` には入るが marketplace 上の同じ版には
 届かない（版の文字列が同じなので配り直さない。タグの内容も動かさない）。次の版で届く。
+
+**Codex の実機確認は、普段の作業場所でも行う**（2026-09-30 追加）。信頼済みの親フォルダの外に作った clone
+（`/private/tmp` の下など）では、フォルダの信頼を聞かれ、リポジトリの `.codex/hooks.json` も読み込まれる。
+普段の作業場所（信頼済みの親フォルダの下）では、信頼を聞かれず、リポジトリの hook は読み込まれない。
+確かめる場所を clone だけにすると、普段の作業場所で動かないことに気づけない
+（`docs/agents/escaped-defects.md` の E-100）。
+
+**セッションの始まりの hook が発火したかは、画面ではなくセッションの記録で見る。** Codex CLI 0.147.0 の
+対話画面には、セッションの始まりの知らせは出ない。`~/.codex/sessions/<年>/<月>/<日>/rollout-*.jsonl` の、
+`developer` の発言に入っている。
 
 ## 6. 戻し方
 

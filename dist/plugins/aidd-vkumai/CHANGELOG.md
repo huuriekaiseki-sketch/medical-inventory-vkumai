@@ -1,6 +1,10 @@
 # 変更履歴（7 項目の 7 の前半。既知の制約は KNOWN-LIMITS.md）
 
-## 未リリース（次の版で配る）
+## 0.1.5（2026-09-30）
+
+Codex 用の aidd-codex-vkumai に、セッションの始まりの点検をまとめて動かす入口が増える版
+（仕様書 `docs/specs/codex-hook-parity/07-claude-only-hooks.md` と `08-distribute-session-start-entry.md`）。
+Claude Code 用の 2 本は、hook の定義（`hooks/hooks.json`）が変わらない。
 
 - aidd-core の hook の生存診断（`scripts/lib/aidd-doctor.mjs`）が、**実行ビットの無い hook** も名指しするようにした。
   hook の登録はスクリプトを直接呼ぶので、実行ビットが無いと呼ばれても起動できず、何も起きない。
@@ -9,8 +13,14 @@
 - **配布物は元から実行ビット付きで生成されるので、導入先の hook の動きは変わらない**
 - aidd-vkumai の登録簿（`scripts/lib/catalog-registry.json`）で、取りこぼし台帳の番号帯に 10x を足した
   （09x が E-099 で埋まった）。導入先の台帳の検査で、E-100〜E-109 を書けるようになる
-- Codex のセッション開始時の入口（`codex-session-start.sh`、PR #868）は**配っていない**。
-  中心リポジトリの `.codex/hooks.json` にだけ登録している
+- aidd-core の `check-blocked-issues-staleness.sh` の知らせから、中心リポジトリの文書への案内
+  （`docs/agents/decisions.md`）を外した。導入先にその文書は無い。再開条件は各 issue に書いてある
+- Codex のセッション開始時の入口（`codex-session-start.sh`、PR #868）を、Codex 用の aidd-codex-vkumai で配る。
+  中心リポジトリの `.codex/hooks.json` にだけ登録していたが、普段の作業場所ではリポジトリの hook が Codex に
+  読み込まれず、動かなかった（`docs/agents/escaped-defects.md` の E-100）。
+  詳しくは `docs/plugin/codex-vkumai/CHANGELOG.md`。**Codex では、更新の後に `/hooks` で入口を信頼する操作が要る**
+- 生成器（`scripts/lib/build-plugin.mjs`）に、Codex 用プラグインへ部品（`scripts/lib/`）を運ぶ宣言
+  （層の表の `codexSupportFiles`）を足した
 
 ## 0.1.4（2026-09-29）
 

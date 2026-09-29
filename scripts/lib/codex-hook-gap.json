@@ -2,7 +2,7 @@
   "_comment": "Claude Code の hook のうち、Codex に同じもの・相方が登録されていないものの一覧と、その扱い（2026-09-30。仕様書 docs/specs/codex-hook-parity/07-claude-only-hooks.md）。検査（scripts/codex-hook-gap.test.sh）が、`.claude/settings.json` と `.codex/hooks.json` の実登録から差を計算して、この一覧と突き合わせる。Claude 側に hook を足したら、ここで区分を決めるまで検査が落ちる。",
   "_limits": "区分が正しいかは機械では見ない（名前が載っていて、区分と理由が書いてあれば通る）。相方（counterparts）が Claude 側と同じことをしているかも見ない——それは各ラッパーのテストの担当。",
   "categories": {
-    "entry": "Codex のセッション開始時の入口（scripts/codex-session-start.sh）が動かす。一覧は scripts/lib/codex-session-start-checks.txt で、この区分と一致していなければ検査が落ちる",
+    "entry": "Codex のセッション開始時の入口（scripts/codex-session-start.sh）が動かす。一覧は scripts/lib/codex-session-start-checks.txt で、この区分と一致していなければ検査が落ちる。入口と点検は、Codex 用の aidd-codex-vkumai でも配る（0.1.5 から。普段の作業場所ではリポジトリの .codex/hooks.json が読み込まれないため）",
     "pending-verify": "登録するだけで動く見込みだが、Codex の実機での確認（人による /hooks の信頼が要る）が先",
     "needs-rework": "考え方は持っていけるが、Codex 向けに作り直しが要る。1 つずつ別の仕様書にする",
     "claude-only-target": "見張る対象が Claude Code そのもの。Codex には同じものが無いので持っていかない",

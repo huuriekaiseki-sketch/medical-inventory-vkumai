@@ -12,13 +12,13 @@
   },
   "plugins": {
     "aidd-core": {
-      "version": "0.1.4",
+      "version": "0.1.5",
       "description": "AIDD パイプラインの共通機構: 検知 hook・証跡の記録・判定エンジン・汎用エージェント/スキル（中心リポジトリから機械生成。issue #420 v1）",
       "dependencies": [],
       "forbiddenWords": true
     },
     "aidd-vkumai": {
-      "version": "0.1.4",
+      "version": "0.1.5",
       "description": "vkumai アダプター: Next.js + Supabase 向けの Workflow・4 軸 Sweep・実装系エージェント・Supabase ガード（aidd-core に依存）",
       "dependencies": [
         {
@@ -165,12 +165,37 @@
     "codex-dependency-change-deny.sh": "aidd-codex-vkumai",
     "check-dependency-change.sh": "aidd-codex-vkumai",
     "codex-ai-check-track.sh": "aidd-codex-vkumai",
-    "codex-ai-check-suggest.sh": "aidd-codex-vkumai"
+    "codex-ai-check-suggest.sh": "aidd-codex-vkumai",
+    "_comment_session_start": "2026-09-30（仕様書 08）。セッション開始時の入口と、入口が動かす点検 12 本。hook として登録されるのは入口だけで、点検は入口が一覧（lib/codex-session-start-checks.txt）を読んで起動する。Claude 側では 12 本のうち 7 本が aidd-core だが、入口は自分と同じ場所にある点検しか起動しないので、Codex 用では 12 本とも入口と同じプラグインに置く。普段の作業場所ではリポジトリの .codex/hooks.json が読み込まれず（E-100）、配らないと動かない。",
+    "codex-session-start.sh": "aidd-codex-vkumai",
+    "check-hooks-path-alive.sh": "aidd-codex-vkumai",
+    "check-fault-injection-drill-staleness.sh": "aidd-codex-vkumai",
+    "check-upstream-docs-review-staleness.sh": "aidd-codex-vkumai",
+    "check-dependency-update-staleness.sh": "aidd-codex-vkumai",
+    "check-access-review-staleness.sh": "aidd-codex-vkumai",
+    "check-empty-session-report.sh": "aidd-codex-vkumai",
+    "check-integration-freshness.sh": "aidd-codex-vkumai",
+    "check-e2e-freshness.sh": "aidd-codex-vkumai",
+    "check-rls-mutation-freshness.sh": "aidd-codex-vkumai",
+    "check-mutation-freshness.sh": "aidd-codex-vkumai",
+    "check-hook-dependencies.sh": "aidd-codex-vkumai",
+    "check-blocked-issues-staleness.sh": "aidd-codex-vkumai"
+  },
+  "codexSupportFiles": {
+    "_comment": "Codex 用 hook が使う部品（2026-09-30 新設、仕様書 08）。hook ではないので .codex/hooks.json には登録されない。値は codexPlugins のキー。supportScripts に相乗りしないのは、あちらが検査（*.test.sh）を自動で連れてくるため。足りない部品は、生成器の同梱の検査（参照先が同じプラグインにあるか）が落とす。",
+    "lib/codex-session-start-checks.txt": "aidd-codex-vkumai",
+    "lib/resolve-log-dir.sh": "aidd-codex-vkumai",
+    "lib/run-freshness.py": "aidd-codex-vkumai",
+    "lib/worktree-hash.sh": "aidd-codex-vkumai",
+    "lib/aidd-doctor.mjs": "aidd-codex-vkumai",
+    "lib/stdout-sync.mjs": "aidd-codex-vkumai",
+    "_comment_rls_mutants": "認可ポリシーの変異計測の鮮度の点検は、自分の隣にこの登録簿が無いと黙る。生成器の同梱の検査は .json の参照を見ないので、入れ忘れても生成は通る——2026-09-30、配布物の入口を動かして、リポジトリでは出る知らせが 1 件出ないことで気づいた。",
+    "lib/rls-mutants.json": "aidd-codex-vkumai"
   },
   "codexPlugins": {
     "_comment": "Codex 用プラグインの一覧（2026-09-28 に codexPlugin（単数）から改名。aidd-codex-vkumai 追加に伴い複数化）。版は plugins.*.version と同じ値にする（build-plugin.mjs が揃っていなければ生成しない）。",
     "aidd-codex": {
-      "version": "0.1.4",
+      "version": "0.1.5",
       "description": "中心リポジトリから生成した AIDD の Codex 用 hook と環境診断",
       "manifestPath": ".codex-plugin/plugin.json",
       "_manifestReason": "Codex CLI 0.147.0 ではルート plugin.json があるだけで4本の hook が認識されない。docs/plugin/codex/evidence/2026-09-27-verify.md の一変数実験 C' に従い、実測済みの .codex-plugin 形式だけを生成する。",
@@ -179,7 +204,7 @@
       "skills": ["aidd-doctor"]
     },
     "aidd-codex-vkumai": {
-      "version": "0.1.4",
+      "version": "0.1.5",
       "description": "vkumai 固有の Codex 用 hook: Supabase 直接 DDL の deny・npm 依存変更の deny・品質チェック未実行の警告（Next.js + Supabase + npm 前提。aidd-codex と併用）",
       "manifestPath": ".codex-plugin/plugin.json",
       "sourceDir": "docs/plugin/codex-vkumai",
@@ -314,8 +339,7 @@
   "supportScriptsNotDistributed": {
     "_comment": "**配らないと判断した**支援スクリプト（2026-09-12 新設）。値は配らない理由。検査（*.test.sh）には checksNotDistributed があったのに、支援スクリプトには「配らないと決めた」と書く場所そのものが無かった——そのため表に無いものが『判断した』のか『足し忘れた』のか区別できなかった（KNOWN-LIMITS.md と check-plugin-asset-coverage.test.sh の限界の、2 か所で申告されていた穴）。",
     "_howto": "理由は「なぜ導入先に要らないか」を具体的に書く。中心リポジトリの運用だけに要るもの（生成器・worktree 作成・git hook の入れ方）、個人環境のもの、外部サービス前提のものが典型。空文字は `check-support-script-coverage.test.sh` が落とす。",
-    "measure-ddl-lock.sh": "ローカルのデータベースが PostgreSQL であること・それが `supabase_db_` で始まる名前のコンテナで動いていることを前提に、その中の psql を docker exec で叩く。測る DDL の顔ぶれもこのスタックの migration の書き方に合わせてある",
-    "codex-session-start.sh": "Codex のセッション開始時に、リポジトリの状態を見る点検をまとめて動かす入口（仕様書 docs/specs/codex-hook-parity/07-claude-only-hooks.md）。動かす点検の多くが、中心リポジトリの運用文書（訓練や棚卸しの予定日）と計測の記録を読む。導入先にはそれが無いので、まず中心リポジトリだけで使う。配るかは導入先が決まってから決める"
+    "measure-ddl-lock.sh": "ローカルのデータベースが PostgreSQL であること・それが `supabase_db_` で始まる名前のコンテナで動いていることを前提に、その中の psql を docker exec で叩く。測る DDL の顔ぶれもこのスタックの migration の書き方に合わせてある"
   },
   "supportScriptsUnclassified": {
     "_comment": "**まだ配る・配らないを決めていない**支援スクリプト（2026-09-12 新設）。値は空でよい——ここは判断を保留する場所で、理由を書けるなら supportScriptsNotDistributed か supportScripts へ移すべきだから。`unclassifiedMax` で件数を固定し、**増やせないが減らせる**（checksSplittable と同じ「返す当てのある借金」の形）。",
@@ -409,10 +433,14 @@
     "scripts/run-integration-tests.test.sh": "同上（CM の expect）。検査は append-only の表 3 つを名指しで要求するので配らない",
     "scripts/check-mutation-freshness.test.sh": "同上（CM の expect）。検査は stryker.config.json と npm script を要求するので配らない（hook 本体は配る）",
     "scripts/check-definer-authz-gaps.test.sh": "同上（CM の expect）。検査は eval-fixtures の実ケースを要求するので配らない（走査器は配る）",
-    "scripts/check-suspense-gaps.test.sh": "同上（CM の expect）。検査は eval-fixtures の実ケースを要求するので配らない（走査器は配る）"
+    "scripts/check-suspense-gaps.test.sh": "同上（CM の expect）。検査は eval-fixtures の実ケースを要求するので配らない（走査器は配る）",
+    "scripts/run-integration-tests.sh": "Codex 用（aidd-codex-vkumai）の鮮度の点検が、知らせの文の中で「導入先のリポジトリでこれを回す」と名前を挙げるだけで、点検からは起動しない。実行用のラッパーは docker と Supabase を前提にした部品を連れてくるので、Codex 用には同梱しない（Claude 用の aidd-vkumai には同梱済みで、そちらではこの免除に当たらない）",
+    "scripts/run-e2e-tests.sh": "同上（E2E の鮮度の点検の、知らせの文の中）",
+    "scripts/check-rls-mutation.sh": "同上（認可ポリシーの変異計測の鮮度の点検の、知らせの文の中）",
+    "scripts/run-mutation-tests.sh": "同上（製品コードの変異計測の鮮度の点検の、知らせの文の中）"
   },
-  "_allowUnresolvedReferencesMax": "逃がし口（同梱しない参照）の上限。放っておくと増えるので件数で見る。2026-09-11 に幽霊 15 件を消して 36 件になった。上げるときは、なぜ同梱できないかを allowUnresolvedReferences の行に書いてから上げる。2026-09-12 に 53 → 56（入れ子の走査・その壊し方の登録簿・本物の Workflow 実行で測るドリルの 3 件。理由は各行に書いた）。同日 56 → 59（**配らないと宣言していたのに配っていた検査 8 本を実際に外した**ため、残った文書・登録簿・コメントからの参照が宙に浮いた 3 件。検査そのものを配れない理由は checksNotDistributed 側に書いてある）。同日 59 → 61（**導入先の実体を要求する検査 8 本を配布から外した**ため、ラッパーの案内文と壊し方の登録簿からの参照が宙に浮いた 2 件）。同日 61 → 64（さらに 5 本を外したぶんの登録簿からの参照 4 件を足し、**同梱したことで不要になった 1 件**（check-catalog.mjs）を幽霊検知にしたがって消した）。",
-  "allowUnresolvedReferencesMax": 64,
+  "_allowUnresolvedReferencesMax": "2026-09-30 に 64 → 68（Codex 用プラグインへ鮮度の点検 4 本を入れたため、知らせの文の中の実行用ラッパー 4 本への参照が宙に浮いた。理由は各行）。逃がし口（同梱しない参照）の上限。放っておくと増えるので件数で見る。2026-09-11 に幽霊 15 件を消して 36 件になった。上げるときは、なぜ同梱できないかを allowUnresolvedReferences の行に書いてから上げる。2026-09-12 に 53 → 56（入れ子の走査・その壊し方の登録簿・本物の Workflow 実行で測るドリルの 3 件。理由は各行に書いた）。同日 56 → 59（**配らないと宣言していたのに配っていた検査 8 本を実際に外した**ため、残った文書・登録簿・コメントからの参照が宙に浮いた 3 件。検査そのものを配れない理由は checksNotDistributed 側に書いてある）。同日 59 → 61（**導入先の実体を要求する検査 8 本を配布から外した**ため、ラッパーの案内文と壊し方の登録簿からの参照が宙に浮いた 2 件）。同日 61 → 64（さらに 5 本を外したぶんの登録簿からの参照 4 件を足し、**同梱したことで不要になった 1 件**（check-catalog.mjs）を幽霊検知にしたがって消した）。",
+  "allowUnresolvedReferencesMax": 68,
   "emptyRepoExempt": {
     "_comment": "**何も無い導入先で回すと落ちる**検査の宣言（2026-09-12 新設）。配る検査は、対象が無ければ『対象なし』と言って通るのが決まり——そうでないと入口が『合格』と『見ていない』を区別できない（C-025）。ここに載るのは、この製品固有の前提（supabase の migration・統合テストの記録）を持つアダプター側の検査だけ。共通側（aidd-core）に 1 本でも載ったら設計の誤りとして扱う。",
     "_why": "2026-09-12 に空の git リポジトリで配る検査 36 本を回して実測した。共通側 29 本は 0 本が落ち、アダプター側 7 本のうち 4 本が落ちた。**その 4 本は同じ日にすべて直したので、いまこの表は空**——(1) 走査器が supabase/migrations を readdir して ENOENT で異常終了していた 2 本、(2) `git rev-parse \"HEAD:supabase\"` がコミットの無い木で標準出力にも書いてから失敗し、値が 2 行になって早期 exit が効いていなかった 2 本。表を空のまま残すのは、**次に同じ判断をする人へ「まず直せないか考える」と伝えるため**（免除は最後の手段）。名前を検査のコードへ焼き込むと腐っても気づけないので、理由つきの宣言にして門から読む。",
@@ -555,7 +583,7 @@
   },
   "checksNotDistributed": {
     "_comment": "配らない検査と、その理由。導入先に存在しないもの（このリポジトリの docs・カタログ・スキーマ）を検査していて、配ると必ず落ちるものだけをここに書く。「面倒だから」で足さない。",
-    "codex-session-start.test.sh": "対象の入口（codex-session-start.sh）を配っていない。scenario 17・18 は中心リポジトリの点検の一覧（scripts/lib/codex-session-start-checks.txt）を名指しで見る",
+    "codex-session-start.test.sh": "入口（codex-session-start.sh）は Codex 用の aidd-codex-vkumai で配るが、この検査は配らない。Codex 用の配布物には検査を運ぶ道が無く（doctor と依存変更の 2 本だけを名指しで入れている）、scenario 19 は「一覧の点検が状態ファイルを書かない」を中心リポジトリの一覧に対して見る。配布物の入口が動くことは build-plugin.test.sh の scenario 3c が、配布物の置き場所から動かして確かめる",
     "codex-hook-gap.test.sh": "中心リポジトリの `.claude/settings.json` と `.codex/hooks.json` の実登録の差を、中心リポジトリの一覧（scripts/lib/codex-hook-gap.json）と突き合わせる。導入先の hook の顔ぶれは別で、配ると必ず落ちる",
     "check-test-matrix.test.sh": "docs/agents/test-matrix.md の実データを検査する。形式は汎用だが、行の中身は導入先ごとに違う（形式だけを配るには雛形が要る。#535）",
     "check-promise-catalog.test.sh": "同上（promise-catalog.md の実データ）",

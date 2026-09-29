@@ -97,7 +97,7 @@ if [ -f "$CODEX_HOOKS" ]; then
   grep -qF 'claude/consumer-check' <<<"$CONTEXT_OUTPUT" && ok "作業対象のブランチを読む（PLUGIN_ROOT を Git root と誤認しない）" || ng "作業対象の Git root を読めない"
 fi
 
-echo "=== scenario 3c: vkumai 固有の Codex hook は aidd-codex-vkumai に4本だけ生成される ==="
+echo "=== scenario 3c: vkumai 固有の Codex hook は aidd-codex-vkumai に5本だけ生成される ==="
 # WHY(2026-09-28): 仕様書 §3 で初版から外した 4 本を、共通の aidd-codex に混ぜず別プラグインで配る
 #      （Claude 側の aidd-core / aidd-vkumai と同じ分け方）。共通側の hooks.json が不変であること
 #      （＝導入済み環境の再信頼が不要なこと）も対で確かめる。
@@ -107,10 +107,59 @@ if [ ! -f "$CV_HOOKS" ]; then
   ng "aidd-codex-vkumai の hooks.json が無い"
 else
   CV_COMMANDS="$(jq -r '.. | .command? // empty' "$CV_HOOKS")"
-  [ "$(printf '%s\n' "$CV_COMMANDS" | grep -c .)" -eq 4 ] && ok "vkumai 固有の Codex hook は4本" || ng "4本でない" "$CV_COMMANDS"
-  for name in check-direct-ddl-execution.sh codex-dependency-change-deny.sh codex-ai-check-track.sh codex-ai-check-suggest.sh; do
+  [ "$(printf '%s\n' "$CV_COMMANDS" | grep -c .)" -eq 5 ] && ok "vkumai 固有の Codex hook は5本" || ng "5本でない" "$CV_COMMANDS"
+  for name in check-direct-ddl-execution.sh codex-dependency-change-deny.sh codex-ai-check-track.sh codex-ai-check-suggest.sh codex-session-start.sh; do
     grep -qF '"${PLUGIN_ROOT}"/scripts/'"$name" <<<"$CV_COMMANDS" && ok "$name のパスを変換" || ng "$name のパスが変換されていない"
   done
+  # WHY(2026-09-30 実測): Codex の信頼の記録は「イベント・組の番号・組の中の番号」で持たれる。
+  #      hook を足すときに既存の hook の位置がずれると、導入済みの環境で信頼がどうなるか分からない。
+  #      0.1.4 までの 4 本が同じ位置にあることを、位置ごとに固定する。
+  CV_POSITIONS="$(jq -r '.hooks | to_entries[] | .key as $e | .value | to_entries[] | .key as $g | .value.hooks | to_entries[] | "\($e):\($g):\(.key) \(.value.command | sub("^.*/"; ""))"' "$CV_HOOKS" | sort)"
+  CV_EXPECTED_POSITIONS="$(printf '%s\n' \
+    'PostToolUse:0:0 codex-ai-check-track.sh' \
+    'PreToolUse:0:0 check-direct-ddl-execution.sh' \
+    'PreToolUse:1:0 codex-dependency-change-deny.sh' \
+    'SessionStart:0:0 codex-session-start.sh' \
+    'Stop:0:0 codex-ai-check-suggest.sh' | sort)"
+  [ "$CV_POSITIONS" = "$CV_EXPECTED_POSITIONS" ] && ok "既存の 4 本の位置は変わらず、入口は SessionStart の 1 本目" || ng "hook の位置が変わった（導入済みの環境で信頼し直しになりうる）" "$CV_POSITIONS"
+  # 入口が動かす点検と、点検が使う部品が同梱されている（仕様書 08）
+  CV_LIST="$CV_DIR/scripts/lib/codex-session-start-checks.txt"
+  if [ ! -f "$CV_LIST" ]; then
+    ng "点検の一覧が同梱されていない"
+  else
+    CV_CHECK_COUNT=0
+    CV_CHECK_BAD=""
+    while IFS= read -r line || [ -n "$line" ]; do
+      cname="${line%%#*}"
+      cname="$(printf '%s' "$cname" | tr -d '[:space:]')"
+      [ -z "$cname" ] && continue
+      CV_CHECK_COUNT=$((CV_CHECK_COUNT + 1))
+      [ -x "$CV_DIR/scripts/$cname" ] || CV_CHECK_BAD="${CV_CHECK_BAD} ${cname}"
+    done < "$CV_LIST"
+    [ "$CV_CHECK_COUNT" -ge 1 ] && ok "一覧から ${CV_CHECK_COUNT} 本を読めた" || ng "一覧から 1 本も読めない"
+    [ -z "$CV_CHECK_BAD" ] && ok "一覧の点検はすべて同梱され、実行できる" || ng "同梱されていない・実行できない点検がある" "$CV_CHECK_BAD"
+  fi
+  for part in lib/resolve-log-dir.sh lib/run-freshness.py lib/worktree-hash.sh lib/aidd-doctor.mjs lib/stdout-sync.mjs lib/rls-mutants.json; do
+    [ -f "$CV_DIR/scripts/$part" ] && ok "部品 $part を同梱" || ng "部品 $part が同梱されていない"
+  done
+  # 配布物の入口を、配布物の置き場所から動かす。見せるのは、運用文書も計測の記録も hook の登録も無い作業場所
+  CV_EMPTY="$WORK/cv-empty-dest"
+  mkdir -p "$CV_EMPTY"
+  CV_IN="$(jq -n -c --arg cwd "$CV_EMPTY" '{session_id: "t", source: "startup", cwd: $cwd}')"
+  CV_OUT="$(printf '%s' "$CV_IN" | CLAUDE_PROJECT_DIR="$REPO_ROOT" "$CV_DIR/scripts/codex-session-start.sh" 2>"$WORK/cv-entry.err")"
+  CV_RC=$?
+  [ "$CV_RC" -eq 0 ] && ok "空の導入先でも exit 0" || ng "空の導入先で異常終了" "rc=$CV_RC"
+  if grep -q -e '起動できなかった' -e '異常終了した' <<<"$CV_OUT"; then
+    ng "空の導入先で、起動できない・異常終了した点検がある" "$CV_OUT"
+  else
+    ok "空の導入先で、起動できない・異常終了した点検が無い"
+  fi
+  if grep -q 'hook を 1 本も見つけられなかった' <<<"$CV_OUT"; then
+    ng "プラグインの hook を数えず、「1 本も無い」と知らせている" "$CV_OUT"
+  else
+    ok "プラグインの hook を数えている（「1 本も無い」と知らせない）"
+  fi
+  [ -s "$WORK/cv-entry.err" ] && ng "標準エラーに出力がある" "$(head -3 "$WORK/cv-entry.err")" || ok "標準エラーが空"
   if grep -qE 'check-branch-|codex-skip-marker' <<<"$CV_COMMANDS"; then ng "共通 hook が固有側に混入"; else ok "共通 hook は固有側に出力しない"; fi
   jq -e '.hooks.PreToolUse[0].matcher == "Bash|mcp__.*execute_sql"' "$CV_HOOKS" >/dev/null && ok "DDL hook の matcher（MCP execute_sql 含む）を維持" || ng "DDL hook の matcher が変わった"
   jq -e '.hooks.Stop[0].hooks[0].statusMessage | length > 0' "$CV_HOOKS" >/dev/null && ok "Stop hook の statusMessage を維持" || ng "statusMessage が落ちた"
@@ -156,13 +205,47 @@ scan_doc_pointers() { # $1=プラグインのディレクトリ。「ファイ�
   done
   return 0
 }
+# WHY(2026-09-30): 期限の点検 4 本は、運用文書に書かれた「次回実施予定日」を**読んで**判定する。
+#      文書が無ければ黙るので、知らせが出るときには、その文書は必ず導入先にある。
+#      「点検が自分で読む文書」への案内だけを通す（点検の名前と文書の名前の組で固定する。
+#      同じ点検でも、別の文書への案内は通さない）。
+drop_self_read_pointers() { # 標準入力: scan_doc_pointers の出力
+  local line file doc rest
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    file="${line%%:*}"
+    case "$file" in
+      check-access-review-staleness.sh) doc='docs/agents/access-review-runbook.md' ;;
+      check-dependency-update-staleness.sh) doc='docs/agents/dependency-update-runbook.md' ;;
+      check-upstream-docs-review-staleness.sh) doc='docs/agents/upstream-docs-review.md' ;;
+      check-fault-injection-drill-staleness.sh) doc='docs/agents/fault-injection-drill.md' ;;
+      *) printf '%s\n' "$line"; continue ;;
+    esac
+    # 読む文書への案内を消して、まだ別の文書への案内が残っていれば出す
+    rest="${line//$doc/}"
+    if grep -q -E 'docs/(agents|superpowers)/' <<<"$rest"; then
+      printf '%s\n' "$line"
+    fi
+  done
+  return 0
+}
 for dir in "$WORK/a/aidd-codex" "$WORK/a/aidd-codex-vkumai"; do
   name="$(basename "$dir")"
   SCANNED="$(find "$dir/scripts" -name '*.sh' ! -name '*.test.sh' -type f 2>/dev/null | wc -l | tr -d ' ')"
   [ "$SCANNED" -gt 0 ] && ok "$name: ${SCANNED} 本を走査した（空振りしていない）" || ng "$name: 走査対象が 0 本"
-  POINTERS="$(scan_doc_pointers "$dir")"
+  POINTERS="$(scan_doc_pointers "$dir" | drop_self_read_pointers)"
   if [ -z "$POINTERS" ]; then ok "$name: 警告文に vkumai の文書への案内が無い"; else ng "$name: 警告文が導入先に無い文書を指している" "$POINTERS"; fi
 done
+# 「点検が自分で読む文書」の通し方が、広すぎないこと
+SELF_READ_RED="$(printf '%s\n' \
+  'check-access-review-staleness.sh:57:MSG="…（docs/agents/access-review-runbook.md「## 次回実施予定日」）。"' \
+  'check-access-review-staleness.sh:58:MSG="…（docs/agents/common.md 参照）。"' \
+  'check-access-review-staleness.sh:59:MSG="…docs/agents/access-review-runbook.md と docs/agents/decisions.md"' \
+  'check-branch-pr-status.sh:10:MSG="…docs/agents/access-review-runbook.md"' | drop_self_read_pointers)"
+if grep -qF ':57:' <<<"$SELF_READ_RED"; then ng "点検が自分で読む文書への案内まで落としている" "$SELF_READ_RED"; else ok "点検が自分で読む文書への案内は通す"; fi
+grep -qF ':58:' <<<"$SELF_READ_RED" && ok "同じ点検でも、別の文書への案内は見つける" || ng "別の文書への案内を通している" "$SELF_READ_RED"
+grep -qF ':59:' <<<"$SELF_READ_RED" && ok "読む文書と別の文書が同じ行にあっても見つける" || ng "同じ行の別の文書を通している" "$SELF_READ_RED"
+grep -qF 'check-branch-pr-status.sh:10:' <<<"$SELF_READ_RED" && ok "別の点検からの案内は見つける" || ng "別の点検からの案内を通している" "$SELF_READ_RED"
 # 壊して落ちることを確かめる（案内を 1 つ戻すと見つける。コメントとテストは見ない）
 POINTER_FIXTURE="$WORK/pointer-fixture"
 mkdir -p "$POINTER_FIXTURE/scripts"

@@ -63,7 +63,9 @@ fi
 
 SUMMARY="$(printf '%s' "$STALE_JSON" | jq -r '.[] | "- #\(.number) \(.title) (\(.url))"')"
 
-MSG="blockedラベルの付いたissueが${STALE_DAYS}日以上更新されていません。再開条件（docs/agents/decisions.mdに記載）を満たすようになっていないか確認してください（issue #453）。
+# WHY(2026-09-30): 文書への案内（再開条件の置き場所）を外した。プラグインを入れた先にその文書は無く、
+#      案内されると探しに行って見つけられない（仕様書 06 と同じ扱い）。再開条件は各 issue に書いてある。
+MSG="blockedラベルの付いたissueが${STALE_DAYS}日以上更新されていません。各issueに書かれた再開条件を満たすようになっていないか確認してください（issue #453）。
 ${SUMMARY}"
 
 jq -n --arg msg "$MSG" '{

@@ -45,6 +45,17 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}\"/scripts/codex-session-start.sh",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

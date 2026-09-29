@@ -16,3 +16,4 @@
 | 0.1.2 | 破壊的変更なし（差は文書のみ） | 不要 |
 | 0.1.3 | 破壊的変更なし（`aidd-codex-vkumai` の追加。既存 3 本の差は文書のみ） | 不要（新プラグインは任意で導入） |
 | 0.1.4 | 破壊的変更なし（hook の stdin / stdout の形・`permissionDecision` の意味・hook 定義は不変）。ただし**止める範囲が変わる**: 前置き付きのコマンドと Codex のファイル編集を止めるようになり、skip マーカーを読むだけの操作と `psql` の版確認だけは止めなくなった。Codex 用ラッパーは判定本体が欠けると exit 2 で全部止める。aidd-vkumai は、自分が起動したローカル Supabase をセッション終了時に止める hook が増える | 不要。Codex の実機確認に `psql --version` を使っていた手順は `psql -c "select 1"` などへ変える（RELEASE.md） |
+| 0.1.5 | 破壊的変更なし（既存の hook の入出力・位置・定義は不変）。Codex 用の aidd-codex-vkumai に、セッションの始まりの hook が 1 本増える。その中の 1 本（`check-hooks-path-alive.sh`）は、導入先の git の設定（`core.hooksPath`）が実在しない場所を指しているときに直す（Claude Code 用の aidd-core に入っているものと同じ正本） | Codex では、更新の後に `/hooks` で新しい 1 本を信頼する。信頼しなければ、0.1.4 と同じ動きのまま |

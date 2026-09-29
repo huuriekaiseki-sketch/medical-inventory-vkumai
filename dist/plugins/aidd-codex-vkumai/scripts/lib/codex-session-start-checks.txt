@@ -1,0 +1,28 @@
+# Codex のセッション開始時に、入口（scripts/codex-session-start.sh）が動かす点検の一覧。
+# 仕様書: docs/specs/codex-hook-parity/07-claude-only-hooks.md（区分 A）
+#
+# 書き方: 1 行に 1 本、scripts/ の直下にあるスクリプトの名前だけを書く（パスは書けない）。
+#         # より後ろはコメント。
+#
+# 載せてよい条件:
+#   - リポジトリの状態を見るだけで、どのツールから動かしても同じ結果になる
+#   - 状態ファイルを書かない（Claude Code と同じ印を共有すると、片方がもう片方を黙らせる）
+#   - 作業を止めない（知らせるだけ）
+#
+# 順番: 手元だけで終わるものを先、GitHub へ問い合わせるものを最後に置く。
+#       合計時間の上限に達したとき、飛ばされるのを通信の遅いものにするため。
+#
+# 載せていないもの: check-stale-worktrees.sh
+#   .aidd/ に「知らせ済み」の印を書く。初回は GitHub への問い合わせで約 5 秒かかる（2026-09-30 実測）。
+check-hooks-path-alive.sh
+check-fault-injection-drill-staleness.sh
+check-upstream-docs-review-staleness.sh
+check-dependency-update-staleness.sh
+check-access-review-staleness.sh
+check-empty-session-report.sh
+check-integration-freshness.sh
+check-e2e-freshness.sh
+check-rls-mutation-freshness.sh
+check-mutation-freshness.sh
+check-hook-dependencies.sh
+check-blocked-issues-staleness.sh

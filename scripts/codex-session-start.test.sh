@@ -225,13 +225,58 @@ RC=$?
 [ "$RC" -eq 0 ] && ok "exit 0" || ng "exit 0" "rc=$RC"
 [ -z "$OUT" ] && ok "出力なし" || ng "出力なし" "$OUT"
 
-echo "=== scenario 14: Claude Code の環境変数を、点検へ引き継がない ==="
-# WHY: Claude Code の端末から Codex を起動すると、CLAUDE_PROJECT_DIR が別の worktree を
-#      指したまま残る。点検がそれを信じると、いま開いているのと違う木を見て知らせる。
-printf '%s\n' "echo-env.sh" > "$WORK/list.txt"
-OUT="$(printf '%s' "$INPUT" | CLAUDE_PROJECT_DIR="/somewhere/else" CODEX_SESSION_START_CHECKS="$WORK/list.txt" CODEX_SESSION_START_CHECK_DIR="$FIX" "$ENTRY" 2>/dev/null)"
+echo "=== scenario 14: 点検へ渡す根は、いま開いている作業場所の git の最上位 ==="
+# WHY: 点検は CLAUDE_PROJECT_DIR を根にする。プラグインから動くと点検の置き場所はキャッシュになり、
+#      Claude Code の端末から起動すると引き継いだ値が別の worktree を指す。どちらも、
+#      動いたのに違う場所を見ることになる。Codex が渡す cwd から決め、引き継いだ値は使わない。
+make_check echo-pwd.sh \
+  'cat > /dev/null' \
+  'jq -n --arg msg "pwd=$(pwd -P)" '"'"'{systemMessage: $msg}'"'"
+PROJ="$WORK/proj"
+mkdir -p "$PROJ/sub/deep"
+git -C "$PROJ" init -q 2>/dev/null
+PROJ_REAL="$(cd "$PROJ" && pwd -P)"
+printf '%s\n' "echo-env.sh" "echo-pwd.sh" > "$WORK/list.txt"
+IN_GIT="$(jq -n -c --arg cwd "$PROJ/sub/deep" '{session_id: "s-1", source: "startup", cwd: $cwd}')"
+OUT="$(printf '%s' "$IN_GIT" | CLAUDE_PROJECT_DIR="/somewhere/else" CODEX_SESSION_START_CHECKS="$WORK/list.txt" CODEX_SESSION_START_CHECK_DIR="$FIX" "$ENTRY" 2>/dev/null)"
 MSG="$(printf '%s' "$OUT" | jq -r '.systemMessage // empty' 2>/dev/null)"
-[ "$MSG" = "claude_dir=unset" ] && ok "CLAUDE_PROJECT_DIR は渡らない" || ng "CLAUDE_PROJECT_DIR は渡らない" "$MSG"
+assert_not_contains "引き継いだ値は使わない" "/somewhere/else" "$MSG"
+assert_contains "深い場所から起動しても、根は git の最上位" "claude_dir=${PROJ_REAL}" "$MSG"
+assert_contains "点検は根で動く" "pwd=${PROJ_REAL}" "$MSG"
+assert_not_contains "点検の置き場所を根にしない" "claude_dir=${FIX}" "$MSG"
+
+PLAIN="$WORK/plain"
+mkdir -p "$PLAIN"
+# git の外であることを確かめてから測る（一時フォルダが何かのリポジトリの中にあると、前提が崩れる）
+if git -C "$PLAIN" rev-parse --show-toplevel >/dev/null 2>&1; then
+  ng "一時フォルダが git の中にあり、git の外の場合を測れない"
+else
+  IN_PLAIN="$(jq -n -c --arg cwd "$PLAIN" '{session_id: "s-1", source: "startup", cwd: $cwd}')"
+  printf '%s\n' "echo-env.sh" > "$WORK/list.txt"
+  OUT="$(printf '%s' "$IN_PLAIN" | CLAUDE_PROJECT_DIR="/somewhere/else" CODEX_SESSION_START_CHECKS="$WORK/list.txt" CODEX_SESSION_START_CHECK_DIR="$FIX" "$ENTRY" 2>/dev/null)"
+  MSG="$(printf '%s' "$OUT" | jq -r '.systemMessage // empty' 2>/dev/null)"
+  [ "$MSG" = "claude_dir=${PLAIN}" ] && ok "git の外では、cwd をそのまま根にする" || ng "git の外では、cwd をそのまま根にする" "$MSG"
+fi
+
+echo "=== scenario 14b: プラグインから動いているときだけ、プラグインの置き場所を点検へ渡す ==="
+make_check echo-plugin.sh \
+  'cat > /dev/null' \
+  'jq -n --arg msg "plugin_root=${CLAUDE_PLUGIN_ROOT:-unset}" '"'"'{systemMessage: $msg}'"'"
+printf '%s\n' "echo-plugin.sh" > "$WORK/list.txt"
+OUT="$(printf '%s' "$INPUT" | CLAUDE_PLUGIN_ROOT="/inherited/plugin" CODEX_SESSION_START_CHECKS="$WORK/list.txt" CODEX_SESSION_START_CHECK_DIR="$FIX" "$ENTRY" 2>/dev/null)"
+MSG="$(printf '%s' "$OUT" | jq -r '.systemMessage // empty' 2>/dev/null)"
+[ "$MSG" = "plugin_root=unset" ] && ok "リポジトリから動くときは、引き継いだ値を外す" || ng "リポジトリから動くときは、引き継いだ値を外す" "$MSG"
+
+PLUG="$WORK/plug"
+mkdir -p "$PLUG/scripts/lib" "$PLUG/.codex-plugin"
+echo '{"name":"x"}' > "$PLUG/.codex-plugin/plugin.json"
+cp -p "$ENTRY" "$PLUG/scripts/codex-session-start.sh"
+cp -p "$FIX/echo-plugin.sh" "$PLUG/scripts/echo-plugin.sh"
+printf '%s\n' "echo-plugin.sh" > "$PLUG/scripts/lib/codex-session-start-checks.txt"
+PLUG_REAL="$(cd "$PLUG" && pwd)"
+OUT="$(printf '%s' "$INPUT" | CLAUDE_PLUGIN_ROOT="/inherited/plugin" "$PLUG/scripts/codex-session-start.sh" 2>/dev/null)"
+MSG="$(printf '%s' "$OUT" | jq -r '.systemMessage // empty' 2>/dev/null)"
+[ "$MSG" = "plugin_root=${PLUG_REAL}" ] && ok "プラグインから動くときは、自分の置き場所を渡す" || ng "プラグインから動くときは、自分の置き場所を渡す" "$MSG"
 
 echo "=== scenario 15: 標準エラーに何も出さない（打ち切りのときも） ==="
 run_entry "slow.sh" "" 1
