@@ -82,6 +82,24 @@ export function scriptNameOf(command) {
   return m ? m[1] : null
 }
 
+/**
+ * その登録は、スクリプトを**直接**起動するか（`bash x.sh` や `node x.mjs` のように
+ * 実行系を前に置いていないか）。直接起動なら、実行ビットが無いと起動できない。
+ */
+export function launchesDirectly(command) {
+  return !/^\s*(?:bash|sh|zsh|node|python3|npx|env)\s/.test(command)
+}
+
+/** 実行ビットが立っているか */
+function isExecutable(file) {
+  try {
+    fs.accessSync(file, fs.constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** スクリプトの実体を探す */
 function findScript(name, roots) {
   for (const root of roots) {
@@ -135,6 +153,19 @@ export function diagnose({ repoRoot, pluginRoots = [], available = null }) {
   const scripts = new Map() // name -> { file, runtimes: Map<name, failMode> }
   let unresolved = 0
 
+  // WHY(実行ビットも見る。2026-09-30): 実体があっても、**実行ビットが無ければ起動できない**。
+  //      hook の登録はスクリプトを直接呼ぶ（前に bash や node を置かない）ので、
+  //      100644 で入ったスクリプトは呼ばれるたびに「権限がありません」で終わり、何も起きない。
+  //      2026-09-10〜11 に足した 3 本（check-rls-mutation-freshness / check-mutation-freshness /
+  //      check-hook-dependencies）がこの状態で、**追加してから一度も動いていなかった**。
+  //      最後の 1 本はこの診断を呼ぶ hook そのものなので、診断は自分が動いていないことを
+  //      自分では知らせられなかった。だから CI（check-aidd-doctor.test.sh）でも見る。
+  const direct = new Set() // 直接起動される名前
+  for (const { command } of commands) {
+    const name = scriptNameOf(command)
+    if (name && launchesDirectly(command)) direct.add(name)
+  }
+
   for (const { command } of commands) {
     const name = scriptNameOf(command)
     if (!name) continue
@@ -142,7 +173,7 @@ export function diagnose({ repoRoot, pluginRoots = [], available = null }) {
     const file = findScript(name, roots)
     if (!file) {
       unresolved++
-      scripts.set(name, { file: null, runtimes: new Map() })
+      scripts.set(name, { file: null, runtimes: new Map(), executable: false })
       continue
     }
     const source = fs.readFileSync(file, 'utf8')
@@ -150,7 +181,7 @@ export function diagnose({ repoRoot, pluginRoots = [], available = null }) {
     for (const r of RUNTIMES) {
       if (r.re.test(source)) runtimes.set(r.name, failMode(source, r.name))
     }
-    scripts.set(name, { file, runtimes })
+    scripts.set(name, { file, runtimes, executable: isExecutable(file) })
   }
 
   const env = {}
@@ -177,8 +208,13 @@ export function diagnose({ repoRoot, pluginRoots = [], available = null }) {
   //      そのせいで ① 「実体 N 本」という表示が嘘をつき ② fail-open 防止（実体 0 本なら落とす）が
   //      **実体ゼロでも名前さえあれば発火しない**という 2 つの穴が空いていた。
   const missingScripts = [...scripts.entries()].filter(([, s]) => !s.file).map(([name]) => name)
+  // 実体はあるのに、直接起動されるのに、実行ビットが無いもの
+  const notExecutable = [...scripts.entries()]
+    .filter(([name, s]) => s.file && direct.has(name) && !s.executable)
+    .map(([name]) => name)
 
   return {
+    notExecutable,
     registrations: commands.length,
     // 実体のある本数だけを「実体」と数える（名前の種類は registeredNames）
     scripts: scripts.size - unresolved,
@@ -269,6 +305,15 @@ if (isRunAsCli()) {
     for (const name of r.missingScripts) writeLine(`  - ${name}（実体なし）`)
   }
 
+  // 実体はあるが起動できないもの。実体なしと同じく、呼ばれても何も起きない
+  if (r.notExecutable.length > 0) {
+    writeLine(
+      `aidd-doctor: hook に登録された ${r.notExecutable.length} 本のスクリプトに実行ビットが無い` +
+        `（呼ばれても起動できない。chmod +x と git update-index --chmod=+x で直す）`
+    )
+    for (const name of r.notExecutable) writeLine(`  - ${name}（実行ビットなし）`)
+  }
+
   if (r.atRisk.length > 0) {
     const byRuntime = {}
     for (const a of r.atRisk) (byRuntime[a.runtime] ??= []).push(a)
@@ -286,7 +331,8 @@ if (isRunAsCli()) {
 
   writeLine(
     `registrations=${r.registrations} scripts=${r.scripts} unresolved=${r.unresolved} atRisk=${r.atRisk.length}` +
-      ` env=${Object.entries(r.env).map(([k, v]) => `${k}:${v ? 'y' : 'n'}`).join(',')}`
+      ` env=${Object.entries(r.env).map(([k, v]) => `${k}:${v ? 'y' : 'n'}`).join(',')}` +
+      ` notExecutable=${r.notExecutable.length}`
   )
-  process.exit(r.atRisk.length > 0 || r.unresolved > 0 ? 1 : 0)
+  process.exit(r.atRisk.length > 0 || r.unresolved > 0 || r.notExecutable.length > 0 ? 1 : 0)
 }
