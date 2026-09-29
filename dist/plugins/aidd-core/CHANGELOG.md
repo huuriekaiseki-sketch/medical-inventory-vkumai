@@ -9,6 +9,9 @@
 - **Claude Code 側の判定は変わらない**（`apply_patch` は Codex だけが使うツール名）
 - aidd-codex-vkumai の `codex-ai-check-suggest.sh` / `codex-ai-check-track.sh` が、記録の置き場に書けなくても
   失敗として終わらないようにした（仕様書 `docs/specs/codex-hook-parity/05-stop-hook-never-fails.md`）。Codex 専用
+- Codex 用ラッパー 2 本（`codex-skip-marker-deny.sh` / `codex-dependency-change-deny.sh`）が、判定本体が無い・
+  失敗した・読めない結果を返したときに exit 2 で止める側に倒すようにした。`aidd-codex` の doctor は部品の
+  ファイルそのものも見る（仕様書 `docs/specs/codex-hook-parity/04-wrapper-fail-closed.md`）。Codex 専用
 - hook 定義（`hooks/hooks.json`）は 4 プラグインとも不変。**Codex 側の再信頼は不要**
 - Codex CLI 0.147.0 の実機で deny を実測した（`docs/plugin/codex/evidence/2026-09-29-apply-patch-verify.md`。
   0.1.3 のキャッシュの判定本体を一時的に差し替えて測った。配布した版そのものでの発火は、配ってから測る）

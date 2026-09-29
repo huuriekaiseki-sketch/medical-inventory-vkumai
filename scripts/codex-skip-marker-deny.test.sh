@@ -106,6 +106,49 @@ run_hook "$input"
 assert_eq "$EXIT_CODE" "0" "exit 0"
 assert_empty "$OUT" "出力が空である"
 
+# --- 判定本体が欠けた・壊れたときは止める側に倒す。docs/specs/codex-hook-parity/04-wrapper-fail-closed.md ---
+# WHY: ラッパーは判定本体に丸投げしている。本体が無い・失敗する・読めない結果を返すとき、
+# ラッパーは rc=127 などで抜けるだけだった（2026-09-29 実測）。Codex が exit 2 以外の失敗を
+# 「止める」と扱うかは分かっていないので、jq 不在のときと同じく exit 2 に揃える。
+WRAP_DIR="$(mktemp -d)"
+trap 'rm -rf "$WRAP_DIR"' EXIT
+GUARD_NAME="check-skip-marker-write.sh"
+run_with_guard() { # $1=判定本体の中身（空なら置かない）
+  rm -f "$WRAP_DIR/$GUARD_NAME"
+  cp "$SCRIPT" "$WRAP_DIR/wrapper.sh"
+  [ -n "$1" ] && printf '%s\n' "$1" > "$WRAP_DIR/$GUARD_NAME"
+  set +e
+  OUT="$(jq -n '{tool_name: "Bash", tool_input: {command: "touch .claude/.verify-state/abc.skip"}}' | bash "$WRAP_DIR/wrapper.sh" 2>"$WRAP_DIR/err.txt")"
+  EXIT_CODE=$?
+  set -e
+  ERR="$(cat "$WRAP_DIR/err.txt")"
+}
+
+echo "=== scenario 8: 判定本体が無い → exit 2、理由に欠けているものと直し方が出る ==="
+run_with_guard ""
+assert_eq "$EXIT_CODE" "2" "exit 2(fail-closed)"
+assert_contains "$ERR" "$GUARD_NAME" "何が欠けているかを名指しする"
+assert_contains "$ERR" "入れ直し" "直し方が書いてある"
+
+echo "=== scenario 9: 判定本体が失敗した → exit 2 ==="
+run_with_guard 'cat >/dev/null; exit 1'
+assert_eq "$EXIT_CODE" "2" "exit 1 で終わる本体でも exit 2"
+run_with_guard 'cat >/dev/null; exit 2'
+assert_eq "$EXIT_CODE" "2" "exit 2 で終わる本体は exit 2 のまま"
+
+echo "=== scenario 10: 判定本体が読めない結果を返した → exit 2 ==="
+run_with_guard 'cat >/dev/null; echo "not json {"'
+assert_eq "$EXIT_CODE" "2" "JSON でない出力は exit 2"
+assert_empty "$OUT" "壊れた出力をそのまま Codex へ渡さない"
+
+echo "=== scenario 11: 判定本体が沈黙 / deny を返す → そのまま通す（対照） ==="
+run_with_guard 'cat >/dev/null; exit 0'
+assert_eq "$EXIT_CODE" "0" "沈黙は exit 0"
+assert_empty "$OUT" "沈黙は沈黙のまま"
+run_with_guard 'cat >/dev/null; echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"x\"}}"'
+assert_eq "$EXIT_CODE" "0" "deny は exit 0"
+assert_contains "$OUT" '"permissionDecision": "deny"' "deny は deny のまま"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

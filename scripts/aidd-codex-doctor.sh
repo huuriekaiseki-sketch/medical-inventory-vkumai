@@ -26,6 +26,25 @@ for name in "${HOOK_NAMES[@]}"; do
   fi
 done
 
+# hooks.json に名前が書いてあっても、スクリプトが無い・実行できないなら hook は動かない。
+# 登録の有無とは別に、部品のファイルそのものを見る（仕様書 04）。
+# あり = ファイルがあり実行できる / なし = ファイルが無い / 実行不可 = あるが実行ビットが無い
+part_state() {
+  local file="$SCRIPT_DIR/$1"
+  if [ ! -f "$file" ]; then echo "なし"
+  elif [ ! -x "$file" ]; then echo "実行不可"
+  else echo "あり"
+  fi
+}
+# ラッパーが `bash <判定本体>` で呼ぶ相方。実行ビットは要らないので、ある / なしだけを見る
+GUARD_BODY="check-skip-marker-write.sh"
+guard_body_state() { if [ -f "$SCRIPT_DIR/$GUARD_BODY" ] && [ -r "$SCRIPT_DIR/$GUARD_BODY" ]; then echo "あり"; else echo "なし"; fi; }
+
+for name in "${HOOK_NAMES[@]}"; do
+  echo "部品 $name: $(part_state "$name")"
+done
+echo "部品 $GUARD_BODY: $(guard_body_state)"
+
 # Codex の公開ドキュメントに、hook の信頼記録を読む安定した設定キー・CLI がない。
 # enabled や plugin の存在を信頼済みと読み替えない。
 echo "信頼状態: 不明（読み取り可能な公開インターフェースを確認できない）"
@@ -79,7 +98,14 @@ for name in "${HOOK_NAMES[@]}"; do
   missing=()
   has_command jq || missing+=("jq なし")
   if has_command jq && ! has_hook "$PLUGIN_HOOKS" "$name"; then missing+=("hook 欠落"); fi
+  case "$(part_state "$name")" in
+    なし) missing+=("部品なし") ;;
+    実行不可) missing+=("実行不可") ;;
+  esac
   case "$name" in
+    codex-skip-marker-deny.sh)
+      [ "$(guard_body_state)" = "あり" ] || missing+=("判定本体なし")
+      ;;
     check-branch-pr-status.sh)
       has_command git || missing+=("git なし")
       has_command gh || missing+=("gh なし")

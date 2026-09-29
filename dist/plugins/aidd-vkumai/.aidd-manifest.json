@@ -4,7 +4,7 @@
   "files": {
     ".claude-plugin/plugin.json": "f87ecd2e7de7d0c65e9bfadbca0f14b45fea638acafd600e299861b8e6ab7a48",
     "BREAKING.md": "6f48497efff720061dc9866f54c530a592a970b39b63938ae7c27324d8002c22",
-    "CHANGELOG.md": "a5a912fd9a0aa7452370c98a48605936da0cccfb4aa974fcb49f90da45657f4f",
+    "CHANGELOG.md": "60873aabcc76b8002dad220248c2f1e0c5218171be6e831e87e5f4c561d2b936",
     "COMPATIBILITY.md": "5fdc16522007a777b5ea7147b6e021cd6973ab33df9aa4641291eb8283682973",
     "KNOWN-LIMITS.md": "c1df0711ca0f70ff012064db6999d961b63015ca293ebfe13bc0c24fcfe5e4c6",
     "MIGRATION.md": "ed96a1db2d1a72fdc50d5c68066b728a349616ac8d741c82d84bd84550ce34a0",
@@ -26,7 +26,7 @@
     "scripts/check-config-drift.sh": "546a36fc92cc1f2ee5edf56410011f59d03a1960d97a60fca1ad66d6ad9fbf73",
     "scripts/check-config-drift.test.sh": "8bd0a9ee6d8da643b7180509ecda2e5b7218671ccbd4d26ad31552c7bc3eac90",
     "scripts/check-dependency-change.sh": "053eb59fe5c4d5f25606adecf11291d8ad23987340584561f988e3ffbb60be91",
-    "scripts/check-dependency-change.test.sh": "fe6697fb350086e4df5eff6eaf6d684f74155f8e911939cc6087cb2fffe22b6f",
+    "scripts/check-dependency-change.test.sh": "87288f94b888766e726b2ca956d2b7ac7607d55104ce79308192e7bdcede0385",
     "scripts/check-dependency-update-staleness.sh": "f384a830e2fa0cac2c1a24c8cd2f0a697246323252a0d8f5edfa0405430e64d2",
     "scripts/check-direct-ddl-execution.sh": "d349e2973bc4e9a260d223f9151542b333db295ccb987cd07e6485d7da239247",
     "scripts/check-e2e-freshness.sh": "852f237ca2c5be6305123cc1d6a4437b193e3624ae4f4512528ca2f37dcf9b27",

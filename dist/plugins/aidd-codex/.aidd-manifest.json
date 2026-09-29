@@ -3,17 +3,17 @@
   "algorithm": "sha256",
   "files": {
     ".codex-plugin/plugin.json": "a3eff7965dba77af32ffe4f386b619ceb53fd42368d0a899e794adbd2d9a9636",
-    "CHANGELOG.md": "32c93f7043d3b6200ea35d28da91fe44d4dfa9dc4fc6a23ba93808dbc92b2f16",
+    "CHANGELOG.md": "8862a1d3daff5ed874401c5f508dc780535589f903f9e6cf245060c5b634fa8b",
     "COMPATIBILITY.md": "537ca6fec61a222e1e1eef129b2b8c482cd93d1656f5c0a19a9b4682721f72b7",
-    "KNOWN-LIMITS.md": "3b6ffb379f0807602e448ae2d812b88444bbe8af3d10adc9ca0fe79c5999d623",
+    "KNOWN-LIMITS.md": "7ec844b1b7f2806476f0909ba73977d06c65c84cbca7492c03b98db253b465f3",
     "hooks/hooks.json": "9a9e189b96a0df1388d351009fe4bc681f9516d76b5cdcea97e4054d9733a8b2",
-    "scripts/aidd-codex-doctor.sh": "30281cf23aee4b456615781da9636ad3f53c376c87e344f292ba085c165e0068",
-    "scripts/aidd-codex-doctor.test.sh": "06e20a59c0f7f4387fc03df629047c1aa7e2f150552bbbcddde1e9b3b900d46c",
+    "scripts/aidd-codex-doctor.sh": "9b47ed82778763c940d2d459383dd56c13357eb000ba1a7b760009bb86709473",
+    "scripts/aidd-codex-doctor.test.sh": "1640deaa5d0798fffe864882984e41bb31bb6faae8465ffa1ad41227c041e6ea",
     "scripts/check-branch-pr-status.sh": "a747d4e4afc1210ff82450fcfd8ae3c1fc916620e8c643c7757d1c6810bab388",
     "scripts/check-branch-tool-ownership.sh": "090f6f2f9fecf16b60dd0e79dc7470a09de2a10974d9eae249f79e5932210c3e",
     "scripts/check-local-main-freshness.sh": "f0940bb7cb6858cb07db540210e32ffc49f3ec19d1a18a654f76712c8d48985f",
     "scripts/check-skip-marker-write.sh": "b7f4bc4630fbd0df1d72058a6704f98add4ed3f89c69a34ded07d12020fabea5",
-    "scripts/codex-skip-marker-deny.sh": "d4129f1995f7bfe7ea7691bb3c2219070c1706aba5b118f1ceae96e30b90a6e2",
-    "skills/aidd-doctor/SKILL.md": "35a969a18bf9a06c6bebe7c084d3f9e0ab1d1a044daeefcbcd43ddfc190f1372"
+    "scripts/codex-skip-marker-deny.sh": "8472b9a1b888c7be9b10fa0665205e43cc422fb70af5697a16fe5956d7eb5aa7",
+    "skills/aidd-doctor/SKILL.md": "53dad0a58d151bec21573f9fd891c09ed6f9a61b1c0b98bf95c46070317d76e9"
   }
 }

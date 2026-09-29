@@ -15,10 +15,23 @@ command -v jq >/dev/null 2>&1 || { echo "jq not found: codex-dependency-change-d
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUARD="$SCRIPT_DIR/check-dependency-change.sh"
 
+# WHY(fail-closed): codex-skip-marker-deny.sh と同じ。判定本体が無い・失敗する・読めない結果を
+# 返すときは、jq 不在のときと同じ exit 2 に揃える
+# （docs/specs/codex-hook-parity/04-wrapper-fail-closed.md）。
+fail_closed() {
+  echo "codex-dependency-change-deny.sh: $1 守りが効かないので止めました。プラグイン（または scripts/）を入れ直してください。" >&2
+  exit 2
+}
+
+[ -f "$GUARD" ] && [ -r "$GUARD" ] || fail_closed "判定本体 check-dependency-change.sh が見つかりません（${GUARD}）。"
+
 INPUT="$(cat)"
-OUT="$(printf '%s' "$INPUT" | bash "$GUARD")"
+GUARD_RC=0
+OUT="$(printf '%s' "$INPUT" | bash "$GUARD")" || GUARD_RC=$?
+[ "$GUARD_RC" -eq 0 ] || fail_closed "判定本体 check-dependency-change.sh が失敗しました（終了コード ${GUARD_RC}）。"
 
 if [ -n "$OUT" ]; then
+  printf '%s' "$OUT" | jq empty >/dev/null 2>&1 || fail_closed "判定本体 check-dependency-change.sh の出力を読めません。"
   printf '%s' "$OUT" | jq '
     if .hookSpecificOutput.permissionDecision == "ask" then
       .hookSpecificOutput.permissionDecision = "deny"

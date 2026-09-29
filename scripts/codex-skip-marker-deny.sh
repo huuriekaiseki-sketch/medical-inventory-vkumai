@@ -18,10 +18,25 @@ command -v jq >/dev/null 2>&1 || { echo "jq not found: codex-skip-marker-deny.sh
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUARD="$SCRIPT_DIR/check-skip-marker-write.sh"
 
+# WHY(fail-closed): このラッパーは判定を本体に丸投げしている。本体が無い・失敗する・
+# 読めない結果を返すとき、以前は rc=127 / 1 / 5 で抜けるだけだった（2026-09-29 実測）。
+# Codex が exit 2 以外の失敗を「止める」と扱うかは確認できていないので、守りが効いていない
+# まま作業が進まないよう、jq 不在のときと同じ exit 2 に揃える
+# （docs/specs/codex-hook-parity/04-wrapper-fail-closed.md）。
+fail_closed() {
+  echo "codex-skip-marker-deny.sh: $1 守りが効かないので止めました。プラグイン（または scripts/）を入れ直してください。" >&2
+  exit 2
+}
+
+[ -f "$GUARD" ] && [ -r "$GUARD" ] || fail_closed "判定本体 check-skip-marker-write.sh が見つかりません（${GUARD}）。"
+
 INPUT="$(cat)"
-OUT="$(printf '%s' "$INPUT" | bash "$GUARD")"
+GUARD_RC=0
+OUT="$(printf '%s' "$INPUT" | bash "$GUARD")" || GUARD_RC=$?
+[ "$GUARD_RC" -eq 0 ] || fail_closed "判定本体 check-skip-marker-write.sh が失敗しました（終了コード ${GUARD_RC}）。"
 
 if [ -n "$OUT" ]; then
+  printf '%s' "$OUT" | jq empty >/dev/null 2>&1 || fail_closed "判定本体 check-skip-marker-write.sh の出力を読めません。"
   printf '%s' "$OUT" | jq '
     if .hookSpecificOutput.permissionDecision == "ask" then
       .hookSpecificOutput.permissionDecision = "deny"

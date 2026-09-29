@@ -9,6 +9,9 @@
 - `codex-ai-check-suggest.sh` / `codex-ai-check-track.sh` が、記録の置き場に書けなくても失敗として終わらない
   ようにした（0.1.3 までは rc=1）。Stop 側は読むだけにし、置き場の用意と古い記録の掃除は記録を書く側だけが行う
   （仕様書 `docs/specs/codex-hook-parity/05-stop-hook-never-fails.md`）。
+- `codex-dependency-change-deny.sh` が、判定本体が無い・失敗した・読めない結果を返したときに exit 2 で
+  止める側に倒すようにした（0.1.3 までは rc=127 などで抜けるだけ。
+  仕様書 `docs/specs/codex-hook-parity/04-wrapper-fail-closed.md`）。
 - hook 定義（`hooks/hooks.json`）は不変。**再信頼不要**。
 - Codex CLI 0.147.0 の実機で deny を実測した（`docs/plugin/codex/evidence/2026-09-29-apply-patch-verify.md`。
   0.1.3 のキャッシュの判定本体を一時的に差し替えて測った。配布した版そのものでの発火は、配ってから測る）。

@@ -147,6 +147,39 @@ assert_contains "$OUT" "Codexはask未対応" "Bash で止めたときと同じ�
 run_patch $'*** Begin Patch\n*** Update File: src/a.ts\n@@\n-1\n+2\n*** End Patch' "$CODEX_WRAPPER"
 assert_empty "$OUT" "無関係なパッチは沈黙のまま"
 
+# --- 判定本体が欠けた・壊れたときは止める側に倒す。docs/specs/codex-hook-parity/04-wrapper-fail-closed.md ---
+# WHY: ラッパーは判定本体に丸投げしている。本体が無い・失敗する・読めない結果を返すとき、
+# ラッパーは rc=127 などで抜けるだけだった（2026-09-29 実測）。jq 不在のときと同じ exit 2 に揃える。
+WRAP_DIR="$WORK_DIR/wrap"
+mkdir -p "$WRAP_DIR"
+GUARD_NAME="check-dependency-change.sh"
+run_with_guard() { # $1=判定本体の中身（空なら置かない）
+  rm -f "$WRAP_DIR/$GUARD_NAME"
+  cp "$CODEX_WRAPPER" "$WRAP_DIR/wrapper.sh"
+  [ -n "$1" ] && printf '%s\n' "$1" > "$WRAP_DIR/$GUARD_NAME"
+  set +e
+  OUT="$(jq -n '{tool_name: "Bash", tool_input: {command: "npm install lodash"}}' | bash "$WRAP_DIR/wrapper.sh" 2>"$WRAP_DIR/err.txt")"
+  EXIT_CODE=$?
+  set -e
+  ERR="$(cat "$WRAP_DIR/err.txt")"
+}
+
+echo "=== scenario 10: ラッパーの判定本体が無い・失敗・読めない出力 → exit 2 ==="
+run_with_guard ""
+assert_eq "$EXIT_CODE" "2" "判定本体が無ければ exit 2"
+assert_contains "$ERR" "$GUARD_NAME" "何が欠けているかを名指しする"
+assert_contains "$ERR" "入れ直し" "直し方が書いてある"
+run_with_guard 'cat >/dev/null; exit 1'
+assert_eq "$EXIT_CODE" "2" "exit 1 で終わる本体でも exit 2"
+run_with_guard 'cat >/dev/null; echo "not json {"'
+assert_eq "$EXIT_CODE" "2" "JSON でない出力は exit 2"
+assert_empty "$OUT" "壊れた出力をそのまま Codex へ渡さない"
+
+echo "=== scenario 11: ラッパーの判定本体が沈黙 → そのまま通す（対照） ==="
+run_with_guard 'cat >/dev/null; exit 0'
+assert_eq "$EXIT_CODE" "0" "沈黙は exit 0"
+assert_empty "$OUT" "沈黙は沈黙のまま"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
