@@ -3,7 +3,7 @@
 - feature: `codex-hook-parity`
 - baseCommit: `9d8bc552`
 - 起点: 2026-09-29 の配布物レビュー（`aidd-codex` / `aidd-codex-vkumai` 0.1.3）
-- 状態: **6 本とも 2026-09-29 に承認済み（決めてほしいことは、おすすめの通り）。** 実装の進み具合は下の表の「実装」欄
+- 状態: **6 本とも 2026-09-29 に承認・実装・マージ済み（PR #858〜#863）。0.1.4 として配布済み**（PR #864、marketplace `0ccc415`）。配布した版での実機確認は `docs/plugin/codex/evidence/2026-09-29-release-0.1.4-verify.md`。下の表の「実装」欄は実装した時点の記録
 
 ## 目指す状態
 

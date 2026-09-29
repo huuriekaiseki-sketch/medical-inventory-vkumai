@@ -6,7 +6,7 @@
 | 0.1.1 | 同上 | Codex CLI 0.147.0 で Git marketplace から導入・4 本の信頼・(c) の発火を実測（evidence 2026-09-28-marketplace-verify.md） |
 | 0.1.2 | 同上 | Codex CLI 0.147.0 で 0.1.1 からの更新を実測。`marketplace upgrade` だけで入れ替わり、`trusted_hash` 4 件は維持、再信頼なしに SessionStart 2 本が発火（evidence 2026-09-28-version-update-verify.md） |
 | 0.1.3 | 同上 | Codex CLI 0.147.0 で `marketplace upgrade` だけで 0.1.2 → 0.1.3 に入れ替わり、`trusted_hash` 4 件は維持（0.1.2 と同じ挙動の再現） |
-| 0.1.4 | 2026-09-29 に [hook の入力の形](https://learn.chatgpt.com/docs/hooks)を確認（ファイル編集は `tool_name: "apply_patch"`、matcher の `Edit` / `Write` はそのエイリアス） | 配布した版での導入・発火は未実測（配布後に実測して書き戻す）。配布前に、Codex CLI 0.147.0 で 0.1.3 のキャッシュの判定本体を一時的に差し替え、`apply_patch` による skip マーカーの新規作成が止まることを実測（evidence 2026-09-29-apply-patch-verify.md） |
+| 0.1.4 | 2026-09-29 に [hook の入力の形](https://learn.chatgpt.com/docs/hooks)を確認（ファイル編集は `tool_name: "apply_patch"`、matcher の `Edit` / `Write` はそのエイリアス） | Codex CLI 0.147.0 で `marketplace upgrade` だけで 0.1.3 → 0.1.4 に入れ替わり、`trusted_hash` 4 件は維持（**スクリプトの中身が変わる版でも再信頼は不要**、の初めての実測）。配布した版で、`apply_patch` による skip マーカーの新規作成が止まること、skip マーカーを `cat` で読むのは止まらないこと、SessionStart の警告 2 本が案内なしの文言で出ることを実測（evidence 2026-09-29-release-0.1.4-verify.md）。判定本体が欠けたときの fail-closed と doctor の `部品` 行は実機では未実測 |
 
 ルートの `plugin.json` は Agent Plugins 1.0 の形式を使う。`hooks/hooks.json` は `extensions.com.openai.hooks` から参照する。hook 実行時の `PLUGIN_ROOT` は Codex が渡すが、スキルから起動する doctor は自身のスクリプト位置を使う。
 

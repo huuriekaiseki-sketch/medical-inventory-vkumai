@@ -4,8 +4,8 @@
   "files": {
     ".codex-plugin/plugin.json": "5c18baf0de5b61cd81dc6958fd2b5024842dab46b71f67cfbabedde00e5f0dbf",
     "CHANGELOG.md": "8850913c040007508ee5e59f4dad44558fca1bd62c17fb0658f4636fbf8193d2",
-    "COMPATIBILITY.md": "c7ae9a4ae5c81fe0cfa2193c530c0a7400b32c436e1acb16ae0bd8586b817ecd",
-    "KNOWN-LIMITS.md": "1a4681077b4164ee001a17c3d0ffcabc0fa0f6b1c106260af8b710bdd2631b84",
+    "COMPATIBILITY.md": "decfe2a7fdc5ae9f724e3fc97a89c8c03be6cf24818d4b5fc824634867077d8d",
+    "KNOWN-LIMITS.md": "1ccfaffd4dc5bca41c80e920d4956f272d9d998ef45bee137b1fd0115c9d1f71",
     "hooks/hooks.json": "641117902fe1c0c4a255cc86c3b1c4a5202ce9944da7bb53dbadf2ab1142fffb",
     "scripts/check-dependency-change.sh": "9b6cfe54a611562dd1dfd572e7e225ea56f87d525ed90e2b07a907c949a4b66e",
     "scripts/check-dependency-change.test.sh": "a81618a47e65f74b4db5025eda48f68af471cbc4850cb0b00e5ad79756f8c057",
