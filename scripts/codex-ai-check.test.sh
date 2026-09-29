@@ -136,6 +136,64 @@ else
   ng "セッションごとのハッシュがコミットされてしまう"
 fi
 
+# --- 警告だけの hook は失敗しない。docs/specs/codex-hook-parity/05-stop-hook-never-fails.md ---
+# WHY: 知らせるだけの hook が自分の都合（記録の置き場に書けない）で失敗として終わると、
+#   Codex の画面に「hook が失敗しました」と出て、本来の知らせと区別がつかない。
+#   置き場の親を**通常ファイル**にして「作れない」を作る（chmod だと root で素通りする）。
+echo "export const a = 9" > "${WORK}/src/a.ts"
+touch "${TMP_ROOT}/blocker"
+BLOCKED_STATE="${TMP_ROOT}/blocker/state"
+
+echo "=== scenario 11: 置き場に書けなくても suggest は失敗せず、知らせは出す ==="
+out="$(cd "${WORK}" && printf '%s' '{"session_id":"s11"}' | CODEX_AI_CHECK_STATE_DIR="${BLOCKED_STATE}" bash "${SUGGEST}" 2>/dev/null)"
+rc=$?
+if [ "${rc}" -eq 0 ]; then
+  ok "exit 0"
+else
+  ng "置き場に書けないだけで hook が失敗として終わる" "rc=${rc}"
+fi
+if grep -q "systemMessage" <<<"${out}"; then
+  ok "知らせるべきことは知らせる"
+else
+  ng "失敗はしないが、知らせも消えた" "${out}"
+fi
+
+echo "=== scenario 12: suggest は読むだけ（置き場を作らない・古い記録を消さない） ==="
+FRESH_STATE="${TMP_ROOT}/never-created"
+(cd "${WORK}" && printf '%s' '{"session_id":"s12"}' | CODEX_AI_CHECK_STATE_DIR="${FRESH_STATE}" bash "${SUGGEST}" >/dev/null 2>&1)
+if [ ! -e "${FRESH_STATE}" ]; then
+  ok "置き場を作らない"
+else
+  ng "確認するだけの hook が導入先にフォルダを作る"
+fi
+OLD_STATE="${TMP_ROOT}/old-state"
+mkdir -p "${OLD_STATE}"
+echo "x" > "${OLD_STATE}/ancient.hash"
+touch -t 202001010000 "${OLD_STATE}/ancient.hash"
+(cd "${WORK}" && printf '%s' '{"session_id":"s12"}' | CODEX_AI_CHECK_STATE_DIR="${OLD_STATE}" bash "${SUGGEST}" >/dev/null 2>&1)
+if [ -f "${OLD_STATE}/ancient.hash" ]; then
+  ok "古い記録を消さない（掃除は track の担当）"
+else
+  ng "確認するだけの hook が記録を消した"
+fi
+
+echo "=== scenario 13: 置き場に書けなくても track は失敗しない（記録は残らない） ==="
+(cd "${WORK}" && printf '%s' '{"session_id":"s13","tool_name":"Bash","tool_input":{"command":"npm run typecheck"}}' | CODEX_AI_CHECK_STATE_DIR="${BLOCKED_STATE}" bash "${TRACK}" >/dev/null 2>&1)
+rc=$?
+if [ "${rc}" -eq 0 ]; then
+  ok "exit 0"
+else
+  ng "置き場に書けないだけで hook が失敗として終わる" "rc=${rc}"
+fi
+
+echo "=== scenario 14: 古い記録の掃除は track が行う（対照） ==="
+(cd "${WORK}" && printf '%s' '{"session_id":"s14","tool_name":"Bash","tool_input":{"command":"npm run typecheck"}}' | CODEX_AI_CHECK_STATE_DIR="${OLD_STATE}" bash "${TRACK}" >/dev/null 2>&1)
+if [ ! -f "${OLD_STATE}/ancient.hash" ] && [ -f "${OLD_STATE}/s14.hash" ]; then
+  ok "7 日より古い記録を消し、新しい記録を残す"
+else
+  ng "掃除する担当がいなくなった（記録が増え続ける）"
+fi
+
 if [ "${fail}" -eq 0 ]; then
   echo "ALL PASSED"
   exit 0

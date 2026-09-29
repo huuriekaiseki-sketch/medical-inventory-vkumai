@@ -57,7 +57,12 @@ UNTRACKED="$(git ls-files --others --exclude-standard -- '*.ts' '*.tsx' '*.sql' 
 [ -n "$STATUS" ] || [ -n "$UNTRACKED" ] || exit 0
 
 STATE_DIR="${CODEX_AI_CHECK_STATE_DIR:-.codex/.ai-check-suggest-state}"
-mkdir -p "$STATE_DIR"
+# WHY(書けなければ黙って終わる): 記録できないことを理由に hook を失敗として終わらせない
+#   （2026-09-29 実測で rc=1）。記録が残らないので Stop は毎回知らせる側に倒れるが、
+#   それは KNOWN-LIMITS に書いてある既知の動き。「書けません」と別の知らせを足すと、
+#   本来の知らせが埋もれる。
+mkdir -p "$STATE_DIR" 2>/dev/null || exit 0
 # 7 日より古い状態ファイルは掃除する（セッションごとに増え続けるのを防ぐ）
 find "$STATE_DIR" -name '*.hash' -mtime +7 -delete 2>/dev/null || true
-printf '%s\n' "$(source_hash)" > "$STATE_DIR/${SESSION_ID}.hash"
+HASH="$(source_hash)"
+{ printf '%s\n' "$HASH" > "$STATE_DIR/${SESSION_ID}.hash"; } 2>/dev/null || exit 0
