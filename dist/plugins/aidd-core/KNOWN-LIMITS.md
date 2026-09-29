@@ -83,6 +83,14 @@
   Codex 用生成経路ができるまでは `.codex/hooks.json` と agent 定義は導入先で個別に設定する
 - 中心リポジトリと同じ hook を settings.json とプラグインの両方で入れると二重に発火する。中心リポジトリ
   自身では生成物を読まない
+- **aidd-vkumai は、セッションの終了時にローカル Supabase を止めることがある**（0.1.4 から）。
+  止めるのは、そのセッションが `supabase start` で起動したときだけ（起動の直前に動いていなかった場合に印を残し、
+  終了時に印があれば `supabase stop` する）。すでに動いていた Supabase を使っただけのセッションは止めない。
+  限界: 起動した側のセッションが先に終わると、同じ Supabase を使っている別のセッションのテストは落ちる。
+  見るのは行の先頭が `supabase start` のコマンドだけで、`cd x && supabase start` や `npx supabase start` の
+  形では印が残らない（＝止めない側に倒れる）。印は導入先の `logs/supabase-started-by/` に置く
+  （`.gitignore` に `logs/` が無ければ `git status` に出る）。導入先での発火は未実測（中心リポジトリでは
+  2026-09-28 に project hook として実測済み）
 - **実行系が無い環境では多くの hook が沈黙する。** 2026-09-11 に実測し直した数字は次のとおり
   （それまでは「hook 33 本のうち 18 本が node / python3 / npx」と書いていたが、
   **`jq` を数えておらず実態より狭かった**）:

@@ -1,6 +1,9 @@
 # AIDD Codex: 変更履歴
 
-## 未リリース（次の版で配る）
+## 0.1.4（2026-09-29）
+
+初めて**スクリプトの中身が変わる**版（0.1.1〜0.1.3 の差は文書のみだった）。導入済み環境は
+`codex plugin marketplace upgrade aidd-plugins` で入れ替える。
 
 - `check-skip-marker-write.sh` が Codex のファイル編集（`apply_patch`）を読むようにした。0.1.3 までは
   ファイル編集で `.claude/.verify-state/*.skip` を作っても止まらなかった（仕様書

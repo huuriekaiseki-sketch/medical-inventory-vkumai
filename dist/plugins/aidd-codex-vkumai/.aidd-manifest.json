@@ -2,9 +2,9 @@
   "plugin": "aidd-codex-vkumai",
   "algorithm": "sha256",
   "files": {
-    ".codex-plugin/plugin.json": "95d854cd0cd3b48f47f23587f8dc72692d9f9a4138e8f7d738ec79a172bbe165",
-    "CHANGELOG.md": "f40874e711f5968c11e35ac46088fd0b47a99a9c932145f9f520e3a387b53eab",
-    "COMPATIBILITY.md": "7e65f141533f303e16037b16d8c7306948d76058f1c3aef14b3fa31e76ae427e",
+    ".codex-plugin/plugin.json": "5c18baf0de5b61cd81dc6958fd2b5024842dab46b71f67cfbabedde00e5f0dbf",
+    "CHANGELOG.md": "8850913c040007508ee5e59f4dad44558fca1bd62c17fb0658f4636fbf8193d2",
+    "COMPATIBILITY.md": "c7ae9a4ae5c81fe0cfa2193c530c0a7400b32c436e1acb16ae0bd8586b817ecd",
     "KNOWN-LIMITS.md": "1a4681077b4164ee001a17c3d0ffcabc0fa0f6b1c106260af8b710bdd2631b84",
     "hooks/hooks.json": "641117902fe1c0c4a255cc86c3b1c4a5202ce9944da7bb53dbadf2ab1142fffb",
     "scripts/check-dependency-change.sh": "9b6cfe54a611562dd1dfd572e7e225ea56f87d525ed90e2b07a907c949a4b66e",

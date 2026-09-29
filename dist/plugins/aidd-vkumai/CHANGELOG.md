@@ -1,6 +1,20 @@
 # 変更履歴（7 項目の 7 の前半。既知の制約は KNOWN-LIMITS.md）
 
-## 未リリース（次の版で配る）
+## 0.1.4（2026-09-29）
+
+Codex の hook を Claude Code と同じ仕様に揃える 6 件（仕様書 `docs/specs/codex-hook-parity/`、PR #858〜#863）。
+初めて**スクリプトの中身が変わる**版（0.1.1〜0.1.3 の差は文書と構成のみだった）。
+
+**上の 6 件とは別に、0.1.3 の配布後に main へ入った変更もこの版で初めて配られる:**
+
+- aidd-vkumai に hook が 2 本増える（PR #855、2026-09-28）。`mark-supabase-started.sh`（PreToolUse, Bash）が
+  `supabase start` の直前に「動いていなかった」ときだけ印を残し、`stop-supabase-on-session-end.sh`
+  （SessionEnd）が**印のあるセッションの終了時にローカル Supabase を止める**。止めるのは、そのセッション自身が
+  起動したものだけ。`supabase` CLI が無い導入先では何もしない。**aidd-vkumai の `hooks/hooks.json` が変わる**
+  （Claude Code には hook 単位の信頼が無いので、更新すればそのまま有効になる）
+- 中心リポジトリの `.claude/settings.json` に足した許可（`supabase start` / `stop` / `db reset` を承認なしに）は
+  **配られない**。導入先では、起動と停止のコマンドにこれまで通り確認が出る
+- Codex 用 2 本の実測記録（PR #853・#854）は文書のみ
 
 - 判定本体 `check-skip-marker-write.sh`（aidd-core / aidd-codex）と `check-dependency-change.sh`
   （aidd-vkumai / aidd-codex-vkumai）が、Codex のファイル編集（`apply_patch`）を読むようにした。
