@@ -67,6 +67,41 @@ extract_patch_paths() {
     | sed -E 's/[[:space:]]+$//'
 }
 
+# WHY(読むだけの操作は見送る): コマンド文字列のどこかにパスが出ていれば止めていたので、
+# `cat …/x.skip` のように中身を読むだけでも止まっていた（2026-09-29 実測）。Claude では確認を
+# 1 回押せば済むが、Codex は確認を出せず、止まったら人が手で実行するしかない
+# （docs/specs/codex-hook-parity/03-readonly-false-deny.md）。
+# これは守りを緩める変更なので、通すものは決め打ちにする:
+#   - セグメントの先頭が下の 8 語のどれかで、
+#   - かつ、そのセグメントに書き込み先の指定（`>`）も `tee` も含まれないときだけ見送る
+# `2>/dev/null` のような無害な `>` でも見送らない（緩めすぎない側に倒す）。
+# `sudo cat …` のように前置きが付いたものも見送らない。
+# 見送らなかったセグメントだけを繋ぎ直して、これまでと同じ 3 系統の判定に渡す
+# （`cd .claude/.verify-state && touch a.skip` は 2 つのセグメントにまたがるので、
+# セグメントごとに判定すると外れる）。
+split_segments() {
+  printf '%s' "$1" | tr ';&|`' $'\n' | sed 's/\$(/\n/g'
+}
+
+drop_readonly_segments() {
+  local seg trimmed first out=""
+  while IFS= read -r seg; do
+    trimmed="${seg#"${seg%%[![:space:]]*}"}"
+    if [ -z "$trimmed" ]; then continue; fi
+    first="${trimmed%%[[:space:]]*}"
+    case "$first" in
+      cat|ls|head|tail|wc|stat|file|grep)
+        case "$trimmed" in
+          *">"*|*tee*) ;;
+          *) continue ;;
+        esac
+        ;;
+    esac
+    out="${out}${out:+ ; }${trimmed}"
+  done <<< "$(split_segments "$1")"
+  printf '%s' "$out"
+}
+
 INPUT="$(cat)"
 TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')"
 CWD="$(printf '%s' "$INPUT" | jq -r '.cwd // ""')"
@@ -75,7 +110,7 @@ TARGET=""
 MATCHED=0
 case "$TOOL_NAME" in
   Bash)
-    TARGET="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')"
+    TARGET="$(drop_readonly_segments "$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')")"
     ;;
   Write|Edit|MultiEdit)
     TARGET="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""')"

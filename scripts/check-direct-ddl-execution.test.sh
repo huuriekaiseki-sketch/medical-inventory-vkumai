@@ -302,6 +302,29 @@ expect_silent 'PGPASSWORD=x supabase db push --local'
 expect_silent 'sudo supabase db reset'
 expect_silent 'echo PGPASSWORD=x psql'
 
+# --- 版を確かめるだけの psql は止めない。docs/specs/codex-hook-parity/03-readonly-false-deny.md ---
+# WHY: psql で始まっていれば引数を見ずに止めていたので、版の確認とヘルプまで止まっていた。
+# Codex では止まったら人が手で実行するしかない。通すのは「psql + 決まった 1 語だけ」に限る。
+echo "=== scenario 35: psql の版確認・ヘルプだけ → 何も出力しない ==="
+expect_silent 'psql --version'
+expect_silent 'psql -V'
+expect_silent 'psql --help'
+expect_silent 'psql -?'
+expect_silent '/opt/homebrew/bin/psql --version'
+expect_silent 'PGHOST=127.0.0.1 psql --version'
+expect_silent 'bash -c "psql --version"'
+expect_silent 'psql --version '
+
+echo "=== scenario 36: 版確認にほかの引数が 1 つでも付いたら → deny（対照） ==="
+expect_deny 'psql --version -c "drop table x"'
+expect_deny 'psql -V mydb'
+expect_deny 'psql --version; psql -c "drop table x"'
+expect_deny 'psql --version && psql -f x.sql'
+expect_deny 'psql --help -c "select 1"'
+expect_deny 'psql'
+expect_deny 'psql -c "select 1"'
+expect_deny 'psql --versionx'
+
 echo "=== scenario 34: 前置きの読み飛ばしが check-dependency-change.sh と同じ（片方だけ直して乖離しない） ==="
 shared_block() { sed -n '/^# --- shared: command-prefix (begin) ---$/,/^# --- shared: command-prefix (end) ---$/p' "$1"; }
 DDL_BLOCK="$(shared_block "$SCRIPT")"

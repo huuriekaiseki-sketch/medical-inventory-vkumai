@@ -61,6 +61,13 @@ command -v jq >/dev/null 2>&1 || { echo "jq not found: check-direct-ddl-executio
 # パス前置（/opt/homebrew/bin/supabase・./node_modules/.bin/supabase等）の迂回経路も塞ぐため、
 # supabaseの前に任意の非空白パスプレフィックス ([^[:space:]]*/)? を許容する（psqlの/psql対応と同型）。
 DIRECT_EXEC_PATTERN='^(npx[[:space:]]+)?([^[:space:]]*/)?supabase[[:space:]]+db[[:space:]]+execute([[:space:]]|$)|^psql([[:space:]]|$)|/psql([[:space:]]|$)'
+# WHY: psql で始まっていれば引数を見ずに止めていたので、`psql --version` まで止まっていた
+# （2026-09-29 実測）。Codex は確認を出せず、止まったら人が手で実行するしかない
+# （docs/specs/codex-hook-parity/03-readonly-false-deny.md）。守りを緩める変更なので、
+# 通すのは「psql + 下の 4 語のどれか 1 語だけ」に限る。ほかの引数が 1 つでも付けば止める。
+# 注意: 2026-09-28 までのプラグインの実機確認は `psql --version` が止まることで確かめていた。
+# これ以降は止まらないので、確認には `psql -c "select 1"` などを使う。
+PSQL_INFO_PATTERN='^([^[:space:]]*/)?psql[[:space:]]+(--version|-V|--help|-\?)[[:space:]]*$'
 # issue #485: supabase db push はフラグ無指定時のデフォルトがリモート(linkedプロジェクト)。
 # --local が明示されていなければ、bare実行・--linked・--db-url いずれであっても一律denyする。
 DB_PUSH_PATTERN='^(npx[[:space:]]+)?([^[:space:]]*/)?supabase[[:space:]]+db[[:space:]]+push([[:space:]]|$)'
@@ -217,6 +224,8 @@ check_segment() {
     REASON="npx 経由の supabase は使えません。npx は npm レジストリから CLI を取ってくるため Homebrew で入れた版と別物が動きます（2026-09-08 に npx supabase db reset が 2.117.0 を引き、ローカルの Supabase 一式が壊れました）。npx を外して supabase を直接実行してください（版の正本は .supabase-version）。"
     return 0
   fi
+  # 版を確かめるだけ・ヘルプを読むだけの psql は止めない
+  if [[ "$seg" =~ $PSQL_INFO_PATTERN ]]; then return 1; fi
   if [[ "$seg" =~ $DIRECT_EXEC_PATTERN ]]; then
     DENY=1
     REASON="supabase db execute・psqlの直接実行はDBスキーマ変更ルール（migration経由）で禁止されています。supabase/migrations/配下にマイグレーションファイルを作成し、supabase db push --localで適用してください。"

@@ -192,6 +192,41 @@ echo "=== scenario 20: 行末が CRLF のパッチ → ask ==="
 run_patch $'*** Begin Patch\r\n*** Add File: .claude/.verify-state/abc.skip\r\n+x\r\n*** End Patch\r\n'
 assert_contains "$OUT" '"permissionDecision": "ask"' "CRLF でもヘッダを読める"
 
+# --- 読むだけの操作は止めない。docs/specs/codex-hook-parity/03-readonly-false-deny.md ---
+# WHY: コマンド文字列のどこかにパスが出ていれば止めていたので、中身を読むだけでも止まっていた
+# （2026-09-29 実測）。Claude では確認を 1 回押せば済むが、Codex では止まったら人が手で
+# 実行するしかなく、調べものが進まない。守りを緩める変更なので、通すものは決め打ちにする。
+run_cmd() { # $1=command $2=cwd（省略時 /repo）
+  run_hook "$(jq -n --arg c "$1" --arg d "${2:-/repo}" '{tool_name: "Bash", tool_input: {command: $c}, cwd: $d}')"
+}
+expect_ask() { run_cmd "$1" "${2:-}"; assert_eq "$EXIT_CODE" "0" "exit 0: $1"; assert_contains "$OUT" '"permissionDecision": "ask"' "ask: $1"; }
+expect_silent() { run_cmd "$1" "${2:-}"; assert_eq "$EXIT_CODE" "0" "exit 0: $1"; assert_empty "$OUT" "沈黙: $1"; }
+
+echo "=== scenario 21: 読むだけのコマンド 8 語 → 何も出力しない ==="
+for cmd in 'cat .claude/.verify-state/abc.skip' 'ls -l .claude/.verify-state/abc.skip' 'head -1 .claude/.verify-state/abc.skip' \
+           'tail -n 5 .claude/.verify-state/abc.skip' 'wc -c .claude/.verify-state/abc.skip' 'stat .claude/.verify-state/abc.skip' \
+           'file .claude/.verify-state/abc.skip' 'grep -c x .claude/.verify-state/abc.skip' \
+           'ls .claude/.verify-state/abc.skip && cat .claude/.verify-state/abc.skip'; do
+  expect_silent "$cmd"
+done
+expect_silent 'cat abc.skip' '/repo/.claude/.verify-state'
+expect_silent 'cd .claude/.verify-state && cat abc.skip'
+
+echo "=== scenario 22: 読むコマンドでも書き込み先の指定が付いていたら → ask ==="
+for cmd in 'cat a > .claude/.verify-state/abc.skip' 'cat a >> .claude/.verify-state/abc.skip' 'cat a >.claude/.verify-state/abc.skip' \
+           'cat a | tee .claude/.verify-state/abc.skip' 'ls .claude/.verify-state/abc.skip; touch .claude/.verify-state/def.skip' \
+           'cat .claude/.verify-state/abc.skip && rm .claude/.verify-state/abc.skip' 'grep x f 2>/dev/null > .claude/.verify-state/abc.skip'; do
+  expect_ask "$cmd"
+done
+expect_ask 'cat a > abc.skip' '/repo/.claude/.verify-state'
+expect_ask 'cd .claude/.verify-state && cat a > abc.skip'
+
+echo "=== scenario 23: 読むコマンドの 8 語に無いものは、これまで通り → ask（対照） ==="
+for cmd in 'touch .claude/.verify-state/abc.skip' 'cp a .claude/.verify-state/abc.skip' 'mv a .claude/.verify-state/abc.skip' \
+           'rm .claude/.verify-state/abc.skip' 'sed -i "" s/a/b/ .claude/.verify-state/abc.skip' 'sudo cat .claude/.verify-state/abc.skip'; do
+  expect_ask "$cmd"
+done
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

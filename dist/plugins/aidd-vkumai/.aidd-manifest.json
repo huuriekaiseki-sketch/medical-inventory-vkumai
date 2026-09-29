@@ -4,7 +4,7 @@
   "files": {
     ".claude-plugin/plugin.json": "f87ecd2e7de7d0c65e9bfadbca0f14b45fea638acafd600e299861b8e6ab7a48",
     "BREAKING.md": "6f48497efff720061dc9866f54c530a592a970b39b63938ae7c27324d8002c22",
-    "CHANGELOG.md": "fdb7c5d59640f1289c9a07194dd2a25cd40175a3798af889110d9e96fb302b3c",
+    "CHANGELOG.md": "8e9766a2bc97690a640f60fe2a4fab945abee5e47a5ea6887537de053a6ef0d5",
     "COMPATIBILITY.md": "5fdc16522007a777b5ea7147b6e021cd6973ab33df9aa4641291eb8283682973",
     "KNOWN-LIMITS.md": "c1df0711ca0f70ff012064db6999d961b63015ca293ebfe13bc0c24fcfe5e4c6",
     "MIGRATION.md": "ed96a1db2d1a72fdc50d5c68066b728a349616ac8d741c82d84bd84550ce34a0",
@@ -28,7 +28,7 @@
     "scripts/check-dependency-change.sh": "a3c09472ed8bc7fe3f444cab392e767f6c341185c55cfda92fdbea639af43e79",
     "scripts/check-dependency-change.test.sh": "a81618a47e65f74b4db5025eda48f68af471cbc4850cb0b00e5ad79756f8c057",
     "scripts/check-dependency-update-staleness.sh": "f384a830e2fa0cac2c1a24c8cd2f0a697246323252a0d8f5edfa0405430e64d2",
-    "scripts/check-direct-ddl-execution.sh": "04967199557323eceb47e70b24ac7d107d97f57593cb95cf29a96acdbdead0d6",
+    "scripts/check-direct-ddl-execution.sh": "88ed2e38042374f6ca222a6ff8d0fe3905f72a906b8f01e1d1bd84bc60e63a53",
     "scripts/check-e2e-freshness.sh": "852f237ca2c5be6305123cc1d6a4437b193e3624ae4f4512528ca2f37dcf9b27",
     "scripts/check-full-run-before-finish.sh": "944f6f23e6a53ee912e7709982b1807d1387815dcca2945df1e57d272ab90714",
     "scripts/check-full-run-before-finish.test.sh": "d33d39c793842606b960764a4efb153c2775874269f21bc40eb06a833e78d89e",

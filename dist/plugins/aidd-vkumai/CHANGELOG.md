@@ -17,6 +17,10 @@
   `sudo npm install foo`、`bash -c "psql …"`、`npm --prefix web install foo` など。仕様書
   `docs/specs/codex-hook-parity/02-command-prefix.md`）。Claude Code では、依存変更の確認が出る回数と
   DDL の deny が増える。それでも通る書き方は `docs/plugin/codex-vkumai/KNOWN-LIMITS.md` に並べた
+- **Claude Code 側の動きも変わる（守りを緩める）:** skip マーカーを読むだけの操作（`cat` / `ls` など 8 語で、
+  `>` も `tee` も含まないもの）と、`psql --version` / `-V` / `--help` / `-?` だけの実行を止めないようにした
+  （仕様書 `docs/specs/codex-hook-parity/03-readonly-false-deny.md`）。Codex の実機確認に使っていた
+  `psql --version` は止まらなくなるので、確認には `psql -c "select 1"` などを使う
 - hook 定義（`hooks/hooks.json`）は 4 プラグインとも不変。**Codex 側の再信頼は不要**
 - Codex CLI 0.147.0 の実機で deny を実測した（`docs/plugin/codex/evidence/2026-09-29-apply-patch-verify.md`。
   0.1.3 のキャッシュの判定本体を一時的に差し替えて測った。配布した版そのものでの発火は、配ってから測る）
