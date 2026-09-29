@@ -24,9 +24,14 @@
 
 ## 2. 中心リポジトリ（vkumai）での作業
 
-1. `scripts/lib/plugin-layout.json` の版を 3 箇所上げる: `plugins.aidd-core.version` / `plugins.aidd-vkumai.version`（＋ `dependencies[].version`）/ `codexPlugin.version`。
-2. `docs/plugin/CHANGELOG.md` と `docs/plugin/codex/CHANGELOG.md` に版の節を足す。破壊的変更があれば `BREAKING.md` の表に行と移行手順を足す。
-3. `docs/plugin/COMPATIBILITY.md` と `docs/plugin/codex/COMPATIBILITY.md` の「最後に確認した版」を、実際に実走した Claude Code / Codex CLI の版に更新する。
+1. `scripts/lib/plugin-layout.json` の版を 4 箇所上げる: `plugins.aidd-core.version` / `plugins.aidd-vkumai.version` / `codexPlugins["aidd-codex"].version` / `codexPlugins["aidd-codex-vkumai"].version`。`aidd-vkumai` の `dependencies[].version`（範囲）は、新しい版を含まなくなるときだけ変える（`^0.1.0` は 0.1.x を含む）。
+2. `docs/plugin/CHANGELOG.md`・`docs/plugin/codex/CHANGELOG.md`・`docs/plugin/codex-vkumai/CHANGELOG.md` に版の節を足す（「未リリース」の節があれば、見出しを版と日付に変える）。破壊的変更があれば `BREAKING.md` の表に行と移行手順を足す。
+   - **変更履歴に漏れが無いかを、配布物の履歴と突き合わせる**（2026-09-29 追加）:
+     ```bash
+     git log --oneline <前の版上げのコミット>..HEAD -- dist/plugins
+     ```
+     出てきたコミットが、どれも変更履歴のどこかに書かれていることを確かめる。変更履歴は「main に入れた PR が自分で書く」運用で、書き忘れても検査は落ちない。0.1.4 では PR #855（`aidd-vkumai` の hook 2 本と `hooks.json` の変更）が漏れていて、配布の直前に marketplace 用の差分を見て気づいた。これは人が行う確認で、機械では見ていない。
+3. `docs/plugin/COMPATIBILITY.md`・`docs/plugin/codex/COMPATIBILITY.md`・`docs/plugin/codex-vkumai/COMPATIBILITY.md` に版の行を足す。実測がまだなら「未実測」と書き、配布後に実測して書き戻す。
 4. 生成と検査:
    ```bash
    bash scripts/build-plugin.sh
@@ -37,7 +42,7 @@
    ```bash
    bash scripts/build-plugin.test.sh
    ```
-5. `dist/plugins/aidd-codex/hooks/hooks.json` と `dist/plugins/aidd-codex-vkumai/hooks/hooks.json` の差分を見る。**ここが変わると導入先は再信頼が要る**（§4.3）。変わっていなければ CHANGELOG に「hook 定義は不変・再信頼不要」と書く。
+5. `dist/plugins/aidd-codex/hooks/hooks.json` と `dist/plugins/aidd-codex-vkumai/hooks/hooks.json` の差分を、**前の版上げのコミットと比べて**見る（版上げの PR の中だけを見ると、その前に main へ入った変更を見落とす）。**ここが変わると導入先は再信頼が要る**（§4.3）。変わっていなければ CHANGELOG に「hook 定義は不変・再信頼不要」と書く。
 6. PR を作り、必須 CI が success になってからマージする。
 
 ## 3. marketplace リポジトリへ配る
@@ -177,7 +182,7 @@ Codex 側の初回実測は CLI 0.147.0 と marketplace commit `be18c7d` で行�
 10. `codex plugin list` の `available: []` は対象プラグインを remove した状態でも再現した ✅。カタログに掲載され、`add` は通る。**表示されない理由は未解明** ⬜。
 
 11. スクリプトの中身が変わる版でも、`hooks.json` が不変なら `trusted_hash` は維持され、再信頼なしに新しい挙動が出る ✅（0.1.3 → 0.1.4。§4.3 の表の 1 行目は、それまで「同じ `hooks.json` を別パスに置いた検証」からの推定だった）。
-12. 配った版に、変更履歴に書かれていない変更が混ざっていないか ⬜。0.1.4 では、配布の直前に marketplace 用の差分を見て、PR #855（`aidd-vkumai` の hook 2 本）が変更履歴に無いことに気づいた。`git log <前の版上げのコミット>..HEAD -- dist/plugins` で配布物を変えたコミットを一覧し、変更履歴と突き合わせると見つかる。**手順には入れていない**（人が思い出したときだけ行う状態）。
+12. 配った版に、変更履歴に書かれていない変更が混ざっていないか ⬜。0.1.4 では、配布の直前に marketplace 用の差分を見て、PR #855（`aidd-vkumai` の hook 2 本）が変更履歴に無いことに気づいた。`git log <前の版上げのコミット>..HEAD -- dist/plugins` で配布物を変えたコミットを一覧し、変更履歴と突き合わせると見つかる。2026-09-29 に §2 の手順 2 へ入れた。**人が行う確認のままで、機械では見ていない**（忘れれば漏れる）。
 
 Codex 側の 0.1.2 の記録は [実証記録](codex/evidence/2026-09-28-version-update-verify.md)、0.1.4 の記録は [実証記録](codex/evidence/2026-09-29-release-0.1.4-verify.md)。
 
