@@ -47,7 +47,7 @@ fi
 
 SUMMARY="$(printf '%s' "$MERGED_PRS" | jq -r '.[] | "- #\(.number) \(.title) (\(.url))"')"
 
-MSG="現在のブランチ「${BRANCH}」は既に以下のPRでマージ済みです。このまま新しいissue・機能の作業を続けると、レビュー時に既マージ分の差分が混在したり、既に他の作業で解決済みの内容を重複実装する恐れがあります。着手前に \`git fetch origin main\` → \`git checkout -b <new-branch> origin/main\` で新しいブランチを作成することを検討してください（docs/agents/common.md「ブランチ運用ルール」参照）。
+MSG="現在のブランチ「${BRANCH}」は既に以下のPRでマージ済みです。このまま新しいissue・機能の作業を続けると、レビュー時に既マージ分の差分が混在したり、既に他の作業で解決済みの内容を重複実装する恐れがあります。着手前に \`git fetch origin main\` → \`git checkout -b <new-branch> origin/main\` で新しいブランチを作成することを検討してください。
 ${SUMMARY}"
 
 jq -n --arg msg "$MSG" '{

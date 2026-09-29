@@ -11,6 +11,9 @@
 - `check-skip-marker-write.sh` が、skip マーカーを読むだけの操作（`cat` / `ls` など 8 語で、`>` も `tee` も
   含まないもの）を止めないようにした。**守りを緩める変更**
   （仕様書 `docs/specs/codex-hook-parity/03-readonly-false-deny.md`）。
+- SessionStart の警告文 3 つ（ブランチが別のツール用・ローカルの main が古い・ブランチがマージ済み）から、
+  中心リポジトリの文書への案内（`docs/agents/…参照`）を外した。導入先にその文書は無い。やるべきことは
+  警告文に書いてあるので、情報は減らない（仕様書 `docs/specs/codex-hook-parity/06-message-pointers.md`）。
 - hook 定義（`hooks/hooks.json`）は不変。**再信頼不要**。
 - Codex CLI 0.147.0 の実機で deny を実測した（evidence 2026-09-29-apply-patch-verify.md。0.1.3 のキャッシュの
   判定本体を一時的に差し替えて測った。配布した版そのものでの発火は、配ってから測る）。

@@ -40,7 +40,7 @@ fi
 
 [ -z "$OTHER" ] && exit 0
 
-MSG="現在のブランチ「${BRANCH}」は命名規約上 ${OTHER} 用のブランチです。Claude CodeとCodexを同じ物理worktree・ブランチで同時に動かすと、編集・ステージング・migration番号・開発サーバー等が競合します。このworktreeが${OTHER}の作業中でないか確認し、自分のツール用のworktree/ブランチへ移動してから作業してください（docs/agents/parallel-agent-work.md参照）。"
+MSG="現在のブランチ「${BRANCH}」は命名規約上 ${OTHER} 用のブランチです。Claude CodeとCodexを同じ物理worktree・ブランチで同時に動かすと、編集・ステージング・migration番号・開発サーバー等が競合します。このworktreeが${OTHER}の作業中でないか確認し、自分のツール用のworktree/ブランチへ移動してから作業してください。"
 
 jq -n --arg msg "$MSG" '{
   systemMessage: $msg,

@@ -181,7 +181,7 @@ check_manifest_path() {
   case "$base" in
     package.json|package-lock.json)
       ASK=1
-      REASON="$base への直接編集は依存関係の変更です（scripts の変更だけであっても、依存に触れていないことを人が確認します）。依存を足す場合は用途・代替案・権限/環境変数/DB への影響・固定する版と出所を報告して承認を得てから進めてください（docs/agents/known-failure-patterns.md「依存関係層」）。"
+      REASON="$base への直接編集は依存関係の変更です（scripts の変更だけであっても、依存に触れていないことを人が確認します）。依存を足す場合は用途・代替案・権限/環境変数/DB への影響・固定する版と出所を報告して承認を得てから進めてください。"
       return 0
       ;;
   esac
@@ -233,7 +233,7 @@ check_segment() { # $1=前置きを読み飛ばしたセグメント $2=理由�
   if [[ "$seg" =~ $NPM_PATTERN ]] || [[ "$seg" =~ $YARN_PATTERN ]] || [[ "$seg" =~ $PNPM_PATTERN ]]; then
     if has_package_arg "$seg"; then
       ASK=1
-      REASON="依存パッケージの追加・更新・削除は「実行する第三者コードと依存関係を増やす設計判断」です。実行前に (1) 用途と代替案（既存の依存や標準 API で足りないか）、(2) 権限・環境変数・DB への影響、(3) 固定する版と出所（registry.npmjs.org か）、を報告して承認を得てください。実行後は package.json / package-lock.json の差分、npm ci、npm audit --omit=dev --audit-level=high の結果と、失敗時のロールバック方法を引き継ぎメモ 00「依存の変更」に書きます（docs/agents/known-failure-patterns.md「依存関係層」）。コマンド: $shown"
+      REASON="依存パッケージの追加・更新・削除は「実行する第三者コードと依存関係を増やす設計判断」です。実行前に (1) 用途と代替案（既存の依存や標準 API で足りないか）、(2) 権限・環境変数・DB への影響、(3) 固定する版と出所（registry.npmjs.org か）、を報告して承認を得てください。実行後は package.json / package-lock.json の差分、npm ci、npm audit --omit=dev --audit-level=high の結果と、失敗時のロールバック方法を引き継ぎメモ 00「依存の変更」に書きます。コマンド: $shown"
       return 0
     fi
   fi

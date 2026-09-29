@@ -75,7 +75,7 @@ else
   FETCH_DETAIL="このworktreeでのfetch記録が見つかりません"
 fi
 
-MSG="ローカルmainが古い可能性があります（${FETCH_DETAIL}、ローカルmainはorigin/mainより${BEHIND_COUNT}コミット遅れています）。新しいブランチを作成する前に \`git fetch origin main\` してから \`git checkout -b <new-branch> origin/main\` してください（docs/agents/common.md「ブランチ運用ルール」参照）。"
+MSG="ローカルmainが古い可能性があります（${FETCH_DETAIL}、ローカルmainはorigin/mainより${BEHIND_COUNT}コミット遅れています）。新しいブランチを作成する前に \`git fetch origin main\` してから \`git checkout -b <new-branch> origin/main\` してください。"
 
 jq -n --arg msg "$MSG" '{
   systemMessage: $msg,

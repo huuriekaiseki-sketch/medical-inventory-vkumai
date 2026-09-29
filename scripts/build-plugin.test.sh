@@ -140,6 +140,40 @@ else
   cmp -s "$WORK/a/aidd-codex/hooks/hooks.json" "$REPO_ROOT/dist/plugins/aidd-codex/hooks/hooks.json" && ok "aidd-codex の hooks.json はコミット済みと同一（再信頼不要）" || ng "aidd-codex の hooks.json が変わった（導入先で再信頼が要る。CHANGELOG に書く）"
 fi
 
+echo "=== scenario 3d: Codex 配布物の警告文が、導入先に無い文書を指さない ==="
+# WHY(2026-09-29): 警告文は「docs/agents/common.md を参照」のように vkumai の文書を案内していたが、
+#      プラグインを入れた別のリポジトリにその文書は無い。AI が探しに行って見つけられず時間を使う
+#      （docs/specs/codex-hook-parity/06-message-pointers.md）。利用者にも AI にも見えない
+#      コメント行は対象外。テスト（*.test.sh）も対象外。
+scan_doc_pointers() { # $1=プラグインのディレクトリ。「ファイル名:行番号:本文」で出す
+  local f
+  for f in "$1"/scripts/*.sh; do
+    case "$f" in *.test.sh) continue ;; esac
+    [ -f "$f" ] || continue
+    { grep -n -E 'docs/(agents|superpowers)/' "$f" 2>/dev/null || true; } \
+      | { grep -v -E '^[0-9]+:[[:space:]]*#' || true; } \
+      | sed "s|^|$(basename "$f"):|"
+  done
+  return 0
+}
+for dir in "$WORK/a/aidd-codex" "$WORK/a/aidd-codex-vkumai"; do
+  name="$(basename "$dir")"
+  SCANNED="$(find "$dir/scripts" -name '*.sh' ! -name '*.test.sh' -type f 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$SCANNED" -gt 0 ] && ok "$name: ${SCANNED} 本を走査した（空振りしていない）" || ng "$name: 走査対象が 0 本"
+  POINTERS="$(scan_doc_pointers "$dir")"
+  if [ -z "$POINTERS" ]; then ok "$name: 警告文に vkumai の文書への案内が無い"; else ng "$name: 警告文が導入先に無い文書を指している" "$POINTERS"; fi
+done
+# 壊して落ちることを確かめる（案内を 1 つ戻すと見つける。コメントとテストは見ない）
+POINTER_FIXTURE="$WORK/pointer-fixture"
+mkdir -p "$POINTER_FIXTURE/scripts"
+printf '%s\n' '# コメントの docs/agents/common.md は対象外' 'MSG="…してください（docs/agents/common.md「ブランチ運用ルール」参照）。"' > "$POINTER_FIXTURE/scripts/with-pointer.sh"
+printf '%s\n' '  # 字下げしたコメントの docs/superpowers/specs/x.md も対象外' 'MSG="…してください。"' > "$POINTER_FIXTURE/scripts/clean.sh"
+printf '%s\n' 'MSG="docs/agents/common.md"' > "$POINTER_FIXTURE/scripts/only.test.sh"
+RED_POINTERS="$(scan_doc_pointers "$POINTER_FIXTURE")"
+grep -qF 'with-pointer.sh:2:' <<<"$RED_POINTERS" && ok "案内を戻すと行番号つきで見つける" || ng "案内を戻しても見つけられない" "$RED_POINTERS"
+if grep -qF 'with-pointer.sh:1:' <<<"$RED_POINTERS"; then ng "コメント行まで対象にしている"; else ok "コメント行は対象外"; fi
+if grep -qE 'clean\.sh|only\.test\.sh' <<<"$RED_POINTERS"; then ng "字下げしたコメントかテストを対象にしている" "$RED_POINTERS"; else ok "字下げしたコメントとテストは対象外"; fi
+
 echo "=== scenario 4: コミット済みの dist/plugins/ が最新（--check） ==="
 if node "$BUILD" --check >/dev/null 2>"$WORK/check.err"; then ok "dist/plugins/ は最新"; else ng "dist/plugins/ が古い（bash scripts/build-plugin.sh で更新）" "$(head -5 "$WORK/check.err")"; fi
 
