@@ -32,17 +32,24 @@
 
 **02・03・06 は Claude Code 側の動きも変わります。** 判定の本体を 2 つのツールで共有しているためで、片方だけ直すことはできません（共有しているから「同じ仕様」が保てています）。
 
-## 今回の対象外（揃えるかどうかは別途判断）
+## Claude Code 側にしかない hook（仕様書 07）
 
-Claude Code 側にあって Codex 側に無い hook です。レビューで「壊れている」と分かったものではないので、今回の 6 本には入れていません。
+6 本とは別に、Claude Code 側にあって Codex 側に無い hook が **40 個**あります（2026-09-29 に全数を調べた。当初ここに書いていた「14 本」は、セッション開始時などを数えていない数字だった）。
 
-| 種類 | Claude Code 側にだけあるもの |
-| --- | --- |
-| ツール実行の前後 | `check-run-manifest-presence.sh` / `check-readonly-bash.sh` / `mark-supabase-started.sh` / `record-test-failure.sh`（4 本） |
-| ターン終了時 | `check-full-run-before-finish.sh` / `check-escape-ledger.sh` / `check-domain-decisions-suggest.sh` / `verify-claims.sh` / `gate-effectiveness-monthly-check.sh` / `check-gap-check-state.sh` / `check-aidd-stats-recorded.sh` / `check-aidd-phase-stats-recorded.sh` / `check-handoff-format.sh` / `check-find-av-precision-recorded.sh`（10 本） |
-| セッション開始時 | 今回は未比較 |
+| # | 仕様書 | 内容 | 状態 |
+| --- | --- | --- | --- |
+| 07 | [Claude Code 側にしかない hook を、Codex へ持っていく](07-claude-only-hooks.md) | 40 個を仕分け、持っていけるものを持っていく | 2026-09-30 承認（決めてほしいことは、おすすめの通り）。A の 12 個を実装済み。**Codex の実機での確認は未実施**（人が `/hooks` で信頼する操作が要る） |
 
-「全部同じ」をここまで広げる場合は、6 本が終わってから別の仕様書にします。多くは Claude Code の transcript や AIDD ワークフローに依存しており、Codex へそのまま持っていけるかは**確認が必要**です。
+| 区分 | 個数 | 扱い | 状態 |
+| --- | --- | --- | --- |
+| A: 登録するだけで動く | 12 | 持っていく | 実装済み（入口 `scripts/codex-session-start.sh`） |
+| A': ローカル Supabase の自動停止 | 2 | 実機確認（人による信頼の操作が要る）の後に判断 | 未着手 |
+| B: 作り直しが要る | 8 | 1 つずつ別の仕様書にする | 未着手 |
+| C: 持っていかない | 18 | 対象が Claude Code 自身（7）、AIDD のワークフロー（10）、別の仕組みで足りている（1） | — |
+
+仕様書を書いた時点では A が 13 個・B が 7 個でした。実装のときに測ると、「用済みの作業場所やブランチが溜まっている」の見張り（`check-stale-worktrees.sh`）は、知らせ済みの印をファイルに書き、初回は約 5 秒かかることが分かったので、A から B へ移しました。
+
+どの hook をどの区分にしたかは `scripts/lib/codex-hook-gap.json` に 1 本ずつ書いてあり、`scripts/codex-hook-gap.test.sh` が実際の登録と突き合わせます。
 
 ## 進め方（AI 用）
 
