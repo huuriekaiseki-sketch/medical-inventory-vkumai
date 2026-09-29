@@ -3,9 +3,9 @@
   "algorithm": "sha256",
   "files": {
     ".codex-plugin/plugin.json": "95d854cd0cd3b48f47f23587f8dc72692d9f9a4138e8f7d738ec79a172bbe165",
-    "CHANGELOG.md": "59e7ddb48f2b64457d3d1efc1cb3240169d0e2696a9eeae805dc9fd8903a1817",
+    "CHANGELOG.md": "7241bda298b8cdeefd710fb61fa8022f5ae3ca1ef84a6f815c19a39a2a309055",
     "COMPATIBILITY.md": "7e65f141533f303e16037b16d8c7306948d76058f1c3aef14b3fa31e76ae427e",
-    "KNOWN-LIMITS.md": "92ce0c8dcb1fe841132d45494f14fa5a0bdbaacc9e70bf8e1f39468f1b5bcc2c",
+    "KNOWN-LIMITS.md": "eed701c6273cc736888f65e62085d610ef21e5c8553c6be5c37034e456c2c19b",
     "hooks/hooks.json": "641117902fe1c0c4a255cc86c3b1c4a5202ce9944da7bb53dbadf2ab1142fffb",
     "scripts/check-dependency-change.sh": "053eb59fe5c4d5f25606adecf11291d8ad23987340584561f988e3ffbb60be91",
     "scripts/check-dependency-change.test.sh": "fe6697fb350086e4df5eff6eaf6d684f74155f8e911939cc6087cb2fffe22b6f",

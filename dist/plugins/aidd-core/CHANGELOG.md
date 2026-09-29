@@ -8,7 +8,8 @@
   （仕様書 `docs/specs/codex-hook-parity/01-apply-patch.md`）
 - **Claude Code 側の判定は変わらない**（`apply_patch` は Codex だけが使うツール名）
 - hook 定義（`hooks/hooks.json`）は 4 プラグインとも不変。**Codex 側の再信頼は不要**
-- Codex 実機での発火は未検証
+- Codex CLI 0.147.0 の実機で deny を実測した（`docs/plugin/codex/evidence/2026-09-29-apply-patch-verify.md`。
+  0.1.3 のキャッシュの判定本体を一時的に差し替えて測った。配布した版そのものでの発火は、配ってから測る）
 
 ## 0.1.3（2026-09-28）
 
