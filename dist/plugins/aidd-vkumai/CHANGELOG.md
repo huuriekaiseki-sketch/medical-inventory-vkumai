@@ -1,5 +1,13 @@
 # 変更履歴（7 項目の 7 の前半。既知の制約は KNOWN-LIMITS.md）
 
+## 未リリース（次の版で配る）
+
+- aidd-core の hook の生存診断（`scripts/lib/aidd-doctor.mjs`）が、**実行ビットの無い hook** も名指しするようにした。
+  hook の登録はスクリプトを直接呼ぶので、実行ビットが無いと呼ばれても起動できず、何も起きない。
+  `bash x.sh` のように実行系を前に置いた登録には求めない。出力の最後の行に `notExecutable=N` が増える
+  （中心リポジトリで 3 本が約 3 週間動いていなかった。`docs/agents/escaped-defects.md` の E-099）
+- **配布物は元から実行ビット付きで生成されるので、導入先の hook の動きは変わらない**
+
 ## 0.1.4（2026-09-29）
 
 Codex の hook を Claude Code と同じ仕様に揃える 6 件（仕様書 `docs/specs/codex-hook-parity/`、PR #858〜#863）。

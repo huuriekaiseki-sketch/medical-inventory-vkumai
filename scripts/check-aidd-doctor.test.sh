@@ -248,6 +248,7 @@ echo "=== scenario 12: 登録されているのに実体が無い hook を名指
 FX="${TMP_ROOT}/unresolved"
 mkdir -p "${FX}/.claude" "${FX}/.codex" "${FX}/scripts"
 printf '#!/usr/bin/env bash\njq --version >/dev/null || exit 0\n' > "${FX}/scripts/check-real.sh"
+chmod +x "${FX}/scripts/check-real.sh"
 cat > "${FX}/.claude/settings.json" <<'EOF'
 {"hooks":{"SessionStart":[{"matcher":"startup","hooks":[
   {"type":"command","command":"$CLAUDE_PROJECT_DIR/scripts/check-real.sh","timeout":5},
@@ -293,12 +294,83 @@ fi
 echo "=== scenario 13: 実体がすべて揃っていれば黙る（誤検知しない。対を置く） ==="
 printf '#!/usr/bin/env bash\njq --version >/dev/null || exit 0\n' > "${FX}/scripts/check-deleted.sh"
 printf '#!/usr/bin/env bash\njq --version >/dev/null || exit 0\n' > "${FX}/scripts/codex-gone.sh"
+chmod +x "${FX}/scripts/check-deleted.sh" "${FX}/scripts/codex-gone.sh"
 out="$(node "${DOCTOR}" "${FX}" 2>&1)"
 status=$?
 if [ "${status}" -eq 0 ] && ! grep -q "実体なし" <<<"${out}"; then
   ok "揃っていれば実体なしとは言わない"
 else
   ng "揃っているのに実体なしと言う（誤検知）" "${out}"
+fi
+
+echo "=== scenario 14: 実体はあるのに実行ビットが無い hook を名指しする ==="
+# WHY(2026-09-30 に実測して見つけた穴): hook の登録はスクリプトを**直接**呼ぶので、
+#      実行ビットが無いスクリプトは呼ばれるたびに「権限がありません」で終わり、何も起きない。
+#      2026-09-10〜11 に足した 3 本が 100644 で入っており、**追加してから一度も動いていなかった**。
+#      うち 1 本はこの診断を呼ぶ hook（check-hook-dependencies.sh）そのものだった。
+#      実体の有無（scenario 12）だけを見ていたので、診断は「実体 50 本・問題なし」と言っていた。
+chmod -x "${FX}/scripts/check-deleted.sh" "${FX}/scripts/codex-gone.sh"
+out="$(node "${DOCTOR}" "${FX}" 2>&1)"
+status=$?
+if [ "${status}" -ne 0 ]; then
+  ok "実行ビットの無い hook があれば落ちる（終了コード ${status}）"
+else
+  ng "実行ビットが無くても通る（起動できない hook を見逃す）" "${out}"
+fi
+if grep -q "check-deleted.sh（実行ビットなし）" <<<"${out}"; then
+  ok "Claude 側の実行ビットなしを名指しする"
+else
+  ng "Claude 側の実行ビットなしを名指ししない" "${out}"
+fi
+if grep -q "codex-gone.sh（実行ビットなし）" <<<"${out}"; then
+  ok "Codex 側の実行ビットなしも名指しする"
+else
+  ng "Codex 側の実行ビットなしを名指ししない" "${out}"
+fi
+if grep -q "check-real.sh（実行ビットなし）" <<<"${out}"; then
+  ng "実行ビットのある hook まで名指しする（誤検知）" "${out}"
+else
+  ok "実行ビットのある hook は名指ししない"
+fi
+if grep -q "^aidd-doctor: hook に登録された 2 本のスクリプトに実行ビットが無い" <<<"${out}"; then
+  ok "SessionStart hook が拾える形で、本数つきで出す"
+else
+  ng "落ちるが人には伝わらない形で出している" "${out}"
+fi
+if grep -q "notExecutable=2" <<<"${out}"; then
+  ok "実行ビットなし 2 本として数える"
+else
+  ng "数え方が実態と違う" "${out}"
+fi
+
+echo "=== scenario 15: 実行系を前に置いて呼ぶ登録は、実行ビットを求めない（誤検知しない） ==="
+# `bash x.sh` や `node x.mjs` は実行系がファイルを読むので、実行ビットが無くても動く
+FX2="${TMP_ROOT}/interp"
+mkdir -p "${FX2}/.claude" "${FX2}/scripts"
+printf '#!/usr/bin/env bash\njq --version >/dev/null || exit 0\n' > "${FX2}/scripts/via-bash.sh"
+printf 'console.log(1)\n' > "${FX2}/scripts/via-node.mjs"
+cat > "${FX2}/.claude/settings.json" <<'EOF'
+{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[
+  {"type":"command","command":"bash $CLAUDE_PROJECT_DIR/scripts/via-bash.sh","timeout":5},
+  {"type":"command","command":"node $CLAUDE_PROJECT_DIR/scripts/via-node.mjs","timeout":5}
+]}]}}
+EOF
+out="$(node "${DOCTOR}" "${FX2}" 2>&1)"
+status=$?
+if [ "${status}" -eq 0 ] && ! grep -q "実行ビットなし" <<<"${out}"; then
+  ok "実行系を前に置いた登録は通る"
+else
+  ng "実行系を前に置いた登録まで実行ビットを求める（誤検知）" "${out}"
+fi
+
+echo "=== scenario 16: このリポジトリの hook は、すべて起動できる ==="
+# WHY: scenario 1 は「足りない実行系」を環境の問題として落とさずに知らせるだけにしている。
+#      実行ビットは環境ではなく**リポジトリの中身**の問題なので、ここは落とす。
+out="$(node "${DOCTOR}" "${REPO_ROOT}" 2>&1)"
+if grep -q "notExecutable=0" <<<"${out}"; then
+  ok "実行ビットの無い hook は 0 本"
+else
+  ng "登録されているのに起動できない hook がある（chmod +x と git update-index --chmod=+x で直す）" "$(grep -e '実行ビット' <<<"${out}")"
 fi
 
 if [ "${fail}" -eq 0 ]; then
