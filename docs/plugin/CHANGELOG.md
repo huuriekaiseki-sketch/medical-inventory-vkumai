@@ -1,6 +1,9 @@
 # 変更履歴（7 項目の 7 の前半。既知の制約は KNOWN-LIMITS.md）
 
-## 未リリース（次の版で配る）
+## 0.1.4（2026-09-29）
+
+Codex の hook を Claude Code と同じ仕様に揃える 6 件（仕様書 `docs/specs/codex-hook-parity/`、PR #858〜#863）。
+初めて**スクリプトの中身が変わる**版（0.1.1〜0.1.3 の差は文書と構成のみだった）。
 
 - 判定本体 `check-skip-marker-write.sh`（aidd-core / aidd-codex）と `check-dependency-change.sh`
   （aidd-vkumai / aidd-codex-vkumai）が、Codex のファイル編集（`apply_patch`）を読むようにした。
