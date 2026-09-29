@@ -11,7 +11,7 @@
 - project の `.codex/hooks.json` に同じ hook があると二重発火しうる。doctor は警告のみで設定を書き換えない。
 - doctor は実行記録を持たず、実発火の有無や効果を報告しない。
 - doctor の `部品` 行は、このプラグインの 4 本と判定本体 `check-skip-marker-write.sh` の「ファイルがあるか・実行できるか」だけを見る。中身が配布時と同じかは見ない（それは `.aidd-manifest.json` との照合の担当で、Codex 用プラグインには照合スクリプトを同梱していない）。
-- `codex-skip-marker-deny.sh` は、判定本体が無い・失敗した・読めない結果を返したとき、exit 2 で止める側に倒す（0.1.3 までは rc=127 などで抜けるだけだった）。**このとき対象のツール（シェル実行とファイル編集）は全部止まる。** 止めた理由に欠けているものと直し方（入れ直す）を出す。Codex が exit 2 以外の失敗をどう扱うかは未確認。
+- `codex-skip-marker-deny.sh` は、判定本体が無い・失敗した・読めない結果を返したとき、exit 2 で止める側に倒す（0.1.3 までは rc=127 などで抜けるだけだった）。**このとき対象のツール（シェル実行とファイル編集）は全部止まる。** 止めた理由に欠けているものと直し方（入れ直す）を出す。配布した 0.1.4 の実機（Codex CLI 0.147.0）で、判定本体を一時的に退避すると `echo hello` も `apply_patch` も止まることを実測した（中心リポジトリの `docs/plugin/codex/evidence/2026-09-29-release-0.1.4-verify.md`）。Codex が exit 2 以外の失敗をどう扱うかは未確認。
 - vkumai 固有の hook（Supabase 直接 DDL の deny・npm 依存変更の deny・品質チェック未実行の警告）はこのプラグインに入っていない。別プラグイン `aidd-codex-vkumai`（Next.js + Supabase + npm 前提）で配る。doctor はそちらの hook を診断しない。
 
 根拠: [OpenAI 公式のプラグイン構成と hook 信頼の説明](https://developers.openai.com/plugins/build/plugins)。
