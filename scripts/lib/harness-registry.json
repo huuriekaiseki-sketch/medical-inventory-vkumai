@@ -48,6 +48,8 @@
         "scripts/check-workflow-nesting.test.sh",
         "scripts/codex-agents-sandbox.test.sh",
         "scripts/codex-config-separation.test.sh",
+        "scripts/codex-hook-gap.test.sh",
+        "scripts/codex-session-start.test.sh",
         "scripts/codex-skip-marker-deny.test.sh",
         "scripts/create-worktree.test.sh",
         "scripts/derive-test-selection.test.sh",

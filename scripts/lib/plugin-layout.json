@@ -314,7 +314,8 @@
   "supportScriptsNotDistributed": {
     "_comment": "**配らないと判断した**支援スクリプト（2026-09-12 新設）。値は配らない理由。検査（*.test.sh）には checksNotDistributed があったのに、支援スクリプトには「配らないと決めた」と書く場所そのものが無かった——そのため表に無いものが『判断した』のか『足し忘れた』のか区別できなかった（KNOWN-LIMITS.md と check-plugin-asset-coverage.test.sh の限界の、2 か所で申告されていた穴）。",
     "_howto": "理由は「なぜ導入先に要らないか」を具体的に書く。中心リポジトリの運用だけに要るもの（生成器・worktree 作成・git hook の入れ方）、個人環境のもの、外部サービス前提のものが典型。空文字は `check-support-script-coverage.test.sh` が落とす。",
-    "measure-ddl-lock.sh": "ローカルのデータベースが PostgreSQL であること・それが `supabase_db_` で始まる名前のコンテナで動いていることを前提に、その中の psql を docker exec で叩く。測る DDL の顔ぶれもこのスタックの migration の書き方に合わせてある"
+    "measure-ddl-lock.sh": "ローカルのデータベースが PostgreSQL であること・それが `supabase_db_` で始まる名前のコンテナで動いていることを前提に、その中の psql を docker exec で叩く。測る DDL の顔ぶれもこのスタックの migration の書き方に合わせてある",
+    "codex-session-start.sh": "Codex のセッション開始時に、リポジトリの状態を見る点検をまとめて動かす入口（仕様書 docs/specs/codex-hook-parity/07-claude-only-hooks.md）。動かす点検の多くが、中心リポジトリの運用文書（訓練や棚卸しの予定日）と計測の記録を読む。導入先にはそれが無いので、まず中心リポジトリだけで使う。配るかは導入先が決まってから決める"
   },
   "supportScriptsUnclassified": {
     "_comment": "**まだ配る・配らないを決めていない**支援スクリプト（2026-09-12 新設）。値は空でよい——ここは判断を保留する場所で、理由を書けるなら supportScriptsNotDistributed か supportScripts へ移すべきだから。`unclassifiedMax` で件数を固定し、**増やせないが減らせる**（checksSplittable と同じ「返す当てのある借金」の形）。",
@@ -554,6 +555,8 @@
   },
   "checksNotDistributed": {
     "_comment": "配らない検査と、その理由。導入先に存在しないもの（このリポジトリの docs・カタログ・スキーマ）を検査していて、配ると必ず落ちるものだけをここに書く。「面倒だから」で足さない。",
+    "codex-session-start.test.sh": "対象の入口（codex-session-start.sh）を配っていない。scenario 17・18 は中心リポジトリの点検の一覧（scripts/lib/codex-session-start-checks.txt）を名指しで見る",
+    "codex-hook-gap.test.sh": "中心リポジトリの `.claude/settings.json` と `.codex/hooks.json` の実登録の差を、中心リポジトリの一覧（scripts/lib/codex-hook-gap.json）と突き合わせる。導入先の hook の顔ぶれは別で、配ると必ず落ちる",
     "check-test-matrix.test.sh": "docs/agents/test-matrix.md の実データを検査する。形式は汎用だが、行の中身は導入先ごとに違う（形式だけを配るには雛形が要る。#535）",
     "check-promise-catalog.test.sh": "同上（promise-catalog.md の実データ）",
     "check-invariant-catalog.test.sh": "同上（invariant-catalog.md の実データ）",

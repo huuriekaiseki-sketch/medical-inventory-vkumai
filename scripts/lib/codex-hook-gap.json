@@ -1,0 +1,64 @@
+{
+  "_comment": "Claude Code の hook のうち、Codex に同じもの・相方が登録されていないものの一覧と、その扱い（2026-09-30。仕様書 docs/specs/codex-hook-parity/07-claude-only-hooks.md）。検査（scripts/codex-hook-gap.test.sh）が、`.claude/settings.json` と `.codex/hooks.json` の実登録から差を計算して、この一覧と突き合わせる。Claude 側に hook を足したら、ここで区分を決めるまで検査が落ちる。",
+  "_limits": "区分が正しいかは機械では見ない（名前が載っていて、区分と理由が書いてあれば通る）。相方（counterparts）が Claude 側と同じことをしているかも見ない——それは各ラッパーのテストの担当。",
+  "categories": {
+    "entry": "Codex のセッション開始時の入口（scripts/codex-session-start.sh）が動かす。一覧は scripts/lib/codex-session-start-checks.txt で、この区分と一致していなければ検査が落ちる",
+    "pending-verify": "登録するだけで動く見込みだが、Codex の実機での確認（人による /hooks の信頼が要る）が先",
+    "needs-rework": "考え方は持っていけるが、Codex 向けに作り直しが要る。1 つずつ別の仕様書にする",
+    "claude-only-target": "見張る対象が Claude Code そのもの。Codex には同じものが無いので持っていかない",
+    "aidd-workflow": "AIDD のワークフロー（Claude Code の機能で動く）を見張るもの。Codex では回していないので持っていかない",
+    "covered-otherwise": "Codex では別の仕組みで既に守られているので持っていかない"
+  },
+  "counterparts": {
+    "_comment": "Claude 側のスクリプト → Codex 側で同じ役割を担う相方。名前が違っても「Codex に在る」と数える",
+    "check-skip-marker-write.sh": "codex-skip-marker-deny.sh",
+    "check-dependency-change.sh": "codex-dependency-change-deny.sh",
+    "ai-check-suggest.sh": "codex-ai-check-suggest.sh"
+  },
+  "claudeOnly": {
+    "check-hooks-path-alive.sh": { "category": "entry", "why": "git の設定を見る。どのツールから動かしても同じ結果になる（知らせるだけでなく core.hooksPath を直す）" },
+    "check-fault-injection-drill-staleness.sh": { "category": "entry", "why": "運用文書の予定日を見る" },
+    "check-upstream-docs-review-staleness.sh": { "category": "entry", "why": "運用文書の予定日を見る" },
+    "check-dependency-update-staleness.sh": { "category": "entry", "why": "運用文書の予定日を見る" },
+    "check-access-review-staleness.sh": { "category": "entry", "why": "運用文書の予定日を見る" },
+    "check-empty-session-report.sh": { "category": "entry", "why": "docs/sessions/ の中身を見る" },
+    "check-integration-freshness.sh": { "category": "entry", "why": "計測の記録と木のハッシュを見る" },
+    "check-e2e-freshness.sh": { "category": "entry", "why": "計測の記録と木のハッシュを見る" },
+    "check-rls-mutation-freshness.sh": { "category": "entry", "why": "計測の記録と木のハッシュを見る" },
+    "check-mutation-freshness.sh": { "category": "entry", "why": "計測の記録と木のハッシュを見る" },
+    "check-hook-dependencies.sh": { "category": "entry", "why": "hook が要る実行系と、登録された hook の実体を見る" },
+    "check-blocked-issues-staleness.sh": { "category": "entry", "why": "GitHub の課題を見る。通信が要るので一覧の最後に置く" },
+
+    "mark-supabase-started.sh": { "category": "pending-verify", "why": "相方（stop-supabase-on-session-end.sh）が動かないと意味が無い。2 本で 1 組" },
+    "stop-supabase-on-session-end.sh": { "category": "pending-verify", "why": "Codex CLI 0.147.0 が SessionEnd を hook に知らせるか、実機で未確認" },
+
+    "check-stale-worktrees.sh": { "category": "needs-rework", "why": ".aidd/ に「知らせ済み」の印を書く（Claude Code と同じ印を共有すると、片方がもう片方を黙らせる）。初回は GitHub への問い合わせで約 5 秒かかり、入口の合計時間の上限に収まらない（2026-09-30 実測）" },
+    "record-test-failure.sh": { "category": "needs-rework", "why": "Codex は、コマンドの終了コードを hook に渡さない（tool_response が文字列）。出力の文字から読み取る作りに変える必要がある" },
+    "check-escape-ledger.sh": { "category": "needs-rework", "why": "record-test-failure.sh が動かないと、聞く材料が無い" },
+    "check-full-run-before-finish.sh": { "category": "needs-rework", "why": "「このセッションで 1 回だけ知らせた」の記録を、Claude Code と別の場所に置く必要がある" },
+    "check-domain-decisions-suggest.sh": { "category": "needs-rework", "why": "同上（知らせ済みの記録の置き場所）" },
+    "check-handoff-format.sh": { "category": "needs-rework", "why": "Claude Code の会話の記録を読んで判断している。Codex の記録は形が違い、安定したインターフェースでもない" },
+    "verify-claims.sh": { "category": "needs-rework", "why": "同上。さらに、突き合わせに Claude を呼んでいる" },
+    "check-run-manifest-presence.sh": { "category": "needs-rework", "why": "Codex のファイル編集の形（apply_patch）に合わせる必要がある。止めずに知らせる、が Codex でできるかも未確認" },
+
+    "check-automode-config.sh": { "category": "claude-only-target", "why": "Claude Code の個人設定を見る" },
+    "check-claude-md-size.sh": { "category": "claude-only-target", "why": "CLAUDE.md の大きさを見る" },
+    "check-subagent-model-force.sh": { "category": "claude-only-target", "why": "Claude Code のサブエージェントのモデル指定を見る" },
+    "check-otel-collector-status.sh": { "category": "claude-only-target", "why": "Claude Code の計測の送り先を見る" },
+    "check-plugin-integrity.sh": { "category": "claude-only-target", "why": "Claude Code のプラグインを見る" },
+    "maintenance-digest.sh": { "category": "claude-only-target", "why": "Setup イベント（Claude Code のもの）で動く" },
+    "log-instructions-loaded.sh": { "category": "claude-only-target", "why": "InstructionsLoaded イベント（Claude Code のもの）で動く" },
+
+    "check-workflow-interruption.sh": { "category": "aidd-workflow", "why": "ワークフローが途中で止まったことを見る" },
+    "check-recovery-queue.sh": { "category": "aidd-workflow", "why": "ワークフローの復旧の待ち行列を見る" },
+    "reinject-aidd-run-state.sh": { "category": "aidd-workflow", "why": "ワークフローの実行状態を、会話を縮めた後に入れ直す" },
+    "gate-effectiveness-monthly-check.sh": { "category": "aidd-workflow", "why": "ワークフローのゲートの効き目を見る" },
+    "check-gap-check-state.sh": { "category": "aidd-workflow", "why": "ワークフローの記録漏れを見る" },
+    "check-aidd-stats-recorded.sh": { "category": "aidd-workflow", "why": "ワークフローの記録漏れを見る" },
+    "check-aidd-phase-stats-recorded.sh": { "category": "aidd-workflow", "why": "ワークフローの記録漏れを見る" },
+    "check-find-av-precision-recorded.sh": { "category": "aidd-workflow", "why": "ワークフローの記録漏れを見る" },
+    "log-subagent-hook-skeleton.sh": { "category": "aidd-workflow", "why": "サブエージェントの開始と終了を記録する（SubagentStart と SubagentStop の 2 つに登録）" },
+
+    "check-readonly-bash.sh": { "category": "covered-otherwise", "why": "Codex では、役割ごとの設定（sandbox_mode = \"read-only\"）で既に止めている" }
+  }
+}

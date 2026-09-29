@@ -48,6 +48,8 @@
 | [`docs/agents/claude-codex-coexistence-template.md`](./claude-codex-coexistence-template.md) | Claude/Codex共存設計のリポジトリ非依存テンプレート（9原則・実機検証手順・移植チェックリスト） |
 | `scripts/check-branch-tool-ownership.sh` | ブランチ命名規約（codex/*・claude/*）と起動ツールの取り違えをSessionStartで警告（両ツール共有） |
 | `scripts/codex-skip-marker-deny.sh` | Codex用ask→deny変換ラッパー（Codexはask未対応のため） |
+| `scripts/codex-session-start.sh` | **Codex のセッション開始時の入口**（2026-09-30）。Claude Code 側にしか無かった SessionStart の点検のうち、リポジトリの状態を見るだけの 12 本を順に動かし、知らせを 1 つにまとめる。動かす点検は `scripts/lib/codex-session-start-checks.txt`、持っていかない hook とその理由は `scripts/lib/codex-hook-gap.json`。限界: **合計時間は整数の秒で数える**ので、上限（5 秒）を最大 1 秒ほど超えうる。打ち切った点検が起動した子（`gh` など）までは止めない。**人が Codex の `/hooks` で信頼するまでは一度も動かず、動いていないことをこの入口自身は知らせられない** |
+| `scripts/codex-hook-gap.test.sh` | **Claude Code にあって Codex に無い hook の一覧を固定する**（2026-09-30）。`.claude/settings.json` と `.codex/hooks.json` の実登録から差を計算し、`scripts/lib/codex-hook-gap.json` の区分（持っていく・作り直す・持っていかない）と突き合わせる。Claude 側に hook を足して区分を決めていないと落ちる。限界: **区分が正しいかは見ない**（名前が載っていれば通る）。Codex 側の相方は名前の対応表で判断するので、相方が同じことをしているかは見ない |
 | `docs/ai-config-map.md` | エージェント・スキル全体マップ |
 | `src/app/` | Next.js App Router のページ・API Routes |
 | `src/components/` | UI コンポーネント |
