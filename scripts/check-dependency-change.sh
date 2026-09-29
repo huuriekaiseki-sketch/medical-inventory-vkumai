@@ -51,6 +51,98 @@ is_readonly_segment() {
   esac
 }
 
+# --- shared: command-prefix (begin) ---
+# WHY: 判定はセグメントの先頭（^）で行うので、先頭に何かが付くだけで外れていた
+# （2026-09-29 実測: `PGPASSWORD=postgres psql …`・`sudo npm install …` などが素通り）。
+# これらはわざと隠した書き方ではなく普通の書き方なので、判定の前に読み飛ばす
+# （docs/specs/codex-hook-parity/02-command-prefix.md）。読み飛ばすのは次の 3 種だけ:
+#   1. 先頭の空白と、サブシェル / グループの開き括弧（`(` `{`）
+#   2. 環境変数の代入（`名前=値`。値は引用符付きでもよい）
+#   3. 前置きの 6 語（sudo / env / command / time / nohup / exec）と、そのフラグ
+# 限界: 前置きの語のフラグのうち「次の 1 語を値として取る」ものは、下の表に書いたものしか
+# 知らない。表に無いフラグが値を取ると、その値をコマンドと読んで外れる。変数に入れてから
+# 実行する・別のコマンド（xargs など）に実行させる書き方も対象外（難読化への完全対策はしない）。
+# このブロックは check-direct-ddl-execution.sh と check-dependency-change.sh に同じものがある
+# （配布の単位が別なので共有 lib にしない）。1 文字でも違うと
+# check-direct-ddl-execution.test.sh scenario 34 が落ちる。
+PREFIX_LEAD_RE='^[[:space:]({]+(.*)$'
+PREFIX_ASSIGN_RE='^[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]*)([[:space:]]+(.*))?$'
+PREFIX_WORD_RE='^([^[:space:]]*/)?(sudo|env|command|time|nohup|exec)([[:space:]]+(.*))?$'
+PREFIX_FLAG_RE='^(-[^[:space:]]*)([[:space:]]+(.*))?$'
+PREFIX_NEXT_RE='^[^[:space:]]+([[:space:]]+(.*))?$'
+INLINE_SHELL_RE='^([^[:space:]]*/)?(bash|sh|zsh)[[:space:]]+(-.*)$'
+INLINE_C_FLAG_RE='^-[A-Za-z]*c$'
+
+# 前置きの語のフラグのうち、次の 1 語を値として取るもの
+prefix_value_flag() { # $1=前置きの語 $2=フラグ
+  case "$1:$2" in
+    sudo:-u|sudo:-g|sudo:-h|sudo:-p|sudo:-C|sudo:-D|sudo:-R|sudo:-T|sudo:-U) return 0 ;;
+    sudo:--user|sudo:--group|sudo:--host|sudo:--prompt|sudo:--chdir) return 0 ;;
+    env:-u|env:--unset|env:-C|env:--chdir|env:-S|env:--split-string) return 0 ;;
+    time:-o|time:--output|time:-f|time:--format) return 0 ;;
+    exec:-a) return 0 ;;
+  esac
+  return 1
+}
+
+# セグメントの先頭から前置きを読み飛ばし、実際に動くコマンドから始まる文字列を返す
+strip_prefix() {
+  local seg="$1" prev="" word rest flag
+  while [ "$seg" != "$prev" ]; do
+    prev="$seg"
+    if [[ "$seg" =~ $PREFIX_LEAD_RE ]]; then
+      seg="${BASH_REMATCH[1]}"
+    fi
+    if [[ "$seg" =~ $PREFIX_ASSIGN_RE ]]; then
+      seg="${BASH_REMATCH[3]}"
+      continue
+    fi
+    if [[ "$seg" =~ $PREFIX_WORD_RE ]]; then
+      word="${BASH_REMATCH[2]}"
+      rest="${BASH_REMATCH[4]}"
+      while [[ "$rest" =~ $PREFIX_FLAG_RE ]]; do
+        flag="${BASH_REMATCH[1]}"
+        rest="${BASH_REMATCH[3]}"
+        # `command -v psql` は psql を実行しない（あるかどうかを調べるだけ）
+        if [ "$word" = "command" ]; then
+          if [ "$flag" = "-v" ] || [ "$flag" = "-V" ]; then
+            rest=""
+            break
+          fi
+        fi
+        if prefix_value_flag "$word" "$flag"; then
+          if [[ "$rest" =~ $PREFIX_NEXT_RE ]]; then
+            rest="${BASH_REMATCH[2]}"
+          fi
+        fi
+      done
+      seg="$rest"
+    fi
+  done
+  printf '%s' "$seg"
+}
+
+# `bash -c "…"` のように、シェルへ文字列で渡されたコマンドを取り出す（該当しなければ空）。
+# 取り出した文字列は呼び出し側がもう一度セグメントに分けて判定する（掘るのは 1 段だけ）。
+inline_shell_command() {
+  local seg="$1" rest flag
+  if [[ "$seg" =~ $INLINE_SHELL_RE ]]; then
+    rest="${BASH_REMATCH[3]}"
+    while [[ "$rest" =~ $PREFIX_FLAG_RE ]]; do
+      flag="${BASH_REMATCH[1]}"
+      rest="${BASH_REMATCH[3]}"
+      if [[ "$flag" =~ $INLINE_C_FLAG_RE ]]; then
+        rest="${rest#[\"\']}"
+        rest="${rest%[\"\']}"
+        printf '%s' "$rest"
+        return 0
+      fi
+    done
+  fi
+  return 0
+}
+# --- shared: command-prefix (end) ---
+
 # サブコマンドより後ろに「フラグでない引数」（= パッケージ名）が 1 つ以上あるか
 has_package_arg() {
   local seg="$1" word i=0
@@ -96,11 +188,57 @@ check_manifest_path() {
   return 1
 }
 
+# WHY: `npm --prefix web install foo` のように、npm とサブコマンドの間にフラグが入ると、
+# 「npm の直後がサブコマンド」を前提にした判定から外れる（2026-09-29 実測で素通り）。
+# サブコマンドより前のフラグを読み飛ばして「npm install foo」の形に直す。
+# 次の 1 語を値として取るフラグは、下の 4 つしか知らない（全フラグを正しく読むのは無理なので
+# 代表だけにする）。`--registry=URL` のように = で繋いだ形は 1 語なのでそのまま読み飛ばせる。
+# 限界: `yarn --cwd web add foo`・`pnpm --filter web add zod` のように、この 4 つ以外の
+# フラグが値を取ると、その値をサブコマンドと読んで外れる。
+PM_LEADING_FLAG_RE='^(([^[:space:]]*/)?(npm|yarn|pnpm))[[:space:]]+(-.*)$'
+normalize_pm_flags() {
+  local seg="$1" tool rest flag
+  if [[ "$seg" =~ $PM_LEADING_FLAG_RE ]]; then
+    tool="${BASH_REMATCH[1]}"
+    rest="${BASH_REMATCH[4]}"
+    while [[ "$rest" =~ $PREFIX_FLAG_RE ]]; do
+      flag="${BASH_REMATCH[1]}"
+      rest="${BASH_REMATCH[3]}"
+      case "$flag" in
+        --prefix|--workspace|-w|--registry)
+          if [[ "$rest" =~ $PREFIX_NEXT_RE ]]; then
+            rest="${BASH_REMATCH[2]}"
+          fi
+          ;;
+      esac
+    done
+    seg="$tool $rest"
+  fi
+  printf '%s' "$seg"
+}
+
 INPUT="$(cat)"
 TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')"
 
 ASK=0
 REASON=""
+
+# 前置きを読み飛ばした後のセグメントを判定する。確認が要るなら ASK / REASON を立てて 0 を返す
+check_segment() { # $1=前置きを読み飛ばしたセグメント $2=理由文に出す元のセグメント
+  local seg="$1" shown="$2"
+  if [ -z "$seg" ]; then return 1; fi
+  # 前置きの後ろが読み取り専用のコマンドなら確認しない（`sudo grep "npm install" …`）
+  if is_readonly_segment "$seg"; then return 1; fi
+  seg="$(normalize_pm_flags "$seg")"
+  if [[ "$seg" =~ $NPM_PATTERN ]] || [[ "$seg" =~ $YARN_PATTERN ]] || [[ "$seg" =~ $PNPM_PATTERN ]]; then
+    if has_package_arg "$seg"; then
+      ASK=1
+      REASON="依存パッケージの追加・更新・削除は「実行する第三者コードと依存関係を増やす設計判断」です。実行前に (1) 用途と代替案（既存の依存や標準 API で足りないか）、(2) 権限・環境変数・DB への影響、(3) 固定する版と出所（registry.npmjs.org か）、を報告して承認を得てください。実行後は package.json / package-lock.json の差分、npm ci、npm audit --omit=dev --audit-level=high の結果と、失敗時のロールバック方法を引き継ぎメモ 00「依存の変更」に書きます（docs/agents/known-failure-patterns.md「依存関係層」）。コマンド: $shown"
+      return 0
+    fi
+  fi
+  return 1
+}
 
 case "$TOOL_NAME" in
   Bash)
@@ -109,14 +247,18 @@ case "$TOOL_NAME" in
     while IFS= read -r RAW_SEG; do
       SEG="$(printf '%s' "$RAW_SEG" | sed -E 's/^[[:space:]]+//')"
       [ -z "$SEG" ] && continue
+      # WHY(前置きを読み飛ばす前に見る): `echo CI=1 npm install foo` は npm を実行しない
       is_readonly_segment "$SEG" && continue
-      if [[ "$SEG" =~ $NPM_PATTERN ]] || [[ "$SEG" =~ $YARN_PATTERN ]] || [[ "$SEG" =~ $PNPM_PATTERN ]]; then
-        if has_package_arg "$SEG"; then
-          ASK=1
-          REASON="依存パッケージの追加・更新・削除は「実行する第三者コードと依存関係を増やす設計判断」です。実行前に (1) 用途と代替案（既存の依存や標準 API で足りないか）、(2) 権限・環境変数・DB への影響、(3) 固定する版と出所（registry.npmjs.org か）、を報告して承認を得てください。実行後は package.json / package-lock.json の差分、npm ci、npm audit --omit=dev --audit-level=high の結果と、失敗時のロールバック方法を引き継ぎメモ 00「依存の変更」に書きます（docs/agents/known-failure-patterns.md「依存関係層」）。コマンド: $SEG"
-          break
-        fi
+      STRIPPED="$(strip_prefix "$SEG")"
+      if check_segment "$STRIPPED" "$SEG"; then break; fi
+      INNER="$(inline_shell_command "$STRIPPED")"
+      if [ -n "$INNER" ]; then
+        INNER_SEGMENTS="$(split_segments "$INNER")"
+        while IFS= read -r RAW_INNER; do
+          if check_segment "$(strip_prefix "$RAW_INNER")" "$SEG"; then break; fi
+        done <<< "$INNER_SEGMENTS"
       fi
+      if [ "$ASK" -eq 1 ]; then break; fi
     done <<< "$SEGMENTS"
     ;;
   Write|Edit|MultiEdit)
@@ -129,7 +271,7 @@ case "$TOOL_NAME" in
     PATCH_PATHS="$(extract_patch_paths "$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')")"
     while IFS= read -r PATCH_PATH; do
       [ -z "$PATCH_PATH" ] && continue
-      check_manifest_path "$PATCH_PATH" && break
+      if check_manifest_path "$PATCH_PATH"; then break; fi
     done <<< "$PATCH_PATHS"
     ;;
   *)

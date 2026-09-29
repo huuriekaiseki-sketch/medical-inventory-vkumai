@@ -61,6 +61,35 @@ for cmd in 'npm ci' 'npm install' 'npm install --package-lock-only' 'npm ci --dr
   assert_empty "$OUT" "沈黙: $cmd"
 done
 
+# --- 前置き付きのコマンド。docs/specs/codex-hook-parity/02-command-prefix.md ---
+# WHY: 判定はセグメントの先頭（^）に固定していたので、先頭に環境変数の代入や sudo などが
+# 付くだけで外れていた（2026-09-29 実測）。
+echo "=== scenario 12: 前置き付き・npm 直後のフラグ → ask ==="
+for cmd in 'CI=1 npm install lodash' 'sudo npm install -g foo' 'env npm install foo' 'npm --prefix web install foo' \
+           'npm -w pkg install foo' 'npm --registry=https://registry.npmjs.org install foo' 'npm --registry https://registry.npmjs.org install foo' \
+           '(npm install foo)' 'bash -c "npm install foo"' "sh -c 'pnpm add zod'" 'NODE_ENV=production yarn add dayjs' \
+           'sudo env CI=1 npm i left-pad' 'sudo -u node npm install foo' 'NPM_TOKEN="a b" npm install foo' 'nohup npm update next'; do
+  run_bash "$cmd"
+  assert_eq "$EXIT_CODE" "0" "exit 0: $cmd"
+  assert_eq "$(decision)" "ask" "ask: $cmd"
+done
+
+echo "=== scenario 13: 前置きの後ろが対象外なら沈黙（対照） ==="
+for cmd in 'CI=1 npm test' 'CI=1 npm ci' 'npm --prefix web ci' 'npm --prefix web install' 'npm --prefix web run install' \
+           'sudo npm ci' 'env' 'FOO=npm ls' 'command -v npm' 'bash -c "npm ci"' 'echo CI=1 npm install foo' \
+           'npm -v' 'npm --version'; do
+  run_bash "$cmd"
+  assert_eq "$EXIT_CODE" "0" "exit 0: $cmd"
+  assert_empty "$OUT" "沈黙: $cmd"
+done
+
+echo "=== scenario 14: 対象にしていない書き方は沈黙のまま（既知の制約に書いてあるもの） ==="
+for cmd in 'bun add zod' 'npx npm install foo' 'yarn --cwd web add foo' 'pnpm --filter web add zod'; do
+  run_bash "$cmd"
+  assert_eq "$EXIT_CODE" "0" "exit 0: $cmd"
+  assert_empty "$OUT" "沈黙（対象外）: $cmd"
+done
+
 echo "=== scenario 3: package.json / package-lock.json への書き込み → ask、他ファイルは沈黙 ==="
 run_file Edit "/repo/package.json"
 assert_eq "$(decision)" "ask" "Edit package.json は ask"

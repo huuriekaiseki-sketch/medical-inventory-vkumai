@@ -243,6 +243,72 @@ set -e
 assert_eq "$EXIT_CODE" "2" "exit 2(fail-closed)"
 assert_contains "$OUT" "jq not found" "jq未検出のエラーメッセージが出る"
 
+# --- 前置き付きのコマンド。docs/specs/codex-hook-parity/02-command-prefix.md ---
+# WHY: 判定はセグメントの先頭（^）に固定していたので、先頭に環境変数の代入や sudo などが
+# 付くだけで外れていた（2026-09-29 実測）。`PGPASSWORD=… psql` はローカルの Supabase へ
+# つなぐときの普通の書き方で、わざと隠した書き方ではない。
+expect_deny() { # $1=command
+  run_hook "$(jq -n --arg c "$1" '{tool_name: "Bash", tool_input: {command: $c}}')"
+  assert_eq "$EXIT_CODE" "0" "exit 0: $1"
+  assert_contains "$OUT" '"permissionDecision": "deny"' "deny: $1"
+}
+expect_silent() { # $1=command
+  run_hook "$(jq -n --arg c "$1" '{tool_name: "Bash", tool_input: {command: $c}}')"
+  assert_eq "$EXIT_CODE" "0" "exit 0: $1"
+  assert_empty "$OUT" "沈黙: $1"
+}
+
+echo "=== scenario 30: 前置き付き（2026-09-29 に素通りを実測した 8 件） → deny ==="
+expect_deny 'PGPASSWORD=postgres psql -h 127.0.0.1 -c "drop table x"'
+expect_deny 'env psql -c "select 1"'
+expect_deny 'sudo psql'
+expect_deny '(psql -c "select 1")'
+expect_deny 'bash -c "psql -c 1"'
+expect_deny 'time psql'
+expect_deny 'SUPABASE_ACCESS_TOKEN=x supabase db push'
+expect_deny 'command supabase db push'
+
+echo "=== scenario 31: 前置きの重ね掛け・値を取るフラグ・空白入りの値 → deny ==="
+expect_deny 'sudo env PGPASSWORD=x psql'
+expect_deny 'sudo -u postgres psql -c "select 1"'
+expect_deny 'PGPASSWORD="a b" psql -c "select 1"'
+expect_deny "PGPASSWORD='a b' PGHOST=127.0.0.1 psql"
+expect_deny 'env -u PGHOST psql'
+expect_deny 'nohup psql -f x.sql'
+expect_deny 'exec psql'
+expect_deny '{ psql -c 1; }'
+expect_deny 'cd db && PGPASSWORD=x psql -c 1'
+expect_deny 'env npx supabase status'
+expect_deny 'CI=1 /opt/homebrew/bin/supabase db execute --sql "select 1"'
+
+echo "=== scenario 32: シェルに文字列で渡す（bash -c / sh -c / zsh -c） → deny ==="
+expect_deny "sh -c 'psql -c 1'"
+expect_deny 'zsh -c "supabase db push"'
+expect_deny 'bash -lc "supabase db push --linked"'
+expect_deny 'sudo bash -c "PGPASSWORD=x psql"'
+
+echo "=== scenario 33: 前置きの後ろが対象外なら沈黙（対照） ==="
+expect_silent 'CI=1 npm test'
+expect_silent 'env'
+expect_silent 'sudo ls'
+expect_silent 'echo "psql"'
+expect_silent 'FOO=psql ls'
+expect_silent 'PGPASSWORD=x'
+expect_silent 'command -v psql'
+expect_silent 'sudo grep psql /etc/services'
+expect_silent 'bash -c "npm test"'
+expect_silent 'bash scripts/run-integration-tests.sh'
+expect_silent 'PGPASSWORD=x supabase db push --local'
+expect_silent 'sudo supabase db reset'
+expect_silent 'echo PGPASSWORD=x psql'
+
+echo "=== scenario 34: 前置きの読み飛ばしが check-dependency-change.sh と同じ（片方だけ直して乖離しない） ==="
+shared_block() { sed -n '/^# --- shared: command-prefix (begin) ---$/,/^# --- shared: command-prefix (end) ---$/p' "$1"; }
+DDL_BLOCK="$(shared_block "$SCRIPT")"
+DEP_BLOCK="$(shared_block "$SCRIPT_DIR/check-dependency-change.sh")"
+if [ -n "$DDL_BLOCK" ]; then echo "  OK: 共有ブロックを取り出せた（走査が空振りしていない）"; else echo "  NG: 共有ブロックが見つからない"; fail=1; fi
+assert_eq "$DEP_BLOCK" "$DDL_BLOCK" "2 本の共有ブロックが 1 文字も違わない"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

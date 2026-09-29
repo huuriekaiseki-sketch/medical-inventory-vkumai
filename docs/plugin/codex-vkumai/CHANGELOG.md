@@ -12,6 +12,9 @@
 - `codex-dependency-change-deny.sh` が、判定本体が無い・失敗した・読めない結果を返したときに exit 2 で
   止める側に倒すようにした（0.1.3 までは rc=127 などで抜けるだけ。
   仕様書 `docs/specs/codex-hook-parity/04-wrapper-fail-closed.md`）。
+- `check-direct-ddl-execution.sh` / `check-dependency-change.sh` が、前置き付きのコマンドを止めるようにした
+  （`PGPASSWORD=… psql`、`sudo npm install foo`、`bash -c "psql …"`、`npm --prefix web install foo` など。
+  0.1.3 までは素通り。仕様書 `docs/specs/codex-hook-parity/02-command-prefix.md`）。**止まる範囲が広がる。**
 - hook 定義（`hooks/hooks.json`）は不変。**再信頼不要**。
 - Codex CLI 0.147.0 の実機で deny を実測した（`docs/plugin/codex/evidence/2026-09-29-apply-patch-verify.md`。
   0.1.3 のキャッシュの判定本体を一時的に差し替えて測った。配布した版そのものでの発火は、配ってから測る）。

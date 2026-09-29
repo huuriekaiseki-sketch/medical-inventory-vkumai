@@ -108,11 +108,131 @@ split_segments() {
   printf '%s' "$1" | tr ';&|`' $'\n' | sed 's/\$(/\n/g'
 }
 
+# --- shared: command-prefix (begin) ---
+# WHY: 判定はセグメントの先頭（^）で行うので、先頭に何かが付くだけで外れていた
+# （2026-09-29 実測: `PGPASSWORD=postgres psql …`・`sudo npm install …` などが素通り）。
+# これらはわざと隠した書き方ではなく普通の書き方なので、判定の前に読み飛ばす
+# （docs/specs/codex-hook-parity/02-command-prefix.md）。読み飛ばすのは次の 3 種だけ:
+#   1. 先頭の空白と、サブシェル / グループの開き括弧（`(` `{`）
+#   2. 環境変数の代入（`名前=値`。値は引用符付きでもよい）
+#   3. 前置きの 6 語（sudo / env / command / time / nohup / exec）と、そのフラグ
+# 限界: 前置きの語のフラグのうち「次の 1 語を値として取る」ものは、下の表に書いたものしか
+# 知らない。表に無いフラグが値を取ると、その値をコマンドと読んで外れる。変数に入れてから
+# 実行する・別のコマンド（xargs など）に実行させる書き方も対象外（難読化への完全対策はしない）。
+# このブロックは check-direct-ddl-execution.sh と check-dependency-change.sh に同じものがある
+# （配布の単位が別なので共有 lib にしない）。1 文字でも違うと
+# check-direct-ddl-execution.test.sh scenario 34 が落ちる。
+PREFIX_LEAD_RE='^[[:space:]({]+(.*)$'
+PREFIX_ASSIGN_RE='^[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]*)([[:space:]]+(.*))?$'
+PREFIX_WORD_RE='^([^[:space:]]*/)?(sudo|env|command|time|nohup|exec)([[:space:]]+(.*))?$'
+PREFIX_FLAG_RE='^(-[^[:space:]]*)([[:space:]]+(.*))?$'
+PREFIX_NEXT_RE='^[^[:space:]]+([[:space:]]+(.*))?$'
+INLINE_SHELL_RE='^([^[:space:]]*/)?(bash|sh|zsh)[[:space:]]+(-.*)$'
+INLINE_C_FLAG_RE='^-[A-Za-z]*c$'
+
+# 前置きの語のフラグのうち、次の 1 語を値として取るもの
+prefix_value_flag() { # $1=前置きの語 $2=フラグ
+  case "$1:$2" in
+    sudo:-u|sudo:-g|sudo:-h|sudo:-p|sudo:-C|sudo:-D|sudo:-R|sudo:-T|sudo:-U) return 0 ;;
+    sudo:--user|sudo:--group|sudo:--host|sudo:--prompt|sudo:--chdir) return 0 ;;
+    env:-u|env:--unset|env:-C|env:--chdir|env:-S|env:--split-string) return 0 ;;
+    time:-o|time:--output|time:-f|time:--format) return 0 ;;
+    exec:-a) return 0 ;;
+  esac
+  return 1
+}
+
+# セグメントの先頭から前置きを読み飛ばし、実際に動くコマンドから始まる文字列を返す
+strip_prefix() {
+  local seg="$1" prev="" word rest flag
+  while [ "$seg" != "$prev" ]; do
+    prev="$seg"
+    if [[ "$seg" =~ $PREFIX_LEAD_RE ]]; then
+      seg="${BASH_REMATCH[1]}"
+    fi
+    if [[ "$seg" =~ $PREFIX_ASSIGN_RE ]]; then
+      seg="${BASH_REMATCH[3]}"
+      continue
+    fi
+    if [[ "$seg" =~ $PREFIX_WORD_RE ]]; then
+      word="${BASH_REMATCH[2]}"
+      rest="${BASH_REMATCH[4]}"
+      while [[ "$rest" =~ $PREFIX_FLAG_RE ]]; do
+        flag="${BASH_REMATCH[1]}"
+        rest="${BASH_REMATCH[3]}"
+        # `command -v psql` は psql を実行しない（あるかどうかを調べるだけ）
+        if [ "$word" = "command" ]; then
+          if [ "$flag" = "-v" ] || [ "$flag" = "-V" ]; then
+            rest=""
+            break
+          fi
+        fi
+        if prefix_value_flag "$word" "$flag"; then
+          if [[ "$rest" =~ $PREFIX_NEXT_RE ]]; then
+            rest="${BASH_REMATCH[2]}"
+          fi
+        fi
+      done
+      seg="$rest"
+    fi
+  done
+  printf '%s' "$seg"
+}
+
+# `bash -c "…"` のように、シェルへ文字列で渡されたコマンドを取り出す（該当しなければ空）。
+# 取り出した文字列は呼び出し側がもう一度セグメントに分けて判定する（掘るのは 1 段だけ）。
+inline_shell_command() {
+  local seg="$1" rest flag
+  if [[ "$seg" =~ $INLINE_SHELL_RE ]]; then
+    rest="${BASH_REMATCH[3]}"
+    while [[ "$rest" =~ $PREFIX_FLAG_RE ]]; do
+      flag="${BASH_REMATCH[1]}"
+      rest="${BASH_REMATCH[3]}"
+      if [[ "$flag" =~ $INLINE_C_FLAG_RE ]]; then
+        rest="${rest#[\"\']}"
+        rest="${rest%[\"\']}"
+        printf '%s' "$rest"
+        return 0
+      fi
+    done
+  fi
+  return 0
+}
+# --- shared: command-prefix (end) ---
+
 INPUT="$(cat)"
 TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')"
 
 DENY=0
 REASON=""
+
+# 前置きを読み飛ばした後のセグメントを判定する。止めるなら DENY / REASON を立てて 0 を返す
+check_segment() {
+  local seg="$1"
+  if [ -z "$seg" ]; then return 1; fi
+  # 前置きの後ろが読み取り専用のコマンドなら止めない（`sudo grep psql …`）
+  if is_readonly_segment "$seg"; then return 1; fi
+  if is_npx_supabase "$seg"; then
+    DENY=1
+    REASON="npx 経由の supabase は使えません。npx は npm レジストリから CLI を取ってくるため Homebrew で入れた版と別物が動きます（2026-09-08 に npx supabase db reset が 2.117.0 を引き、ローカルの Supabase 一式が壊れました）。npx を外して supabase を直接実行してください（版の正本は .supabase-version）。"
+    return 0
+  fi
+  if [[ "$seg" =~ $DIRECT_EXEC_PATTERN ]]; then
+    DENY=1
+    REASON="supabase db execute・psqlの直接実行はDBスキーマ変更ルール（migration経由）で禁止されています。supabase/migrations/配下にマイグレーションファイルを作成し、supabase db push --localで適用してください。"
+    return 0
+  elif [[ "$seg" =~ $DB_PUSH_PATTERN ]]; then
+    # WHY: --localの有無はセグメント単位で判定する（issue #634）。以前はコマンド文字列
+    # 全体への部分文字列一致だったため、無関係な位置に`--local`があるだけで素通りしていた
+    # （例: `echo see --local docs; supabase db push`、`db push --local && db push`の2つ目）。
+    if [[ "$seg" != *"--local"* ]]; then
+      DENY=1
+      REASON="supabase db push はフラグ無指定時のデフォルトがリモート(本番)データベースです（--linked・--db-url指定時も同様）。ローカルSupabaseへ適用する場合は明示的に --local を付けてください（例: supabase db push --local）。本番への適用が本当に必要な場合は、人間が手動で実行してください（issue #485）。"
+      return 0
+    fi
+  fi
+  return 1
+}
 
 case "$TOOL_NAME" in
   Bash)
@@ -123,26 +243,18 @@ case "$TOOL_NAME" in
     while IFS= read -r RAW_SEG; do
       SEG="$(printf '%s' "$RAW_SEG" | sed -E 's/^[[:space:]]+//')"
       [ -z "$SEG" ] && continue
+      # WHY(前置きを読み飛ばす前に見る): `echo PGPASSWORD=x psql` は psql を実行しない
       is_readonly_segment "$SEG" && continue
-      if is_npx_supabase "$SEG"; then
-        DENY=1
-        REASON="npx 経由の supabase は使えません。npx は npm レジストリから CLI を取ってくるため Homebrew で入れた版と別物が動きます（2026-09-08 に npx supabase db reset が 2.117.0 を引き、ローカルの Supabase 一式が壊れました）。npx を外して supabase を直接実行してください（版の正本は .supabase-version）。"
-        break
+      SEG="$(strip_prefix "$SEG")"
+      if check_segment "$SEG"; then break; fi
+      INNER="$(inline_shell_command "$SEG")"
+      if [ -n "$INNER" ]; then
+        INNER_SEGMENTS="$(split_segments "$INNER")"
+        while IFS= read -r RAW_INNER; do
+          if check_segment "$(strip_prefix "$RAW_INNER")"; then break; fi
+        done <<< "$INNER_SEGMENTS"
       fi
-      if [[ "$SEG" =~ $DIRECT_EXEC_PATTERN ]]; then
-        DENY=1
-        REASON="supabase db execute・psqlの直接実行はDBスキーマ変更ルール（migration経由）で禁止されています。supabase/migrations/配下にマイグレーションファイルを作成し、supabase db push --localで適用してください。"
-        break
-      elif [[ "$SEG" =~ $DB_PUSH_PATTERN ]]; then
-        # WHY: --localの有無はセグメント単位で判定する（issue #634）。以前はコマンド文字列
-        # 全体への部分文字列一致だったため、無関係な位置に`--local`があるだけで素通りしていた
-        # （例: `echo see --local docs; supabase db push`、`db push --local && db push`の2つ目）。
-        if [[ "$SEG" != *"--local"* ]]; then
-          DENY=1
-          REASON="supabase db push はフラグ無指定時のデフォルトがリモート(本番)データベースです（--linked・--db-url指定時も同様）。ローカルSupabaseへ適用する場合は明示的に --local を付けてください（例: supabase db push --local）。本番への適用が本当に必要な場合は、人間が手動で実行してください（issue #485）。"
-          break
-        fi
-      fi
+      if [ "$DENY" -eq 1 ]; then break; fi
     done <<< "$SEGMENTS"
     ;;
   mcp__*execute_sql*)
