@@ -23,12 +23,12 @@ fail_closed() {
   exit 2
 }
 
-[ -f "$GUARD" ] && [ -r "$GUARD" ] || fail_closed "判定本体 check-dependency-change.sh が見つかりません（$GUARD）。"
+[ -f "$GUARD" ] && [ -r "$GUARD" ] || fail_closed "判定本体 check-dependency-change.sh が見つかりません（${GUARD}）。"
 
 INPUT="$(cat)"
 GUARD_RC=0
 OUT="$(printf '%s' "$INPUT" | bash "$GUARD")" || GUARD_RC=$?
-[ "$GUARD_RC" -eq 0 ] || fail_closed "判定本体 check-dependency-change.sh が失敗しました（終了コード $GUARD_RC）。"
+[ "$GUARD_RC" -eq 0 ] || fail_closed "判定本体 check-dependency-change.sh が失敗しました（終了コード ${GUARD_RC}）。"
 
 if [ -n "$OUT" ]; then
   printf '%s' "$OUT" | jq empty >/dev/null 2>&1 || fail_closed "判定本体 check-dependency-change.sh の出力を読めません。"
