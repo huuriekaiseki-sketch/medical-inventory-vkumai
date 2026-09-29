@@ -12,6 +12,6 @@
     "scripts/check-direct-ddl-execution.sh": "04967199557323eceb47e70b24ac7d107d97f57593cb95cf29a96acdbdead0d6",
     "scripts/codex-ai-check-suggest.sh": "0441b34b83b5b7abde31f80a5073ef04b6b7ba38458106a4675650e0e028791a",
     "scripts/codex-ai-check-track.sh": "8b4f95bf07df9add8a2643a87e29c4a28b39b1a243739125d6066ddc71726f9d",
-    "scripts/codex-dependency-change-deny.sh": "b879505a43fbadc497878b69d709363e624751c753cfcd42895f2f75bf1248fa"
+    "scripts/codex-dependency-change-deny.sh": "4797d6b95fa71cda6f7f79cbe0ac091e623541699cb42e7ac6d78155356331dd"
   }
 }
