@@ -15,4 +15,4 @@
 | 0.1.1 | 破壊的変更なし（中身は 0.1.0 と同じ。marketplace のエントリから `version` を外したが、正本の plugin.json は変わらない） | 不要 |
 | 0.1.2 | 破壊的変更なし（差は文書のみ） | 不要 |
 | 0.1.3 | 破壊的変更なし（`aidd-codex-vkumai` の追加。既存 3 本の差は文書のみ） | 不要（新プラグインは任意で導入） |
-| 0.1.4 | 破壊的変更なし（hook の stdin / stdout の形・`permissionDecision` の意味・hook 定義は不変）。ただし**止める範囲が変わる**: 前置き付きのコマンドと Codex のファイル編集を止めるようになり、skip マーカーを読むだけの操作と `psql` の版確認だけは止めなくなった。Codex 用ラッパーは判定本体が欠けると exit 2 で全部止める | 不要。Codex の実機確認に `psql --version` を使っていた手順は `psql -c "select 1"` などへ変える（RELEASE.md） |
+| 0.1.4 | 破壊的変更なし（hook の stdin / stdout の形・`permissionDecision` の意味・hook 定義は不変）。ただし**止める範囲が変わる**: 前置き付きのコマンドと Codex のファイル編集を止めるようになり、skip マーカーを読むだけの操作と `psql` の版確認だけは止めなくなった。Codex 用ラッパーは判定本体が欠けると exit 2 で全部止める。aidd-vkumai は、自分が起動したローカル Supabase をセッション終了時に止める hook が増える | 不要。Codex の実機確認に `psql --version` を使っていた手順は `psql -c "select 1"` などへ変える（RELEASE.md） |

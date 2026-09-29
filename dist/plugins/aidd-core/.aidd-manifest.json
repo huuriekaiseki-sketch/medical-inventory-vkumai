@@ -3,10 +3,10 @@
   "algorithm": "sha256",
   "files": {
     ".claude-plugin/plugin.json": "39a5c7a17ef4350f82b5e50dc77abc7f73587dedafc8776bad9f367645bb0144",
-    "BREAKING.md": "c082cc527e5a5c065c54497d9c8ec23d9522680d64172ce9247001b642551847",
-    "CHANGELOG.md": "f2b3ab74cff40967c01d3eb17ea19a2ef34c305a7ace3400858ecd7fe147ac02",
+    "BREAKING.md": "b2dc718fc5915f849f6c440a1497eda16380d0caf7e1f5208f7108a60eeac6ac",
+    "CHANGELOG.md": "2c66bb792795c2517cd4df7698acf53f58a95c0d88146f319820b6fc7cf1ab87",
     "COMPATIBILITY.md": "d24aed05c45aae07672219a1a4478fd083d20477a28e8f499fe693c55a3cb188",
-    "KNOWN-LIMITS.md": "c1df0711ca0f70ff012064db6999d961b63015ca293ebfe13bc0c24fcfe5e4c6",
+    "KNOWN-LIMITS.md": "ba7df99ae13af635a6935633bcc718cbcdb634f6f09f570acefd55305d767a11",
     "MIGRATION.md": "ed96a1db2d1a72fdc50d5c68066b728a349616ac8d741c82d84bd84550ce34a0",
     "agents/adversarial-verify.md": "e4a7bb89ac63f5820f724d8ae3536a8870d04b06351faa823781050b3f89602a",
     "agents/completeness-critic.md": "85ad67b1f3751445dae304195ba4be24436cd483fae43e239d5fc4d864f18d1c",
