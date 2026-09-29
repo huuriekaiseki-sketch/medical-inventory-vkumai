@@ -127,8 +127,12 @@ assert_empty "$OUT" "出力が空である(cdを伴わないディレクトリ�
 echo "=== scenario 13: .claude/settings.jsonのmatcherと本スクリプトのcase文のツール一覧が一致する(matcher/case文の二重管理による抜け漏れの再発防止) ==="
 SETTINGS_FILE="$SCRIPT_DIR/../.claude/settings.json"
 MATCHER_TOOLS="$(jq -r '.hooks.PreToolUse[] | select(.hooks[].command | endswith("check-skip-marker-write.sh")) | .matcher' "$SETTINGS_FILE" | tr '|' '\n' | sort)"
-CASE_TOOLS="$(grep -oE '^  [A-Za-z]+(\|[A-Za-z]+)*\)' "$SCRIPT" | grep -v '^  \*)' | tr -d ' )' | tr '|' '\n' | sort -u)"
+# WHY: apply_patch は Codex だけが使うツール名で、Claude の settings.json の matcher には現れない
+# （Codex 側の matcher は Edit / Write が apply_patch のエイリアスとして効く）。
+# 名前に _ が入っているので以前の正規表現では偶然拾われなかったが、偶然に頼らず明示的に外す。
+CASE_TOOLS="$(grep -oE '^  [A-Za-z_]+(\|[A-Za-z_]+)*\)' "$SCRIPT" | grep -v '^  \*)' | tr -d ' )' | tr '|' '\n' | grep -vx 'apply_patch' | sort -u)"
 assert_eq "$CASE_TOOLS" "$MATCHER_TOOLS" "settings.jsonのmatcherとcase文のツール一覧(Bash/Write/Edit/MultiEdit)が一致する(片方だけ変更されている場合はここで失敗する)"
+if grep -qE '^  apply_patch\)' "$SCRIPT"; then echo "  OK: case文に Codex の apply_patch がある"; else echo "  NG: case文に apply_patch が無い（Codex のファイル編集が素通りする）"; fail=1; fi
 
 echo "=== scenario 14: jq未インストール環境 → fail-closed(exit 2でブロック、issue #636) ==="
 input="$(jq -n '{tool_name: "Bash", tool_input: {command: "touch .claude/.verify-state/x.skip"}}')"
@@ -138,6 +142,55 @@ EXIT_CODE=$?
 set -e
 assert_eq "$EXIT_CODE" "2" "exit 2(fail-closed)"
 assert_contains "$OUT" "jq not found" "jq未検出のエラーメッセージが出る"
+
+# --- Codex のファイル編集（apply_patch）。docs/specs/codex-hook-parity/01-apply-patch.md ---
+# WHY: Codex はファイル編集を tool_name: "apply_patch" で渡し、パスは tool_input.file_path ではなく
+# tool_input.command（パッチ本文）のヘッダ行に入る。Claude の形（Write/Edit + file_path）しか
+# 見ていなかったため、Codex のファイル編集は丸ごと素通りしていた（2026-09-29 実測）。
+run_patch() { # $1=パッチ本文 $2=cwd（省略時 /repo）
+  run_hook "$(jq -n --arg c "$1" --arg d "${2:-/repo}" '{tool_name: "apply_patch", tool_input: {command: $c}, cwd: $d}')"
+}
+
+echo "=== scenario 15: apply_patch のヘッダ 4 種で .skip を触る → ask ==="
+run_patch $'*** Begin Patch\n*** Add File: .claude/.verify-state/abc.skip\n+x\n*** End Patch'
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" '"permissionDecision": "ask"' "Add File は ask"
+run_patch $'*** Begin Patch\n*** Update File: .claude/.verify-state/abc.skip\n@@\n-x\n+y\n*** End Patch'
+assert_contains "$OUT" '"permissionDecision": "ask"' "Update File は ask"
+run_patch $'*** Begin Patch\n*** Delete File: .claude/.verify-state/abc.skip\n*** End Patch'
+assert_contains "$OUT" '"permissionDecision": "ask"' "Delete File は ask"
+run_patch $'*** Begin Patch\n*** Update File: tmp/marker.txt\n*** Move to: .claude/.verify-state/abc.skip\n@@\n-x\n+y\n*** End Patch'
+assert_contains "$OUT" '"permissionDecision": "ask"' "Move to（移動先が .skip）は ask"
+
+echo "=== scenario 16: 複数ファイルのパッチで 1 つだけ該当 → 全体が ask ==="
+run_patch $'*** Begin Patch\n*** Update File: src/a.ts\n@@\n-1\n+2\n*** Add File: .claude/.verify-state/abc.skip\n+x\n*** Update File: docs/b.md\n@@\n-1\n+2\n*** End Patch'
+assert_contains "$OUT" '"permissionDecision": "ask"' "該当 1 + 非該当 2 は ask"
+
+echo "=== scenario 17: 本文にパスが出るだけ → 何も出力しない（対照） ==="
+run_patch $'*** Begin Patch\n*** Update File: docs/verify.md\n@@\n-old\n+スキップするには .claude/.verify-state/abc.skip を作る\n+*** Add File: .claude/.verify-state/abc.skip\n*** End Patch'
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "本文（+ 行）の中のパスとヘッダもどきは見ない"
+
+echo "=== scenario 18: 無関係なパッチ・ヘッダの無い入力 → 何も出力しない（対照） ==="
+run_patch $'*** Begin Patch\n*** Update File: src/a.ts\n@@\n-1\n+2\n*** End Patch'
+assert_empty "$OUT" "無関係なファイルは沈黙"
+run_patch $'*** Begin Patch\n*** Add File: .claude/.verify-state/abc.json\n+x\n*** End Patch'
+assert_empty "$OUT" ".skip 以外は沈黙"
+run_patch 'ヘッダの無い文字列'
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "ヘッダが 1 行も無ければ沈黙（全編集を止めない）"
+
+echo "=== scenario 19: cwd 起点の相対パス → ask ==="
+run_patch $'*** Begin Patch\n*** Add File: abc.skip\n+x\n*** End Patch' "/repo/.claude/.verify-state"
+assert_contains "$OUT" '"permissionDecision": "ask"' "cwd が .verify-state で相対の abc.skip は ask"
+run_patch $'*** Begin Patch\n*** Add File: .verify-state/abc.skip\n+x\n*** End Patch' "/repo/.claude"
+assert_contains "$OUT" '"permissionDecision": "ask"' "cwd が .claude で .verify-state/abc.skip は ask"
+run_patch $'*** Begin Patch\n*** Add File: abc.skip\n+x\n*** End Patch' "/repo"
+assert_empty "$OUT" "cwd が無関係なら相対の abc.skip は沈黙（対照）"
+
+echo "=== scenario 20: 行末が CRLF のパッチ → ask ==="
+run_patch $'*** Begin Patch\r\n*** Add File: .claude/.verify-state/abc.skip\r\n+x\r\n*** End Patch\r\n'
+assert_contains "$OUT" '"permissionDecision": "ask"' "CRLF でもヘッダを読める"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

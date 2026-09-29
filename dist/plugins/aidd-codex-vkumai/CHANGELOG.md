@@ -1,5 +1,14 @@
 # AIDD Codex vkumai: 変更履歴
 
+## 未リリース（次の版で配る）
+
+- `check-dependency-change.sh` が Codex のファイル編集（`apply_patch`）を読むようにした。0.1.3 までは
+  ファイル編集で `package.json` / `package-lock.json` を書き換えても止まらなかった（仕様書
+  `docs/specs/codex-hook-parity/01-apply-patch.md`）。
+- この直しで **Codex は `package.json` を一切編集できなくなる**（`scripts` 欄だけの変更でも止まる）。
+- hook 定義（`hooks/hooks.json`）は不変。**再信頼不要**。
+- Codex 実機での発火は未検証。
+
 ## 0.1.3（2026-09-28）
 
 - marketplace `aidd-plugins` に初めて載る版。導入は `codex plugin add aidd-codex-vkumai@aidd-plugins` → `/hooks` で 4 本を信頼。

@@ -91,6 +91,21 @@ input="$(jq -n '{tool_name: "Bash", tool_input: {command: "touch .claude/.verify
 run_hook "$input"
 assert_contains "$OUT" 'Codex' "理由文にCodex読み替えの説明がある"
 
+echo "=== scenario 6: Codex のファイル編集（apply_patch）で skip マーカーを作る → deny ==="
+# WHY: Codex の実際のファイル編集はこの形で来る（scenario 2 の Write + file_path は Claude の形）。
+# 判定本体が apply_patch を知らないと、ラッパーは沈黙をそのまま返して素通りする（2026-09-29 実測）。
+input="$(jq -n --arg c $'*** Begin Patch\n*** Add File: .claude/.verify-state/abc.skip\n+x\n*** End Patch' '{tool_name: "apply_patch", tool_input: {command: $c}, cwd: "/repo"}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" '"permissionDecision": "deny"' "denyが出力される"
+assert_contains "$OUT" 'Codexはask未対応' "Bash で止めたときと同じ読み替えの注記が付く"
+
+echo "=== scenario 7: 無関係な apply_patch → 何も出力しない（対照） ==="
+input="$(jq -n --arg c $'*** Begin Patch\n*** Update File: src/a.ts\n@@\n-1\n+2\n*** End Patch' '{tool_name: "apply_patch", tool_input: {command: $c}, cwd: "/repo"}')"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_empty "$OUT" "出力が空である"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
