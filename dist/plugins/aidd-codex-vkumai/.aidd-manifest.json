@@ -29,7 +29,7 @@
     "scripts/lib/aidd-doctor.mjs": "1ef3fdd8ab814ea6e92fd314d70268e464d9cc74281b63fa8b87a119ec1f6801",
     "scripts/lib/codex-session-start-checks.txt": "bdf2eace1edfbd9310e4068d66a9a2255d72706158e70ced7e36abefd5279166",
     "scripts/lib/resolve-log-dir.sh": "b459c3da39017bf468d885803e8bfa05b01b91b8059591103fdca4f6c1cf8b4e",
-    "scripts/lib/rls-mutants.json": "a3a5bb7ccc10239e1521d9e941218b55ef375a64ef6308da1af2cb10867e9473",
+    "scripts/lib/rls-mutants.json": "75c4e6c9fd63dc1e870f9ab97ab87fb7f8a76963a498ddec3fa16e1a4b8e0e5f",
     "scripts/lib/run-freshness.py": "9f04444987a2e0c48dd162643365e44f0f0e05e9cf936853df75a9397b8af9c6",
     "scripts/lib/stdout-sync.mjs": "813aa2a97ad006b7381ed440a9a341bec2e76535991ba50785ea5cd10efe4d79",
     "scripts/lib/worktree-hash.sh": "a633830777c44fbe86c5c90a942d2e2b2e0f2449ddd2fd07e3d775b40e3278b4"

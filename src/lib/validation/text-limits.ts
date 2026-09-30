@@ -28,7 +28,10 @@ export const TEXT_LIMITS: Readonly<Record<TextLimitKey, number>> = LIMITS
  *      1 回の登録で何万件でも受け取れ、詳細ページ（issue #809）は 1 件の明細を全件そのまま表に出すので、
  *      応答も画面も際限なく大きくなる。値は人が決めたもので（2026-09-20）、文字数と同じく設定の 1 か所に置く。
  *
- * 限界: 効くのは API の入口だけ。RPC（create_*_atomic）を直接呼ぶ経路と DB には同じ上限が無い。
+ * 2 枚目は RPC 側の共有関数 `assert_items_within_limit`（20260930000000、issue #825）。RPC を直接呼ぶ経路も
+ * 同じ上限で止まる。数字は設定とその migration の 2 か所にあり、一致は
+ * `scripts/check-order-items-limit-consistency.test.sh` が突き合わせる。
+ * 残る限界: service_role で明細の表へ直接書く経路（鍵を持つ運用者だけ）には上限が無い。
  */
 export const ORDER_ITEMS_MAX: number = limitsConfig.limits.orderItemsMax
 

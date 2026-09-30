@@ -69,7 +69,7 @@
     "scripts/lib/replay-rls-policies.mjs": "ba5166088db8c95dc98d9cd37193250f4b3234a532fa1d1935788ecc81d4384a",
     "scripts/lib/resolve-log-dir.sh": "b459c3da39017bf468d885803e8bfa05b01b91b8059591103fdca4f6c1cf8b4e",
     "scripts/lib/resolve-log-dir.test.sh": "21aa497a006ea1566d72dcaf7dec621673d11d7c64640eb0dee62b217c77c5a0",
-    "scripts/lib/rls-mutants.json": "a3a5bb7ccc10239e1521d9e941218b55ef375a64ef6308da1af2cb10867e9473",
+    "scripts/lib/rls-mutants.json": "75c4e6c9fd63dc1e870f9ab97ab87fb7f8a76963a498ddec3fa16e1a4b8e0e5f",
     "scripts/lib/roadmap-registry.json": "539b5d5806ba4cef678dfa482eef5ac159cd4a840b09bce660d0b167578f6d0e",
     "scripts/lib/rule-guard-registry.json": "32d80ce2452d565527c862aac76e1dcf7956ccefad51528fdd0f7b40fc74ecc8",
     "scripts/lib/run-freshness.py": "9f04444987a2e0c48dd162643365e44f0f0e05e9cf936853df75a9397b8af9c6",

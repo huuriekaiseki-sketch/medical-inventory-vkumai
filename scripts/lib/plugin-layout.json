@@ -638,6 +638,7 @@
     "check-text-column-limits.test.sh": "supabase/migrations/ の実データを走査する",
     "check-text-contrast.test.sh": "src/ の色指定とこの製品のブランド色が前提",
     "check-text-length-consistency.test.sh": "設定・DB・入口の 3 点突合。値が導入先ごとに違う",
+    "check-order-items-limit-consistency.test.sh": "同上（明細の件数の上限。設定・migration の共有関数・入口の 3 点突合）。migration のファイル名を名指しで見る",
     "check-threat-model.test.sh": "docs/agents/threat-model.md の実データを検査する",
     "log-manual-override.test.sh": "logs/manual-overrides.jsonl の実データ形式が前提",
     "supply-chain-drill.test.sh": "配布物の構成（dist/plugins）そのものを検査する。中心リポジトリだけが持つ",
