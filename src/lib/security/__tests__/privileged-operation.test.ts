@@ -210,6 +210,44 @@ describe('特権操作の記録ヘルパー（recordPrivilegedOperation） [P-06
     expect(createClient).toHaveBeenCalledTimes(1)
     expect(rpc).toHaveBeenCalledTimes(2)
   })
+
+  // WHY(2026-09-30 の変異計測): reset の中身は統合テスト（privileged-operations-rls-idor）しか
+  //      呼んでおらず、単体の計測では「テストなし」だった。中身を空にしても誰も気づかない状態。
+  //      統合テストは env を差し替えたあと、この reset でキャッシュを捨てて測っている。
+  //      空になると、差し替えた env が効かず、**古い接続先のまま測って緑になる**。
+  it('reset すると、次の記録でクライアントを作り直す（統合テストが env を差し替える口）', async () => {
+    const m = await loadModule()
+    await m.recordPrivilegedOperation({ operation: 'user_invite', succeeded: true, actorId: 'a' })
+    expect(createClient).toHaveBeenCalledTimes(1)
+
+    m.resetPrivilegedOperationClientForTests()
+    await m.recordPrivilegedOperation({ operation: 'user_delete', succeeded: true, actorId: 'a' })
+    expect(createClient).toHaveBeenCalledTimes(2)
+  })
+
+  // WHY(2026-09-30 の変異計測): 上限で諦めたときの戻り値（`{ error: null }`）を undefined に
+  //      書き換えても緑だった。分解代入で例外になり catch に落ちるので、外から見た結果は同じ
+  //      「操作は止めない」だが、**諦めのログに加えて「記録の失敗」のログが 1 つ余計に出る**。
+  //      諦めたことと記録が壊れたことは別の事象で、ログで見分けられなければ原因に辿り着けない
+  it('上限で諦めたとき、ログは「諦めた」の 1 件だけで、記録の失敗としては出さない', async () => {
+    vi.useFakeTimers()
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      rpc.mockImplementation(() => new Promise(() => {}))
+      const m = await loadModule()
+      const promise = m.recordPrivilegedOperation({
+        operation: 'user_invite', succeeded: true, actorId: 'a',
+      })
+      await vi.advanceTimersByTimeAsync(limitsConfig.limits.authJudgmentTimeoutMs)
+      await expect(promise).resolves.toBeUndefined()
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(String(spy.mock.calls[0][0])).toBe('[judgment-timeout]')
+      expect(spy.mock.calls.map((c) => String(c[0]))).not.toContain('[record_privileged_operation]')
+    } finally {
+      spy.mockRestore()
+      vi.useRealTimers()
+    }
+  })
 })
 
 // 部分成功の棚卸し（docs/agents/partial-success-inventory.md）: M-021 メール送信だけ失敗したときの記録

@@ -256,17 +256,52 @@ describe('招待の枠の払い戻し（refundInviteQuota） [M-021][Q-020]', ()
   // WHY(2026-09-08 の変異計測): `row?.refunded` の `?.` を外しても緑だった。
   //      行がまったく返らない形（空配列）を測っていなかったため。
   //      そこで落ちると**払い戻しの失敗が例外になって呼び出し側を巻き込む**
+  // WHY(2026-09-30 の変異計測): `row?.refunded` の `?.` を外しても、やはり緑だった。
+  //      上の 2026-09-08 の直しは「false を返す」だけを見ており、`?.` を外すと例外が catch に
+  //      落ちて**同じ false になる**ため区別がつかなかった。違いはログに出る——例外経路は
+  //      「払い戻しに失敗した」を記録するので、行が無いだけなのに失敗のログが毎回出る。
+  //      「行が無い」は正常（窓が変わった）で、失敗ではない。ログで見分けられなければ、
+  //      本当の失敗（PostgREST が落ちている）が、正常のログに埋もれる
   it('行が 1 つも返らなくても例外にせず false（呼び出し側を巻き込まない）', async () => {
-    rpc.mockResolvedValue({ data: [], error: null })
-    const m = await loadModule()
-    await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      rpc.mockResolvedValue({ data: [], error: null })
+      const m = await loadModule()
+      await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
   })
 
-  it('service role の環境変数が無ければ RPC を呼ばずに false', async () => {
+  it('data が null でも例外にせず false で、失敗のログも出さない', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      rpc.mockResolvedValue({ data: null, error: null })
+      const m = await loadModule()
+      await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  // WHY(2026-09-30 の変異計測): `if (!db) return false` を消しても緑だった。null の client を
+  //      呼んで例外になり、catch が false を返すので結果は同じ。違いは、**設定漏れのたびに
+  //      「払い戻しに失敗した」のログが出る**こと。設定漏れの警告は共有ヘルパーが初回に 1 回だけ
+  //      出す設計（issue #793）で、そこに失敗のログが混ざると「PostgREST が落ちた」と読み違える
+  it('service role の環境変数が無ければ RPC を呼ばずに false（失敗のログは出さない）', async () => {
     delete process.env.SUPABASE_SERVICE_ROLE_KEY
-    const m = await loadModule()
-    await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
-    expect(rpc).not.toHaveBeenCalled()
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const m = await loadModule()
+      await expect(m.refundInviteQuota('admin-1')).resolves.toBe(false)
+      expect(rpc).not.toHaveBeenCalled()
+      // 出てよいのは共有ヘルパーの「設定が無い」の警告だけ。払い戻しの失敗としては出さない
+      expect(spy.mock.calls.map((c) => String(c[0]))).not.toContain('[refund_rate_limit]')
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('RPC が戻り値の error で失敗したら false を返し、ログに出す（黙って落とさない）', async () => {
