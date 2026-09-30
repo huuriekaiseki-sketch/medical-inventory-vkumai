@@ -127,7 +127,7 @@ codex plugin marketplace upgrade aidd-plugins
 | `hooks/hooks.json` の command / timeout / matcher | **必要**。`/hooks` に「changed - review required」で出る | 公式「new or changed hooks are marked for review and skipped until trusted」📄 |
 | 版番号だけ | 不要 | 0.1.1 → 0.1.2（`hooks.json` 不変）を `marketplace upgrade` で入れ替えた前後で `trusted_hash` 4 件と `enabled = true` が完全一致 ✅。更新後の新規セッションで SessionStart の hook 2 本（マージ済み PR・古い FETCH_HEAD）が再信頼なしに発火 ✅（2026-09-28） |
 | marketplace の名前 | **必要**（鍵が変わり別 hook 扱い） | 鍵の形 ✅。検証用の `aidd-codex-configured` から本番の `aidd-plugins` へ移すときに 1 回起きる |
-| hook を足す（既存の hook の位置は変えない） | 足した hook だけ**必要**。既存の hook は不要の見込み | リポジトリの `.codex/hooks.json` の末尾に 1 本足したとき、足した hook は `New hook - review required` で出て、信頼の記録は足した 1 本の鍵（`session_start:0:3`）だけが増えた ✅（2026-09-30）。**既存の hook の信頼が保たれることは、プラグインでは未実測** ⬜（0.1.5 の配布で測る） |
+| hook を足す（既存の hook の位置は変えない） | 足した hook だけ**必要**。既存の hook は不要 | 0.1.4 → 0.1.5（`aidd-codex-vkumai` に SessionStart を 1 本追加）を `marketplace upgrade` で入れ替えた前後で、`hooks.state` 63 件が完全一致 ✅。足した hook は `/hooks` に信頼待ちで出て、信頼すると、その 1 本の鍵（`session_start:0:0`）だけが増えた ✅（2026-09-30。[実証記録](codex-vkumai/evidence/2026-09-30-release-0.1.5-verify.md)） |
 | hook を足す・消す・並べ替えて、既存の hook の位置（`<i>:<j>`）が変わる | 未実測 ⬜ | 鍵に位置が入っているので、位置がずれた hook は別の hook として扱われる可能性がある。足すときは、組の末尾か、新しい組の末尾に足す |
 
 再信頼が要る版は CHANGELOG に「hook 定義変更・`/hooks` で再信頼が必要」と書き、導入先の作業に含める。
@@ -153,13 +153,16 @@ codex plugin marketplace upgrade aidd-plugins
 | **スクリプトの中身が変わる**版の更新（0.1.3 → 0.1.4） | Claude は 2 本とも `claude plugin update`、Codex は `codex plugin marketplace upgrade` | ✅ 2026-09-29。Claude Code 2.1.270 で 2 本とも `0.1.3 → 0.1.4`。Codex CLI 0.147.0 は `upgrade` だけで 2 本とも 0.1.4 に入れ替わり、キャッシュは配布物と `diff -r` で同一 |
 | Codex: スクリプトが変わったあとの信頼 | `config.toml` の `trusted_hash` 8 件が更新前と一致し、新規セッションで新しい挙動が出る | ✅ 8 件とも一致。再信頼の操作なしに、配布した版の新しい挙動（`apply_patch` の deny・前置き付きコマンドの deny・`psql --version` は止めない・案内なしの警告文）が出た（[実証記録](codex/evidence/2026-09-29-release-0.1.4-verify.md)） |
 
+| **hook が増える**版の更新（0.1.4 → 0.1.5） | Claude は 2 本とも `claude plugin update`、Codex は `codex plugin marketplace upgrade` | ✅ 2026-09-30。Claude Code 2.1.270 で 2 本とも `0.1.4 → 0.1.5`。Codex CLI 0.147.0 は `upgrade` だけで 2 本とも 0.1.5 に入れ替わり、キャッシュは配布物と `diff -r` で同一 |
+| Codex: hook が増えたあとの信頼と発火 | 既存の `trusted_hash` が更新前と一致し、足した hook だけを信頼すると、普段の作業場所で発火する | ✅ 既存は全件一致。入口 1 本だけを信頼した後、信頼済みの親フォルダの下の作業場所で、入口の知らせ 3 件がセッションの記録に入った。**合計 5 秒の上限に達し、点検 1 本が打ち切られた**（[実証記録](codex-vkumai/evidence/2026-09-30-release-0.1.5-verify.md)） |
+
 **上の表の `psql --version` は 0.1.3 までの確認手順。** 0.1.4 からは版の確認だけの `psql` は止まらない
 （仕様書 `docs/specs/codex-hook-parity/03-readonly-false-deny.md`。0.1.4 の実機で止まらないことを実測）ので、
 DDL の deny を確かめるときは `psql -c "select 1"` などを使う。未信頼の hook が動かないことの対照も同じコマンドで取る。
 
 検証用リポジトリと clone（`/Users/masanori/雑談/aidd-codex-verify`）はこの目的で残してある。
 
-Codex 側の初回実測は CLI 0.147.0 と marketplace commit `be18c7d` で行った。CLI の既定モデル `gpt-6-sol` はこの ChatGPT アカウントで非対応だったため、発火確認には `gpt-5.5` を指定した。[実証記録](codex/evidence/2026-09-28-marketplace-verify.md)に導入・信頼・発火の証拠と未検証範囲を残した。0.1.3 の追加実測は marketplace commit `bc49596` で行った。検証用 clone は追加実測後にクリーンへ戻した。0.1.4 の実測は marketplace commit `0ccc415` で行った。個人環境には `aidd-plugins` marketplace と信頼済み `aidd-codex`・`aidd-codex-vkumai`（ともに 0.1.4）を残している（解除は各 `codex plugin remove`。信頼記録は自動で消えるとは限らない）。
+Codex 側の初回実測は CLI 0.147.0 と marketplace commit `be18c7d` で行った。CLI の既定モデル `gpt-6-sol` はこの ChatGPT アカウントで非対応だったため、発火確認には `gpt-5.5` を指定した。[実証記録](codex/evidence/2026-09-28-marketplace-verify.md)に導入・信頼・発火の証拠と未検証範囲を残した。0.1.3 の追加実測は marketplace commit `bc49596` で行った。検証用 clone は追加実測後にクリーンへ戻した。0.1.4 の実測は marketplace commit `0ccc415` で行った。0.1.5 の実測は marketplace commit `6311105` で行った。個人環境には `aidd-plugins` marketplace と信頼済み `aidd-codex`・`aidd-codex-vkumai`（ともに 0.1.5）を残している（解除は各 `codex plugin remove`。信頼記録は自動で消えるとは限らない）。
 
 配布後にこの表へ書き戻した結果は、中心リポジトリの `dist/plugins` には入るが marketplace 上の同じ版には
 届かない（版の文字列が同じなので配り直さない。タグの内容も動かさない）。次の版で届く。

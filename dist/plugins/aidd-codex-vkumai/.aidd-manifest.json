@@ -4,8 +4,8 @@
   "files": {
     ".codex-plugin/plugin.json": "86195d2590b19a90eabec25f43cd19aadec512703cd988c27eeaee53e226ddf2",
     "CHANGELOG.md": "886fbe0c872c7ee71ad6ca71b47e994d942ae08bc414c8cc2ef7e120a0ed1374",
-    "COMPATIBILITY.md": "bdfc70c88ccaf30a576034d1068a81b3fddd81fda4bcf6d3b16799d6d86a18b4",
-    "KNOWN-LIMITS.md": "ef1112ff5b49f5e25cd7c1d7664a22c93e7fce272de5098d8e5e6a00166c2132",
+    "COMPATIBILITY.md": "1dc013f86d56cc5a3b32b1c1ca70beef29d2f41edf4e0769baae608129b5549d",
+    "KNOWN-LIMITS.md": "bc6217816cf5eb6f1270e821516a3d1df7033f4cb218b3bc352ec0047900b7a2",
     "hooks/hooks.json": "216f3715b21fdd0ed9c8fb0ec6ad7c99f5abc0df533d7610f9ca2c0adfb3f82e",
     "scripts/check-access-review-staleness.sh": "4185028711c70e3d193ea43d1e54a07f22f90e1ef9e75da026814180e6dd72db",
     "scripts/check-blocked-issues-staleness.sh": "607e5e10a95838da6adbbca9146f9db58f6e223bf7ef0cecc41b2183b655d438",
