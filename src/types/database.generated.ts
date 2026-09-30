@@ -986,6 +986,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      assert_items_within_limit: { Args: { p_items: Json }; Returns: undefined }
       check_business_invariants: {
         Args: never
         Returns: {
