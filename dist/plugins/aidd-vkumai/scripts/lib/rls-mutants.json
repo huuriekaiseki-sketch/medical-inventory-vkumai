@@ -157,6 +157,14 @@
       "expect": "supabase/__tests__/integration/rpc-boundary-sweep.integration.test.ts",
       "promise": "P-019",
       "note": "2026-09-11（E-013）。**`GRANT ... TO authenticated` と書いてあっても、CREATE FUNCTION の既定で PUBLIC に EXECUTE が付いたまま**だった。止めていたのは関数の中の is_facility_writer() 1 行だけで、そこが崩れれば認証すら不要の入口になる。20260911000001 で PUBLIC ごと外したので、戻したら落ちること（＝権限の層が本当に効いていること）を測る"
+    },
+    {
+      "id": "RM-021",
+      "breaks": "明細の件数の上限（assert_items_within_limit）を、何もしない関数にする",
+      "sql": "-- WHY(この変異が要る): 上限の確認は共有関数 1 本に置いた（20260930000000、issue #825）。\n--      RM-018 と同じく「**共有関数そのものが効いているか**」を測る。呼んでいても中身が空なら意味が無い。\n--      RPC 4 本が呼び忘れていないかは、統合テストが 4 本を直接呼ぶことで捕まえる（変異にはしない。\n--      RM-016 / RM-017 の形は本体の写しになり、関数が別の理由で書き直されると古い本体を復元してしまう）。\nDO $chk$\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'assert_items_within_limit') THEN\n    RAISE EXCEPTION 'RM-021 の前提が崩れている（共有関数が無い）';\n  END IF;\nEND $chk$;\n\nCREATE OR REPLACE FUNCTION assert_items_within_limit(\n  p_items JSONB\n)\nRETURNS VOID\nLANGUAGE plpgsql\nIMMUTABLE\nSET search_path = ''\nAS $fn$\nBEGIN\n  RETURN;  -- 何も数えない\nEND;\n$fn$;",
+      "expect": "supabase/__tests__/integration/order-items-limit-boundary.integration.test.ts",
+      "promise": "P-013",
+      "note": "2026-09-30 に共有関数（20260930000000）を入れたときに足した。上限の値そのものは aidd.config.json が正本で、migration の数字との一致は設定との突合の検査（check-order-items-limit-consistency）が見る。この変異が測るのは「数えているか」であって「値が正しいか」ではない"
     }
   ]
 }
