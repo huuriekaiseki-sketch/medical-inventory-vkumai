@@ -72,12 +72,31 @@ export function catchBlocks(source) {
 }
 
 /**
+ * `<変数>.message` の読み出しにあたる正規表現（主語〜`message` まで）。
+ * WHY(issue #875): 最初の版は `\b<変数>\.message` だけを見ていたので、主語と `.message` の間に
+ *      何か挟まる書き方をすべて見逃していた。別の導入先へ移植したときに `(error as Error).message` で気づき、
+ *      直した直後に走査器へ当てると `error?.message`（ふだん普通に書く形）・`error!.message`・
+ *      `(error as unknown as Error).message`・`(<Error>error).message` も見逃していた。
+ *      1 つずつ塞ぐと隣の形が残るので、揺れをここ 1 か所で吸収する。拾う形:
+ *        error / error! / (error) / (error as T) / (error as A as B) / (<T>error) のあとに `.` か `?.`
+ *      型の部分は `Error` / `Foo.Bar` / `Array<string>` / `string[]` 程度までの近似。
+ *      **拾えない形**（行ベースの近似の限界。構文木で見る案は issue #878）:
+ *        `error['message']`・`const { message } = error`・`String(error)`・式が複数行にまたがるもの
+ */
+function messageAccess(varName) {
+  const name = varName ?? '[A-Za-z_$][\\w$]*'
+  const type = '[\\w$.<>\\[\\]]+'
+  const plain = `\\b${name}!?`
+  const wrapped = `\\(\\s*(?:<${type}>\\s*)?${name}(?:\\s+as\\s+${type})*\\s*\\)!?`
+  return `(?:${plain}|${wrapped})(?:\\?\\.|\\.)message\\b`
+}
+
+/**
  * ブロック内で `<変数>.message` を**値として**使っている行を返す。
- * メソッド呼び出し（`.message.includes(`）と比較（`.message ===`）は数えない。
+ * メソッド呼び出し（`.message.includes(` / `.message?.includes(`）と比較（`.message ===`）は数えない。
  */
 export function valueUses(body, varName) {
-  const name = varName ?? '[A-Za-z_$][\\w$]*'
-  const re = new RegExp(`\\b${name}\\.message\\b(?!\\s*(?:\\.|===|!==|==|!=))`, 'g')
+  const re = new RegExp(`${messageAccess(varName)}(?!\\s*(?:\\?\\.|\\.|===|!==|==|!=))`, 'g')
   const lines = body.split('\n')
   const uses = []
   lines.forEach((line, idx) => {
@@ -90,8 +109,7 @@ export function valueUses(body, varName) {
 
 /** その使用を囲む直近の `if` が「厳密一致」で絞っているか */
 function guardedByStrictEquality(lines, index, varName) {
-  const name = varName ?? '[A-Za-z_$][\\w$]*'
-  const strict = new RegExp(`\\b${name}\\.message\\s*(?:===|!==)`)
+  const strict = new RegExp(`${messageAccess(varName)}\\s*(?:===|!==)`)
   // 同じ行に書いてある場合（`if (e.message === X) return apiError(e.message, 404)`）も拾う
   for (let i = index; i >= 0 && i >= index - 6; i--) {
     const line = lines[i]
