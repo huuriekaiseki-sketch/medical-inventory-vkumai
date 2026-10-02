@@ -25,7 +25,8 @@ tools: Read, Bash
 - 問題点・ギャップに必ず言及する
 - コードは書かない。設計の方針だけを述べる
 - ファイルを編集しない
-- Bash は進捗記録（下記）だけに使う。書き込み系のコマンドは PreToolUse で deny される
+- Bash は進捗記録（下記）だけに使う。ファイルを書き換えるコマンド（リダイレクト・`sed -i`・`rm`・`git checkout` など）は使わない
+- 書き込み系の Bash を止めるガード（`check-readonly-bash.sh`、PreToolUse）は**アダプター側**にある。それを入れていない導入先では**止まらない**ので、止められる前提で動かず、自分で守る
 
 ## 進捗報告（issue #18）
 提案の検討を始めるときに`--status running`、出力を返す直前に`--status done`で、`scripts/log-agent-progress.sh --agent proposer --feature <対象の機能名。無ければunknown> --status <状態> --note <一言>` を呼ぶこと。

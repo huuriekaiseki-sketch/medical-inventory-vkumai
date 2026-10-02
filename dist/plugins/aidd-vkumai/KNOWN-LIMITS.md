@@ -6,7 +6,11 @@
   フロー（調査→仕様→実装）は動かない。Next.js + Supabase 以外のスタックで使うには、`aidd-vkumai` を
   ひな形に自分のアダプターを作る（v1.x で Workflow を共通側へ移す計画。`docs/specs/plugin-v1/SPEC.md`）
 - `check-readonly-bash.sh`（読み取り専用ロールの Bash deny）はアダプター側。npm / npx の許可リストが
-  スタック固有のため。共通側にするには許可リストの設定化が要る
+  スタック固有のため。共通側にするには許可リストの設定化が要る（issue #883）。
+  **共通側だけを入れた導入先では、共通側が配る読み取り専用ロール 6 本（adversarial-verify・
+  completeness-critic・judge-panel・proposer・reviewer・spec-drafter）が Bash で書き込める。**
+  6 本の本文にはそのことを書いてある（以前の proposer は「PreToolUse で deny される」と書いていて、
+  存在しない守りを前提にしていた。issue #875 の 4）。本文は守りではない
 - **層の表（`plugin-layout.json`）に載っていないものは黙って同梱されない。** 生成器は表を回るだけで、
   表に無い実体はその視界に存在しない（型は [`check-design-pitfalls.md`](../agents/check-design-pitfalls.md) の C-047）。
   両方向で突き合わせているのは **hook（生成器の中）・検査 `*.test.sh`（`check-plugin-check-coverage.test.sh`）・
