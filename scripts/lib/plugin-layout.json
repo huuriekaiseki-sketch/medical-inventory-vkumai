@@ -643,6 +643,7 @@
     "log-manual-override.test.sh": "logs/manual-overrides.jsonl の実データ形式が前提",
     "supply-chain-drill.test.sh": "配布物の構成（dist/plugins）そのものを検査する。中心リポジトリだけが持つ",
     "lib/flaky-issue.test.sh": "issue 作成コマンドと題名の規約が前提",
+    "lib/audit-issue.test.sh": "issue 作成コマンドと題名の規約（`[audit] npm` / `[env] npm audit`・security ラベル）が前提。main の定期 audit（dependency-audit-scheduled.yml）とセットで、導入先へ配る形は #876 で別に決める（2026-10-02 のユーザー判断で、まず中心だけに入れる）",
     "check-access-path-inventory.test.sh": "docs/agents/access-path-inventory.md の実データ（鍵の所在と経路）を検査する",
     "check-catalogs.test.sh": "登録簿（catalog-registry.json）と索引の実データを検査する。登録簿は導入先のものなので中心リポジトリの実データでは配れない",
     "check-design-answers.test.sh": "aidd.config.json の limits と design-questions.md の実データを突合する。値が導入先ごとに違う",

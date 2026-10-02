@@ -51,7 +51,7 @@
 | ワークフロー同期テスト | ✅ | 毎回 | 全 PR | Workflow DSL 側のインライン複製と `lib/` 正本の乖離検知（prompt sync・router-risk sync 等） | `.claude/workflows/lib/__tests__/`、CI `test` ジョブ | workflow-sync | — | `npm test` |
 | hook 回帰 | ✅ | 毎回 | 全 PR | hook スクリプトの入出力回帰と設定分離の構造テスト | `scripts/` 配下の `*.test.sh`、`scripts/lib/` 配下の `*.test.sh`、CI `hooks-test` ジョブ（`.github/workflows/ci.yml`） | hook-regression | — | `for t in scripts/*.test.sh scripts/lib/*.test.sh; do bash "$t"; done` |
 | 認証ファイル漏洩チェック | ✅ | 毎回 | 全 PR | `e2e/.auth` 配下の認証状態ファイルがコミットされていない | CI `hooks-test` ジョブ内ステップ（`.github/workflows/ci.yml`） | auth-file-leak | ASVS V2 | `git ls-files e2e/.auth` |
-| 依存監査（既知脆弱性） | ✅ | 毎回 | 全 PR | 本番依存（`--omit=dev`）に high 以上の公開済み脆弱性が無い。緑でも「安全の証明」ではなく、未公表の攻撃や登録されていない悪意あるコードは見つけられない（2026-09-04） | CI `dependency-audit` ジョブ（`.github/workflows/ci.yml`） | dependency-audit | OWASP A06（脆弱で古いコンポーネント）、SCA | `npm audit --omit=dev --audit-level=high` |
+| 依存監査（既知脆弱性） | ✅ | 毎回 | 全 PR。加えて main を日次 cron（21:00 UTC） | 本番依存（`--omit=dev`）に high 以上の公開済み脆弱性が無い。緑でも「安全の証明」ではなく、未公表の攻撃や登録されていない悪意あるコードは見つけられない（2026-09-04）。**脆弱性はコードを変えなくても増える**ので、PR だけでは止まっている間の公開に気づけない。2026-09-30 公開の Next.js の critical に、10-02 に無関係な PR 2 本が同時に赤くなって初めて気づいた。そこで main を毎日監査し、見つけたら `[audit] npm`（audit 自体の失敗は `[env] npm audit`）の issue を作る／追記する（issue #876） | CI `dependency-audit` ジョブ（`.github/workflows/ci.yml`）、`.github/workflows/dependency-audit-scheduled.yml`、`scripts/lib/audit-issue.sh`、`scripts/lib/audit-report.mjs`、`scripts/lib/audit-issue.test.sh` | dependency-audit | OWASP A06（脆弱で古いコンポーネント）、SCA | `npm audit --omit=dev --audit-level=high` |
 | ロックファイルの出所 | ✅ | 毎回 | 全 PR | `package-lock.json` の全項目が registry.npmjs.org 由来で sha512 の integrity を持ち、`package.json` に git / file / http 指定が無い。レジストリ上の正規パッケージ内部の悪意は見つけられない | `scripts/check-lockfile-integrity.test.sh`、CI `hooks-test` ジョブ | lockfile-integrity | SLSA（出所の固定） | `bash scripts/check-lockfile-integrity.test.sh` |
 | docs 整合性 | ✅ | 毎回 | 全 PR（docs のみの PR は `docs-integrity-check.yml`、それ以外は hooks-test） | AI が毎回読む知識庫（docs/agents 等）のリンク切れ・アンカー不一致・削除済みスクリプトへの言及を機械検知する（issue #714）。文章内容の陳腐化・クローズ済み issue への言及は見つけられない | `scripts/lib/check-docs-integrity.mjs`、`scripts/check-docs-integrity.test.sh`、`.github/workflows/docs-integrity-check.yml`、CI `hooks-test` ジョブ | docs-integrity | OpenAI Harness engineering（docs の腐敗抑制） | `node scripts/lib/check-docs-integrity.mjs` |
 | 棚卸し表の行の重複 | ✅ | 毎回 | 全 PR | `.gitattributes` の `merge=union` は衝突を報告せず**両方の行を残す**ため、ID 列を持たない棚卸し表では同じ観点の古い版と新しい版が並んで残る。2026-09-07 に 40 本のマージ後 10 行の重複が実在し、どれも「計画のまま・根拠列が空」の古い版だったため「まだやっていない」と誤読させた。鍵の列の重複を落とす。**どちらが新しいかは判定しないので直しは人が行う** | `scripts/lib/check-table-row-duplicates.mjs`、`scripts/check-table-row-duplicates.test.sh`、`.gitattributes`、CI `hooks-test` ジョブ | table-row-duplicates | — | `node scripts/lib/check-table-row-duplicates.mjs` |
@@ -80,7 +80,7 @@
 | イベント | 実施する種別 |
 | --- | --- |
 | main へのマージ後 | E2E |
-| 毎日 | スキーマドリフト検知 |
+| 毎日 | スキーマドリフト検知、依存監査（main の lockfile。issue #876） |
 | 毎週 | フレーキー検知（unit 10 回・integration 10 回。回数の根拠は上の理由列） |
 | 依存の major 更新 | 障害注入、RLS/IDOR 統合、E2E、build、規模の実測 |
 | 四半期 | fault injection 訓練、hook 実機発火（ゲート訓練）、復旧手順の見直し |
