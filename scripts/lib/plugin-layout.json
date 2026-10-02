@@ -643,6 +643,7 @@
     "log-manual-override.test.sh": "logs/manual-overrides.jsonl の実データ形式が前提",
     "supply-chain-drill.test.sh": "配布物の構成（dist/plugins）そのものを検査する。中心リポジトリだけが持つ",
     "lib/flaky-issue.test.sh": "issue 作成コマンドと題名の規約が前提",
+    "setup-merge-drivers.test.sh": "対象の setup-merge-drivers.sh が配るかどうか未決（supportScriptsUnclassified）なので、検査も配らない。対象を配ると決めたら、この検査も一緒に配る（一時リポジトリだけで動くので導入先の木には依存しない）",
     "check-access-path-inventory.test.sh": "docs/agents/access-path-inventory.md の実データ（鍵の所在と経路）を検査する",
     "check-catalogs.test.sh": "登録簿（catalog-registry.json）と索引の実データを検査する。登録簿は導入先のものなので中心リポジトリの実データでは配れない",
     "check-design-answers.test.sh": "aidd.config.json の limits と design-questions.md の実データを突合する。値が導入先ごとに違う",
