@@ -81,8 +81,15 @@ emit_pass() {
 #   VERIFY_CLAIMS_WARN_REVIEW_BY - 警告モードを見直す期限(YYYY-MM-DD)。過ぎたら毎回その旨を言う
 # WHY(期限を機械が言う): 「数日様子を見る」を人の記憶に任せると止まる。fail-open の連続を見る
 # 検知器(check-verify-claims-fail-open-streak.sh)は起動が人で、2 か月誰も呼ばなかった。
+# WHY(2026-10-02 に期限を 09-27 → 10-16 へ延長、issue #875・人が決めた): 期限の時点で率を数えると
+#      09-24 以降 110 回中 91 回が fail_open に見えたが、**半分以上は古い版の記録だった**。
+#      メインのチェックアウトが 820 コミット遅れたブランチのままで、そこを向いたセッションの hook は
+#      #815・#832 の直しが入る前の本スクリプトを動かしていた（その版は verifier_seconds を書かない）。
+#      verifier_seconds のある行（今の版）だけで数えると 09-20 以降 30 回中 24 回が判定できていた
+#      （pass 22・block 2・fail_open 6）。判定はできているが、block が 2 回では誤検知の率が出ないので延長する。
+#      **次に数えるときも verifier_seconds のある行だけを数える**（古い版の行が混ざると率がずれる）。
 ENFORCE_MODE="${VERIFY_CLAIMS_ENFORCE:-warn}"
-WARN_REVIEW_BY="${VERIFY_CLAIMS_WARN_REVIEW_BY:-2026-09-27}"
+WARN_REVIEW_BY="${VERIFY_CLAIMS_WARN_REVIEW_BY:-2026-10-16}"
 
 emit_block() {
   local msg="$1"

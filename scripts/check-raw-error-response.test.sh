@@ -47,6 +47,15 @@ run_scan() {
   node "${SCANNER}" "$1" 2>&1
 }
 
+# 違反を報告した行（`raw-error: [<file>:<line>] ...`）があるか
+# WHY(issue #875): 以前は `grep -q "raw-error"` で見ていたが、これは走査器自身のエラー文
+#      （`scan-raw-error-response: …見つけられなかった`）にも一致する。走査器が特定の入力で
+#      落ちるだけでも「検知した」と読み、RED 方向の自己検証が素通りしていた（C-002 の型）。
+#      違反行の書式そのもので判定する。
+is_violation_report() {
+  grep -qF -- "raw-error: [" <<<"$1"
+}
+
 # fixture のリポジトリを 1 つ作る
 # $1 = 置き場, $2 = route の中身, $3 = 設定を置くか（yes/no）
 make_fixture() {
@@ -98,7 +107,7 @@ make_fixture "${TMP_ROOT}/a" 'export async function GET() {
   }
 }'
 out="$(run_scan "${TMP_ROOT}/a")"
-if [ $? -ne 0 ] && grep -q "raw-error" <<<"${out}"; then
+if [ $? -ne 0 ] && is_violation_report "${out}"; then
   ok "検知: そのまま返している"
 else
   ng "そのまま返す形を見逃した" "${out}"
@@ -114,7 +123,7 @@ make_fixture "${TMP_ROOT}/b" 'export async function GET() {
   }
 }'
 out="$(run_scan "${TMP_ROOT}/b")"
-if [ $? -ne 0 ] && grep -q "raw-error" <<<"${out}"; then
+if [ $? -ne 0 ] && is_violation_report "${out}"; then
   ok "検知: 変数へ移してから返している"
 else
   ng "変数へ移す形を見逃した" "${out}"
@@ -131,7 +140,7 @@ make_fixture "${TMP_ROOT}/c" 'export async function GET() {
   }
 }'
 out="$(run_scan "${TMP_ROOT}/c")"
-if [ $? -ne 0 ] && grep -q "raw-error" <<<"${out}"; then
+if [ $? -ne 0 ] && is_violation_report "${out}"; then
   ok "検知: 危ない語だけ弾くブラックリスト"
 else
   ng "ブラックリストの形を見逃した" "${out}"
@@ -156,11 +165,75 @@ export async function GET() {
   }
 }'
 out="$(run_scan "${TMP_ROOT}/i")"
-if [ $? -ne 0 ] && grep -q "raw-error" <<<"${out}"; then
+if [ $? -ne 0 ] && is_violation_report "${out}"; then
   ok "検知: catch の外へ切り出したヘルパー"
 else
   ng "catch の外に置かれると見えない（走査の範囲が狭い）" "${out}"
 fi
+
+# 2e: 型アサーション付きで返す（`(error as Error).message`）
+#     WHY(issue #875): 主語が `error` ではなく `(error as Error)` なので、最初の版は
+#          値の使用として数えず examined にも入れていなかった。3e・5 の fixture もこの形で、
+#          「理由があるから通った」のではなく「見えていないから通った」だけだった。
+make_fixture "${TMP_ROOT}/j" 'export async function GET() {
+  try {
+    return Response.json({ ok: true })
+  } catch (error) {
+    return Response.json({ error: (error as Error).message }, { status: 500 })
+  }
+}'
+out="$(run_scan "${TMP_ROOT}/j")"
+if [ $? -ne 0 ] && is_violation_report "${out}"; then
+  ok "検知: 型アサーション付きで返している"
+else
+  ng "型アサーション付きの形を見逃した" "${out}"
+fi
+
+# 2f: 2e と同じ形をヘルパーの中に置いても見える（ヘルパー側は変数名を問わない経路）
+make_fixture "${TMP_ROOT}/k" 'function toMessage(e: unknown): string {
+  return (e as Error).message
+}
+
+export async function GET() {
+  try {
+    return Response.json({ ok: true })
+  } catch (error) {
+    return Response.json({ error: toMessage(error) }, { status: 500 })
+  }
+}'
+out="$(run_scan "${TMP_ROOT}/k")"
+if [ $? -ne 0 ] && is_violation_report "${out}"; then
+  ok "検知: ヘルパー内の型アサーション付き"
+else
+  ng "ヘルパー内の型アサーション付きの形を見逃した" "${out}"
+fi
+
+# 2g: 主語と `.message` の間に挟まる書き方の揺れ
+#     WHY(issue #875): 2e を直した直後に走査器へ当てると、`error?.message`（ふだん普通に書く形）・
+#          `error!.message`・二重のアサーション・`<T>` 前置きのアサーションをすべて見逃していた。
+#          1 つ塞ぐたびに隣の形が残るので、揺れをまとめて 1 か所（messageAccess）で吸収し、ここで並べて固定する。
+form_idx=0
+for form in \
+  '(error as unknown as Error).message' \
+  '(<Error>error).message' \
+  'error?.message' \
+  'error!.message' \
+  '(error as any)?.message'; do
+  form_idx=$((form_idx + 1))
+  make_fixture "${TMP_ROOT}/g${form_idx}" "export async function GET() {
+  try {
+    return Response.json({ ok: true })
+  } catch (error) {
+    return Response.json({ error: ${form} }, { status: 500 })
+  }
+}"
+  out="$(run_scan "${TMP_ROOT}/g${form_idx}")"
+  if [ $? -ne 0 ] && is_violation_report "${out}"; then
+    ok "検知: ${form}"
+  else
+    ng "見逃した: ${form}" "${out}"
+  fi
+done
 
 echo "=== scenario 3: 正しい形は 1 件も出さない（誤検知しない） ==="
 
@@ -249,6 +322,91 @@ if [ $? -eq 0 ]; then
   ok "誤検知なし: 理由つきの逃がし口"
 else
   ng "理由を書いても外れない" "${out}"
+fi
+# WHY(issue #875): 通っただけでは「理由で外れた」のか「見えていない」のか分からない。
+#      この fixture は以前、後者で通っていた。見たうえで外れたことを件数で確かめる。
+if grep -qE -- "examined=[1-9]" <<<"${out}"; then
+  ok "逃がし口の行を実際に見たうえで外している"
+else
+  ng "逃がし口の行を見ていない（examined=0）" "${out}"
+fi
+
+# 3f: 型アサーション付きでも、判定にしか使っていなければ数えない
+make_fixture "${TMP_ROOT}/l" 'export async function GET() {
+  try {
+    return Response.json({ ok: true })
+  } catch (error) {
+    if ((error as Error).message.includes("permission denied")) {
+      return Response.json({ error: "権限がありません" }, { status: 403 })
+    }
+    return Response.json({ error: "失敗しました" }, { status: 500 })
+  }
+}'
+out="$(run_scan "${TMP_ROOT}/l")"
+if [ $? -eq 0 ]; then
+  ok "誤検知なし: 型アサーション付きを判定にしか使っていない"
+else
+  ng "型アサーション付きの判定だけなのに違反にした" "${out}"
+fi
+
+# 3g: 型アサーション付きの厳密一致で絞っている
+make_fixture "${TMP_ROOT}/m" 'export async function GET() {
+  try {
+    return Response.json({ ok: true })
+  } catch (error) {
+    if ((error as Error).message === NOT_FOUND) {
+      return Response.json({ error: (error as Error).message }, { status: 404 })
+    }
+    return Response.json({ error: "失敗しました" }, { status: 500 })
+  }
+}'
+out="$(run_scan "${TMP_ROOT}/m")"
+if [ $? -eq 0 ]; then
+  ok "誤検知なし: 型アサーション付きの厳密一致"
+else
+  ng "型アサーション付きの厳密一致なのに違反にした" "${out}"
+fi
+
+# 3h: optional chaining でも、判定にしか使っていなければ数えない（`.message?.includes(`）
+make_fixture "${TMP_ROOT}/n" 'export async function GET() {
+  try {
+    return Response.json({ ok: true })
+  } catch (error) {
+    if (error?.message?.includes("permission denied")) {
+      return Response.json({ error: "権限がありません" }, { status: 403 })
+    }
+    return Response.json({ error: "失敗しました" }, { status: 500 })
+  }
+}'
+out="$(run_scan "${TMP_ROOT}/n")"
+if [ $? -eq 0 ]; then
+  ok "誤検知なし: optional chaining を判定にしか使っていない"
+else
+  ng "optional chaining の判定だけなのに違反にした" "${out}"
+fi
+
+# 3i: optional chaining の厳密一致で絞っている
+make_fixture "${TMP_ROOT}/o" 'export async function GET() {
+  try {
+    return Response.json({ ok: true })
+  } catch (error) {
+    if (error?.message === NOT_FOUND) {
+      return Response.json({ error: error?.message }, { status: 404 })
+    }
+    return Response.json({ error: "失敗しました" }, { status: 500 })
+  }
+}'
+out="$(run_scan "${TMP_ROOT}/o")"
+if [ $? -eq 0 ]; then
+  ok "誤検知なし: optional chaining の厳密一致"
+else
+  ng "optional chaining の厳密一致なのに違反にした" "${out}"
+fi
+# 3e と同じ理由: 見えていないから通ったのではなく、見たうえで絞りが効いたことを件数で確かめる
+if grep -qE -- "examined=[1-9]" <<<"${out}"; then
+  ok "optional chaining の値の使用を実際に見たうえで外している"
+else
+  ng "optional chaining の値の使用を見ていない（examined=0）" "${out}"
 fi
 
 echo "=== scenario 4: 走査が空振りしたら落ちる（fail-open 防止） ==="
