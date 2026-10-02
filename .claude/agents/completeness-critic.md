@@ -37,5 +37,10 @@ effort: medium
 
 **重要**: この2択以外の形式で返さないこと。前置き文・まとめ・補足説明は不要。
 
+## Bash の使い方（読み取り専用）
+- Bash は読むこと（`grep`・`git diff`・`git log`・テストの実行など）と、記録用スクリプトの呼び出しだけに使う
+- ファイルを書き換えるコマンド（リダイレクト `>`・`sed -i`・`rm`・`git checkout` など）は使わない
+- 書き込み系の Bash を止めるガード（`check-readonly-bash.sh`、PreToolUse）は**アダプター側**にある。それを入れていない導入先では**止まらない**ので、止められる前提で動かず、自分で守る
+
 ## 進捗報告（issue #18）
 評価開始時に`--status running`、出力を返す直前に`--status done`で、`scripts/log-agent-progress.sh --agent completeness-critic --feature <評価対象の機能名。無ければunknown> --status <状態> --note <一言>` を呼ぶこと。
