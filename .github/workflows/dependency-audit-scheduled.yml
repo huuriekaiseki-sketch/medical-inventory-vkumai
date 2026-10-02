@@ -1,0 +1,64 @@
+name: Scheduled Dependency Audit
+
+# WHY(issue #876): `npm audit` は ci.yml の dependency-audit（PR / 手動）でしか走らず、
+# 脆弱性は**コードを変えなくても増える**ので、作業が止まっている間に公開されたものに気づけなかった。
+# 気づくのは次に PR を出した人で、その PR と無関係な赤に時間を取られる。
+# 実際、2026-09-30 公開の Next.js の critical（GHSA-vcvr-r3jv-pc5j）は 10-02 に無関係な PR 2 本
+# （#879・#880）を同時に赤くして初めて分かった。導入先 kojigyo-zei-rag でも 1 か月で high 2 件が同じ形で出た。
+#
+# WHY(毎日): 1 回あたり約 25 秒（node_modules を入れず lockfile だけで監査する）。月 15 分程度で、
+# Free の 2,000 分/月の 1% 未満。週 1 回だと critical の公開から最大 7 日気づかない。
+#
+# 判定は ci.yml と同じ（`--omit=dev --audit-level=high`）。見つけたら issue を作る／追記する
+# （scripts/lib/audit-issue.sh。flaky-detection.yml・schema-drift-check.yml と同じ型）。
+# 「脆弱性あり」と「audit 自体の失敗」は npm の終了コードがどちらも 1 なので、JSON で分けて
+# 題名を変える（`[audit] npm` / `[env] npm audit`）。
+#
+# 限界:
+#   - 見るのは main の lockfile だけ。開いている PR のブランチは見ない（それは ci.yml の担当）
+#   - 直っても issue は自動で閉じない
+#   - GitHub は、公開リポジトリで 60 日間活動が無いと schedule を止める。止まっても何も言わない
+on:
+  schedule:
+    - cron: '0 21 * * *' # 毎日 21:00 UTC = 06:00 JST。平日の作業前に結果が出ている
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dependency-audit-scheduled
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'  # 版の正本は .nvmrc（issue #775）
+      # WHY(npm ci をしない): npm audit は lockfile だけで判定できる（2026-10-02、node_modules の無い
+      #      ディレクトリで実測して critical を検出した）。入れないぶん速く、install scripts も走らない
+      - name: Audit production dependencies
+        id: audit
+        run: |
+          set +e
+          npm audit --omit=dev --audit-level=high --json > audit.json
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-audit
+          path: audit.json
+          retention-days: 30
+      - name: Open or update issue
+        if: steps.audit.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS: ${{ steps.audit.outputs.status }}
+        run: bash scripts/lib/audit-issue.sh audit.json
+      - name: Fail the job when the audit did not pass
+        if: steps.audit.outputs.status != '0'
+        run: exit 1

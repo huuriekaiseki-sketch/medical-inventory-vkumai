@@ -200,15 +200,25 @@
       "manifestPath": ".codex-plugin/plugin.json",
       "_manifestReason": "Codex CLI 0.147.0 ではルート plugin.json があるだけで4本の hook が認識されない。docs/plugin/codex/evidence/2026-09-27-verify.md の一変数実験 C' に従い、実測済みの .codex-plugin 形式だけを生成する。",
       "sourceDir": "docs/plugin/codex",
-      "releaseDocs": ["KNOWN-LIMITS.md", "COMPATIBILITY.md", "CHANGELOG.md"],
-      "skills": ["aidd-doctor"]
+      "releaseDocs": [
+        "KNOWN-LIMITS.md",
+        "COMPATIBILITY.md",
+        "CHANGELOG.md"
+      ],
+      "skills": [
+        "aidd-doctor"
+      ]
     },
     "aidd-codex-vkumai": {
       "version": "0.1.5",
       "description": "vkumai 固有の Codex 用 hook: Supabase 直接 DDL の deny・npm 依存変更の deny・品質チェック未実行の警告（Next.js + Supabase + npm 前提。aidd-codex と併用）",
       "manifestPath": ".codex-plugin/plugin.json",
       "sourceDir": "docs/plugin/codex-vkumai",
-      "releaseDocs": ["KNOWN-LIMITS.md", "COMPATIBILITY.md", "CHANGELOG.md"],
+      "releaseDocs": [
+        "KNOWN-LIMITS.md",
+        "COMPATIBILITY.md",
+        "CHANGELOG.md"
+      ],
       "skills": []
     }
   },
@@ -535,7 +545,10 @@
   "checks": {
     "_comment": "検査（*.test.sh）の層。check-x.sh に対する check-x.test.sh は自動で対象と同じプラグインへ付いていくので、ここに書くのは (1) 対象スクリプトを持たない構造テスト (2) 自動判定を上書きしたいもの の 2 つだけ。上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙（高リスクパスの例・ドメイン語・スタック名）で書かれている検査で、共通側の禁止語検査に引っかかるもの。 層は 3 つある: ここ（配る）／checksNotDistributed（エンジン自体が固有で配れない）／checksSplittable（**対象・閾値だけが固有で、登録簿へ出せば配れる**＝返す当てのある借金。件数の上限を機械で見る）。",
     "aidd-codex-doctor.test.sh": "aidd-codex",
-    "check-dependency-change.test.sh": ["aidd-vkumai", "aidd-codex-vkumai"],
+    "check-dependency-change.test.sh": [
+      "aidd-vkumai",
+      "aidd-codex-vkumai"
+    ],
     "check-node-version-pin.test.sh": "aidd-vkumai",
     "check-session-start-matchers.test.sh": "aidd-core",
     "check-aidd-config-schema.test.sh": "aidd-core",
@@ -643,6 +656,7 @@
     "log-manual-override.test.sh": "logs/manual-overrides.jsonl の実データ形式が前提",
     "supply-chain-drill.test.sh": "配布物の構成（dist/plugins）そのものを検査する。中心リポジトリだけが持つ",
     "lib/flaky-issue.test.sh": "issue 作成コマンドと題名の規約が前提",
+    "lib/audit-issue.test.sh": "issue 作成コマンドと題名の規約（`[audit] npm` / `[env] npm audit`・security ラベル）が前提。main の定期 audit（dependency-audit-scheduled.yml）とセットで、導入先へ配る形は #876 で別に決める（2026-10-02 のユーザー判断で、まず中心だけに入れる）",
     "check-access-path-inventory.test.sh": "docs/agents/access-path-inventory.md の実データ（鍵の所在と経路）を検査する",
     "check-catalogs.test.sh": "登録簿（catalog-registry.json）と索引の実データを検査する。登録簿は導入先のものなので中心リポジトリの実データでは配れない",
     "check-design-answers.test.sh": "aidd.config.json の limits と design-questions.md の実データを突合する。値が導入先ごとに違う",
