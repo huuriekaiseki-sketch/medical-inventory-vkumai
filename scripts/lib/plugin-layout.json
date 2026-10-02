@@ -656,7 +656,7 @@
     "log-manual-override.test.sh": "logs/manual-overrides.jsonl の実データ形式が前提",
     "supply-chain-drill.test.sh": "配布物の構成（dist/plugins）そのものを検査する。中心リポジトリだけが持つ",
     "lib/flaky-issue.test.sh": "issue 作成コマンドと題名の規約が前提",
-    "lib/audit-issue.test.sh": "issue 作成コマンドと題名の規約（`[audit] npm` / `[env] npm audit`・security ラベル）が前提。main の定期 audit（dependency-audit-scheduled.yml）とセットで、導入先へ配る形は #876 で別に決める（2026-10-02 のユーザー判断で、まず中心だけに入れる）",
+    "setup-merge-drivers.test.sh": "対象の setup-merge-drivers.sh が配るかどうか未決（supportScriptsUnclassified）なので、検査も配らない。対象を配ると決めたら、この検査も一緒に配る（一時リポジトリだけで動くので導入先の木には依存しない）",
     "check-access-path-inventory.test.sh": "docs/agents/access-path-inventory.md の実データ（鍵の所在と経路）を検査する",
     "check-catalogs.test.sh": "登録簿（catalog-registry.json）と索引の実データを検査する。登録簿は導入先のものなので中心リポジトリの実データでは配れない",
     "check-design-answers.test.sh": "aidd.config.json の limits と design-questions.md の実データを突合する。値が導入先ごとに違う",
@@ -680,7 +680,8 @@
     "check-file-intake-paths.test.sh": "src/ の実コードと依存名を走査する（ファイル・アーカイブ受け取りが生えた瞬間に落とす ratchet）。走査する印が Next.js の route と Supabase Storage というこのスタック固有のもので、引き出しの行（security-test-catalog）も名指しで要求する",
     "check-rls-policy-count.test.sh": "supabase/migrations/ を順に再生して現存ポリシー数を上限と突き合わせる。**再生器（lib/replay-rls-policies.mjs）は配る**が、上限の台帳（lib/rls-policy-budget.json）はこのリポジトリの実測値なので、検査ごとここに置く",
     "check-ci-path-filter.test.sh": "`.github/workflows/ci.yml` のジョブ（typecheck / lint / build / dependency-audit / test / hooks-test）を**名指しで**確かめ、supabase/ と src/ の実体から『docs を読むテストが在るか』を数える。CI の組み方も除外してよいパスも導入先ごとに違う（判定器 lib/classify-changed-paths.mjs も同じ理由でここには配らない）",
-    "check-cli-entry-guard.test.sh": "中心リポジトリのパス構成（`.claude/workflows/lib/` と `scripts/` の位置関係）を前提に、本物の gap 判定を symlink 経由で起動して確かめる（issue #806）。配布物では判定が `bin/` に置かれるので同じ手順では起動できない。素の比較を落とす走査も、中心リポジトリの木を見る"
+    "check-cli-entry-guard.test.sh": "中心リポジトリのパス構成（`.claude/workflows/lib/` と `scripts/` の位置関係）を前提に、本物の gap 判定を symlink 経由で起動して確かめる（issue #806）。配布物では判定が `bin/` に置かれるので同じ手順では起動できない。素の比較を落とす走査も、中心リポジトリの木を見る",
+    "lib/audit-issue.test.sh": "issue 作成コマンドと題名の規約（`[audit] npm` / `[env] npm audit`・security ラベル）が前提。main の定期 audit（dependency-audit-scheduled.yml）とセットで、導入先へ配る形は #876 で別に決める（2026-10-02 のユーザー判断で、まず中心だけに入れる）"
   },
   "checksSplittable": {
     "_comment": "**分ければ配れる**検査の層（2026-09-09 新設）。エンジンは汎用で、固有なのは対象・閾値・対応表だけ、というもの。`checksNotDistributed`（エンジン自体が固有で本当に配れない）とは別物で、ここは**返す当てのある借金**。増やさないことだけを機械で守る（減らすのは人が決める）。",
