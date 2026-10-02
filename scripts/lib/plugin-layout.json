@@ -200,15 +200,25 @@
       "manifestPath": ".codex-plugin/plugin.json",
       "_manifestReason": "Codex CLI 0.147.0 ではルート plugin.json があるだけで4本の hook が認識されない。docs/plugin/codex/evidence/2026-09-27-verify.md の一変数実験 C' に従い、実測済みの .codex-plugin 形式だけを生成する。",
       "sourceDir": "docs/plugin/codex",
-      "releaseDocs": ["KNOWN-LIMITS.md", "COMPATIBILITY.md", "CHANGELOG.md"],
-      "skills": ["aidd-doctor"]
+      "releaseDocs": [
+        "KNOWN-LIMITS.md",
+        "COMPATIBILITY.md",
+        "CHANGELOG.md"
+      ],
+      "skills": [
+        "aidd-doctor"
+      ]
     },
     "aidd-codex-vkumai": {
       "version": "0.1.5",
       "description": "vkumai 固有の Codex 用 hook: Supabase 直接 DDL の deny・npm 依存変更の deny・品質チェック未実行の警告（Next.js + Supabase + npm 前提。aidd-codex と併用）",
       "manifestPath": ".codex-plugin/plugin.json",
       "sourceDir": "docs/plugin/codex-vkumai",
-      "releaseDocs": ["KNOWN-LIMITS.md", "COMPATIBILITY.md", "CHANGELOG.md"],
+      "releaseDocs": [
+        "KNOWN-LIMITS.md",
+        "COMPATIBILITY.md",
+        "CHANGELOG.md"
+      ],
       "skills": []
     }
   },
@@ -535,7 +545,10 @@
   "checks": {
     "_comment": "検査（*.test.sh）の層。check-x.sh に対する check-x.test.sh は自動で対象と同じプラグインへ付いていくので、ここに書くのは (1) 対象スクリプトを持たない構造テスト (2) 自動判定を上書きしたいもの の 2 つだけ。上書きが要るのは、仕組みは汎用でも fixture がこのリポジトリの語彙（高リスクパスの例・ドメイン語・スタック名）で書かれている検査で、共通側の禁止語検査に引っかかるもの。 層は 3 つある: ここ（配る）／checksNotDistributed（エンジン自体が固有で配れない）／checksSplittable（**対象・閾値だけが固有で、登録簿へ出せば配れる**＝返す当てのある借金。件数の上限を機械で見る）。",
     "aidd-codex-doctor.test.sh": "aidd-codex",
-    "check-dependency-change.test.sh": ["aidd-vkumai", "aidd-codex-vkumai"],
+    "check-dependency-change.test.sh": [
+      "aidd-vkumai",
+      "aidd-codex-vkumai"
+    ],
     "check-node-version-pin.test.sh": "aidd-vkumai",
     "check-session-start-matchers.test.sh": "aidd-core",
     "check-aidd-config-schema.test.sh": "aidd-core",
@@ -667,7 +680,8 @@
     "check-file-intake-paths.test.sh": "src/ の実コードと依存名を走査する（ファイル・アーカイブ受け取りが生えた瞬間に落とす ratchet）。走査する印が Next.js の route と Supabase Storage というこのスタック固有のもので、引き出しの行（security-test-catalog）も名指しで要求する",
     "check-rls-policy-count.test.sh": "supabase/migrations/ を順に再生して現存ポリシー数を上限と突き合わせる。**再生器（lib/replay-rls-policies.mjs）は配る**が、上限の台帳（lib/rls-policy-budget.json）はこのリポジトリの実測値なので、検査ごとここに置く",
     "check-ci-path-filter.test.sh": "`.github/workflows/ci.yml` のジョブ（typecheck / lint / build / dependency-audit / test / hooks-test）を**名指しで**確かめ、supabase/ と src/ の実体から『docs を読むテストが在るか』を数える。CI の組み方も除外してよいパスも導入先ごとに違う（判定器 lib/classify-changed-paths.mjs も同じ理由でここには配らない）",
-    "check-cli-entry-guard.test.sh": "中心リポジトリのパス構成（`.claude/workflows/lib/` と `scripts/` の位置関係）を前提に、本物の gap 判定を symlink 経由で起動して確かめる（issue #806）。配布物では判定が `bin/` に置かれるので同じ手順では起動できない。素の比較を落とす走査も、中心リポジトリの木を見る"
+    "check-cli-entry-guard.test.sh": "中心リポジトリのパス構成（`.claude/workflows/lib/` と `scripts/` の位置関係）を前提に、本物の gap 判定を symlink 経由で起動して確かめる（issue #806）。配布物では判定が `bin/` に置かれるので同じ手順では起動できない。素の比較を落とす走査も、中心リポジトリの木を見る",
+    "lib/audit-issue.test.sh": "issue 作成コマンドと題名の規約（`[audit] npm` / `[env] npm audit`・security ラベル）が前提。main の定期 audit（dependency-audit-scheduled.yml）とセットで、導入先へ配る形は #876 で別に決める（2026-10-02 のユーザー判断で、まず中心だけに入れる）"
   },
   "checksSplittable": {
     "_comment": "**分ければ配れる**検査の層（2026-09-09 新設）。エンジンは汎用で、固有なのは対象・閾値・対応表だけ、というもの。`checksNotDistributed`（エンジン自体が固有で本当に配れない）とは別物で、ここは**返す当てのある借金**。増やさないことだけを機械で守る（減らすのは人が決める）。",

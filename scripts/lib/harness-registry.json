@@ -396,6 +396,7 @@
         "scripts/gate-effectiveness-monthly-check.test.sh",
         "scripts/harvest-journal-events.test.sh",
         "scripts/lib/flaky-issue.test.sh",
+        "scripts/lib/audit-issue.test.sh",
         "scripts/log-find-av-precision.test.sh",
         "scripts/log-instructions-loaded.test.sh",
         "scripts/log-manual-override.test.sh",
