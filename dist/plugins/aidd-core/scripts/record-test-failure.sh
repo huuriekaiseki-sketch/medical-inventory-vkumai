@@ -67,43 +67,65 @@ try:
 except json.JSONDecodeError:
     sys.exit(0)
 
-response = payload.get("tool_response") or {}
-if isinstance(response, str):
-    text, fields = response, {}
-else:
-    fields = response
-    text = "\n".join(
-        str(fields.get(k, "")) for k in ("stdout", "stderr", "output", "content", "error")
-    )
+# WHY(issue #875): Bash が 0 以外で終わると、PostToolUse ではなく PostToolUseFailure が発火する。
+#      この hook は長く PostToolUse にしか登録されておらず、**普通に落ちたテストは一度も届いていなかった**
+#      （届いていたのは exit 0 で終わったのに本文に失敗の文字が出たものだけ。E-103）。
+#      失敗時の入力は形が違い、公式は exit_code / stdout / stderr を tool_response の**外**に置くと書く。
+#      実機の形はまだ測っていないので、内側・外側のどちらにあっても読む。
+event = payload.get("hook_event_name") or ""
+response = payload.get("tool_response")
+fields = response if isinstance(response, dict) else {}
+TEXT_KEYS = ("stdout", "stderr", "output", "content", "error")
+parts = [response] if isinstance(response, str) else [str(fields.get(k, "")) for k in TEXT_KEYS]
+parts += [str(payload.get(k, "")) for k in TEXT_KEYS]
+text = "\n".join(p for p in parts if p)
 
-# 終了コードは版によって名前が違うので、在りそうなものを順に見る。
+# 終了コードは版によって名前と置き場が違うので、在りそうなものを順に見る。
 # どれも無ければ本文の見た目で判断する（無音で素通りするより、拾いすぎる方を選ぶ）。
 exit_code = None
-for key in ("exit_code", "exitCode", "returnCode", "code", "status"):
-    v = fields.get(key)
-    if isinstance(v, int):
-        exit_code = v
+for source in (fields, payload):
+    for key in ("exit_code", "exitCode", "returnCode", "code", "status"):
+        v = source.get(key)
+        if isinstance(v, int) and not isinstance(v, bool):
+            exit_code = v
+            break
+    if exit_code is not None:
         break
 
-FAILURE_MARKS = ("FAILED", "Tests  ", "failed", "✗", "×", "  NG: ", "error TS", "✖")
 if exit_code is not None:
     failed = exit_code != 0
+elif event == "PostToolUseFailure":
+    # 失敗時のイベントで届いた時点で落ちている。本文の形を知らなくても拾う（形を知らないと無音になる）
+    failed = True
 else:
     # vitest は成功時も "Tests  N passed" を出すので、失敗の形だけを見る
+    # WHY(issue #875): aidd-core は言語を問わず配るので、pytest / unittest の失敗の形も既定で知っておく。
+    #      知らないと Python の導入先では下書きに一度も載らない（kojigyo-zei-rag への移植で発覚）
     failed = bool(
         re.search(r"\bTests\b.*\b\d+ failed", text)
         or re.search(r"^\s*FAILED\s*$", text, re.M)
         or re.search(r"^\s*NG: ", text, re.M)
         or re.search(r"^\s*×\s", text, re.M)
         or re.search(r"error TS\d+", text)
+        # pytest: 末尾の要約行（`=== 1 failed, 140 passed in 1.23s ===`）と short summary（`FAILED path::test`）
+        or re.search(r"^=+ .*\b\d+ (?:failed|errors?)\b.*=+\s*$", text, re.M)
+        or re.search(r"^(?:FAILED|ERROR)\s+\S+::\S+", text, re.M)
+        # unittest: `FAIL: test_x (mod.Class.test_x)` / `ERROR: ...`
+        or re.search(r"^(?:FAIL|ERROR): \S", text, re.M)
     )
 
 if not failed:
     sys.exit(0)
 
-# 落ちたものの名前を拾う（vitest の × 行、bash 検査の NG: 行、tsc のエラー行）
+# 落ちたものの名前を拾う（vitest の × 行、bash 検査の NG: 行、tsc のエラー行、pytest のノード ID、unittest の FAIL: 行）
 names = []
-for pat in (r"^\s*×\s+(.+?)(?:\s+\d+ms)?$", r"^\s*NG:\s+(.+)$", r"^(.+?\(\d+,\d+\): error TS\d+.*)$"):
+for pat in (
+    r"^\s*×\s+(.+?)(?:\s+\d+ms)?$",
+    r"^\s*NG:\s+(.+)$",
+    r"^(.+?\(\d+,\d+\): error TS\d+.*)$",
+    r"^(?:FAILED|ERROR)\s+(\S+::\S+)",
+    r"^(?:FAIL|ERROR):\s+(.+)$",
+):
     names += [m.strip() for m in re.findall(pat, text, re.M)]
 seen, uniq = set(), []
 for n in names:
@@ -115,8 +137,12 @@ row = {
     "at": datetime.now(timezone.utc).isoformat(),
     "command": command[:300],
     "exitCode": exit_code,
-    # 終了コードが読めなかったときは、次のドリルで形を直せるように残す
+    # どのイベントで届いたか（PostToolUse = exit 0 で本文に失敗 / PostToolUseFailure = 0 以外で終了）
+    "event": event or None,
+    "errorType": payload.get("error_type"),
+    # 終了コードが読めなかったとき・失敗時のイベントで届いたときは、実機の入力の形を後から直せるように残す
     "responseKeys": sorted(fields.keys()) if exit_code is None else None,
+    "inputKeys": sorted(payload.keys()) if (exit_code is None or event == "PostToolUseFailure") else None,
     "failed": uniq[:20],
     "failedCount": len(uniq),
 }

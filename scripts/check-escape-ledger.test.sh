@@ -84,6 +84,62 @@ rm -f "$CANDIDATES"
 OUT="$(ask)"
 is_empty "$OUT" "何も起きていないときは無言"
 
+# ここから先は、上の流れ（下書き → 聞く → 片付け）と混ざらないよう別の置き場で測る
+WORK2="$WORK/b"
+mkdir -p "$WORK2"
+CANDIDATES2="$WORK2/escape-candidates.jsonl"
+feed2() { AIDD_LOG_DIR="$WORK2" bash "$RECORD" > /dev/null 2>&1; }
+
+# WHY(issue #875): Bash が 0 以外で終わると、Claude Code は PostToolUse ではなく PostToolUseFailure を
+#      発火する（公式の hooks リファレンス）。この hook は PostToolUse にしか登録されておらず、
+#      普通に落ちたテストは一度も下書きに載っていなかった（2026-09-07〜10-02 の 51 件は、すべて
+#      exit 0 で終わったのに本文に失敗の文字があったもの。終了コードが取れた行は 0 件）。
+#      失敗時の入力は形が違う（exit_code / stdout / stderr が tool_response の外にある、と公式は書く）ので、
+#      どちらの置き場にあっても読めることを測る。
+echo "=== scenario 10: PostToolUseFailure（失敗時のイベント）で届いた失敗を拾う ==="
+printf '%s' '{"hook_event_name":"PostToolUseFailure","tool_name":"Bash","tool_input":{"command":"bash scripts/foo.test.sh"},"tool_response":"Error: Exit code 1","error_type":"execution_error","exit_code":1,"stdout":"  NG: 施設をまたいで読めた\nFAILED","stderr":""}' > "$WORK/in.json"
+feed2 < "$WORK/in.json"
+if [ -f "$CANDIDATES2" ]; then ok "失敗時のイベントで届いた失敗を記録する"; else ng "失敗時のイベントで届いた失敗を記録できない"; fi
+contains "$(cat "$CANDIDATES2" 2>/dev/null)" '"exitCode": 1' "外側にある終了コードを読む"
+contains "$(cat "$CANDIDATES2" 2>/dev/null)" "施設をまたいで読めた" "外側にある stdout から落ちた名前を拾う"
+contains "$(cat "$CANDIDATES2" 2>/dev/null)" '"event": "PostToolUseFailure"' "どのイベントで届いたかを残す（実機の形を後から確かめる）"
+
+echo "=== scenario 11: 失敗時のイベントなら、本文が見知らぬ形でも拾う ==="
+rm -f "$CANDIDATES2"
+printf '%s' '{"hook_event_name":"PostToolUseFailure","tool_name":"Bash","tool_input":{"command":"bash scripts/foo.test.sh"},"error":"Command failed with exit code 2"}' > "$WORK/in.json"
+feed2 < "$WORK/in.json"
+if [ -f "$CANDIDATES2" ]; then ok "終了コードも失敗の文字も無くても、イベントで失敗と分かれば記録する"; else ng "失敗時のイベントなのに記録しなかった（形を知らないと無音になる）"; fi
+contains "$(cat "$CANDIDATES2" 2>/dev/null)" '"inputKeys"' "入力の鍵を残す（実機の形を後から確かめる）"
+
+echo "=== scenario 12: 失敗時のイベントでも、検査でないコマンドは拾わない ==="
+rm -f "$CANDIDATES2"
+printf '%s' '{"hook_event_name":"PostToolUseFailure","tool_name":"Bash","tool_input":{"command":"git push"},"exit_code":1,"stderr":"rejected"}' > "$WORK/in.json"
+feed2 < "$WORK/in.json"
+if [ ! -f "$CANDIDATES2" ]; then ok "無関係なコマンドの失敗は記録しない"; else ng "無関係なコマンドの失敗を記録した" "$(cat "$CANDIDATES2")"; fi
+
+# WHY(issue #875): aidd-core は言語を問わず配る。終了コードが取れない経路（exit 0 で本文に失敗が出る形）で
+#      pytest / unittest の失敗の形を知らないと、Python の導入先では下書きに一度も載らない
+#      （kojigyo-zei-rag への移植で見つかった）。
+echo "=== scenario 13: pytest の失敗を拾い、ノード ID を名前に残す ==="
+rm -f "$CANDIDATES2"
+printf '%s' '{"tool_input":{"command":"python -m pytest tests"},"tool_response":{"stdout":"FAILED tests/test_tax.py::test_rounding - AssertionError: 1 != 2\n=================== 1 failed, 140 passed in 1.23s ===================="}}' > "$WORK/in.json"
+feed2 < "$WORK/in.json"
+if [ -f "$CANDIDATES2" ]; then ok "pytest の失敗を記録する"; else ng "pytest の失敗を記録できない"; fi
+contains "$(cat "$CANDIDATES2" 2>/dev/null)" "tests/test_tax.py::test_rounding" "pytest のノード ID を名前に残す"
+
+echo "=== scenario 14: unittest の失敗を拾う ==="
+rm -f "$CANDIDATES2"
+printf '%s' '{"tool_input":{"command":"python -m unittest discover"},"tool_response":{"stdout":"======================================================================\nFAIL: test_split (test_ledger.LedgerTest.test_split)\n----------------------------------------------------------------------\nFAILED (failures=1)"}}' > "$WORK/in.json"
+feed2 < "$WORK/in.json"
+if [ -f "$CANDIDATES2" ]; then ok "unittest の失敗を記録する"; else ng "unittest の失敗を記録できない"; fi
+contains "$(cat "$CANDIDATES2" 2>/dev/null)" "test_split (test_ledger.LedgerTest.test_split)" "unittest のテスト名を残す"
+
+echo "=== scenario 15: pytest の成功は拾わない（緑のたびに鳴らない） ==="
+rm -f "$CANDIDATES2"
+printf '%s' '{"tool_input":{"command":"python -m pytest tests"},"tool_response":{"stdout":"=================== 141 passed in 1.23s ===================="}}' > "$WORK/in.json"
+feed2 < "$WORK/in.json"
+if [ ! -f "$CANDIDATES2" ]; then ok "pytest の成功は記録しない"; else ng "pytest の成功を記録した" "$(cat "$CANDIDATES2")"; fi
+
 echo ""
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
