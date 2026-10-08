@@ -36,7 +36,7 @@
     "scripts/check-integration-freshness.sh": "db7972a63320c5cc43f892bb86ea20673c25de2d626df274a77c9f58a7559766",
     "scripts/check-integration-freshness.test.sh": "758b6d5557a533594b7f09139e15df9a9c25246cdbe221073a746592dcc1e913",
     "scripts/check-mutation-freshness.sh": "e0fee3f45c6a989ffa6ae95f147c7212b0f5dfdeae5308adef9a9b328bc051aa",
-    "scripts/check-node-version-pin.test.sh": "72923a68610f285292551edb971010eb1a5ccca7cca82b911037e33bada25d06",
+    "scripts/check-node-version-pin.test.sh": "a9b3f4d8865cd6545e93ab18698b5df4e7cfb75caf742bd1489ae1fb0c22fd64",
     "scripts/check-operation-contracts.test.sh": "56ccce392dbd14a6090d38b257846ba5bee684d44e2bae5c87806849a593a4f5",
     "scripts/check-readonly-bash.sh": "69106c0aab699824769eea79244ab30b696264c6e5953dc469f8f94c9a9e508e",
     "scripts/check-readonly-bash.test.sh": "96c72f6546fbf27c40a34846eff86c0897d8c1f77d9dc1fb922c409588654631",

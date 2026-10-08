@@ -23,7 +23,7 @@ jobs:
   # 判定そのものは scripts/lib/classify-changed-paths.mjs が持ち、hooks-test で守られている
   # （scripts/check-ci-path-filter.test.sh）。判定できないときは code=true に倒す＝全部回す。
   changes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       code: ${{ steps.classify.outputs.code }}
     steps:
@@ -92,7 +92,7 @@ jobs:
   dependency-audit:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -108,7 +108,7 @@ jobs:
   # （check-catalogs・check-session-handoff-format・棚卸し系・check-harness-map 等）。
   # ここを省いた結果が PR #781 の違反 2 件だったので、changes の判定に**かけない**。
   hooks-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # WHY(fetch-depth: 0): scripts/check-secret-leak-history.test.sh は git のオブジェクト全部を
       # 走査して「一度でも秘密をコミットしていないか」を見る。既定の浅い clone（depth 1）では
