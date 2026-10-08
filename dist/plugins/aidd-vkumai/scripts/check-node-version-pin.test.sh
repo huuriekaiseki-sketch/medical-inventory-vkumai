@@ -13,6 +13,9 @@
 #   (a) .nvmrc が厳密な版（x.y.z）である。メジャーだけ・範囲は不可
 #   (b) package.json の engines.node が .nvmrc と一致する
 #   (c) **すべての workflow が node-version-file: '.nvmrc' を使う**（浮動の node-version を書かない）
+#   (d) **runs-on に *-latest を使わない**（issue #894）。ubuntu-latest は GitHub 側の都合で中身の OS が
+#       入れ替わる（2026-10-19 に Ubuntu 26 へ）。Node と同じく「実行環境の版が勝手に動く」穴なので、
+#       ubuntu-24.04 等の版を固定したラベルにし、上げるときは PR で明示する
 #
 # 見ないもの（限界）:
 #   - engines.npm が実際にその Node に同梱される npm かは**機械で確かめていない**
@@ -81,6 +84,11 @@ function inspect(dir) {
   if (!existsSync(wfDir)) return problems
   for (const f of readdirSync(wfDir).filter((x) => /\.ya?ml$/.test(x))) {
     const text = readFileSync(path.join(wfDir, f), "utf8")
+    for (const [i, line] of text.split("\n").map((l) => l.replace(/#.*$/, "")).entries()) {
+      if (/^\s*runs-on\s*:.*-latest\b/.test(line)) {
+        problems.push(`${f}:${i + 1} runs-on が浮動の *-latest（ubuntu-24.04 等の版を固定したラベルにする）`)
+      }
+    }
     if (!/actions\/setup-node/.test(text)) continue
     // コメントを除いた行だけを見る（説明文に node-version と書いてあるのを拾わない）
     const lines = text.split("\n").map((l) => l.replace(/#.*$/, ""))
@@ -145,6 +153,17 @@ console.log("=== scenario 2: fixture で検知できる（RED 方向の自己検
   writeFileSync(path.join(wf, "a.yml"), "      - uses: actions/setup-node@v7\n        with:\n          # node-version: \x2724\x27 は使わない\n          node-version-file: \x27.nvmrc\x27\n")
   if (inspect(work).length === 0) ok("コメント内の node-version は誤検知しない")
   else ng("コメントを拾った", JSON.stringify(inspect(work)))
+
+  good()
+  writeFileSync(path.join(wf, "b.yml"), "jobs:\n  x:\n    runs-on: ubuntu-latest\n")
+  has(inspect(work), "浮動の *-latest", "runs-on の ubuntu-latest を検知（setup-node を使わない workflow でも）")
+  rmSync(path.join(wf, "b.yml"))
+
+  good()
+  writeFileSync(path.join(wf, "b.yml"), "jobs:\n  x:\n    runs-on: ubuntu-24.04 # ubuntu-latest は使わない\n")
+  if (inspect(work).length === 0) ok("版を固定した runs-on とコメント内の -latest は誤検知しない")
+  else ng("固定した runs-on かコメントを拾った", JSON.stringify(inspect(work)))
+  rmSync(path.join(wf, "b.yml"))
 
   rmSync(work, { recursive: true, force: true })
 }

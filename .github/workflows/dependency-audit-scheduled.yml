@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -47,7 +47,8 @@ jobs:
           set +e
           npm audit --omit=dev --audit-level=high --json > audit.json
           echo "status=$?" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      # WHY(v7.0.1): v4 は Node.js 20 向けで非推奨。@v7 だと公開直後の v7.0.2（2026-10-07）に解決されるので版まで書く（issue #894）
+      - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: dependency-audit
