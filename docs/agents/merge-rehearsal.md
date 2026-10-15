@@ -148,8 +148,11 @@ decisions・known-failure-patterns。jsonunion が効いたのは plugin-layout.
 
 **次に同じ波が来たら**: 先に `bash scripts/rehearse-merge.sh` で衝突を数え、
 「両方の行を残す」で解けるファイルを `.gitattributes` に足してから並べる。
-新しい clone・worktree では `bash scripts/setup-merge-drivers.sh` を 1 回実行する
-（マージドライバの中身は git の仕様で配れない）。
+新しい clone では `bash scripts/setup-merge-drivers.sh` を 1 回実行する
+（マージドライバの中身は git の仕様で配れない）。設定は全 worktree で共有されるので、worktree ごとには要らない。
+**2026-10-02 まではドライバーを実行した worktree の絶対パスで書き込んでおり、その worktree を消すと全員のドライバーが
+起動に失敗していた**（JSON の衝突が黙って増える）。いまは相対パスで書き込む（git は各 worktree の一番上でドライバーを起動する）。
+古い clone で `git config merge.jsonunion.driver` が絶対パスのままなら、このスクリプトをもう一度実行する。
 
 ## GitHub 復旧時の入れ方（2026-09-11）
 
