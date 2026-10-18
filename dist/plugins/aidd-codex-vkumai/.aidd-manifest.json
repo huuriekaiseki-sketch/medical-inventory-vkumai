@@ -17,7 +17,7 @@
     "scripts/check-empty-session-report.sh": "e54bf43c2e4d034db9333ea83ed06f8ba64d62891095147138868f35952ca46f",
     "scripts/check-fault-injection-drill-staleness.sh": "1cb547f735f2ce0b9ae7cb75b6b546a761f41f4061195ddef57e5f9407422b9b",
     "scripts/check-hook-dependencies.sh": "26b1d6446a1c0994e06877e1a8bbf2449d04ac99b723059fde24b5c56c70acd7",
-    "scripts/check-hooks-path-alive.sh": "9d2884c2fdcb3ec22921d26109b381a589e15cd75471e1572f3df53779f4feb3",
+    "scripts/check-hooks-path-alive.sh": "47b0d6fcce4a7d11e3303ae4e242ce81a013cbfe039bf920760647b0f7256805",
     "scripts/check-integration-freshness.sh": "db7972a63320c5cc43f892bb86ea20673c25de2d626df274a77c9f58a7559766",
     "scripts/check-mutation-freshness.sh": "e0fee3f45c6a989ffa6ae95f147c7212b0f5dfdeae5308adef9a9b328bc051aa",
     "scripts/check-rls-mutation-freshness.sh": "d71abb9b7dfe951bca5260f35f103784a95da6c70996fd6c902fb980b410838c",

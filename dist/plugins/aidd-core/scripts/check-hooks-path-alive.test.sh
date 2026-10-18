@@ -103,6 +103,12 @@ else
   else
     assert_fail "直したのに黙っている（勝手に環境を変えて報告しないのが一番危ない）" "$OUT"
   fi
+  # 対（scenario 4 と見分ける）: 先が実在しなかったときは「動いていませんでした」と言う
+  if grep -qF '動いていませんでした' <<<"$OUT"; then
+    assert_ok "先が無かったときは hook が動いていなかったことを言う"
+  else
+    assert_fail "先が無かったのに「動いていなかった」と言わない" "$OUT"
+  fi
 fi
 
 echo "=== scenario 4: worktree スコープの上書きは、実在してもその場で外す（E-092 の形） ==="
@@ -128,6 +134,19 @@ if [ "$E_AFTER" = "scripts/git-hooks" ]; then
   assert_ok "外したあと、clone の相対設定が効く状態になる"
 else
   assert_fail "外したあとの effective が壊れている（${E_AFTER:-未設定}）" "$OUT"
+fi
+# WHY(2026-10-19 の実走ドリル): 上書きの先が実在していたのに「hook が動いていませんでした」と言っていた。
+#      事実と違う報告は、人に不要な見直し（直前のコミットは hook を通っていないのでは）をさせる。
+#      先が実在したときは「動いていました」と言い、「動いていませんでした」とは言わない
+if grep -qF '動いていませんでした' <<<"$OUT"; then
+  assert_fail "先が実在していたのに「動いていなかった」と言う（事実を越えた報告）" "$OUT"
+else
+  assert_ok "先が実在していたときは「動いていなかった」と言わない"
+fi
+if grep -qF '動いていました' <<<"$OUT"; then
+  assert_ok "hook 自体は動いていたことを言う"
+else
+  assert_fail "hook が動いていたことを言わない" "$OUT"
 fi
 
 echo "=== scenario 4b: 直す先が無ければ直さず、警告だけする（配布先を壊さない） ==="

@@ -129,12 +129,74 @@ InstructionsLoaded、SubagentStart/Stop（phase1 実走時）。状態ファイ�
 skip-marker / readonly-bash / dependency-change / direct-ddl）は検証リポジトリで Write / Bash を伴う
 操作をしていないため未実走（構造テストと中心リポジトリでの実機 deny 確認のみ）。
 
+## 2026-10-19 の実施結果（2 回目・全件）
+
+版 `833d37f9a27c`。前回（2026-09-05）から hook は 24 → 48 登録に増えていたが、実走の版は未記録だった。
+手順 1〜2 は scratchpad の runner で機械化した（`.claude/settings.json` から hook を列挙 → このセッションの
+transcript を入力に 1 本ずつ実行 → 沈黙は `bash -x` で再実行して最後の分岐を残す）。
+runner はリポジトリに入れていない（入れるなら `plugin-layout.json` の配る／配らないの宣言が要る）。
+
+| 群 | 本数 | 出力 | 沈黙（判定到達） | 無音死 | 省略 |
+|---|---|---|---|---|---|
+| SessionStart + Setup | 25 | 12 | 13 | **0** | 0 |
+| Stop | 11 | 2 | 8 | **0** | 1（verify-claims。`claude -p` を呼ぶため） |
+| PreToolUse（RED 方向） | 5 | deny 2 / ask 2 / warn 1 | — | **0** | 0 |
+| 記録専用・外部に触るもの | 6 | — | — | — | 6（log-subagent-hook-skeleton ×2・log-instructions-loaded・record-test-failure ×2・mark/stop-supabase） |
+
+沈黙した 21 本は、trace の末尾がすべて**判定材料を集めた上での `exit 0`** だった（例: `BEHIND_COUNT=0`、
+`STALE_JSON='[]'`、`WF_COUNT=0`、`CHANGED_FILES=''`、`[ -f .aidd/recovery-queue.jsonl ]` が偽）。
+ただし Stop の 3 本（aidd-stats / aidd-phase-stats / find-av-precision）は session_id で絞るため、
+偽の session_id（マーカーを消費しないために使った）では「このセッションの Workflow 0 件」として黙る。
+Workflow を回したセッションで実走しないと、記録漏れ側の判定は測れない（2026-09-05 と同じ限界）。
+
+PreToolUse 5 本は、止める入力で判定が出ることに加えて **`logs/hook-decisions.jsonl` に 5 行**
+（`caller: claude`、`rule` は固定語彙）が書かれることを確認した（2026-10-18 導入、`docs/specs/hook-decision-log.md`）。
+本物の deny は 2026-10-18 に 1 回（`psql -c "select 1"`）。
+
+| 発見 | 種別 | 症状 | 対応 |
+|---|---|---|---|
+| `check-hooks-path-alive` の自動復旧の文言 | **事実を越えた報告** | worktree スコープの上書きの先が**実在していた**（hook は動いていた）のに「git hook が動いていませんでした。直前のコミット・push は hook を通っていない可能性」と断定した | 直す前の先が実在したかで分岐（`WAS_DEAD`）。test の scenario 3 / 4 に対を足した（本 PR） |
+| worktree スコープの `core.hooksPath`（メイン checkout の絶対パス）が**再び**入っていた | 環境（外部要因） | リポジトリのスクリプトは worktree スコープを書かない（`install-git-hooks.sh` は local・相対）。worktree を作る側（アプリの EnterWorktree）が入れている可能性 `[要確認]`。4 回目。自動復旧が外した（いまは `local scripts/git-hooks`） | 観察のみ。発生源の特定は別件 |
+| `record-test-failure` が `ls …test.sh` の失敗を「落ちた検査」に数える | 設計どおりの粗さ | コマンド文字列に `test` を含めば検査扱い。`check-escape-ledger` に「（テスト名を拾えず）」が 3 件並んだ | 設計どおり（拾うだけ拾い、人が仕分ける）。`triage-escapes.sh --none` で記録した |
+| ドリルの runner 自身の誤り | **C-025 の型（不在を対象外と読む）** | jq の出力を tab 区切りで読んだため、matcher が空の行で欄が詰まり **Stop 以降が丸ごとスキップ**された。1 回目の結果表には Stop が無く、無いことに気づかず「終わった」と読みかけた | 区切りを US 文字にして再実行。**件数の期待値（settings.json の登録数 48）と結果表の行数を突き合わせる**のを手順に足すべき |
+
+### hook 一覧と 2026-10-19 の判定（沈黙したもののみ。出力したものは「出力あり・内容妥当」）
+
+| イベント | hook | 判定 | 最後に通った分岐 |
+|---|---|---|---|
+| SessionStart | check-branch-tool-ownership | 正常 | ブランチ `claude/*` と tool `claude` が一致 |
+| SessionStart | check-local-main-freshness | 正常 | FETCH_HEAD 13h・behind 0 |
+| SessionStart | check-otel-collector-status | 正常 | opt-in 未設定 |
+| SessionStart | check-blocked-issues-staleness | 正常 | blocked 1 件、90 日未満 |
+| SessionStart | check-fault-injection-drill-staleness | 正常 | 期限前 |
+| SessionStart | check-workflow-interruption | 正常 | project dir に `wf_*.json` なし |
+| SessionStart | check-recovery-queue | 正常 | キュー無し |
+| SessionStart | check-claude-md-size | 正常 | 16,104 文字（上限 24,000） |
+| SessionStart | check-empty-session-report | 正常 | 未コミットの sessions 無し |
+| SessionStart | check-access-review-staleness | 正常 | 期限前 |
+| SessionStart | check-subagent-model-force | 正常 | 3 つの settings に変数なし |
+| SessionStart | check-plugin-integrity | 正常（7 秒） | 4 プラグインの manifest と実物が一致 |
+| SessionStart | check-hook-dependencies | 正常 | doctor: registrations=57 unresolved=0 notExecutable=0 |
+| Stop | check-domain-decisions-suggest | 正常 | 変更ファイル無し |
+| Stop | ai-check-suggest | 正常 | 変更ファイル無し（.ts/.tsx/.sql なし） |
+| Stop | gate-effectiveness-monthly-check | 正常 | 収穫は実行、通知は 30 日未経過 |
+| Stop | check-gap-check-state | 正常 | state 無し |
+| Stop | check-aidd-stats-recorded | 正常（限界あり） | 偽 session_id で WF_COUNT=0 |
+| Stop | check-aidd-phase-stats-recorded | 正常（限界あり） | 偽 session_id の workflows dir 無し |
+| Stop | check-handoff-format | 正常 | transcript から PR #896 を拾い、必須見出し・04 表・依存変更の記述を評価して違反なし |
+| Stop | check-find-av-precision-recorded | 正常（限界あり） | 偽 session_id の workflows dir 無し |
+
+出力があった 14 本（hooks-path-alive・branch-pr-status・automode-config・stale-worktrees・upstream-docs/
+dependency-update の期限超過・鮮度 4 本・reinject・maintenance-digest・full-run-before-finish・escape-ledger）は、
+いずれも内容がいまの状態と一致していた（例: branch-pr-status は PR #896 でマージ済みのブランチを正しく名指し）。
+hooks-path-alive だけが上表のとおり文言が事実を越えていた。
+
 ## 実走した版（2026-09-11 に追加）
 
 「hook を変えたら回す」という目安は書いてあったが、**変わったかどうかを誰も見ていなかった**
 （期限＝四半期だけが `scripts/maintenance-digest.sh` に載っていた）。版で見る。
 
-最後に実走した版: 未記録
+最後に実走した版: `833d37f9a27c`（2026-10-19、全件）
 この仕組みを入れた時点の版: `4e16c913748b`（2026-09-11）
 
 - 版は `node scripts/lib/hook-registry-hash.mjs --root .` が出す。
@@ -161,6 +223,6 @@ skip-marker / readonly-bash / dependency-change / direct-ddl）は検証リポ�
 
 ## 次回実施予定日
 
-2026-12-05（四半期後の目安。v1 の切り出し前は予定日を待たず全件実施する。実施後に手動で書き換える。
+2027-01-19（四半期後の目安。v1 の切り出し前は予定日を待たず全件実施する。実施後に手動で書き換える。
 期限は `scripts/maintenance-digest.sh`（`claude -p --maintenance`、issue #741）が他の定期作業と
 まとめて表示する）
