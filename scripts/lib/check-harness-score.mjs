@@ -13,8 +13,9 @@
 //   - 費用は任意項目。書かれていなければ「邪魔した」の重さが読めない。
 //   - 部品名（component）は自由記述。同じ部品を別名で書けば別の部品として数える。
 
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { writeLine } from './stdout-sync.mjs'
 
 export const SCORE_FILE = 'docs/agents/harness-score.jsonl'
@@ -144,6 +145,21 @@ function main(argv) {
   process.exit(0)
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+// WHY(issue #806・2026-10-19): `path.resolve` 同士の比較だと、argv[1] が symlink 経由（macOS の
+//      mktemp -d が返す /var/folders → /private/var/folders、プラグインの配布先）のとき import.meta.url
+//      （実体パス）と一致せず、main() が走らないまま無出力・exit 0 で終わる。呼び出し側が `|| true` で
+//      受けると、空出力が「取得できませんでした」に化けて誰も気づかない。実体パスへ直してから比べる。
+//      #806 で 21 本を直したとき、この綴りの 8 本は走査に掛からず残っていた。
+//      この書き方へ戻すと check-cli-entry-guard.test.sh が落とす
+function isRunAsCli() {
+  const entry = process.argv[1]
+  if (!entry) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entry)).href
+  } catch {
+    return false
+  }
+}
+if (isRunAsCli()) {
   main(process.argv.slice(2))
 }

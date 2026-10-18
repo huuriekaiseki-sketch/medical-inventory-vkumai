@@ -18,10 +18,10 @@
 //   node scripts/lib/check-docs-issue-refs.mjs --states s.json   # {"123":"CLOSED",...} を注入（テスト用）
 //   node scripts/lib/check-docs-issue-refs.mjs --root <dir> --files a.md,b.md
 
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, realpathSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { defaultTargets, stripFences } from './check-docs-integrity.mjs'
 import { writeLine } from './stdout-sync.mjs'
 
@@ -90,7 +90,22 @@ export function run(opts) {
   return { candidates, warnings, unresolved }
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+// WHY(issue #806・2026-10-19): `path.resolve` 同士の比較だと、argv[1] が symlink 経由（macOS の
+//      mktemp -d が返す /var/folders → /private/var/folders、プラグインの配布先）のとき import.meta.url
+//      （実体パス）と一致せず、main() が走らないまま無出力・exit 0 で終わる。呼び出し側が `|| true` で
+//      受けると、空出力が「取得できませんでした」に化けて誰も気づかない。実体パスへ直してから比べる。
+//      #806 で 21 本を直したとき、この綴りの 8 本は走査に掛からず残っていた。
+//      この書き方へ戻すと check-cli-entry-guard.test.sh が落とす
+function isRunAsCli() {
+  const entry = process.argv[1]
+  if (!entry) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entry)).href
+  } catch {
+    return false
+  }
+}
+const isMain = isRunAsCli()
 if (isMain) {
   const opts = parseArgs(process.argv.slice(2))
   const { candidates, warnings, unresolved } = run(opts)
