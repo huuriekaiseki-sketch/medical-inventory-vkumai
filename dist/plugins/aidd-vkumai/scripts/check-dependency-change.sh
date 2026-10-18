@@ -5,6 +5,17 @@ set -euo pipefail
 #      deny ゲートに準ずる重要度のため fail-closed（exit 2 でブロック側に倒す）。
 command -v jq >/dev/null 2>&1 || { echo "jq not found: check-dependency-change.sh cannot run" >&2; exit 2; }
 
+# WHY(止めた回を残す): ask を出した回を logs/hook-decisions.jsonl に 1 行書く（docs/specs/hook-decision-log.md）。
+#     記録は判定を 1 文字も変えない（書けなければ黙って飛ぶ）。lib が無い配布先では何もしない関数に差し替える
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/lib/log-hook-decision.sh" ]; then
+  source "$SCRIPT_DIR/lib/log-hook-decision.sh"
+else
+  log_hook_decision() { :; }
+fi
+# 記録の target は「実行されようとした先頭の語」だけ（パス前置は basename に。コマンド本文は残さない）
+first_word_base() { local w="${1%%[[:space:]]*}"; printf '%s' "${w##*/}"; }
+
 # PreToolUse hook（ask）。npm パッケージの追加・更新・削除を「部品を増やす作業」ではなく
 # 「実行する第三者コードと依存関係を増やす設計判断」として、人間の明示的確認を要求する
 # （docs/agents/known-failure-patterns.md「依存関係層」、2026-09-04）。
@@ -181,6 +192,8 @@ check_manifest_path() {
   case "$base" in
     package.json|package-lock.json)
       ASK=1
+      RULE="dependency_change_file"
+      LOG_TARGET="$1"
       REASON="$base への直接編集は依存関係の変更です（scripts の変更だけであっても、依存に触れていないことを人が確認します）。依存を足す場合は用途・代替案・権限/環境変数/DB への影響・固定する版と出所を報告して承認を得てから進めてください。"
       return 0
       ;;
@@ -222,6 +235,8 @@ TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')"
 
 ASK=0
 REASON=""
+RULE=""        # 記録用。どの規則で止めたか（固定語彙: dependency_change_command / dependency_change_file）
+LOG_TARGET=""  # 記録用。コマンドなら先頭の語、ファイルならそのパス
 
 # 前置きを読み飛ばした後のセグメントを判定する。確認が要るなら ASK / REASON を立てて 0 を返す
 check_segment() { # $1=前置きを読み飛ばしたセグメント $2=理由文に出す元のセグメント
@@ -233,6 +248,8 @@ check_segment() { # $1=前置きを読み飛ばしたセグメント $2=理由�
   if [[ "$seg" =~ $NPM_PATTERN ]] || [[ "$seg" =~ $YARN_PATTERN ]] || [[ "$seg" =~ $PNPM_PATTERN ]]; then
     if has_package_arg "$seg"; then
       ASK=1
+      RULE="dependency_change_command"
+      LOG_TARGET="$(first_word_base "$seg")"
       REASON="依存パッケージの追加・更新・削除は「実行する第三者コードと依存関係を増やす設計判断」です。実行前に (1) 用途と代替案（既存の依存や標準 API で足りないか）、(2) 権限・環境変数・DB への影響、(3) 固定する版と出所（registry.npmjs.org か）、を報告して承認を得てください。実行後は package.json / package-lock.json の差分、npm ci、npm audit --omit=dev --audit-level=high の結果と、失敗時のロールバック方法を引き継ぎメモ 00「依存の変更」に書きます。コマンド: $shown"
       return 0
     fi
@@ -280,6 +297,7 @@ case "$TOOL_NAME" in
 esac
 
 if [[ "$ASK" -eq 1 ]]; then
+  log_hook_decision "check-dependency-change" "ask" "$RULE" "$TOOL_NAME" "$LOG_TARGET" "$INPUT"
   jq -n --arg reason "$REASON" \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: $reason}}'
 fi

@@ -34,7 +34,9 @@ if [ -d "$REPO_ROOT/dist/plugins" ]; then
 fi
 if [ -f "$REPO_ROOT/dist/plugins/aidd-codex/.aidd-manifest.json" ]; then
   COUNT="$(node -e 'const m=require(process.argv[1]); process.stdout.write(String(Object.keys(m.files ?? {}).length))' "$REPO_ROOT/dist/plugins/aidd-codex/.aidd-manifest.json")"
-  [ "$COUNT" -eq 13 ] && assert_ok "Codex の hooks・scripts・manifest・docs・skill を照合する" || assert_fail "Codex の manifest が13ファイルでない" "$COUNT"
+  # 13 → 15（2026-10-18、docs/specs/hook-decision-log.md）: 止めた回を残す部品 lib/log-hook-decision.sh と
+  # lib/resolve-log-dir.sh を aidd-codex にも同梱した
+  [ "$COUNT" -eq 15 ] && assert_ok "Codex の hooks・scripts・manifest・docs・skill を照合する" || assert_fail "Codex の manifest が15ファイルでない" "$COUNT"
 fi
 OUT="$(bash "$CHECKER" 2>&1)"
 if [ $? -eq 0 ] && [ -z "$OUT" ]; then

@@ -11,6 +11,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="$SCRIPT_DIR/check-dependency-change.sh"
 CODEX_WRAPPER="$SCRIPT_DIR/codex-dependency-change-deny.sh"
 
+# WHY: 判定 hook は止めた回を共有の logs/hook-decisions.jsonl に書く（docs/specs/hook-decision-log.md）。
+#      テストの合成入力で本物の記録を汚さないよう、捨て場へ向ける（後片付けは下の trap に相乗り）
+DECISION_SINK="$(mktemp -d)"
+export AIDD_HOOK_DECISION_LOG_FILE="$DECISION_SINK/hook-decisions.jsonl"
+
 fail=0
 assert_eq() {
   local actual="$1" expected="$2" label="$3"
@@ -110,7 +115,7 @@ assert_empty "$OUT" "Read は対象外"
 
 echo "=== scenario 5: jq 不在 → fail-closed（exit 2） ==="
 WORK_DIR="$(mktemp -d)"
-trap 'rm -rf "$WORK_DIR"' EXIT
+trap 'rm -rf "$WORK_DIR" "$DECISION_SINK"' EXIT
 mkdir -p "$WORK_DIR/bin"
 for b in bash sed awk tr basename cat printf; do
   p="$(command -v "$b" 2>/dev/null || true)"; [ -n "$p" ] && ln -sf "$p" "$WORK_DIR/bin/$b"
@@ -208,6 +213,40 @@ echo "=== scenario 11: ラッパーの判定本体が沈黙 → そのまま通�
 run_with_guard 'cat >/dev/null; exit 0'
 assert_eq "$EXIT_CODE" "0" "沈黙は exit 0"
 assert_empty "$OUT" "沈黙は沈黙のまま"
+
+echo "=== scenario 12: 止めた回は hook-decisions.jsonl に 1 行残る。通した回は残らない。書けなくても判定は同じ ==="
+DLOG_DIR="$(mktemp -d)"
+DLOG="$DLOG_DIR/hook-decisions.jsonl"
+input="$(jq -n '{tool_name: "Bash", session_id: "s-dep", tool_input: {command: "NPM_TOKEN=TopSecretTok /opt/homebrew/bin/npm install left-pad"}}')"
+set +e
+OUT_LOGGED="$(printf '%s' "$input" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" 2>/dev/null)"
+RC_LOGGED=$?
+set -e
+assert_contains "$OUT_LOGGED" '"permissionDecision": "ask"' "ask は出る"
+assert_eq "$(wc -l <"$DLOG" | tr -d ' ')" "1" "1 行残る"
+assert_eq "$(jq -r '.hook' "$DLOG")" "check-dependency-change" "hook はスクリプト名"
+assert_eq "$(jq -r '.decision + " " + .rule' "$DLOG")" "ask dependency_change_command" "decision / rule（コマンド）"
+assert_eq "$(jq -r '.target' "$DLOG")" "npm" "target は先頭の語の basename（npm）"
+if grep -qF "TopSecretTok" "$DLOG"; then echo "  NG: 環境変数の値が行に残っている"; fail=1; else echo "  OK: 環境変数の値が行に無い"; fi
+# ファイル編集の経路
+printf '%s' "$(jq -n '{tool_name: "Edit", tool_input: {file_path: "/repo/package.json", old_string: "a", new_string: "b"}}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null 2>&1
+assert_eq "$(sed -n '2p' "$DLOG" | jq -r '.rule + " " + .target')" "dependency_change_file /repo/package.json" "rule / target（ファイル）"
+# Codex ラッパー経由は caller: codex
+printf '%s' "$(jq -n '{tool_name: "Bash", tool_input: {command: "npm install lodash"}}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$CODEX_WRAPPER" >/dev/null 2>&1
+assert_eq "$(sed -n '3p' "$DLOG" | jq -r '.caller + " " + .decision')" "codex ask" "ラッパー経由は caller: codex（decision は正本の ask のまま）"
+# 対: 通した回は残らない
+printf '%s' "$(jq -n '{tool_name: "Bash", tool_input: {command: "npm ci"}}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null 2>&1
+printf '%s' "$(jq -n '{tool_name: "Edit", tool_input: {file_path: "src/a.ts", old_string: "a", new_string: "b"}}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null 2>&1
+assert_eq "$(wc -l <"$DLOG" | tr -d ' ')" "3" "通した回は行が増えない"
+# RED 方向: 記録先に書けなくても、同じ入力の出力・終了コードが 1 文字も変わらない
+printf 'not a dir' > "$DLOG_DIR/notadir"
+set +e
+OUT_UNWRITABLE="$(printf '%s' "$input" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG_DIR/notadir/sub/x.jsonl" bash "$SCRIPT" 2>/dev/null)"
+RC_UNWRITABLE=$?
+set -e
+assert_eq "$OUT_UNWRITABLE" "$OUT_LOGGED" "書けなくても出力が同一"
+assert_eq "$RC_UNWRITABLE" "$RC_LOGGED" "書けなくても終了コードが同一"
+rm -rf "$DLOG_DIR"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

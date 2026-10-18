@@ -27,6 +27,7 @@
     "check-access-review-staleness.test.sh": "both",
     "check-plugin-integrity.test.sh": "self",
     "lib/resolve-log-dir.test.sh": "self",
+    "lib/log-hook-decision.test.sh": "self",
     "lib/table-row.test.sh": "both",
     "queue-recovery-task.test.sh": "self",
     "resolve-recovery-task.test.sh": "self",

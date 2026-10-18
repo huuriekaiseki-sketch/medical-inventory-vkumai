@@ -274,9 +274,14 @@ function build(outRoot) {
         fail(`codexHookScripts の ${name}: 所属 '${owner}' は codexPlugins に無い（${codexPluginNames.join(' / ')} のいずれか）`)
       }
     }
+    // WHY(2026-10-18、docs/specs/hook-decision-log.md): 部品を 2 つの Codex 用プラグインの両方へ運ぶ必要が出た
+    //      （止めた回を残す lib/log-hook-decision.sh は aidd-codex の skip マーカー判定と aidd-codex-vkumai の
+    //      DDL・依存変更判定の両方が使う）。supportScripts と同じく値を配列でも書けるようにし、1 つなら文字列のまま
     for (const [name, owner] of codexSupportFiles) {
-      if (!codexPluginNames.includes(owner)) {
-        fail(`codexSupportFiles の ${name}: 所属 '${owner}' は codexPlugins に無い（${codexPluginNames.join(' / ')} のいずれか）`)
+      for (const one of Array.isArray(owner) ? owner : [owner]) {
+        if (!codexPluginNames.includes(one)) {
+          fail(`codexSupportFiles の ${name}: 所属 '${one}' は codexPlugins に無い（${codexPluginNames.join(' / ')} のいずれか）`)
+        }
       }
     }
     for (const plugin of activeCodexPlugins) {
@@ -290,7 +295,7 @@ function build(outRoot) {
       //      supportScripts に相乗りしないのは、あちらは検査（*.test.sh）を自動で連れてくるため——
       //      Codex 用の配布物に、Claude 用の前提で書かれた検査が混ざる。
       for (const [name, owner] of codexSupportFiles) {
-        if (owner !== plugin) continue
+        if (!(Array.isArray(owner) ? owner : [owner]).includes(plugin)) continue
         copyText(plugin, `scripts/${name}`, `scripts/${name}`, null, name.endsWith('.sh') ? 0o755 : undefined)
       }
       const codexMeta = codexPlugins[plugin]

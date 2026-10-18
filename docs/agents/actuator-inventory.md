@@ -16,6 +16,12 @@
 | 自動復旧（queue） | `scripts/queue-recovery-task.sh`で`.aidd/recovery-queue.jsonl`へ登録し、次回セッション冒頭で機械的に目の前へ出す。実際の是正はセッション自身が自律的に行うか、人が対応後`scripts/resolve-recovery-task.sh`で閉じる（issue #523・#579） |
 | warning-only | `systemMessage`/`additionalContext`を出すのみ。是正するかどうか・いつ是正するかは完全に人（またはそれを読んだセッション）の裁量に委ねられ、機械的な強制力は無い |
 
+**PreToolUse の block / ask / warn が実際に出た回は `logs/hook-decisions.jsonl` に 1 行残る**（2026-10-18、
+`docs/specs/hook-decision-log.md`。対象は下表の `check-direct-ddl-execution` / `check-readonly-bash` /
+`check-skip-marker-write` / `check-dependency-change` / `check-run-manifest-presence` の 5 本）。それまでは、
+この表の「分類」は設計の宣言であって、**実際に何を何回止めたかを数える記録はどこにも無かった**。
+記録は判定を変えない（書けなければ黙って飛ぶ）ので、この表の分類はそのまま読める。
+
 ## 棚卸し表
 
 | Hookイベント | スクリプト | 分類 | 備考 |

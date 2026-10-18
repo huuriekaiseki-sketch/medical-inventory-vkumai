@@ -12,8 +12,10 @@
     "scripts/check-branch-pr-status.sh": "76790deecf37fcd18426ab1ccc233ff4600b6e5b03289004b6ecfcac371afba4",
     "scripts/check-branch-tool-ownership.sh": "8d156464181ac80564aded93cbc5f8ed5d1a7abe19978f982dece56502622db6",
     "scripts/check-local-main-freshness.sh": "69122db64798687e0c447721cad11047358ce9711e315fe41cac938133d9dafc",
-    "scripts/check-skip-marker-write.sh": "2a4026d2e7609daabf88e4740df54b43b9acbf4078b4353586999d1d5803e179",
-    "scripts/codex-skip-marker-deny.sh": "8472b9a1b888c7be9b10fa0665205e43cc422fb70af5697a16fe5956d7eb5aa7",
+    "scripts/check-skip-marker-write.sh": "7b71e106da9883018d2e689c823f72da048a596bd6bef7b5e8fe07ae8e661dd0",
+    "scripts/codex-skip-marker-deny.sh": "2967219068034af5c4acfc227d686e432bb30927d664c1b30ae9163019ac7674",
+    "scripts/lib/log-hook-decision.sh": "db386aae56489ccadd55a727129b818bb29630bbf8c68d32db0dcf716e145f69",
+    "scripts/lib/resolve-log-dir.sh": "b459c3da39017bf468d885803e8bfa05b01b91b8059591103fdca4f6c1cf8b4e",
     "skills/aidd-doctor/SKILL.md": "53dad0a58d151bec21573f9fd891c09ed6f9a61b1c0b98bf95c46070317d76e9"
   }
 }

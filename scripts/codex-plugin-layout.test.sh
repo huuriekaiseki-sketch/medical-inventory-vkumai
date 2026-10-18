@@ -44,7 +44,8 @@ assert.deepEqual(
 for (const name of [sessionEntry, ...sessionChecks]) assert.equal(codex[name], 'aidd-codex-vkumai', `${name} は入口と同じプラグイン（入口は自分の隣の点検しか起動しない）`)
 assert.equal(support['lib/codex-session-start-checks.txt'], 'aidd-codex-vkumai', '入口が読む一覧を、入口と同じプラグインに同梱する')
 for (const [name, owner] of Object.entries(support)) {
-  assert.ok(Object.keys(plugins).includes(owner), `${name} の所属 ${owner} は codexPlugins にある`)
+  // 値は 1 つなら文字列、複数のプラグインへ運ぶなら配列（docs/specs/hook-decision-log.md、2026-10-18）
+  for (const one of Array.isArray(owner) ? owner : [owner]) assert.ok(Object.keys(plugins).includes(one), `${name} の所属 ${one} は codexPlugins にある`)
   assert.ok(fs.existsSync(path.join(root, 'scripts', name)), `${name} の正本が存在する`)
 }
 assert.equal(layout.hookScripts[sessionEntry], undefined, `Codex 専用の ${sessionEntry} を Claude 用生成器へ渡さない`)
