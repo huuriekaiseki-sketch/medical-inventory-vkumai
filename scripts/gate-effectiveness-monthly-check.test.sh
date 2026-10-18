@@ -126,6 +126,34 @@ run_hook
 assert_contains "$OUT" "Workflow実行記録: 2件" "収穫済みjournalの件数が集計に出る(issue #642)"
 assert_contains "$OUT" "reviewer: pass=1" "agentType別のpass集計が出る"
 assert_contains "$OUT" "implementer: pass=0 / fail=0 / blocked=1" "blockedも同じ集計に統合されて出る(旧summarize-gate-blocked.shの統合先)"
+# 止めた回の集計（docs/specs/hook-decisions-summary.md）はこの時点ではスクリプト不在 → 断り書きのみ
+assert_contains "$OUT" "## 止める hook が止めた回" "止めた回の節の見出しは集計スクリプト不在でも出る"
+assert_contains "$OUT" "止めた回の集計を取得できませんでした" "集計スクリプト不在の断り書き"
+
+echo "=== scenario 7: 止めた回の集計スクリプトがある環境 → hook-decisions.jsonl の集計が本文に入る（docs/specs/hook-decisions-summary.md） ==="
+rm -f "$STATE_FILE"
+cp "$SCRIPT_DIR/summarize-hook-decisions.sh" "$SANDBOX/scripts/"
+cp "$SCRIPT_DIR/lib/hook-decisions-summary.mjs" "$SANDBOX/scripts/lib/"
+cp "$SCRIPT_DIR/lib/stdout-sync.mjs" "$SANDBOX/scripts/lib/"
+# 記録が無い状態 → 「止めていない」と「記録が飛んでいる」の両方を言う（不在を合格と読ませない。C-025）
+run_hook
+assert_contains "$OUT" "記録なし" "記録が無いときは「記録なし」"
+assert_contains "$OUT" "記録が黙って飛んでいる" "記録が飛んでいる可能性も書く"
+assert_contains "$OUT" "機械記録" "機械記録であることを節に書く（自己申告の節と区別する）"
+# 記録が 2 行ある状態 → 少数なので表でなく 1 件 1 行。sandbox は git リポジトリでないので
+# resolve_log_dir は cwd 相対の logs/ に落ち、本体の cd 先 = $SANDBOX の logs/ を読む
+rm -f "$STATE_FILE"
+NOW_ISO="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+cat > "$SANDBOX/logs/hook-decisions.jsonl" <<EOF
+{"timestamp":"$NOW_ISO","hook":"check-direct-ddl-execution","decision":"deny","rule":"direct_exec","tool_name":"Bash","target":"psql","caller":"claude","agent_type":"","session_id":"s1","branch":"main"}
+{"timestamp":"$NOW_ISO","hook":"check-skip-marker-write","decision":"ask","rule":"skip_marker","tool_name":"Write","target":".skip-marker","caller":"codex","agent_type":"","session_id":"","branch":"main"}
+EOF
+run_hook
+assert_contains "$OUT" "全期間 2 件 / 期間内 2 件" "件数が本文に入る"
+if [ "$(grep -o "止める hook が止めた回" <<<"$OUT" | wc -l | tr -d ' ')" = "1" ]; then echo "  OK: 見出しは 1 回（集計側の見出しと二重にならない）"; else echo "  NG: 見出しが二重"; fail=1; fi
+assert_contains "$OUT" "check-direct-ddl-execution / deny / direct_exec / psql / claude" "少数は 1 件 1 行で出る"
+assert_contains "$OUT" "caller=codex の ask 1 件" "Codex 読み替えの脚注"
+if grep -qF "| hook | deny |" <<<"$OUT"; then echo "  NG: 2 件で表が出ている"; fail=1; else echo "  OK: 2 件では表を出さない"; fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
