@@ -60,7 +60,13 @@ case "$EFFECTIVE" in
 esac
 
 PROBLEMS=()
+# WAS_DEAD: 直す前の hooksPath が実在しなかった（= hook が本当に動いていなかった）か。
+# WHY(2026-10-19 の実走ドリル): worktree スコープの上書きが**実在するパス**を指していた場合にも
+#     「動いていませんでした」と言っていた。実際には hook は動いており、直したのは「上書きを外した」だけ。
+#     事実と違う報告は、人が「直前のコミットは hook を通っていない」と誤って見直す手間を生む
+WAS_DEAD=0
 if [ ! -d "$RESOLVED" ]; then
+  WAS_DEAD=1
   PROBLEMS+=("core.hooksPath が指す \`$EFFECTIVE\` が存在しません（解決先: \`$RESOLVED\`）。**git はこれを黙って無視するため、commit-msg も pre-push も動いていません**")
 fi
 if [ -n "$WORKTREE_OVERRIDE" ]; then
@@ -121,11 +127,19 @@ if [ ${#RECOVERED[@]} -gt 0 ]; then
     FIXED="${FIXED}- ${r}
 "
   done
-  MSG="git hook が動いていませんでした（E-092）。**この場で直しました**。
+  if [ "$WAS_DEAD" -eq 1 ]; then
+    MSG="git hook が動いていませんでした（E-092）。**この場で直しました**。
 ${FIXED}直す前: \`core.hooksPath\` = \`${BEFORE_DESC}\`
 git は存在しない core.hooksPath を**黙って無視する**ため、それまで commit-msg も pre-push も動いていません。
 **このリポジトリで直前に作ったコミット・push は hook を通っていない可能性があります。**必要なら見直してください。
 確認: \`git config --show-scope --get-all core.hooksPath\`"
+  else
+    # 上書きの先は実在していた。hook は動いていたので「動いていなかった」とは言わない（事実を越えない）
+    MSG="git hook の設定に worktree スコープの上書きがありました（E-092 と同じ形）。**この場で直しました**。
+${FIXED}直す前: \`core.hooksPath\` = \`${BEFORE_DESC}\`（この先は実在していたので、hook 自体はこれまでも動いていました）
+上書きは clone の相対設定に勝つため、ブランチや置き場所が変わって先が無くなった瞬間に hook が黙って止まります。先回りして外しました。
+確認: \`git config --show-scope --get-all core.hooksPath\`"
+  fi
 else
   DETAIL=""
   for p in "${PROBLEMS[@]}"; do
