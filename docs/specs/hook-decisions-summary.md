@@ -88,7 +88,7 @@ Codex のラッパー 2 本は正本の ask を deny に読み替えて返しま
 - ✅ HTML: fixture の設定・ドリル文書・成績ファイルで、`.test.sh` の有無が行ごとに正しく出る／実走日が複数あれば最新を取る（散文の日付は拾わない）／成績コマンドが失敗したら「取得できませんでした」が出て `<table>` が出ない／`http` を含む外部参照が無い（`render-hook-decisions-html.test.sh` scenario 1〜7）
 - ✅ `plugin-layout.json` に配る 2 本（集計）と配らない 2 本（HTML）が宣言され、`check-support-script-coverage.test.sh`・`check-plugin-check-coverage.test.sh`・`build-plugin.test.sh`・`check-plugin-integrity.test.sh` が緑
 - ✅ `harness-registry.json` の H-07 に 2 本の `.test.sh`（集計・HTML。月次サマリの検査は既登録）が登録され、`render-harness-map.sh --check` が最新
-- ⬜ シェルテスト全件（`LC_ALL=C.UTF-8`）が緑（PR 本文 04 表に結果を書く）
+- ✅ シェルテスト全件（`LC_ALL=C.UTF-8`）が緑（169 本 PASS / 0 FAIL。編集途中と最終状態の 2 回。PR #897 の 04 表）
 
 実装中に見つけて直したこと（fixture では見えず、実物で初めて分かった）:
 
