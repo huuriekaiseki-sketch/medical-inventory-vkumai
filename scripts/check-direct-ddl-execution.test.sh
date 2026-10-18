@@ -14,6 +14,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # SCRIPT_UNDER_TEST: プラグイン内に同梱したコピーに対して同じ検査を回すための注入口（build-plugin.test.sh が使う）
 SCRIPT="${SCRIPT_UNDER_TEST:-$SCRIPT_DIR/check-direct-ddl-execution.sh}"
 
+# WHY: 判定 hook は止めた回を共有の logs/hook-decisions.jsonl に書く（docs/specs/hook-decision-log.md）。
+#      テストの合成入力で本物の記録を汚さないよう、捨て場へ向ける
+DECISION_SINK="$(mktemp -d)"
+export AIDD_HOOK_DECISION_LOG_FILE="$DECISION_SINK/hook-decisions.jsonl"
+trap 'rm -rf "$DECISION_SINK"' EXIT
+
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
@@ -331,6 +337,44 @@ DDL_BLOCK="$(shared_block "$SCRIPT")"
 DEP_BLOCK="$(shared_block "$SCRIPT_DIR/check-dependency-change.sh")"
 if [ -n "$DDL_BLOCK" ]; then echo "  OK: 共有ブロックを取り出せた（走査が空振りしていない）"; else echo "  NG: 共有ブロックが見つからない"; fail=1; fi
 assert_eq "$DEP_BLOCK" "$DDL_BLOCK" "2 本の共有ブロックが 1 文字も違わない"
+
+echo "=== scenario 35: 止めた回は hook-decisions.jsonl に 1 行残る。通した回は残らない。書けなくても判定は同じ ==="
+DLOG_DIR="$(mktemp -d)"
+DLOG="$DLOG_DIR/hook-decisions.jsonl"
+input="$(jq -n '{tool_name: "Bash", session_id: "s-ddl", tool_input: {command: "PGPASSWORD=TopSecretPw psql \"postgres://u:TopSecretPw@h/db\" -c \"drop table x\""}}')"
+set +e
+OUT_LOGGED="$(printf '%s' "$input" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT")"
+RC_LOGGED=$?
+set -e
+assert_contains "$OUT_LOGGED" '"permissionDecision": "deny"' "deny は出る"
+assert_eq "$(wc -l <"$DLOG" | tr -d ' ')" "1" "1 行残る"
+assert_eq "$(jq -r '.hook' "$DLOG")" "check-direct-ddl-execution" "hook はスクリプト名"
+assert_eq "$(jq -r '.decision' "$DLOG")" "deny" "decision は deny"
+assert_eq "$(jq -r '.rule' "$DLOG")" "direct_exec" "rule は direct_exec"
+assert_eq "$(jq -r '.target' "$DLOG")" "psql" "target は先頭の語だけ"
+assert_eq "$(jq -r '.session_id' "$DLOG")" "s-ddl" "session_id が入る"
+if grep -qF "TopSecretPw" "$DLOG"; then echo "  NG: 接続文字列のパスワードが行に残っている"; fail=1; else echo "  OK: 接続文字列のパスワードが行に無い"; fi
+# 他の規則も語彙どおりに入る
+printf '%s' "$(jq -n '{tool_name: "Bash", tool_input: {command: "npx supabase status"}}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null
+printf '%s' "$(jq -n '{tool_name: "Bash", tool_input: {command: "supabase db push"}}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null
+printf '%s' "$(jq -n '{tool_name: "mcp__supabase__execute_sql", tool_input: {query: "select 1"}}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null
+assert_eq "$(sed -n '2p' "$DLOG" | jq -r '.rule')" "npx_supabase" "rule: npx_supabase"
+assert_eq "$(sed -n '3p' "$DLOG" | jq -r '.rule')" "db_push_without_local" "rule: db_push_without_local"
+assert_eq "$(sed -n '3p' "$DLOG" | jq -r '.target')" "supabase" "target: supabase"
+assert_eq "$(sed -n '4p' "$DLOG" | jq -r '.rule')" "mcp_execute_sql" "rule: mcp_execute_sql"
+assert_eq "$(sed -n '4p' "$DLOG" | jq -r '.tool_name')" "mcp__supabase__execute_sql" "tool_name: MCP ツール名"
+# 対: 通した回は残らない
+printf '%s' "$(jq -n '{tool_name: "Bash", tool_input: {command: "supabase db push --local"}}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null
+assert_eq "$(wc -l <"$DLOG" | tr -d ' ')" "4" "通した回は行が増えない"
+# RED 方向: 記録先に書けなくても、同じ入力の出力・終了コードが 1 文字も変わらない
+printf 'not a dir' > "$DLOG_DIR/notadir"
+set +e
+OUT_UNWRITABLE="$(printf '%s' "$input" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG_DIR/notadir/sub/x.jsonl" bash "$SCRIPT")"
+RC_UNWRITABLE=$?
+set -e
+assert_eq "$OUT_UNWRITABLE" "$OUT_LOGGED" "書けなくても出力が同一"
+assert_eq "$RC_UNWRITABLE" "$RC_LOGGED" "書けなくても終了コードが同一"
+rm -rf "$DLOG_DIR"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

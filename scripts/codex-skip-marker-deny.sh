@@ -32,7 +32,8 @@ fail_closed() {
 
 INPUT="$(cat)"
 GUARD_RC=0
-OUT="$(printf '%s' "$INPUT" | bash "$GUARD")" || GUARD_RC=$?
+# AIDD_HOOK_CALLER: 正本が止めた回を記録するとき、呼んだ側が Codex だと分かるように渡す（docs/specs/hook-decision-log.md）
+OUT="$(printf '%s' "$INPUT" | AIDD_HOOK_CALLER=codex bash "$GUARD")" || GUARD_RC=$?
 [ "$GUARD_RC" -eq 0 ] || fail_closed "判定本体 check-skip-marker-write.sh が失敗しました（終了コード ${GUARD_RC}）。"
 
 if [ -n "$OUT" ]; then

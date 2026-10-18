@@ -58,6 +58,13 @@ if [ -f "$SCRIPT_DIR/lib/aidd-config.sh" ]; then
 else
   aidd_config_query() { printf '%s' "${2:-}"; }
 fi
+# WHY(止めた回を残す): deny を出した回を logs/hook-decisions.jsonl に 1 行書く（docs/specs/hook-decision-log.md）。
+#     記録は判定を 1 文字も変えない（書けなければ黙って飛ぶ）。lib が無い配布先では何もしない関数に差し替える
+if [ -f "$SCRIPT_DIR/lib/log-hook-decision.sh" ]; then
+  source "$SCRIPT_DIR/lib/log-hook-decision.sh"
+else
+  log_hook_decision() { :; }
+fi
 DEFAULT_READONLY_AGENT_TYPES='sweep-ui sweep-data sweep-db sweep-types reviewer completeness-critic adversarial-verify judge-panel'
 CONFIG_READONLY_AGENT_TYPES="$(aidd_config_query '.readonlyAgentTypes // [] | join(" ")' '')"
 READONLY_AGENT_TYPES="${READONLY_AGENT_TYPES:-${CONFIG_READONLY_AGENT_TYPES:-$DEFAULT_READONLY_AGENT_TYPES}}"
@@ -114,6 +121,8 @@ strip_env_assignments() {
 }
 
 deny() {
+  # 記録の target は止めた先頭の語の basename（ループの前のリダイレクト判定では未確定なので空）
+  log_hook_decision "check-readonly-bash" "deny" "readonly_role" "$TOOL_NAME" "${FIRST_BASE:-}" "$INPUT"
   jq -n --arg reason "$1" \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
   exit 0

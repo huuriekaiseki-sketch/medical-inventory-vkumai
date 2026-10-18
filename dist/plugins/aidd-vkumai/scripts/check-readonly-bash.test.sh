@@ -10,6 +10,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="$SCRIPT_DIR/check-readonly-bash.sh"
 
+# WHY: 判定 hook は止めた回を共有の logs/hook-decisions.jsonl に書く（docs/specs/hook-decision-log.md）。
+#      テストの合成入力で本物の記録を汚さないよう、捨て場へ向ける
+DECISION_SINK="$(mktemp -d)"
+export AIDD_HOOK_DECISION_LOG_FILE="$DECISION_SINK/hook-decisions.jsonl"
+trap 'rm -rf "$DECISION_SINK"' EXIT
+
 fail=0
 # $1=command $2=agent_type（既定 sweep-ui。空文字ならフィールド自体を省略）
 run() {
@@ -152,6 +158,36 @@ if printf '%s' "$OUT" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse"
 else
   echo "  NG: 出力契約違反: $OUT"; fail=1
 fi
+
+echo "=== scenario 5: 止めた回は hook-decisions.jsonl に 1 行残る。通した回は残らない。書けなくても判定は同じ ==="
+DLOG_DIR="$(mktemp -d)"
+DLOG="$DLOG_DIR/hook-decisions.jsonl"
+input='{"tool_name":"Bash","agent_id":"a1","agent_type":"sweep-ui","session_id":"s-ro","tool_input":{"command":"/bin/rm -rf /tmp/x"}}'
+set +e
+OUT_LOGGED="$(printf '%s' "$input" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT")"
+RC_LOGGED=$?
+set -e
+if printf '%s' "$OUT_LOGGED" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1; then echo "  OK: deny は出る"; else echo "  NG: deny が出ない"; fail=1; fi
+if [ "$(wc -l <"$DLOG" | tr -d ' ')" = "1" ]; then echo "  OK: 1 行残る"; else echo "  NG: 行数が 1 でない"; fail=1; fi
+if [ "$(jq -r '.hook' "$DLOG")" = "check-readonly-bash" ]; then echo "  OK: hook はスクリプト名"; else echo "  NG: hook 名が違う: $(cat "$DLOG")"; fail=1; fi
+if [ "$(jq -r '.decision + " " + .rule' "$DLOG")" = "deny readonly_role" ]; then echo "  OK: decision / rule"; else echo "  NG: decision / rule が違う: $(cat "$DLOG")"; fail=1; fi
+if [ "$(jq -r '.target' "$DLOG")" = "rm" ]; then echo "  OK: target は先頭の語の basename（rm）"; else echo "  NG: target が違う: $(cat "$DLOG")"; fail=1; fi
+if [ "$(jq -r '.agent_type' "$DLOG")" = "sweep-ui" ]; then echo "  OK: agent_type が入る"; else echo "  NG: agent_type が違う"; fail=1; fi
+# リダイレクトで止めた回（ループの前で deny する経路）も残る
+printf '%s' '{"tool_name":"Bash","agent_type":"sweep-ui","tool_input":{"command":"echo x > out.txt"}}' | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null
+if [ "$(wc -l <"$DLOG" | tr -d ' ')" = "2" ]; then echo "  OK: リダイレクトの deny も残る"; else echo "  NG: リダイレクトの deny が残らない"; fail=1; fi
+# 対: 通した回・対象外ロールは残らない
+printf '%s' '{"tool_name":"Bash","agent_type":"sweep-ui","tool_input":{"command":"rg --files src"}}' | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null
+printf '%s' '{"tool_name":"Bash","agent_type":"implementer","tool_input":{"command":"rm -rf x"}}' | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null
+if [ "$(wc -l <"$DLOG" | tr -d ' ')" = "2" ]; then echo "  OK: 通した回は行が増えない"; else echo "  NG: 通した回で行が増えた"; fail=1; fi
+# RED 方向: 記録先に書けなくても、同じ入力の出力・終了コードが 1 文字も変わらない
+printf 'not a dir' > "$DLOG_DIR/notadir"
+set +e
+OUT_UNWRITABLE="$(printf '%s' "$input" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG_DIR/notadir/sub/x.jsonl" bash "$SCRIPT")"
+RC_UNWRITABLE=$?
+set -e
+if [ "$OUT_UNWRITABLE" = "$OUT_LOGGED" ] && [ "$RC_UNWRITABLE" = "$RC_LOGGED" ]; then echo "  OK: 書けなくても出力・終了コードが同一"; else echo "  NG: 書けないと出力が変わる"; fail=1; fi
+rm -rf "$DLOG_DIR"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

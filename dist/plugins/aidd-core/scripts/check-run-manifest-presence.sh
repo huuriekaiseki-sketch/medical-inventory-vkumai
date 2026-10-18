@@ -38,6 +38,13 @@ if [ -f "$SCRIPT_DIR/lib/aidd-config.sh" ]; then
 else
   aidd_config_query() { printf '%s' "${2:-}"; }
 fi
+# WHY(警告した回を残す): 注記を出した回を logs/hook-decisions.jsonl に warn で 1 行書く（docs/specs/hook-decision-log.md）。
+#     記録は判定を 1 文字も変えない（書けなければ黙って飛ぶ）。lib が無い配布先では何もしない関数に差し替える
+if [ -f "$SCRIPT_DIR/lib/log-hook-decision.sh" ]; then
+  source "$SCRIPT_DIR/lib/log-hook-decision.sh"
+else
+  log_hook_decision() { :; }
+fi
 DEFAULT_HIGH_RISK_PATTERN='(^|/)middleware\.ts$|(^|/)proxy\.ts$|auth|rls|policy|migration'
 build_high_risk_pattern() {
   local root_hint="$1" extra
@@ -114,6 +121,7 @@ if [[ -f "$MANIFEST_PATH" ]]; then
   exit 0
 fi
 
+log_hook_decision "check-run-manifest-presence" "warn" "manifest_missing" "$TOOL_NAME" "$TARGET" "$INPUT"
 jq -n --arg ctx "高リスクパス($TARGET)への変更ですが、.aidd/run-manifest.jsonが見当たりません。aidd-phase1-routerを経由せず直接実装に入っていないか確認してください（意図した変更であればこのまま進めて構いません）。" \
   '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "allow", additionalContext: $ctx}}'
 

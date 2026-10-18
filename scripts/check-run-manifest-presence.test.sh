@@ -10,6 +10,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="$SCRIPT_DIR/check-run-manifest-presence.sh"
 
+# WHY: 判定 hook は止めた回を共有の logs/hook-decisions.jsonl に書く（docs/specs/hook-decision-log.md）。
+#      テストの合成入力で本物の記録を汚さないよう、捨て場へ向ける（後片付けは下の cleanup に相乗り）
+DECISION_SINK="$(mktemp -d)"
+export AIDD_HOOK_DECISION_LOG_FILE="$DECISION_SINK/hook-decisions.jsonl"
+
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
@@ -67,7 +72,7 @@ INVENTORY_NAMED_PARENT="$(mktemp -d)/medical-inventory-fixture"
 mkdir -p "$INVENTORY_NAMED_PARENT"
 git -C "$INVENTORY_NAMED_PARENT" init -q
 
-cleanup() { rm -rf "$NO_MANIFEST_REPO" "$WITH_MANIFEST_REPO" "$(dirname "$INVENTORY_NAMED_PARENT")"; }
+cleanup() { rm -rf "$NO_MANIFEST_REPO" "$WITH_MANIFEST_REPO" "$(dirname "$INVENTORY_NAMED_PARENT")" "$DECISION_SINK"; }
 trap cleanup EXIT
 
 echo "=== scenario 1: 高リスクパス(src/lib/supabase配下) + manifest無し → allow+additionalContext ==="
@@ -211,6 +216,33 @@ EXIT_CODE=$?
 set -e
 assert_eq "$EXIT_CODE" "0" "exit 0(fail-open。本ファイルは元々ブロックしない設計のため他2ゲートと異なりfail-closedにしない)"
 assert_empty "$OUT" "出力が空である(警告注入は諦めるが、ブロックはしない)"
+
+echo "=== scenario 11: 警告した回は hook-decisions.jsonl に warn で 1 行残る。通した回は残らない。書けなくても判定は同じ ==="
+DLOG_DIR="$(mktemp -d)"
+DLOG="$DLOG_DIR/hook-decisions.jsonl"
+input="$(jq -n --arg cwd "$NO_MANIFEST_REPO" '{tool_name: "Edit", session_id: "s-manifest", tool_input: {file_path: "src/lib/supabase/client.ts", old_string: "x", new_string: "y"}, cwd: $cwd}')"
+set +e
+OUT_LOGGED="$(printf '%s' "$input" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT")"
+RC_LOGGED=$?
+set -e
+assert_contains "$OUT_LOGGED" "additionalContext" "警告は出る"
+assert_eq "$(wc -l <"$DLOG" | tr -d ' ')" "1" "1 行残る"
+assert_eq "$(jq -r '.hook' "$DLOG")" "check-run-manifest-presence" "hook はスクリプト名"
+assert_eq "$(jq -r '.decision + " " + .rule' "$DLOG")" "warn manifest_missing" "decision は warn（allow + 注記）、rule は manifest_missing"
+assert_eq "$(jq -r '.tool_name + " " + .target' "$DLOG")" "Edit src/lib/supabase/client.ts" "tool_name / target はファイルパス"
+# 対: manifest があれば残らない。低リスクパスも残らない
+printf '%s' "$(jq -n --arg cwd "$WITH_MANIFEST_REPO" '{tool_name: "Edit", tool_input: {file_path: "src/lib/supabase/client.ts", old_string: "x", new_string: "y"}, cwd: $cwd}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null
+printf '%s' "$(jq -n --arg cwd "$NO_MANIFEST_REPO" '{tool_name: "Edit", tool_input: {file_path: "src/components/Button.tsx", old_string: "x", new_string: "y"}, cwd: $cwd}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null
+assert_eq "$(wc -l <"$DLOG" | tr -d ' ')" "1" "通した回は行が増えない"
+# RED 方向: 記録先に書けなくても、同じ入力の出力・終了コードが 1 文字も変わらない
+printf 'not a dir' > "$DLOG_DIR/notadir"
+set +e
+OUT_UNWRITABLE="$(printf '%s' "$input" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG_DIR/notadir/sub/x.jsonl" bash "$SCRIPT")"
+RC_UNWRITABLE=$?
+set -e
+assert_eq "$OUT_UNWRITABLE" "$OUT_LOGGED" "書けなくても出力が同一"
+assert_eq "$RC_UNWRITABLE" "$RC_LOGGED" "書けなくても終了コードが同一"
+rm -rf "$DLOG_DIR"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

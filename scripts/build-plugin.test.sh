@@ -65,7 +65,9 @@ if [ -f "$CODEX_HOOKS" ]; then
   if grep -qE 'check-direct-ddl-execution|codex-dependency-change|codex-ai-check' <<<"$CODEX_COMMANDS"; then ng "固有 hook が混入"; else ok "固有 hook は出力しない"; fi
   if grep -qF '$(git rev-parse --show-toplevel)' <<<"$CODEX_COMMANDS"; then ng "project root 形式が残った"; else ok "project root 形式を残さない"; fi
   [ -f "$CODEX_DIR/.aidd-manifest.json" ] && ok "Codex 配布物に同一性 manifest がある" || ng "Codex 配布物の同一性 manifest が無い"
-  [ "$(find "$CODEX_DIR/scripts" -type f | wc -l | tr -d ' ')" -eq 7 ] && ok "Codex に正本6ファイルと doctor 検査を同梱" || ng "Codex の scripts/ が7ファイルでない"
+  # 7 → 9（2026-10-18、docs/specs/hook-decision-log.md）: 止めた回を残す部品 lib/log-hook-decision.sh と、
+  # その記録先を解決する lib/resolve-log-dir.sh を aidd-codex にも同梱した（skip マーカー判定が source する）
+  [ "$(find "$CODEX_DIR/scripts" -type f | wc -l | tr -d ' ')" -eq 9 ] && ok "Codex に正本6ファイルと doctor 検査・部品 2 本を同梱" || ng "Codex の scripts/ が9ファイルでない"
   [ ! -e "$CODEX_DIR/plugin.json" ] && ok "Codex 配布物のルートに plugin.json を出さない" || ng "ルート plugin.json が残っている"
   CODEX_MANIFEST="$CODEX_DIR/.codex-plugin/plugin.json"
   LAYOUT_CODEX_VERSION="$(jq -r '.codexPlugins["aidd-codex"].version' "$REPO_ROOT/scripts/lib/plugin-layout.json")"

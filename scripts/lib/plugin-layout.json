@@ -184,7 +184,15 @@
   "codexSupportFiles": {
     "_comment": "Codex 用 hook が使う部品（2026-09-30 新設、仕様書 08）。hook ではないので .codex/hooks.json には登録されない。値は codexPlugins のキー。supportScripts に相乗りしないのは、あちらが検査（*.test.sh）を自動で連れてくるため。足りない部品は、生成器の同梱の検査（参照先が同じプラグインにあるか）が落とす。",
     "lib/codex-session-start-checks.txt": "aidd-codex-vkumai",
-    "lib/resolve-log-dir.sh": "aidd-codex-vkumai",
+    "_comment_hook_decision_log": "止めた回を残す部品（docs/specs/hook-decision-log.md、2026-10-18）。aidd-codex の skip マーカー判定と aidd-codex-vkumai の DDL・依存変更判定の両方が source するので、値を配列にして両方へ運ぶ（build-plugin.mjs は supportScripts と同じく配列も読む）。resolve-log-dir.sh は記録先の解決に要るので aidd-codex にも足した。hook 側は lib が無ければ何もしない関数に差し替えるので、運び忘れても判定は壊れない——が、記録が黙って無くなる",
+    "lib/log-hook-decision.sh": [
+      "aidd-codex",
+      "aidd-codex-vkumai"
+    ],
+    "lib/resolve-log-dir.sh": [
+      "aidd-codex",
+      "aidd-codex-vkumai"
+    ],
     "lib/run-freshness.py": "aidd-codex-vkumai",
     "lib/worktree-hash.sh": "aidd-codex-vkumai",
     "lib/aidd-doctor.mjs": "aidd-codex-vkumai",
@@ -234,6 +242,10 @@
       "aidd-vkumai"
     ],
     "lib/resolve-log-dir.sh": [
+      "aidd-core",
+      "aidd-vkumai"
+    ],
+    "lib/log-hook-decision.sh": [
       "aidd-core",
       "aidd-vkumai"
     ],
@@ -540,6 +552,7 @@
     "verify-claims.test.sh": "self",
     "lib/judge-sweep-recall.test.sh": "self",
     "lib/resolve-log-dir.test.sh": "self",
+    "lib/log-hook-decision.test.sh": "self",
     "lib/table-row.test.sh": "both"
   },
   "checks": {

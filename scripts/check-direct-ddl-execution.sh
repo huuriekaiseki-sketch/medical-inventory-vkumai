@@ -8,6 +8,18 @@ set -euo pipefail
 # （exit 2でブロック側に倒す）にする。
 command -v jq >/dev/null 2>&1 || { echo "jq not found: check-direct-ddl-execution.sh cannot run" >&2; exit 2; }
 
+# WHY(止めた回を残す): deny を出した回を logs/hook-decisions.jsonl に 1 行書く（docs/specs/hook-decision-log.md）。
+#     記録は判定を 1 文字も変えない（書けなければ黙って飛ぶ）。lib が無い配布先では何もしない関数に
+#     差し替え、判定はそのまま動く。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/lib/log-hook-decision.sh" ]; then
+  source "$SCRIPT_DIR/lib/log-hook-decision.sh"
+else
+  log_hook_decision() { :; }
+fi
+# 記録の target は「実行されようとした先頭の語」だけ（パス前置は basename に。コマンド本文は残さない）
+first_word_base() { local w="${1%%[[:space:]]*}"; printf '%s' "${w##*/}"; }
+
 # PreToolUse hook。issue #444（issue #339「直接DDL実行禁止は事後のドリフト検知(issue #305)
 # のみで、実行しようとした瞬間に止める事前ブロックはない」の機械化・優先度2候補）。
 #
@@ -212,6 +224,8 @@ TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')"
 
 DENY=0
 REASON=""
+RULE=""        # 記録用。どの規則で止めたか（固定語彙: npx_supabase / direct_exec / db_push_without_local / mcp_execute_sql）
+LOG_TARGET=""  # 記録用。実行されようとした先頭の語
 
 # 前置きを読み飛ばした後のセグメントを判定する。止めるなら DENY / REASON を立てて 0 を返す
 check_segment() {
@@ -221,6 +235,8 @@ check_segment() {
   if is_readonly_segment "$seg"; then return 1; fi
   if is_npx_supabase "$seg"; then
     DENY=1
+    RULE="npx_supabase"
+    LOG_TARGET="$(first_word_base "$seg")"
     REASON="npx 経由の supabase は使えません。npx は npm レジストリから CLI を取ってくるため Homebrew で入れた版と別物が動きます（2026-09-08 に npx supabase db reset が 2.117.0 を引き、ローカルの Supabase 一式が壊れました）。npx を外して supabase を直接実行してください（版の正本は .supabase-version）。"
     return 0
   fi
@@ -228,6 +244,8 @@ check_segment() {
   if [[ "$seg" =~ $PSQL_INFO_PATTERN ]]; then return 1; fi
   if [[ "$seg" =~ $DIRECT_EXEC_PATTERN ]]; then
     DENY=1
+    RULE="direct_exec"
+    LOG_TARGET="$(first_word_base "$seg")"
     REASON="supabase db execute・psqlの直接実行はDBスキーマ変更ルール（migration経由）で禁止されています。supabase/migrations/配下にマイグレーションファイルを作成し、supabase db push --localで適用してください。"
     return 0
   elif [[ "$seg" =~ $DB_PUSH_PATTERN ]]; then
@@ -236,6 +254,8 @@ check_segment() {
     # （例: `echo see --local docs; supabase db push`、`db push --local && db push`の2つ目）。
     if [[ "$seg" != *"--local"* ]]; then
       DENY=1
+      RULE="db_push_without_local"
+      LOG_TARGET="$(first_word_base "$seg")"
       REASON="supabase db push はフラグ無指定時のデフォルトがリモート(本番)データベースです（--linked・--db-url指定時も同様）。ローカルSupabaseへ適用する場合は明示的に --local を付けてください（例: supabase db push --local）。本番への適用が本当に必要な場合は、人間が手動で実行してください（issue #485）。"
       return 0
     fi
@@ -268,6 +288,7 @@ case "$TOOL_NAME" in
     ;;
   mcp__*execute_sql*)
     DENY=1
+    RULE="mcp_execute_sql"
     REASON="MCPツール経由のSQL直接実行はDBスキーマ変更ルール（migration経由）で禁止されています。supabase/migrations/配下にマイグレーションファイルを作成してください。"
     ;;
   *)
@@ -276,6 +297,7 @@ case "$TOOL_NAME" in
 esac
 
 if [[ "$DENY" -eq 1 ]]; then
+  log_hook_decision "check-direct-ddl-execution" "deny" "$RULE" "$TOOL_NAME" "$LOG_TARGET" "$INPUT"
   jq -n --arg reason "$REASON" \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
 fi

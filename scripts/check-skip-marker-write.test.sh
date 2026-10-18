@@ -11,6 +11,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="${SCRIPT_UNDER_TEST:-$SCRIPT_DIR/check-skip-marker-write.sh}"
 
+# WHY: 判定 hook は止めた回を共有の logs/hook-decisions.jsonl に書く（docs/specs/hook-decision-log.md）。
+#      テストの合成入力で本物の記録を汚さないよう、捨て場へ向ける
+DECISION_SINK="$(mktemp -d)"
+export AIDD_HOOK_DECISION_LOG_FILE="$DECISION_SINK/hook-decisions.jsonl"
+trap 'rm -rf "$DECISION_SINK"' EXIT
+
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
@@ -226,6 +232,37 @@ for cmd in 'touch .claude/.verify-state/abc.skip' 'cp a .claude/.verify-state/ab
            'rm .claude/.verify-state/abc.skip' 'sed -i "" s/a/b/ .claude/.verify-state/abc.skip' 'sudo cat .claude/.verify-state/abc.skip'; do
   expect_ask "$cmd"
 done
+
+echo "=== scenario 24: 止めた回は hook-decisions.jsonl に 1 行残る。通した回は残らない。書けなくても判定は同じ ==="
+DLOG_DIR="$(mktemp -d)"
+DLOG="$DLOG_DIR/hook-decisions.jsonl"
+input="$(jq -n '{tool_name: "Bash", session_id: "s-skip", tool_input: {command: "echo SECRET_TOKEN_VALUE > .claude/.verify-state/abc.skip"}}')"
+set +e
+OUT_LOGGED="$(printf '%s' "$input" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT")"
+RC_LOGGED=$?
+set -e
+assert_contains "$OUT_LOGGED" '"permissionDecision": "ask"' "ask は出る"
+assert_eq "$(wc -l <"$DLOG" | tr -d ' ')" "1" "1 行残る"
+assert_eq "$(jq -r '.hook' "$DLOG")" "check-skip-marker-write" "hook はスクリプト名"
+assert_eq "$(jq -r '.decision + " " + .rule' "$DLOG")" "ask skip_marker" "decision / rule"
+assert_eq "$(jq -r '.target' "$DLOG")" ".claude/.verify-state/abc.skip" "target は当たったパスだけ（コマンド本文ではない）"
+if grep -qF "SECRET_TOKEN_VALUE" "$DLOG"; then echo "  NG: コマンド本文が行に残っている"; fail=1; else echo "  OK: コマンド本文が行に無い"; fi
+# Write 系はファイルパス
+printf '%s' "$(jq -n '{tool_name: "Write", tool_input: {file_path: "/repo/.claude/.verify-state/def.skip", content: "x"}}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null
+assert_eq "$(sed -n '2p' "$DLOG" | jq -r '.tool_name + " " + .target')" "Write /repo/.claude/.verify-state/def.skip" "Write 系は file_path が target"
+# 対: 通した回は残らない
+printf '%s' "$(jq -n '{tool_name: "Bash", tool_input: {command: "cat .claude/.verify-state/abc.skip"}}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null
+printf '%s' "$(jq -n '{tool_name: "Write", tool_input: {file_path: "src/a.ts", content: "x"}}')" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT" >/dev/null
+assert_eq "$(wc -l <"$DLOG" | tr -d ' ')" "2" "通した回は行が増えない"
+# RED 方向: 記録先に書けなくても、同じ入力の出力・終了コードが 1 文字も変わらない
+printf 'not a dir' > "$DLOG_DIR/notadir"
+set +e
+OUT_UNWRITABLE="$(printf '%s' "$input" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG_DIR/notadir/sub/x.jsonl" bash "$SCRIPT")"
+RC_UNWRITABLE=$?
+set -e
+assert_eq "$OUT_UNWRITABLE" "$OUT_LOGGED" "書けなくても出力が同一"
+assert_eq "$RC_UNWRITABLE" "$RC_LOGGED" "書けなくても終了コードが同一"
+rm -rf "$DLOG_DIR"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

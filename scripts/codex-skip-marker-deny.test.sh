@@ -11,6 +11,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="${SCRIPT_UNDER_TEST:-$SCRIPT_DIR/codex-skip-marker-deny.sh}"
 
+# WHY: 判定本体は止めた回を共有の logs/hook-decisions.jsonl に書く（docs/specs/hook-decision-log.md）。
+#      テストの合成入力で本物の記録を汚さないよう、捨て場へ向ける（後片付けは下の trap に相乗り）
+DECISION_SINK="$(mktemp -d)"
+export AIDD_HOOK_DECISION_LOG_FILE="$DECISION_SINK/hook-decisions.jsonl"
+
 fail=0
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
@@ -111,7 +116,7 @@ assert_empty "$OUT" "出力が空である"
 # ラッパーは rc=127 などで抜けるだけだった（2026-09-29 実測）。Codex が exit 2 以外の失敗を
 # 「止める」と扱うかは分かっていないので、jq 不在のときと同じく exit 2 に揃える。
 WRAP_DIR="$(mktemp -d)"
-trap 'rm -rf "$WRAP_DIR"' EXIT
+trap 'rm -rf "$WRAP_DIR" "$DECISION_SINK"' EXIT
 GUARD_NAME="check-skip-marker-write.sh"
 run_with_guard() { # $1=判定本体の中身（空なら置かない）
   rm -f "$WRAP_DIR/$GUARD_NAME"
@@ -148,6 +153,20 @@ assert_empty "$OUT" "沈黙は沈黙のまま"
 run_with_guard 'cat >/dev/null; echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"x\"}}"'
 assert_eq "$EXIT_CODE" "0" "deny は exit 0"
 assert_contains "$OUT" '"permissionDecision": "deny"' "deny は deny のまま"
+
+echo "=== scenario 12: ラッパー経由で止めた回は、正本の記録に caller: codex が付く ==="
+DLOG_DIR="$(mktemp -d)"
+DLOG="$DLOG_DIR/hook-decisions.jsonl"
+input="$(jq -n '{tool_name: "Bash", tool_input: {command: "touch .claude/.verify-state/abc.skip"}}')"
+set +e
+OUT="$(printf '%s' "$input" | AIDD_HOOK_DECISION_LOG_FILE="$DLOG" bash "$SCRIPT")"
+EXIT_CODE=$?
+set -e
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_contains "$OUT" '"permissionDecision": "deny"' "Codex 側は deny に読み替える"
+assert_eq "$(wc -l <"$DLOG" | tr -d ' ')" "1" "正本が 1 行残す（ラッパーは重ねて書かない）"
+assert_eq "$(jq -r '.caller + " " + .decision + " " + .hook' "$DLOG")" "codex ask check-skip-marker-write" "caller は codex、decision は正本が出した ask のまま"
+rm -rf "$DLOG_DIR"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"

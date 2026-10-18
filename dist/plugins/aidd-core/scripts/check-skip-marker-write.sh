@@ -7,6 +7,15 @@ set -euo pipefail
 # 重要度のためfail-closed（jq不在時はexit 2でブロック側に倒す）にする。
 command -v jq >/dev/null 2>&1 || { echo "jq not found: check-skip-marker-write.sh cannot run" >&2; exit 2; }
 
+# WHY(止めた回を残す): ask を出した回を logs/hook-decisions.jsonl に 1 行書く（docs/specs/hook-decision-log.md）。
+#     記録は判定を 1 文字も変えない（書けなければ黙って飛ぶ）。lib が無い配布先では何もしない関数に差し替える
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/lib/log-hook-decision.sh" ]; then
+  source "$SCRIPT_DIR/lib/log-hook-decision.sh"
+else
+  log_hook_decision() { :; }
+fi
+
 # PreToolUse hook。issue #348: verify-claims.shのエスケープハッチ
 # (.claude/.verify-state/<session_id>.skip の作成)を、touch/echo/python等の手段を問わず
 # 人間の確認プロンプト(ask)に強制する。
@@ -147,6 +156,21 @@ if [[ "$MATCHED" -eq 0 ]] && [[ "$CWD" =~ $CWD_PATTERN ]] && [[ "$TARGET" =~ $RE
 fi
 
 if [[ "$MATCHED" -eq 1 ]]; then
+  # 記録の target は当たったパスだけ。Bash の TARGET はコマンド本文なので、そのまま書かずに
+  # .skip のパス（フルパス一致 → 相対トークンの順）を取り出す。apply_patch は解決済みのパス
+  LOG_TARGET=""
+  case "$TOOL_NAME" in
+    Bash)
+      if [[ "$TARGET" =~ $FULL_PATH_PATTERN ]]; then
+        LOG_TARGET="${BASH_REMATCH[0]}"
+      elif [[ "$TARGET" =~ $RELATIVE_SKIP_TOKEN_PATTERN ]]; then
+        LOG_TARGET="${BASH_REMATCH[0]}"
+      fi
+      ;;
+    apply_patch) LOG_TARGET="${RESOLVED:-}" ;;
+    *) LOG_TARGET="$TARGET" ;;
+  esac
+  log_hook_decision "check-skip-marker-write" "ask" "skip_marker" "$TOOL_NAME" "$LOG_TARGET" "$INPUT"
   jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: "verify-claimsのエスケープハッチ(.skipマーカー)への書き込みです。人間の確認が必要です。"}}'
 fi
 
