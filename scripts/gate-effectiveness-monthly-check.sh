@@ -60,6 +60,11 @@ PASSFAIL_SUMMARY="$(bash "$SCRIPT_DIR/summarize-gate-passfail.sh" 2>/dev/null ||
 # issue #742: InstructionsLoaded hook の記録から「どの rules がどの頻度で読まれたか」を同じ月次で出す
 # （読まれない paths 付き rules は削除候補）。記録が無ければ「記録なし」の 1 行になる。fail-open
 INSTRUCTIONS_SUMMARY="$(bash "$SCRIPT_DIR/summarize-instructions-loaded.sh" --days "$INTERVAL_DAYS" 2>/dev/null || true)"
+# docs/specs/hook-decisions-summary.md: 止める PreToolUse hook が deny / ask / warn を出した回
+# （logs/hook-decisions.jsonl＝lib/log-hook-decision.sh の機械記録）を同じ月次で出す。
+# 記録が無ければ集計側が「止めていないか、記録が飛んでいるか、区別できない」と言う（C-025）。
+# 集計スクリプト自体が無い・node が無いときは断り書き。fail-open
+HOOK_DECISIONS_SUMMARY="$(bash "$SCRIPT_DIR/summarize-hook-decisions.sh" --days "$INTERVAL_DAYS" --no-heading 2>/dev/null || true)"
 touch "$STATE_FILE"
 
 if [ -z "$SUMMARY" ] && [ -z "$PASSFAIL_SUMMARY" ]; then
@@ -74,6 +79,9 @@ ${PASSFAIL_SUMMARY:-（取得できませんでした。npx/tsxが利用でき�
 
 ## feature別・コスト集計（loop-observability.jsonlベース＝自己申告。記録漏れによる欠落があり得るため、件数ゼロを「発火ゼロ」と読まないこと）
 ${SUMMARY}
+
+## 止める hook が止めた回（hook-decisions.jsonl＝機械記録。allow は書かれないので分母は無い。docs/specs/hook-decisions-summary.md）
+${HOOK_DECISIONS_SUMMARY:-（止めた回の集計を取得できませんでした。summarize-hook-decisions.sh か node が無い可能性があります。記録そのものが無いのか集計が動かないのかは、この文からは分かりません）}
 
 ${INSTRUCTIONS_SUMMARY}"
 

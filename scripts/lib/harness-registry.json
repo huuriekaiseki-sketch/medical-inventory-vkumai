@@ -394,6 +394,8 @@
         "scripts/check-upstream-docs-review-staleness.test.sh",
         "scripts/check-verify-claims-fail-open-streak.test.sh",
         "scripts/gate-effectiveness-monthly-check.test.sh",
+        "scripts/summarize-hook-decisions.test.sh",
+        "scripts/render-hook-decisions-html.test.sh",
         "scripts/harvest-journal-events.test.sh",
         "scripts/lib/flaky-issue.test.sh",
         "scripts/lib/audit-issue.test.sh",

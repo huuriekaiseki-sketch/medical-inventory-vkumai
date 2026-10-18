@@ -13,6 +13,7 @@
     "check-config-drift.test.sh": "self",
     "lib/resolve-log-dir.test.sh": "self",
     "lib/log-hook-decision.test.sh": "self",
+    "summarize-hook-decisions.test.sh": "self",
     "check-rls-mutation.test.sh": "self",
     "check-node-version-pin.test.sh": "both",
     "check-rls-grant-gaps.test.sh": "both",

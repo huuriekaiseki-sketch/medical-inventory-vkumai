@@ -249,6 +249,14 @@
       "aidd-core",
       "aidd-vkumai"
     ],
+    "summarize-hook-decisions.sh": [
+      "aidd-core",
+      "aidd-vkumai"
+    ],
+    "lib/hook-decisions-summary.mjs": [
+      "aidd-core",
+      "aidd-vkumai"
+    ],
     "lib/count-flow-loop-records.sh": "aidd-core",
     "lib/non-subagent-loop-agents.json": "aidd-core",
     "lib/record-eval-run.sh": [
@@ -361,7 +369,10 @@
   "supportScriptsNotDistributed": {
     "_comment": "**配らないと判断した**支援スクリプト（2026-09-12 新設）。値は配らない理由。検査（*.test.sh）には checksNotDistributed があったのに、支援スクリプトには「配らないと決めた」と書く場所そのものが無かった——そのため表に無いものが『判断した』のか『足し忘れた』のか区別できなかった（KNOWN-LIMITS.md と check-plugin-asset-coverage.test.sh の限界の、2 か所で申告されていた穴）。",
     "_howto": "理由は「なぜ導入先に要らないか」を具体的に書く。中心リポジトリの運用だけに要るもの（生成器・worktree 作成・git hook の入れ方）、個人環境のもの、外部サービス前提のものが典型。空文字は `check-support-script-coverage.test.sh` が落とす。",
-    "measure-ddl-lock.sh": "ローカルのデータベースが PostgreSQL であること・それが `supabase_db_` で始まる名前のコンテナで動いていることを前提に、その中の psql を docker exec で叩く。測る DDL の顔ぶれもこのスタックの migration の書き方に合わせてある"
+    "measure-ddl-lock.sh": "ローカルのデータベースが PostgreSQL であること・それが `supabase_db_` で始まる名前のコンテナで動いていることを前提に、その中の psql を docker exec で叩く。測る DDL の顔ぶれもこのスタックの migration の書き方に合わせてある",
+    "_comment_hook_decisions_summary": "読む側の配り分け（docs/specs/hook-decisions-summary.md、2026-10-18）: 集計の入口 summarize-hook-decisions.sh と本体 lib/hook-decisions-summary.mjs は supportScripts で aidd-core / aidd-vkumai へ配る。月次サマリ hook（gate-effectiveness-monthly-check.sh、aidd-core）がこの入口を呼ぶので、記録部品 log-hook-decision.sh と同じ先へ運ばないと導入先の月次サマリで段落が『取得できませんでした』になる（記録が黙って無くなる型の読む側版）。HTML 生成の 2 本は下の理由で配らない",
+    "render-hook-decisions-html.sh": "静的 HTML の 3 節目が docs/agents/hook-live-drill.md（このリポジトリの実走ドリルの記録）を読み、成績の節が docs/agents/harness-score.jsonl（このリポジトリの記録）を読む。導入先にはどちらも無く、配っても 2 節が必ず『記録なし』になる。集計本体（summarize-hook-decisions.sh）は配るので、導入先はテキストの集計で読める。プラグインは 0.1.5 で『配れるもの』として一区切りしており、見た目の部品を足して版を上げる判断は別（docs/specs/hook-decisions-summary.md 決めてほしいこと 4、2026-10-18）",
+    "lib/render-hook-decisions-html.mjs": "render-hook-decisions-html.sh の本体。理由は同上"
   },
   "supportScriptsUnclassified": {
     "_comment": "**まだ配る・配らないを決めていない**支援スクリプト（2026-09-12 新設）。値は空でよい——ここは判断を保留する場所で、理由を書けるなら supportScriptsNotDistributed か supportScripts へ移すべきだから。`unclassifiedMax` で件数を固定し、**増やせないが減らせる**（checksSplittable と同じ「返す当てのある借金」の形）。",
@@ -553,6 +564,7 @@
     "lib/judge-sweep-recall.test.sh": "self",
     "lib/resolve-log-dir.test.sh": "self",
     "lib/log-hook-decision.test.sh": "self",
+    "summarize-hook-decisions.test.sh": "self",
     "lib/table-row.test.sh": "both"
   },
   "checks": {
@@ -621,6 +633,7 @@
     "check-lockfile-integrity.test.sh": "npm の package-lock.json 前提（禁止語 npm を含む）",
     "check-eval-fixtures-neutral.test.sh": "scripts/eval-fixtures/ の実データを検査する",
     "check-holdout-isolation.test.sh": "同上（held-out セットの実データと .claude/ の実文面を突き合わせる）",
+    "render-hook-decisions-html.test.sh": "対象の render-hook-decisions-html.sh を配らない（supportScriptsNotDistributed。このリポジトリのドリル文書と成績の記録を読む）ので、検査も配らない。中身は fixture だけで閉じているが、配る対象が無いのに検査だけ届くと『何を守っているのか』が導入先で分からない",
     "check-exemptions.test.sh": "逃がし口の上限（exemption-budget.json）は導入先ごとの実測値で、走査対象も src / supabase / e2e というこのリポジトリの構成に依る",
     "check-eval-runs-freshness.test.sh": "docs/agents/eval-runs.jsonl の実データを検査する",
     "check-aidd-graph-rendered.test.sh": ".claude/workflows/graph/ の実データを検査する",

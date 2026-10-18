@@ -2,7 +2,7 @@
 
 - feature: `hook-decision-log`
 - 重要度: 中 / 影響: Claude Code・Codex の PreToolUse hook 5 本（判定そのものは変えない）
-- 状態: 2026-10-18 承認（決めてほしいこと 1〜6 はすべておすすめの通り）。スクリプトとテストは実装済み。実機（Claude Code / Codex の本物の hook 入力）での確認は未実施
+- 状態: 2026-10-18 承認（決めてほしいこと 1〜6 はすべておすすめの通り）。スクリプトとテストは実装済み。実機（Claude Code）での確認は 2026-10-18 に 1 回実施（`psql -c "select 1"` で deny が出て `logs/hook-decisions.jsonl` に 1 行＝hook=check-direct-ddl-execution / decision=deny / rule=direct_exec / target=psql / caller=claude、session_id と branch あり、を確認）。Codex 側は未確認
 
 ---
 
