@@ -54,6 +54,7 @@ const SYNC_POLICY: Record<string, 'exact' | 'headings'> = {
   'structured-review': 'exact',
   'feature-spec': 'headings', // design スキル依存部分を Codex 向けに書き換えている（意図的差分）
   'e2e-runner': 'headings', // ${CLAUDE_SKILL_DIR} / allowed-tools が Claude 固有（意図的差分）
+  'verify': 'exact', // Claude 固有記法なし。Codex には自動起動規約が無いので AGENTS.md が「コミット前に回す」と指示する（issue #903）
 }
 
 // Stop hook（scripts/check-handoff-format.sh）が PR 本文で検知する見出し・4 値。両ミラーに無いと

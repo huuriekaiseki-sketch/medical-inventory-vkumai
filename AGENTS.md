@@ -26,6 +26,10 @@
 | `npm run test:e2e` | E2Eテスト（Playwright。テスト専用Supabase接続が前提。下記「テスト環境・データ衛生ルール」参照） |
 | `npm run ai:check` | typecheck→lint→test→test:e2e の一括実行。作業完了前に実行する |
 
+- **コミット前（docs / tests だけの変更を除く）に `.agents/skills/verify/SKILL.md` の手順を回す。**
+  Claude Code は 2.1.286 以上の規約で `verify` スキルを自動で呼ぶが、Codex には相当する規約が
+  無いので、ここで指示する（issue #903）。回せない検査は 4 値（⬜ 未実施）と理由で書き、直さず報告する
+
 ## Codex 用設定（`.codex/`）
 
 | ファイル | 目的 |
@@ -76,6 +80,7 @@ Phase 1 調査(並列) → Phase 2 仕様書 → [停止① 人間レビュー]
 | `structured-review` | `/structured-review` | 最終構造化レビュー（Phase 5 後・人間が起動） |
 | `e2e-runner` | `/e2e-runner` | E2Eテスト・スクリーンショット生成（随時） |
 | `handoff-format` | 作業完了報告（PR本文・セッション終了報告）を書くとき | 引き継ぎメモの必須フォーマット（issue #542） |
+| `verify` | コミット直前（docs / tests だけの変更を除く）。Claude Code 2.1.286 以上は自動で呼ぶ。Codex は上記の指示で手動 | `derive-test-selection` で要る検査を導いて回し、4 値で 04 表に貼れる形を返す（issue #903） |
 
 ## TRI/RISK 機械判定基準（AIDDパイプライン採用条件）
 
