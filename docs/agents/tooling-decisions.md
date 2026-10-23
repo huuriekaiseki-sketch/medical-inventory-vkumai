@@ -471,3 +471,10 @@ Stop hook が検知する見出し・4 値は、両ミラーに含まれるこ�
 **How to apply:** スキルを足したら `SYNC_POLICY` に登録する。Claude 固有記法を使わないなら
 `exact`。handoff-format を変えたら `.agents/skills/handoff-format/SKILL.md` にもコピーする
 （`cp` で足りる。テストが差分を止める）。
+
+**verify（2026-10-23、issue #903）は `exact`。** 本文は `scripts/` のコマンドと 4 値だけで
+Claude 固有記法が無い。Claude Code は 2.1.286 以上の規約（リポジトリに `verify` という名前の
+プロジェクトスキルがあると、docs / tests だけの変更を除きコミット直前に必ず呼ぶ）で自動起動するが、
+Codex に相当する規約は無い。ミラーを置くだけでは Codex は一度も呼ばないので、`AGENTS.md`
+「ビルド・テストコマンド」に「コミット前に `.agents/skills/verify/SKILL.md` の手順を回す」の
+一文を置いた。配布は固有側（aidd-vkumai。本文が npm / Supabase / このリポジトリの `scripts/` を名指しするため）。
