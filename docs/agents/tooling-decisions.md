@@ -478,3 +478,13 @@ Claude 固有記法が無い。Claude Code は 2.1.286 以上の規約（リポ�
 Codex に相当する規約は無い。ミラーを置くだけでは Codex は一度も呼ばないので、`AGENTS.md`
 「ビルド・テストコマンド」に「コミット前に `.agents/skills/verify/SKILL.md` の手順を回す」の
 一文を置いた。配布は固有側（aidd-vkumai。本文が npm / Supabase / このリポジトリの `scripts/` を名指しするため）。
+
+**2026-10-24 実測: 呼ばれた**（本体 2.1.289、新しいセッション、`src/lib/format-date.ts` に意味を変えない
+コメント 1 行を足して `git add` → `git commit`。コミットは push せず捨てた）。根拠は 3 つ。
+①セッション開始時の利用可能スキル一覧に `verify` が載っていた。②Bash ツールの説明文の Git 節に
+「Always run `/verify` right before the `commit` command (never for docs or tests)」が入っていた
+（これが規約の実体。CLAUDE.md や hook ではなく、本体がツール説明文に差し込む）。③その指示に従って
+`git add` の直後・`git commit` の前に Skill ツールで `verify` を呼び、SKILL.md の手順どおり
+derive（route: light）→「毎回」の行 20 種を回した（unit 2,477 件・build・hook 回帰 170 本ほか緑。
+typecheck と lint は worktree の node_modules が lockfile より古いことによる赤で、直さず報告のみ）。
+限界: 呼ぶかどうかは LLM の判断なので、1 回の観測は「指示が届き、従える」ことの確認に留まる。
