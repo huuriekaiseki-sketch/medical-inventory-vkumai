@@ -84,7 +84,8 @@
 | Stop（Codex側） | `codex-ai-check-suggest.sh` | warning-only | Claude 側 `ai-check-suggest.sh` の Codex 版（2026-09-11 に派生先から逆輸入。Codex 側には Stop hook が 1 本も無かった）。同じく止めない。**2026-09-12 に表へ追加——しかもこの 1 本は、人が手で突き合わせたときには見落としており、`check-actuator-inventory-coverage.test.sh` が書いた直後に見つけた**（`.codex/hooks.json` 側の登録を目視で追い切れていなかった） |
 | （参考）per-edit | security-guidanceプラグイン（`possible_real_facility_name`等） | warning-only | issue #440。Claude Code公式プラグイン経由、上記`.claude/settings.json`のhooksとは別経路 |
 
-（`SubagentStart`/`SubagentStop`の`log-subagent-hook-skeleton.sh`、および`InstructionsLoaded`の
+（`SubagentStart`/`SubagentStop`/`PostToolUse`(matcher `SubagentHandback`、issue #902。auto mode の
+subagent の報告本文を残す 3 本目の登録)の`log-subagent-hook-skeleton.sh`、および`InstructionsLoaded`の
 `log-instructions-loaded.sh`（issue #742。公式仕様で出力が全て無視されるため是正手段を持ちえない）は
 検知ではなく記録専用のためこの表の対象外）
 

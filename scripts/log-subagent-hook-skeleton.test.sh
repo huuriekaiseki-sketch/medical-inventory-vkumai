@@ -93,6 +93,58 @@ else
 fi
 rm -f "$TMP_TRANSCRIPT"
 
+# WHY（issue #902）: Claude Code 2.1.271 以降、auto mode の subagent は報告を SubagentHandback ツールで
+# 渡し、SubagentStop の last_assistant_message は報告ではない（公式 hooks リファレンス）。2026-10-23 の
+# 実測では auto mode の 4 体の SubagentStop 行に lastAssistantMessage が無かった。報告本文を残すには
+# PostToolUse(SubagentHandback) の tool_input.message を記録するしかない。6〜9 はその RED fixture。
+echo "=== scenario 6: PostToolUse(SubagentHandback) は報告本文を hookEvent=SubagentHandback の行として残す（issue #902） ==="
+BEFORE_LINES="$(wc -l < "$TMP_LOG" | tr -d ' ')"
+input='{"session_id":"sess-2","transcript_path":"/tmp/t.jsonl","cwd":"/repo","permission_mode":"auto","hook_event_name":"PostToolUse","tool_name":"SubagentHandback","tool_input":{"message":"# 調査レポート\n\n- 結論: 2 本だけ"},"tool_response":{"ok":true},"tool_use_id":"toolu_01","agent_id":"agent-hb1","agent_type":"general-purpose"}'
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+AFTER_LINES="$(wc -l < "$TMP_LOG" | tr -d ' ')"
+assert_eq "$AFTER_LINES" "$((BEFORE_LINES + 1))" "1 行だけ増える"
+LAST_LINE="$(tail -n 1 "$TMP_LOG")"
+assert_contains "$LAST_LINE" '"hookEvent":"SubagentHandback"' "hookEvent は PostToolUse でなく SubagentHandback"
+assert_contains "$LAST_LINE" '"sessionId":"sess-2"' "sessionId が記録される"
+assert_contains "$LAST_LINE" '"agentId":"agent-hb1"' "agentId が記録される"
+assert_contains "$LAST_LINE" '"agentType":"general-purpose"' "agentType が記録される"
+assert_contains "$LAST_LINE" '"message":"# 調査レポート\n\n- 結論: 2 本だけ"' "報告本文が message に残る（改行は JSON エスケープのまま）"
+assert_contains "$LAST_LINE" '"messageLength":21' "元の文字数が messageLength に残る"
+assert_contains "$LAST_LINE" '"timestamp":"' "timestamp が記録される"
+
+echo "=== scenario 7: 長い報告本文は先頭 4,000 文字で切り、元の長さを messageLength に残す ==="
+LONG_MESSAGE="$(printf 'a%.0s' $(seq 1 4100))"
+input="{\"session_id\":\"sess-2\",\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"SubagentHandback\",\"tool_input\":{\"message\":\"${LONG_MESSAGE}\"},\"agent_id\":\"agent-hb2\",\"agent_type\":\"reviewer\"}"
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+LAST_LINE="$(tail -n 1 "$TMP_LOG")"
+STORED_LEN="$(printf '%s' "$LAST_LINE" | jq -r '.message | length')"
+assert_eq "$STORED_LEN" "4000" "message は 4,000 文字に切られる"
+assert_contains "$LAST_LINE" '"messageLength":4100' "切る前の長さが messageLength に残る"
+assert_contains "$LAST_LINE" '"messageTruncated":true' "切ったことが messageTruncated に残る"
+
+echo "=== scenario 8: auto mode の SubagentStop（last_assistant_message 無し、2026-10-23 実測の形）は報告本文を残せない ==="
+input='{"session_id":"sess-2","transcript_path":"/tmp/t.jsonl","cwd":"/repo","permission_mode":"auto","agent_id":"agent-hb1","agent_type":"general-purpose","hook_event_name":"SubagentStop","stop_hook_active":false,"agent_transcript_path":"/tmp/subagents/agent-hb1.jsonl"}'
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+LAST_LINE="$(tail -n 1 "$TMP_LOG")"
+assert_contains "$LAST_LINE" '"hookEvent":"SubagentStop"' "SubagentStop 行自体は残る（骨格は変えない）"
+if grep -qF -e '"lastAssistantMessage"' -e '"message"' <<<"$LAST_LINE"; then
+  echo "  NG: SubagentStop 行に報告本文が付かないこと（実際: ${LAST_LINE}）"
+  fail=1
+else
+  echo "  OK: SubagentStop だけでは報告本文が残らない（だから scenario 6 の行が要る）"
+fi
+
+echo "=== scenario 9: SubagentHandback 以外のツールの PostToolUse では何も書かない ==="
+BEFORE_LINES="$(wc -l < "$TMP_LOG" | tr -d ' ')"
+input='{"session_id":"sess-2","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls","message":"これは報告ではない"},"tool_response":{"stdout":""},"agent_id":"agent-hb1","agent_type":"general-purpose"}'
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+AFTER_LINES="$(wc -l < "$TMP_LOG" | tr -d ' ')"
+assert_eq "$AFTER_LINES" "$BEFORE_LINES" "行数が増えない（Bash の PostToolUse は対象外）"
+
 rm -f "$TMP_LOG"
 
 if [ "$fail" -ne 0 ]; then

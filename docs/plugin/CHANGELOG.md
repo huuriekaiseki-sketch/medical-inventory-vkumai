@@ -2,6 +2,15 @@
 
 ## 未配布（main に入ったが、まだ版を切っていない）
 
+- aidd-core の `log-subagent-hook-skeleton.sh` を `PostToolUse`（matcher `SubagentHandback`）にも登録した
+  （issue #902、2026-10-23）。Claude Code 2.1.271 以降の auto mode では subagent の報告が `SubagentHandback`
+  ツール経由になり、`SubagentStop` の `last_assistant_message` は報告ではない。報告本文（`tool_input.message`
+  の先頭 4,000 文字。切ったときは `messageTruncated: true` と元の文字数 `messageLength`）を
+  `hookEvent: "SubagentHandback"` の行として `logs/subagent-skeleton.jsonl` に残す。`SubagentStart` /
+  `SubagentStop` の行は変わらない。**aidd-core の `hooks/hooks.json` が変わる**（Claude Code には hook 単位の
+  信頼が無いので、更新すればそのまま有効になる）。通常モードでは `SubagentHandback` が提供されないので
+  この行は書かれない。同梱の `canonical-event.ts` は `message` を `detail` に写すが、骨格行は status を持たない
+  ので `verify-agent-progress-transcript.sh` の突合の数字は変わらない。aidd-vkumai・Codex 用の 2 本は不変
 - 止める hook に `"onFailure": "block"` を足した（2026-10-23）。aidd-core の `check-skip-marker-write.sh`、
   aidd-vkumai の `check-direct-ddl-execution.sh` / `check-readonly-bash.sh` / `check-dependency-change.sh`。
   hook の timeout・起動失敗・想定外の exit code のときも、通さずに止める（それまでは jq 不在だけを止めていた）。
