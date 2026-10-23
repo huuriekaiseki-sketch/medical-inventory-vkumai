@@ -312,6 +312,7 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-skip-marker-write.sh",
+            "onFailure": "block",
             "timeout": 5
           }
         ]
@@ -322,6 +323,7 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-dependency-change.sh",
+            "onFailure": "block",
             "timeout": 5
           }
         ]
@@ -342,6 +344,7 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-direct-ddl-execution.sh",
+            "onFailure": "block",
             "timeout": 5
           }
         ]
@@ -352,6 +355,7 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/check-readonly-bash.sh",
+            "onFailure": "block",
             "timeout": 5
           }
         ]
@@ -387,6 +391,16 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/scripts/record-test-failure.sh",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "SubagentHandback",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/log-subagent-hook-skeleton.sh",
+            "timeout": 5
           }
         ]
       }

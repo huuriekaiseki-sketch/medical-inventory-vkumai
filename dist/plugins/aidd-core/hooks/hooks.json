@@ -121,6 +121,7 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-skip-marker-write.sh",
+            "onFailure": "block",
             "timeout": 5
           }
         ]
@@ -144,6 +145,16 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/record-test-failure.sh",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "SubagentHandback",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/log-subagent-hook-skeleton.sh",
+            "timeout": 5
           }
         ]
       }

@@ -115,6 +115,42 @@ describe('subagentSkeletonAdapter', () => {
     expect(events[1]).toMatchObject({ agentId: 'a1', startTimestamp: null, endTimestamp: '2026-07-27T00:00:02Z', detail: 'ok' })
   })
 
+  // WHY（issue #902）: auto mode では報告本文が SubagentStop の lastAssistantMessage ではなく
+  // PostToolUse(SubagentHandback) 由来の hookEvent=SubagentHandback 行の message に入る。
+  // detail へ写さないと、突合の低重複判定（compareDetail）が auto mode の体では常に空を比べる。
+  it('SubagentHandback行はendTimestamp側で、messageをdetailに写す（issue #902）', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'skeleton-test-handback-'))
+    const logFile = join(dir, 'subagent-skeleton.jsonl')
+    writeFileSync(
+      logFile,
+      [
+        line({ timestamp: '2026-10-23T00:00:00Z', hookEvent: 'SubagentStart', agentId: 'hb1', agentType: 'general-purpose' }),
+        line({
+          timestamp: '2026-10-23T00:00:05Z',
+          hookEvent: 'SubagentHandback',
+          agentId: 'hb1',
+          agentType: 'general-purpose',
+          message: '# 調査レポート\n\n- 結論: 2 本だけ',
+          messageLength: 21,
+        }),
+        // auto mode の実測の形: SubagentStop に lastAssistantMessage が無い
+        line({ timestamp: '2026-10-23T00:00:06Z', hookEvent: 'SubagentStop', agentId: 'hb1', agentType: 'general-purpose' }),
+      ].join('\n') + '\n',
+      'utf-8',
+    )
+
+    const events = subagentSkeletonAdapter(logFile).load()
+    expect(events).toHaveLength(3)
+    expect(events[1]).toMatchObject({
+      agentId: 'hb1',
+      startTimestamp: null,
+      endTimestamp: '2026-10-23T00:00:05Z',
+      detail: '# 調査レポート\n\n- 結論: 2 本だけ',
+      source: 'subagent-skeleton',
+    })
+    expect(events[2]).toMatchObject({ agentId: 'hb1', endTimestamp: '2026-10-23T00:00:06Z', detail: null })
+  })
+
   it('ファイルが存在しない場合は空配列を返す', () => {
     const events = subagentSkeletonAdapter('/tmp/does-not-exist-xyz.jsonl').load()
     expect(events).toEqual([])

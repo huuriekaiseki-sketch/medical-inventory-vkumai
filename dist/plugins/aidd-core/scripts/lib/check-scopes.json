@@ -39,6 +39,7 @@
     "record-gap-check-state.test.sh": "self",
     "check-loop-observability-gap.test.sh": "self",
     "check-session-start-matchers.test.sh": "both",
+    "check-blocking-hooks-onfailure.test.sh": "both",
     "check-aidd-config-schema.test.sh": "both",
     "check-hook-doc-pointers.test.sh": "both",
     "check-skill-size.test.sh": "consumer",

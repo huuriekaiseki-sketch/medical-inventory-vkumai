@@ -132,7 +132,7 @@ issue #640で「journalに実行記録が1件以上あるがblockedが0件のage
 
 | 層 | 内容 | 記録手段 | 保証レベル |
 |---|---|---|---|
-| ① 骨格 | agent_id・agent_type・開始/終了・timestamp | `scripts/log-subagent-hook-skeleton.sh`（`SubagentStart`/`SubagentStop` hook） | 機械強制（呼び忘れ得ない） |
+| ① 骨格 | agent_id・agent_type・開始/終了・timestamp・報告本文（先頭 4,000 文字） | `scripts/log-subagent-hook-skeleton.sh`（`SubagentStart`/`SubagentStop` hook、および `PostToolUse` hook の matcher `SubagentHandback`。issue #902） | 機械強制（呼び忘れ得ない） |
 | ② feature/attempt | どの機能・何回目の試行か | `aidd-phase2.js`の`withIntent()`がプロンプト先頭に`INTENT: <label> feature=<feature>`規約行を埋め込み、`scripts/log-subagent-hook-skeleton.sh`が`agent_transcript_path`をgrepして`intent`フィールドに復元（issue #423ステップ3実装済み、issue #480でmain最新に合わせて再実装） / 従来の`log-agent-progress.sh` / `log-loop-observability.sh`（自然言語指示）も併存 | コード埋め込み＋hook抽出（labelはコードが決定的に付与するため`agent()`呼び出し自体が漏れなければ欠落しない。ただしtranscriptのテキスト抽出はベストエフォート） |
 | ③ 自由記述intent/scenario | 何をしようとしていたかの説明 | `log-agent-progress.sh` / `log-loop-observability.sh`の自己申告 | ベストエフォート（欠落許容） |
 
@@ -141,6 +141,20 @@ issue #640で「journalに実行記録が1件以上あるがblockedが0件のage
 agentTranscriptPath?, lastAssistantMessage?}`形式で自動記録される。フィールド名はissue #423
 ステップ1の実験で実際に観測したhookペイロード（`agent_id`・`agent_type`・
 `agent_transcript_path`・`last_assistant_message`等）に基づく。
+
+**auto mode の報告本文（issue #902、2026-10-23）**: Claude Code 2.1.271 以降、auto mode の subagent は
+報告を `SubagentHandback` ツールで渡し、`SubagentStop` の `last_assistant_message` は閉じの一言で
+あって報告ではない（公式 hooks リファレンスに明記。2026-10-23 の実測でも auto mode の 4 体の
+`SubagentStop` 行に `lastAssistantMessage` が無かった）。そのため `.claude/settings.json` の
+`PostToolUse` に matcher `SubagentHandback` で同じスクリプトを登録し、`tool_input.message` を
+`{timestamp, hookEvent: "SubagentHandback", sessionId, agentId, agentType, message, messageLength,
+messageTruncated?}` の行として同じファイルに残す。`message` は先頭 4,000 文字で切る（報告は 1 体で
+20,000 文字を超えることがあり、全文を 1 行に積むと共有の jsonl が読めなくなる。全文は同じ
+`agentId` の `SubagentStop` 行の `agentTranscriptPath` から読める）。切ったことは `messageTruncated: true`
+と `messageLength`（元の文字数）で分かる。`canonical-event.ts` の骨格アダプタはこの `message` を
+`detail` に写すが、骨格行は `status` を持たないので `verify-agent-progress-transcript.sh` の
+突合の数字は変わらない（限界は同スクリプトの WHY に書いた）。通常モード（`SubagentHandback` が
+提供されないとき）はこの行は書かれず、従来どおり `lastAssistantMessage` に本文が入る。
 
 **既知の限界:**
 - ペイロードに`status`（pass/fail/blocked）フィールドは含まれない。`SubagentStop`が発火した

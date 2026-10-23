@@ -48,7 +48,8 @@ medical-inventory-vkumai/               ← このプロジェクト
     │   ├── feature-spec/SKILL.md       ← 仕様書生成（Phase 2）
     │   ├── structured-review/SKILL.md  ← 最終構造化レビュー（Phase 5後）
     │   ├── e2e-runner/SKILL.md         ← E2Eテスト・スクリーンショット
-    │   └── handoff-format/SKILL.md     ← 作業完了時の引き継ぎメモフォーマット（issue #542）
+    │   ├── handoff-format/SKILL.md     ← 作業完了時の引き継ぎメモフォーマット（issue #542）
+    │   └── verify/SKILL.md             ← コミット直前の検査（Claude Code 2.1.286 以上が自動で呼ぶ。issue #903）
     └── workflows/
         ├── aidd-phase1-router.js       ← Phase 1 入口。TRI/RISKキーワードでaidd-phase1/aidd-1-1-deep-task/メタ改修軽量ルート(issue #457)へ自動振り分け
         ├── aidd-phase1.js              ← Phase 1 調査ワークフロー（軽量Sweep。routerから呼ばれる）
@@ -156,6 +157,7 @@ frontmatterを変更しても実フローの挙動が変わらないケースが
 | `structured-review` | Phase 5 後：最終構造化レビューを実施するとき（`/structured-review` で起動） | レビュー観点別の指摘リスト |
 | `e2e-runner` | E2Eテストやスクリーンショットが必要なとき（随時） | Playwright テスト + スクリーンショット |
 | `handoff-format` | 作業完了報告（PR本文・セッション終了報告・`docs/sessions/`記録）を書くとき | 引き継ぎメモ（作業サマリ/検証済み/既知の未対応/後任AIへの注意） |
+| `verify` | コミット直前（docs / tests だけの変更を除く）。Claude Code 2.1.286 以上はコミット指示から自動で呼ぶ。Codex は `AGENTS.md` の指示で手動（issue #903） | `derive-test-selection` の表を 4 値で書き換えた 04 表（回せなかった検査は理由つき ⬜）。失敗は直さず報告 |
 
 ---
 

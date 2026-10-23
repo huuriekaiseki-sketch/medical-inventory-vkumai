@@ -95,7 +95,8 @@
     "feature-spec": "aidd-core",
     "structured-review": "aidd-core",
     "handoff-format": "aidd-vkumai",
-    "e2e-runner": "aidd-vkumai"
+    "e2e-runner": "aidd-vkumai",
+    "verify": "aidd-vkumai"
   },
   "workflows": {
     "aidd-phase1-router": "aidd-vkumai",
@@ -406,7 +407,8 @@
     "scripts/check-detectors-effective.test.sh": "壊し方の登録簿（check-mutants.json）は導入先にあり、走らせ方は共通側（aidd-core）にある。aidd-vkumai は aidd-core に依存するので解決できるが、走査は同じプラグイン内しか見ない",
     "scripts/lib/precision-metrics.mjs": "精度指標のエンジンは共通側（aidd-core）、指標の登録簿は導入先（aidd-vkumai）。依存関係（aidd-vkumai → aidd-core）で解決されるが、走査は同じプラグイン内しか見ない",
     "scripts/check-precision-metrics.test.sh": "同上（検査は共通側、壊し方の登録簿は導入先）",
-    "scripts/derive-test-selection.sh": "check-handoff-format.sh の警告文が導入先の derive を案内するだけ（実行しない）",
+    "scripts/derive-test-selection.sh": "check-handoff-format.sh の警告文と verify スキル本文が、導入先のリポジトリで回すコマンドとして derive を案内するだけ（プラグインからは起動しない。ルール表が固有なので配らない）",
+    "scripts/check-generated-supabase-types.sh": "verify スキル本文（aidd-vkumai）が、導入先のリポジトリで回すコマンドとして名前を挙げるだけ（スキルからは起動しない）。スクリプト自体は supportScriptsUnclassified で配る・配らないを保留中（2026-10-23、issue #903）",
     "scripts/check-handoff-format.sh": "handoff-format スキル本文が Stop hook 名を説明するだけ",
     "scripts/summarize-gate-blocked.sh": "summarize-gate-passfail.sh のコメントが統合前の旧スクリプト名を示すだけ（削除済み）",
     "scripts/codex-dependency-change-deny.sh": "check-dependency-change.sh のコメントが Codex 用ラッパーを示すだけ。ラッパーは aidd-codex-vkumai に同梱するが、Claude 側の aidd-vkumai には無い（Codex 専用）",
@@ -472,8 +474,8 @@
     "scripts/check-rls-mutation.sh": "同上（認可ポリシーの変異計測の鮮度の点検の、知らせの文の中）",
     "scripts/run-mutation-tests.sh": "同上（製品コードの変異計測の鮮度の点検の、知らせの文の中）"
   },
-  "_allowUnresolvedReferencesMax": "2026-09-30 に 64 → 68（Codex 用プラグインへ鮮度の点検 4 本を入れたため、知らせの文の中の実行用ラッパー 4 本への参照が宙に浮いた。理由は各行）。逃がし口（同梱しない参照）の上限。放っておくと増えるので件数で見る。2026-09-11 に幽霊 15 件を消して 36 件になった。上げるときは、なぜ同梱できないかを allowUnresolvedReferences の行に書いてから上げる。2026-09-12 に 53 → 56（入れ子の走査・その壊し方の登録簿・本物の Workflow 実行で測るドリルの 3 件。理由は各行に書いた）。同日 56 → 59（**配らないと宣言していたのに配っていた検査 8 本を実際に外した**ため、残った文書・登録簿・コメントからの参照が宙に浮いた 3 件。検査そのものを配れない理由は checksNotDistributed 側に書いてある）。同日 59 → 61（**導入先の実体を要求する検査 8 本を配布から外した**ため、ラッパーの案内文と壊し方の登録簿からの参照が宙に浮いた 2 件）。同日 61 → 64（さらに 5 本を外したぶんの登録簿からの参照 4 件を足し、**同梱したことで不要になった 1 件**（check-catalog.mjs）を幽霊検知にしたがって消した）。",
-  "allowUnresolvedReferencesMax": 68,
+  "_allowUnresolvedReferencesMax": "2026-10-23 に 68 → 69（verify スキル本文が導入先で回すコマンドとして check-generated-supabase-types.sh を挙げる 1 件。そのスクリプトは保留中で、配るか決めたらこの件も消す。issue #903）。2026-09-30 に 64 → 68（Codex 用プラグインへ鮮度の点検 4 本を入れたため、知らせの文の中の実行用ラッパー 4 本への参照が宙に浮いた。理由は各行）。逃がし口（同梱しない参照）の上限。放っておくと増えるので件数で見る。2026-09-11 に幽霊 15 件を消して 36 件になった。上げるときは、なぜ同梱できないかを allowUnresolvedReferences の行に書いてから上げる。2026-09-12 に 53 → 56（入れ子の走査・その壊し方の登録簿・本物の Workflow 実行で測るドリルの 3 件。理由は各行に書いた）。同日 56 → 59（**配らないと宣言していたのに配っていた検査 8 本を実際に外した**ため、残った文書・登録簿・コメントからの参照が宙に浮いた 3 件。検査そのものを配れない理由は checksNotDistributed 側に書いてある）。同日 59 → 61（**導入先の実体を要求する検査 8 本を配布から外した**ため、ラッパーの案内文と壊し方の登録簿からの参照が宙に浮いた 2 件）。同日 61 → 64（さらに 5 本を外したぶんの登録簿からの参照 4 件を足し、**同梱したことで不要になった 1 件**（check-catalog.mjs）を幽霊検知にしたがって消した）。",
+  "allowUnresolvedReferencesMax": 69,
   "emptyRepoExempt": {
     "_comment": "**何も無い導入先で回すと落ちる**検査の宣言（2026-09-12 新設）。配る検査は、対象が無ければ『対象なし』と言って通るのが決まり——そうでないと入口が『合格』と『見ていない』を区別できない（C-025）。ここに載るのは、この製品固有の前提（supabase の migration・統合テストの記録）を持つアダプター側の検査だけ。共通側（aidd-core）に 1 本でも載ったら設計の誤りとして扱う。",
     "_why": "2026-09-12 に空の git リポジトリで配る検査 36 本を回して実測した。共通側 29 本は 0 本が落ち、アダプター側 7 本のうち 4 本が落ちた。**その 4 本は同じ日にすべて直したので、いまこの表は空**——(1) 走査器が supabase/migrations を readdir して ENOENT で異常終了していた 2 本、(2) `git rev-parse \"HEAD:supabase\"` がコミットの無い木で標準出力にも書いてから失敗し、値が 2 行になって早期 exit が効いていなかった 2 本。表を空のまま残すのは、**次に同じ判断をする人へ「まず直せないか考える」と伝えるため**（免除は最後の手段）。名前を検査のコードへ焼き込むと腐っても気づけないので、理由つきの宣言にして門から読む。",
@@ -532,6 +534,7 @@
     "check-rls-mutation.test.sh": "self",
     "check-roadmap-staleness.test.sh": "both",
     "check-rule-guard-coverage.test.sh": "both",
+    "check-blocking-hooks-onfailure.test.sh": "both",
     "check-session-start-matchers.test.sh": "both",
     "check-shell-expansion-safety.test.sh": "consumer",
     "check-shell-locale-safety.test.sh": "consumer",
@@ -576,6 +579,7 @@
     ],
     "check-node-version-pin.test.sh": "aidd-vkumai",
     "check-session-start-matchers.test.sh": "aidd-core",
+    "check-blocking-hooks-onfailure.test.sh": "aidd-core",
     "check-aidd-config-schema.test.sh": "aidd-core",
     "check-hook-doc-pointers.test.sh": "aidd-core",
     "check-skill-size.test.sh": "aidd-core",
