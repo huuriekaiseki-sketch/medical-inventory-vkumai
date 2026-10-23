@@ -146,6 +146,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "SubagentHandback",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/log-subagent-hook-skeleton.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [

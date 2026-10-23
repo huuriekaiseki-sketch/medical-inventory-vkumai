@@ -101,6 +101,8 @@ interface SkeletonLine {
   agentId: string
   agentType?: string
   lastAssistantMessage?: string
+  // issue #902: hookEvent=SubagentHandback 行だけが持つ報告本文（先頭 4,000 文字）
+  message?: string
   intent?: string
 }
 
@@ -152,7 +154,10 @@ export function subagentSkeletonAdapter(logFile: string): EventAdapter {
           startTimestamp: isStart ? parsed.timestamp : null,
           endTimestamp: isStart ? null : parsed.timestamp,
           status: null,
-          detail: parsed.lastAssistantMessage ?? null,
+          // WHY（issue #902）: auto mode では報告本文が SubagentStop の lastAssistantMessage ではなく
+          //      PostToolUse(SubagentHandback) 由来の SubagentHandback 行の message に入る。
+          //      どちらも「その agent の報告」なので同じ detail に写す（1 行に両方は入らない）
+          detail: parsed.lastAssistantMessage ?? parsed.message ?? null,
           intent: parsed.intent ?? null,
           scenario: null,
           source: 'subagent-skeleton',

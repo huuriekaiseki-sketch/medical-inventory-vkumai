@@ -45,10 +45,45 @@ AGENT_ID="$(echo "$PAYLOAD" | jq -r '.agent_id // empty')"
 AGENT_TYPE="$(echo "$PAYLOAD" | jq -r '.agent_type // empty')"
 AGENT_TRANSCRIPT_PATH="$(echo "$PAYLOAD" | jq -r '.agent_transcript_path // empty')"
 LAST_ASSISTANT_MESSAGE="$(echo "$PAYLOAD" | jq -r '.last_assistant_message // empty')"
+TOOL_NAME="$(echo "$PAYLOAD" | jq -r '.tool_name // empty')"
 
-if [[ -z "$HOOK_EVENT" || -z "$AGENT_ID" ]]; then
+# WHY（issue #902）: Claude Code 2.1.271 以降、auto mode の subagent は報告を SubagentHandback
+# ツールで渡す。SubagentStop の last_assistant_message は「閉じの一言」であって報告ではない
+# （公式 hooks リファレンスに明記。2026-10-23 の実測でも auto mode の 4 体の SubagentStop 行に
+# lastAssistantMessage が無かった）。報告本文は PostToolUse(SubagentHandback) の
+# tool_input.message にしか現れないので、settings.json の PostToolUse に matcher SubagentHandback
+# で本スクリプトを登録し、ここで hookEvent "SubagentHandback" の行として残す。
+# SubagentStart / SubagentStop の行の形は変えない。
+#
+# 本文の上限は先頭 4,000 文字。理由: 報告は 1 体で 20,000 文字を超えることがあり（2026-10-23 の
+# 実測）、全文を 1 行に積むと共有の jsonl が読めない大きさになる。4,000 文字あれば報告の結論
+# （先頭に書かれる）は残り、全文が要るときは同じ agentId の SubagentStop 行の agentTranscriptPath
+# を辿れば読める。切ったことは messageTruncated: true と messageLength（元の文字数）で分かる
+# ようにする（切ったのに切っていないように見える形を残さない）。
+#
+# matcher が SubagentHandback に絞られていても、tool_name をここでも見る。将来 matcher を広げた
+# 登録が混ざったとき、他のツールの PostToolUse ごとに骨格行が積まれる事故を防ぐため。
+HANDBACK_MESSAGE=""
+HANDBACK_MESSAGE_LENGTH=0
+if [[ "$HOOK_EVENT" == "PostToolUse" ]]; then
+  if [[ "$TOOL_NAME" != "SubagentHandback" ]]; then
+    exit 0
+  fi
+  HOOK_EVENT="SubagentHandback"
+  # 切り詰めは jq 側で行う（長い本文を bash の引数に載せないため）
+  HANDBACK_MESSAGE="$(echo "$PAYLOAD" | jq -r '.tool_input.message // "" | .[:4000]')"
+  HANDBACK_MESSAGE_LENGTH="$(echo "$PAYLOAD" | jq -r '.tool_input.message // "" | length')"
+fi
+
+if [[ -z "$HOOK_EVENT" ]]; then
+  exit 0
+fi
+if [[ -z "$AGENT_ID" && "$HOOK_EVENT" != "SubagentHandback" ]]; then
   # ペイロード形状が想定と異なる場合はサイレントに何もしない(hookの失敗でセッション全体を
   # 止めないため。exit非0にするとhook自体がエラー扱いになりうる)。
+  # SubagentHandback だけは agent_id が無くても書く。公式 docs は subagent 内の PostToolUse に
+  # agent_id が入ると言うが、実機で欠けたときに報告本文ごと静かに消えるより、agentId 空の行が
+  # 残って「欠けている」と分かるほうがよい（C-025 の型を避ける）。
   exit 0
 fi
 
@@ -75,6 +110,8 @@ jq -nc \
   --arg agentTranscriptPath "$AGENT_TRANSCRIPT_PATH" \
   --arg lastAssistantMessage "$LAST_ASSISTANT_MESSAGE" \
   --arg intentValue "$INTENT_VALUE" \
+  --arg handbackMessage "$HANDBACK_MESSAGE" \
+  --argjson handbackMessageLength "$HANDBACK_MESSAGE_LENGTH" \
   '{
     timestamp: $timestamp,
     hookEvent: $hookEvent,
@@ -84,7 +121,11 @@ jq -nc \
   }
   + (if $agentTranscriptPath != "" then {agentTranscriptPath: $agentTranscriptPath} else {} end)
   + (if $lastAssistantMessage != "" then {lastAssistantMessage: $lastAssistantMessage} else {} end)
-  + (if $intentValue != "" then {intent: $intentValue} else {} end)' \
+  + (if $intentValue != "" then {intent: $intentValue} else {} end)
+  + (if $hookEvent == "SubagentHandback"
+     then {message: $handbackMessage, messageLength: $handbackMessageLength}
+          + (if $handbackMessageLength > 4000 then {messageTruncated: true} else {} end)
+     else {} end)' \
   >> "$LOG_FILE"
 
 exit 0

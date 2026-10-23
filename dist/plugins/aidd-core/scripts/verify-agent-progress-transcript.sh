@@ -37,6 +37,17 @@ fi
 # このラッパーは --skeleton-log-file を引数として受けないので、常に共有側を渡す
 ARGS=(--skeleton-log-file "$(resolve_log_dir)/subagent-skeleton.jsonl" "${ARGS[@]}")
 
+# WHY（issue #902、骨格ログの SubagentHandback 行をどこまで突合に使えるか）:
+#   auto mode では報告本文が SubagentStop の lastAssistantMessage ではなく hookEvent=SubagentHandback
+#   行の message に入る。canonical-event.ts の骨格アダプタはその message を detail に写すので、
+#   同じ agentId の束に報告本文は届く。ただし突合の判定材料になるのは次の範囲まで:
+#   - status の食い違い検出には使えない。骨格行は status を持たない（pass/fail/blocked は
+#     ペイロードに無い）ので、buildReport は journal の無い束を「未突合」に落とす。ここは従来どおり
+#   - detail の低重複検出は、journal の無い束では骨格行が anchor にならないため、やはり走らない
+#   つまり本文が残っても、この検査の数字（突合成功・未突合）は SubagentHandback 行の有無で変わらない。
+#   本文が効くのは、未突合の行を人が辿るときに agentTranscriptPath を開かずに済む、という一点。
+#   Workflow 経由（journal あり）の束では journal の detail が優先されるので、こちらも変わらない。
+
 # WHY: npx tsx はレジストリ依存で遅い日に数分かかる（harvest-journal-events.sh のコメント参照）。
 #      Node 標準の型除去で直接実行する
 node --experimental-strip-types --no-warnings "$SCRIPT_DIR/lib/verify-agent-progress-transcript.ts" "${ARGS[@]}"
