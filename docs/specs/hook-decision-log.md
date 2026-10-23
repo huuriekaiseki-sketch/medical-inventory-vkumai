@@ -2,7 +2,7 @@
 
 - feature: `hook-decision-log`
 - 重要度: 中 / 影響: Claude Code・Codex の PreToolUse hook 5 本（判定そのものは変えない）
-- 状態: 2026-10-18 承認（決めてほしいこと 1〜6 はすべておすすめの通り）。スクリプトとテストは実装済み。実機（Claude Code）での確認は 2026-10-18 に 1 回実施（`psql -c "select 1"` で deny が出て `logs/hook-decisions.jsonl` に 1 行＝hook=check-direct-ddl-execution / decision=deny / rule=direct_exec / target=psql / caller=claude、session_id と branch あり、を確認）。Codex 側は未確認
+- 状態: 2026-10-18 承認（決めてほしいこと 1〜6 はすべておすすめの通り）。スクリプトとテストは実装済み。実機（Claude Code）での確認は 2026-10-18 に 1 回実施（`psql -c "select 1"` で deny が出て `logs/hook-decisions.jsonl` に 1 行＝hook=check-direct-ddl-execution / decision=deny / rule=direct_exec / target=psql / caller=claude、session_id と branch あり、を確認）。Codex 側は未確認（2026-10-24 に `codex exec` で `psql -c "select 1"` の deny を確認したが、導入済みプラグイン 0.1.5 はこの記録の仕組みより前の版で、行は増えなかった＝5 → 5。記録の仕組みを含む版を配ったあとに再測する。`docs/plugin/codex-vkumai/evidence/2026-10-24-codex-exec-json-deny.md`）
 
 ---
 

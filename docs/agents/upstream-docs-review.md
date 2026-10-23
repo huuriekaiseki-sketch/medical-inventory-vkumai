@@ -138,6 +138,9 @@ claude.com / claude.dev の実践記事（09-28〜10-22 の 4 本）、OpenAI de
 9. **Codex hook の実機確認の機械化**（OpenAI「Testing Agent Skills Systematically with Evals」）。
    `codex exec --json --full-auto` の JSONL（`command_execution` / `turn.completed`）で hook の発火を決定論的に
    採点できる可能性。「05 は非対話モードでは確かめる手段が無い」（2026-09-29）の再検討材料。要実機確認
+   → **2026-10-24 実測（issue #909）**: stdout の JSONL には deny が item として出ない。stderr の
+   `Command blocked by PreToolUse hook` と rollout の `custom_tool_call_output` で判定する。手順は
+   `docs/agents/hook-live-drill.md`「Codex 側: `codex exec --json` での機械確認」。05 の hook 自身の失敗は対象外のまま
 
 **対応不要（理由つき）**
 - idle compaction（2.1.299、54 分放置で compact）: `SessionStart(compact)` の再注入が同じく走る（matcher `auto` に含む）。恩恵のみ

@@ -191,6 +191,87 @@ dependency-update の期限超過・鮮度 4 本・reinject・maintenance-digest
 いずれも内容がいまの状態と一致していた（例: branch-pr-status は PR #896 でマージ済みのブランチを正しく名指し）。
 hooks-path-alive だけが上表のとおり文言が事実を越えていた。
 
+## Codex 側: `codex exec --json` での機械確認（2026-10-24 実測）
+
+Codex の PreToolUse の deny は、人が対話 CLI を操作しなくても `codex exec` で確かめられる。ただし **stdout の
+JSONL（`--json`）だけでは判定できない**。止められたコマンドは `command_execution` の item として出ず（`item.started` も無い）、
+出るのはモデルの `agent_message` がエラー文を引用した本文だけ。決定論的な痕跡は **stderr** と **セッションの保存記録
+（rollout）** にある。実測の全文は
+[`docs/plugin/codex-vkumai/evidence/2026-10-24-codex-exec-json-deny.md`](../plugin/codex-vkumai/evidence/2026-10-24-codex-exec-json-deny.md)
+（issue #909。Codex CLI 0.147.0、プラグイン 0.1.5）。
+
+前提: 普段の作業場所（信頼済みの親フォルダの下）で動かす。そこではリポジトリの `.codex/hooks.json` は読み込まれず、
+プラグインの hook だけが動く（E-100）。既定モデルが ChatGPT アカウントで拒否されるときは `-m` で
+`~/.codex/models_cache.json` に載るものを指定する（2026-10-24 は `gpt-5.6-terra`）。`--full-auto` は 0.147.0 に無い。
+
+### 1. 止める入力と対照を 1 回ずつ走らせ、stdout と stderr を別々に残す
+
+```bash
+codex exec --json -m gpt-5.6-terra -s workspace-write -C "$PWD" "シェルで psql -c 'select 1' を 1 回だけ実行して、その結果（成功・失敗・エラー文）をそのまま報告して。他のコマンドは実行しないで。" > deny.jsonl 2> deny.stderr
+```
+
+```bash
+codex exec --json -m gpt-5.6-terra -s workspace-write -C "$PWD" "シェルで psql --version を 1 回だけ実行して、その結果（成功・失敗・エラー文）をそのまま報告して。他のコマンドは実行しないで。" > control.jsonl 2> control.stderr
+```
+
+`psql --version` は 0.1.4 から止めない（仕様書 03）ので対照に使える。費用は 1 回あたり入力 5 万トークン前後。
+
+### 2. 4 つの数を取る
+
+```bash
+grep -c '"type":"turn.completed"' deny.jsonl
+```
+
+```bash
+grep -c 'Command blocked by PreToolUse hook' deny.stderr
+```
+
+```bash
+grep -c '"type":"command_execution"' deny.jsonl
+```
+
+```bash
+grep -c '"type":"command_execution"' control.jsonl
+```
+
+### 3. 判定表（期待する欄が無ければ「判定できない」と言う）
+
+| `turn.completed` | stderr の `Command blocked` | deny 側の `command_execution` | 対照の `command_execution` | 判定 |
+| --- | --- | --- | --- | --- |
+| 1 | 1 以上 | 0 | 1 以上 | **deny が発火した**（2026-10-24 の実測値: 1 / 1 / 0 / 2） |
+| 1 | 0 | 1 以上 | 1 以上 | **止まっていない**（hook が未信頼・スキップ・不在。`/hooks` と `hooks.state` を見る） |
+| 1 | 0 | 0 | — | **判定できない。** モデルがコマンドを呼んでいない（`agent_message` を読む。プロンプトを直して再実行） |
+| 0 | — | — | — | **判定できない。** ターンが最後まで走っていない（`turn.failed` のモデル 400 など。hook は測れていない） |
+| 1 | 1 以上 | 1 以上 | — | **判定できない。** 0.147.0 では起きない組。`--json` の形式が変わった可能性があるので rollout を読む |
+| — | — | — | 0 | **判定できない。** 対照が実行されていない。環境側（sandbox・モデル）を疑う |
+
+「deny 側に `command_execution` が無い」だけを合格と読まない（C-025 の型。不在は「止めた」と「呼ばなかった」を
+区別しない）。stderr の 1 行が肯定側の証拠で、表の 1 行目はその組でのみ成立する。
+
+### 4. 裏取り: rollout の `custom_tool_call_output`
+
+`deny.jsonl` の 1 行目 `thread.started` の `thread_id` で保存記録を引く。
+
+```bash
+grep -F -c 'Command blocked by PreToolUse hook' ~/.codex/sessions/<年>/<月>/<日>/rollout-*-<thread_id>.jsonl
+```
+
+1 以上なら、ツール呼び出しの結果（`payload.type: custom_tool_call_output` の `output[].text` に
+`Script error:\nCommand blocked by PreToolUse hook: …`）として止められたことが残っている。stderr を取り損ねたときの
+代わりにもなる。ファイルが無い・0 件なら「判定できない」（`--ephemeral` で走らせると保存されない）。
+
+### 分からないこと・使えないもの
+
+- **どの hook が止めたか**は、stderr にも rollout にも出ない（理由文はプラグインとリポジトリの `.codex/hooks.json` で同じ）。
+  止めた回の記録（`logs/hook-decisions.jsonl`、`docs/specs/hook-decision-log.md`）が配布された版でなら `hook` / `caller`
+  欄で分かるが、**0.1.5 には無く、2026-10-24 の測定では行が増えなかった（5 → 5）**。配布後に同じ測定で 1 行増えることを
+  確かめてから、行数の前後をこの手順に足す
+- **hook 自身の失敗**（PostToolUse / Stop が rc≠0 で終わる。仕様書 05）は、この手順では見えない。2026-09-29 の
+  「非対話では確かめられない」はそのまま
+- Stop の知らせ（`codex-ai-check-suggest.sh`）は未追跡の `.ts` が要る。2026-10-24 は条件を作っておらず未測定
+- `--json` のイベント形式は安定した interface ではない（Codex 公式 docs）。表の組が崩れたら、形式が変わったとみて
+  まず rollout を読む
+
 ## 実走した版（2026-09-11 に追加）
 
 「hook を変えたら回す」という目安は書いてあったが、**変わったかどうかを誰も見ていなかった**
