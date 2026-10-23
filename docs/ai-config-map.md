@@ -112,6 +112,11 @@ frontmatterを変更しても実フローの挙動が変わらないケースが
 **この二重管理はプロンプト正本問題（`workflow-prompt-sync.test.js`）と同型のドリフトリスクを
 持つが、意図的な差異（後述）があるため単純な一字一致sync testは適用できない。**
 
+**実測（2026-10-24、issue #906、本体 2.1.289）:** frontmatter の `effort` は sonnet / opus では API の
+`output_config.effort` にそのまま乗る。一方 **haiku には effort 自体が送られない**ので、下の表で
+`haiku / low` と書いてある行の `low` は API 上は no-op（費用も挙動も変えない）。根拠と抜粋は
+[`decisions/aidd-pipeline.md`](agents/decisions/aidd-pipeline.md#なぜ-agent-の-effort-を実測してから階層を見直すことにしたかissue-906)。
+
 ### 対応表
 
 | agentType | frontmatter (model/effort) | 実際に効く経路 | 備考 |

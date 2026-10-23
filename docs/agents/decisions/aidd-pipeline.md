@@ -732,3 +732,92 @@ nodes（model / effort の値）だけからは生成できない。列の一部
 （テストが RED になったら片方だけ直した合図）。図は手で直さない。issue #420（Plugin 化）で
 可搬にする「共通部分」はこのマニフェストの**スキーマ**であり、nodes / edges の中身は
 リポジトリ固有（`docs/agents/portability-inventory.md`）。
+
+## なぜ agent の effort を実測してから階層を見直すことにしたか（issue #906）
+
+**結論: frontmatter の `effort` は、agentType 経由で起動した subagent の API リクエストに
+`output_config.effort` としてそのまま乗る（sonnet / opus）。ただし haiku（claude-haiku-4-5）には
+effort という項目自体が送られず、`effort: low` も本体の `--effort low` も本文に現れない。
+13 体のうち haiku の 5 体（sweep 4 本・contract-writer）の `effort` は API 上は no-op で、効いているのは
+sonnet 7 体・opus 1 体のぶんだけ。階層は変えない（2026-10-24 実測、本体 2.1.289）。**
+
+公式 docs の差分確認（[`upstream-docs-review.md`](../upstream-docs-review.md) 2026-10-23、候補 6）で
+「2.1.267 以前は effort 固定モデルで frontmatter の `effort` が無視されていた可能性」が出た。
+直す案（階層の見直し）を出す前に、**今の本体で本当に乗っているか**を生の本文で測った
+（`feedback_measure_before_recommending_fix`）。
+
+### 何を測ったか
+
+- 方法: `OTEL_LOG_RAW_API_BODIES=file:<dir>`（2.1.274）を付けた
+  `claude -p --setting-sources "" --no-session-persistence --model haiku --agents <json> --permission-prompts none --max-budget-usd 0.5`
+  で、`sweep-db` 相当の最小定義（`tools: ["Read"]`、「1 行返せ」だけのプロンプト）を Agent ツールで
+  1 回起動し、`index.jsonl` の `query_source: "agent:custom:<name>"` 行が指す `*.request.json` を読んだ。
+  OTel の span 属性ではなく生の本文を見たのは、collector を立てずに済み、値をそのまま引用できるため。
+  hook の継承事故（[`known-failure-patterns.md`](../known-failure-patterns.md)「hookから `claude -p` を起動する際の
+  settings.json/hooks 継承漏れ」）を避けるため `--setting-sources ""` と `--no-session-persistence` を付け、
+  CLAUDE.md を拾わないよう scratchpad 直下で動かした。
+- 変えたのは `model` と `effort` の 2 つだけ。本体（親）は全回 haiku のまま。
+
+| # | 定義（`--agents`） | 解決されたモデル | リクエスト本文の effort |
+|---|---|---|---|
+| 1 | haiku / `effort: low` | claude-haiku-4-5-20251001 | **無し**（`output_config` キー自体が無い） |
+| 2 | haiku / `effort: high` | 同上 | 無し（#1 とパラメータが同一） |
+| 3 | haiku / 指定なし | 同上 | 無し（同一） |
+| 4 | 本体のみ `--model haiku --effort low`（subagent 無し） | 同上 | 無し（haiku には本体の effort も送られない） |
+| 5 | sonnet / `effort: low` | claude-sonnet-5-5 | `{"effort": "low"}` |
+| 6 | sonnet / `effort: high` | 同上 | `{"effort": "high"}` |
+| 7 | sonnet / 指定なし | 同上 | `{"effort": "medium"}`（継承値。本体の既定か model の既定かは未確認） |
+| 8 | opus / `effort: xhigh`（adversarial-verify 相当） | claude-opus-5-5 | `{"effort": "xhigh"}` |
+
+### 生の本文の抜粋（`messages` / `system` / `tools` を除いた部分）
+
+```json
+// #1 haiku / effort: low（#2・#3・#4 も同じ）
+"model": "claude-haiku-4-5-20251001",
+"max_tokens": 32000,
+"thinking": { "budget_tokens": 31999, "type": "enabled", "display": "omitted" }
+// output_config 無し。betas に effort-2025-11-24 も無い
+
+// #5 sonnet / effort: low
+"model": "claude-sonnet-5-5",
+"max_tokens": 128000,
+"thinking": { "type": "adaptive", "display": "omitted" },
+"output_config": { "effort": "low" }
+// betas に "effort-2025-11-24" が入る
+
+// #8 opus / effort: xhigh
+"model": "claude-opus-5-5",
+"output_config": { "effort": "xhigh" }
+```
+
+### 読み方
+
+- **haiku には effort が存在しない。** 2.1.289 は haiku 4.5 に `output_config` を付けず、effort の beta も
+  要求しない。thinking は固定で有効（budget 31999）。sweep 4 本と contract-writer の `effort: low` は
+  意図の表示にはなるが、費用も挙動も変えない。**sweep の費用を effort で下げることはできない**
+  （[`ai-config-map.md`](../../ai-config-map.md) の対応表で「frontmatter と一致する健全なケース」と
+  書いてきた行は、一致はしているが API には届いていない）。
+- **sonnet / opus では frontmatter の値がそのまま乗る。** 「2.1.267 以前は無視されていた」疑いは、
+  少なくとも現行版には当てはまらない。以前の版でどうだったかは測っていない（戻して測る価値は無い）。
+- **Workflow の `agent()`**: `/workflow-authoring` の API 説明に `opts.effort`
+  （`'low' | 'medium' | 'high' | 'xhigh' | 'max'`、省略でセッションの effort を継承）が明記されており、
+  既存の Workflow は既に渡している（`aidd-phase1.js` の sweep 4 本に `effort: 'low'`、
+  `aidd-1-1-deep-task.js` の各 phase）。**Workflow 経由の起動で本文に乗るか、agentType の frontmatter と
+  `opts.effort` が両方あるときどちらが勝つかは、今回は測っていない**（Workflow の実走は費用が桁違い）。
+- Agent ツールの `effort` 引数（2.1.292）は本体が 2.1.289 なので測れない。
+
+### 費用の目安
+
+8 回で合計約 $0.24（本体 haiku のぶんを含む。subagent 側は sonnet 1 回 $0.002〜0.006、opus 1 回 $0.012）。
+1 回あたり 3〜13 秒。生の本文は scratchpad に置いたまま（リポジトリには入れていない）。
+
+### 次の一手（`.claude/agents/` は変えない）
+
+1. haiku 5 体の `effort` 行は**残す**（将来 haiku が effort 対応になれば効く。消すと意図が消える）。
+   代わりに `ai-config-map.md` の対応表に「haiku は API 上 no-op」を注記する（本 PR で実施）。
+2. sweep の費用を下げたいなら effort 以外の手段（thinking の上限・プロンプトの総当たり範囲）を
+   **先に測ってから**決める。本節の結果からは「下げる手段が無い」ことしか言えない。
+3. Workflow 経由の実測は、次に `aidd-phase1` を実走する機会に `OTEL_LOG_RAW_API_BODIES` を付けて
+   副産物として取る（そのためだけの実走はしない）。
+4. 本体を 2.1.292 以上へ更新したら、Agent ツールの `effort` 引数が frontmatter を上書きするかを
+   同じ手順で 1 回だけ測る。
