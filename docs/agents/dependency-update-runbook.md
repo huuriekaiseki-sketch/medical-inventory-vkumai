@@ -13,7 +13,7 @@ SessionStart hook（`scripts/check-dependency-update-staleness.sh`）と `claude
 
 ## 次回実施予定日
 
-2026-10-06（月 1 の目安。Next.js / React / Supabase の major が出たとき、`npm audit` が high 以上を
+2026-11-24（月 1 の目安。Next.js / React / Supabase の major が出たとき、`npm audit` が high 以上を
 出したとき、Dependabot の PR が 5 件（上限）で止まっているときは予定日を待たず実施する。実施後に手動で
 書き換える）
 
@@ -45,17 +45,46 @@ SessionStart hook（`scripts/check-dependency-update-staleness.sh`）と `claude
 
 | 対象 | 版 | 確認日 |
 | --- | --- | --- |
-| next / eslint-config-next | 16.3.4（`@next/env` は 16.2.12。次回 16.3.4 に揃える） | 2026-09-06 |
-| react / react-dom | 19.2.8 | 2026-09-06 |
-| @supabase/supabase-js | 2.112.4（Wanted 2.115.0） | 2026-09-06 |
-| @supabase/ssr | 0.12.5（Wanted 0.12.6） | 2026-09-06 |
-| vitest | 4.1.11（Latest 5.0.0、major 保留） | 2026-09-06 |
-| typescript | 5.9.3（Latest 7.0.2、major 保留） | 2026-09-06 |
-| eslint | 9.39.4（Latest 10.10.0、major 保留） | 2026-09-06 |
-| CI の npm | 11.19.0（setup-node の Environment details） | 2026-09-05 |
+| next / eslint-config-next | 16.4.2（PR #916、2026-10-23。Latest 16.4.3。`@next/env` は 16.2.12 のまま。次回 next と一緒に揃える） | 2026-10-24 |
+| react / react-dom | 19.2.8（Latest 19.3.1、minor。ピン留めの組なので next と同じ回で判断） | 2026-10-24 |
+| @supabase/supabase-js | 2.112.4（Latest 2.118.0） | 2026-10-24 |
+| @supabase/ssr | 0.12.5（Latest 0.12.7） | 2026-10-24 |
+| vitest | 4.1.11（Latest 5.0.5、major 保留） | 2026-10-24 |
+| typescript | 5.9.3（Latest 7.0.2、major 保留） | 2026-10-24 |
+| eslint | 9.39.4（Latest 10.13.0、major 保留） | 2026-10-24 |
+| CI の npm | 11.19.0（`package.json` の `engines`。2026-10-23 に lock を 11.6.2 で作って `npm ci` が落ちた実例あり） | 2026-10-23 |
 | fast-check | 4.9.0（dev のみ。推移依存は `pure-rand` 8.4.2 だけ） | 2026-09-07 |
 
 ## 実施記録
+
+### 2026-10-24（2 回目。期限 2026-10-06 から 18 日遅れ）
+
+前提: 2026-10-23 に `next` の critical 3 件（#901、main の定期 audit が起票）を予定日を待たず
+PR #916 で対応した（next / eslint-config-next 16.3.8 → 16.4.2）。そのとき**手元の npm 11.6.2 で
+lock を更新したら `@emnapi/runtime` / `@emnapi/core` の項目が落ちて CI の `npm ci` が全ジョブで失敗**し、
+`npx -y npm@11.19.0 install --package-lock-only` で作り直して通した（手順 4 の実例）。
+
+- `npm outdated`（lock の固定版 → Latest、2026-10-24）。minor / patch 15 件:
+  `@next/env` 16.2.12 → 16.4.3、`@playwright/test` 1.62.1 → 1.64.1、`@supabase/ssr` 0.12.5 → 0.12.7、
+  `@supabase/supabase-js` 2.112.4 → 2.118.0、`@tailwindcss/postcss` / `tailwindcss` 4.3.3（最新）、
+  `@testing-library/react` 16.3.2 → 16.3.3、`@testing-library/user-event` 14.6.1 → 14.6.8、
+  `@types/node` 26.4.0 → 26.6.5、`@types/react` 19.2.17 → 19.3.0、`@types/react-dom` 19.2.5 → 19.3.0、
+  `@vitejs/plugin-react` 6.1.1 → 6.1.2、`eslint` 9.39.4 → 9.39.5、`jsdom` 30.0.1 → 30.1.3
+  （`outdated` は Latest を 29.1.1 と出すが `dist-tags.latest` は 30.1.3。前回と同じ表示ずれ）、
+  `next` / `eslint-config-next` 16.4.2 → 16.4.3（patch）、`react` / `react-dom` 19.2.8 → 19.3.1（minor）、
+  `zod` 4.5.4 → 4.6.7（minor、exact 固定）。
+- major 3 件は保留のまま: `vitest` 5.0.5（理由は 2026-09-06 と同じ。フレーキー検知 #757-14 が JSON レポートに依存）、
+  `typescript` 7.0.2（Next.js 16.4 の対応を待つ）、`eslint` 10.13.0（`eslint-config-next` 16.4.x の peer 範囲
+  `>=9.0.0` は満たすが、`@typescript-eslint` 側の対応を待つ）。
+- **Dependabot の open PR は 0 件で、最後の PR は 2026-09-02（#701、closed）。** 7 週間 PR が無いのに
+  minor / patch が 15 件たまっているので、**止まっている可能性が高い**（GitHub は Dependabot の PR に
+  90 日反応が無いと更新を自動停止する。#701 を閉じたのが最後の反応）。確認は Insights →
+  Dependency graph → Dependabot（admin 権限。API はこの token では 403）。止まっていれば
+  「minor / patch は Dependabot に任せる」前提が崩れるので、次回は手動でまとめて上げる。
+- `npm audit --omit=dev --audit-level=high`: 0 件（2026-10-23、#916 後の手元と CI の両方）。dev 依存の
+  high 8 件は #890 のまま。
+- 今回は依存を上げない。`next` は前日に上げたばかりで、minor 15 件は Dependabot の状態を確かめてから
+  まとめる（上げるときは `npx -y npm@11.19.0` で lock を作る）。
 
 ### 2026-09-07（追加 1 件: fast-check）
 
