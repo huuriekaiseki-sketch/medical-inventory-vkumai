@@ -12,6 +12,7 @@
 | 0.1.3 | 2.1.270（2 本の `claude plugin update` で 0.1.2 → 0.1.3 を実測） | 2.1.261 | Codex 側は codex/ と codex-vkumai/ の COMPATIBILITY.md | 2026-09-28。差は文書のみ。`aidd-codex-vkumai` の marketplace 初掲載 |
 | 0.1.4 | 2.1.270（2 本の `claude plugin update` で 0.1.3 → 0.1.4 を実測）。**版が上がることだけを確認。導入先での hook の発火は未実測**（導入先ではプラグインが disabled）。中心リポジトリでは同じスクリプトが project hook として動いている | 2.1.261 | Codex 側は codex/ と codex-vkumai/ の COMPATIBILITY.md | 2026-09-29。Codex の hook を Claude Code と同じ仕様に揃える 6 件。初めてスクリプトの中身が変わる版 |
 | 0.1.5 | 2.1.270（2 本の `claude plugin update` で 0.1.4 → 0.1.5 を実測）。**版が上がることだけを確認。導入先での hook の発火は未実測**（導入先ではプラグインが disabled） | 2.1.261 | Codex 側は codex/ と codex-vkumai/ の COMPATIBILITY.md | 2026-09-30。Claude Code 用の 2 本は hook の定義が不変。Codex 用の aidd-codex-vkumai に hook が 1 本増える |
+| 未配布（次の版） | 未実測（中心リポジトリの本体は 2.1.289。`onFailure` は 2.1.295 以上でしか効かないため、更新後に実走する） | 2.1.309 | Codex 側は codex/ と codex-vkumai/ の COMPATIBILITY.md | 2026-10-23。止める hook 4 本に `"onFailure": "block"`。**Claude Code 2.1.295 以上が前提**（KNOWN-LIMITS.md）。Codex 用の 2 本は不変 |
 
 ## 前提にしている Claude Code の挙動（変わると壊れる）
 
@@ -22,6 +23,8 @@
   （ロール別ガードは hooks.json の PreToolUse + `agent_type`）
 - プラグインは `.claude/rules/` と CLAUDE.md を同梱できない（導入先が持つ）
 - `InstructionsLoaded` の hook 出力は無視される（記録専用）
+- hook の `"onFailure": "block"` で、timeout・起動失敗・0 / 2 以外の exit code のときもツール呼び出しを止める
+  （2.1.295 以上。止める hook 4 本が持つ。旧版での扱いは KNOWN-LIMITS.md）
 - hook の stdin JSON の形（`session_id` / `transcript_path` / `cwd` / `agent_type` 等）。transcript の
   1 行目が `bridge-session` のことがある（Remote Control）
 

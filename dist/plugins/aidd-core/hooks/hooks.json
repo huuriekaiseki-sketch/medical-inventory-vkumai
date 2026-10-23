@@ -121,6 +121,7 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-skip-marker-write.sh",
+            "onFailure": "block",
             "timeout": 5
           }
         ]

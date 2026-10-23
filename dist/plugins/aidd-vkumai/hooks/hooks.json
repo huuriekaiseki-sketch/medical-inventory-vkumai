@@ -44,6 +44,7 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-dependency-change.sh",
+            "onFailure": "block",
             "timeout": 5
           }
         ]
@@ -54,6 +55,7 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-direct-ddl-execution.sh",
+            "onFailure": "block",
             "timeout": 5
           }
         ]
@@ -64,6 +66,7 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check-readonly-bash.sh",
+            "onFailure": "block",
             "timeout": 5
           }
         ]
