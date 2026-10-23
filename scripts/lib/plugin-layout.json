@@ -373,7 +373,9 @@
     "measure-ddl-lock.sh": "ローカルのデータベースが PostgreSQL であること・それが `supabase_db_` で始まる名前のコンテナで動いていることを前提に、その中の psql を docker exec で叩く。測る DDL の顔ぶれもこのスタックの migration の書き方に合わせてある",
     "_comment_hook_decisions_summary": "読む側の配り分け（docs/specs/hook-decisions-summary.md、2026-10-18）: 集計の入口 summarize-hook-decisions.sh と本体 lib/hook-decisions-summary.mjs は supportScripts で aidd-core / aidd-vkumai へ配る。月次サマリ hook（gate-effectiveness-monthly-check.sh、aidd-core）がこの入口を呼ぶので、記録部品 log-hook-decision.sh と同じ先へ運ばないと導入先の月次サマリで段落が『取得できませんでした』になる（記録が黙って無くなる型の読む側版）。HTML 生成の 2 本は下の理由で配らない",
     "render-hook-decisions-html.sh": "静的 HTML の 3 節目が docs/agents/hook-live-drill.md（このリポジトリの実走ドリルの記録）を読み、成績の節が docs/agents/harness-score.jsonl（このリポジトリの記録）を読む。導入先にはどちらも無く、配っても 2 節が必ず『記録なし』になる。集計本体（summarize-hook-decisions.sh）は配るので、導入先はテキストの集計で読める。プラグインは 0.1.5 で『配れるもの』として一区切りしており、見た目の部品を足して版を上げる判断は別（docs/specs/hook-decisions-summary.md 決めてほしいこと 4、2026-10-18）",
-    "lib/render-hook-decisions-html.mjs": "render-hook-decisions-html.sh の本体。理由は同上"
+    "lib/render-hook-decisions-html.mjs": "render-hook-decisions-html.sh の本体。理由は同上",
+    "record-eval-decision.sh": "eval の結果で変更を「採用した／見送った」と docs/agents/eval-decisions.jsonl へ書く入口（issue #907、2026-10-24）。読むのは eval スクリプト本体（eval-sweep-recall.sh / eval-workflow-prompts.sh）が残す記録で、その本体の配布方針が supportScriptsUnclassified で保留中。本体を配らないうちに判定の入口だけ届いても読む記録が無い。本体の方針が決まったら一緒に動かす",
+    "lib/scan-eval-record-shape.mjs": "record-eval-decision.sh の判定エンジン兼、check-eval-record-shape.test.sh の走査器。docs/agents/eval-runs.jsonl と scripts/eval-fixtures/ の実データを読むので、理由は同上"
   },
   "supportScriptsUnclassified": {
     "_comment": "**まだ配る・配らないを決めていない**支援スクリプト（2026-09-12 新設）。値は空でよい——ここは判断を保留する場所で、理由を書けるなら supportScriptsNotDistributed か supportScripts へ移すべきだから。`unclassifiedMax` で件数を固定し、**増やせないが減らせる**（checksSplittable と同じ「返す当てのある借金」の形）。",
@@ -415,6 +417,8 @@
     "scripts/check-skip-marker-write.sh": "check-direct-ddl-execution.sh のコメントが同型ゲートを示すだけ",
     "scripts/check-eval-runs-freshness.sh": "壊し方の登録簿（check-mutants.json）の CM-061 が対象にする。検査自体は eval-runs.jsonl の実データを見るので配らない（checksNotDistributed）",
     "scripts/check-eval-runs-freshness.test.sh": "同上（CM-061 の expect）",
+    "scripts/lib/scan-eval-record-shape.mjs": "CM-091 / CM-092 が対象にする。eval-runs.jsonl・eval-decisions.jsonl・eval-fixtures の実データを読む走査器で、eval スクリプト本体の配布方針（supportScriptsUnclassified）が保留中のため配らない（supportScriptsNotDistributed）",
+    "scripts/check-eval-record-shape.test.sh": "同上（CM-090〜CM-092 の expect。checksNotDistributed）",
     "scripts/lib/scan-holdout-isolation.mjs": "CM-062 / CM-063 / CM-066 が対象にする。held-out セットの実データと .claude/ の実文面を突き合わせるので配らない",
     "scripts/check-holdout-isolation.test.sh": "同上（CM-062 / CM-063 / CM-066 の expect）",
     "scripts/lib/scan-exemptions.mjs": "CM-064 / CM-065 が対象にする。逃がし口の上限は導入先ごとの実測値なので配らない",
@@ -474,8 +478,8 @@
     "scripts/check-rls-mutation.sh": "同上（認可ポリシーの変異計測の鮮度の点検の、知らせの文の中）",
     "scripts/run-mutation-tests.sh": "同上（製品コードの変異計測の鮮度の点検の、知らせの文の中）"
   },
-  "_allowUnresolvedReferencesMax": "2026-10-23 に 68 → 69（verify スキル本文が導入先で回すコマンドとして check-generated-supabase-types.sh を挙げる 1 件。そのスクリプトは保留中で、配るか決めたらこの件も消す。issue #903）。2026-09-30 に 64 → 68（Codex 用プラグインへ鮮度の点検 4 本を入れたため、知らせの文の中の実行用ラッパー 4 本への参照が宙に浮いた。理由は各行）。逃がし口（同梱しない参照）の上限。放っておくと増えるので件数で見る。2026-09-11 に幽霊 15 件を消して 36 件になった。上げるときは、なぜ同梱できないかを allowUnresolvedReferences の行に書いてから上げる。2026-09-12 に 53 → 56（入れ子の走査・その壊し方の登録簿・本物の Workflow 実行で測るドリルの 3 件。理由は各行に書いた）。同日 56 → 59（**配らないと宣言していたのに配っていた検査 8 本を実際に外した**ため、残った文書・登録簿・コメントからの参照が宙に浮いた 3 件。検査そのものを配れない理由は checksNotDistributed 側に書いてある）。同日 59 → 61（**導入先の実体を要求する検査 8 本を配布から外した**ため、ラッパーの案内文と壊し方の登録簿からの参照が宙に浮いた 2 件）。同日 61 → 64（さらに 5 本を外したぶんの登録簿からの参照 4 件を足し、**同梱したことで不要になった 1 件**（check-catalog.mjs）を幽霊検知にしたがって消した）。",
-  "allowUnresolvedReferencesMax": 69,
+  "_allowUnresolvedReferencesMax": "2026-10-24 に 69 → 71（issue #907。壊し方の登録簿 CM-090〜CM-092 が、配らない走査器 scan-eval-record-shape.mjs と検査 check-eval-record-shape.test.sh を名指しする 2 件。eval スクリプト本体の配布方針が保留のまま（supportScriptsUnclassified）なので、その記録を読む側も配らない。本体を配ると決めたら 2 件とも同梱して消す）。2026-10-23 に 68 → 69（verify スキル本文が導入先で回すコマンドとして check-generated-supabase-types.sh を挙げる 1 件。そのスクリプトは保留中で、配るか決めたらこの件も消す。issue #903）。2026-09-30 に 64 → 68（Codex 用プラグインへ鮮度の点検 4 本を入れたため、知らせの文の中の実行用ラッパー 4 本への参照が宙に浮いた。理由は各行）。逃がし口（同梱しない参照）の上限。放っておくと増えるので件数で見る。2026-09-11 に幽霊 15 件を消して 36 件になった。上げるときは、なぜ同梱できないかを allowUnresolvedReferences の行に書いてから上げる。2026-09-12 に 53 → 56（入れ子の走査・その壊し方の登録簿・本物の Workflow 実行で測るドリルの 3 件。理由は各行に書いた）。同日 56 → 59（**配らないと宣言していたのに配っていた検査 8 本を実際に外した**ため、残った文書・登録簿・コメントからの参照が宙に浮いた 3 件。検査そのものを配れない理由は checksNotDistributed 側に書いてある）。同日 59 → 61（**導入先の実体を要求する検査 8 本を配布から外した**ため、ラッパーの案内文と壊し方の登録簿からの参照が宙に浮いた 2 件）。同日 61 → 64（さらに 5 本を外したぶんの登録簿からの参照 4 件を足し、**同梱したことで不要になった 1 件**（check-catalog.mjs）を幽霊検知にしたがって消した）。",
+  "allowUnresolvedReferencesMax": 71,
   "emptyRepoExempt": {
     "_comment": "**何も無い導入先で回すと落ちる**検査の宣言（2026-09-12 新設）。配る検査は、対象が無ければ『対象なし』と言って通るのが決まり——そうでないと入口が『合格』と『見ていない』を区別できない（C-025）。ここに載るのは、この製品固有の前提（supabase の migration・統合テストの記録）を持つアダプター側の検査だけ。共通側（aidd-core）に 1 本でも載ったら設計の誤りとして扱う。",
     "_why": "2026-09-12 に空の git リポジトリで配る検査 36 本を回して実測した。共通側 29 本は 0 本が落ち、アダプター側 7 本のうち 4 本が落ちた。**その 4 本は同じ日にすべて直したので、いまこの表は空**——(1) 走査器が supabase/migrations を readdir して ENOENT で異常終了していた 2 本、(2) `git rev-parse \"HEAD:supabase\"` がコミットの無い木で標準出力にも書いてから失敗し、値が 2 行になって早期 exit が効いていなかった 2 本。表を空のまま残すのは、**次に同じ判断をする人へ「まず直せないか考える」と伝えるため**（免除は最後の手段）。名前を検査のコードへ焼き込むと腐っても気づけないので、理由つきの宣言にして門から読む。",
@@ -640,6 +644,7 @@
     "render-hook-decisions-html.test.sh": "対象の render-hook-decisions-html.sh を配らない（supportScriptsNotDistributed。このリポジトリのドリル文書と成績の記録を読む）ので、検査も配らない。中身は fixture だけで閉じているが、配る対象が無いのに検査だけ届くと『何を守っているのか』が導入先で分からない",
     "check-exemptions.test.sh": "逃がし口の上限（exemption-budget.json）は導入先ごとの実測値で、走査対象も src / supabase / e2e というこのリポジトリの構成に依る",
     "check-eval-runs-freshness.test.sh": "docs/agents/eval-runs.jsonl の実データを検査する",
+    "check-eval-record-shape.test.sh": "同上（docs/agents/eval-runs.jsonl・docs/agents/eval-decisions.jsonl・scripts/eval-fixtures/ の実データを検査する。走査器 lib/scan-eval-record-shape.mjs と入口 record-eval-decision.sh も supportScriptsNotDistributed）",
     "check-aidd-graph-rendered.test.sh": ".claude/workflows/graph/ の実データを検査する",
     "build-plugin.test.sh": "プラグインの生成そのものを検査する。中心リポジトリだけが持つ",
     "create-worktree.test.sh": "git worktree と .env の運用がこのリポジトリ固有",

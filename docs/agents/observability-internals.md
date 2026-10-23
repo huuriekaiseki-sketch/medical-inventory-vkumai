@@ -522,3 +522,71 @@ issue #419のような設定変更（effort/model）に対して「精度が落�
   - 両スクリプトは実行完了時（pass/fail問わず）に `docs/agents/eval-runs.jsonl`（git管理。`logs/`はgitignoreでbefore消失の前例があるため対象外にした。issue #429と同じ理由）へ日時・fixtureセット名・合否件数を1行追記する。呼び出し側の自己申告ではなくeval script自身が書くため、記録そのものの呼び忘れは起きない（issue #411原則: 起動トリガーは機械）
   - `.github/workflows/eval-runs-freshness-check.yml`（`scripts/check-eval-runs-freshness.sh`、`agent-baseline-check.yml`と同型）が、PRに `.claude/workflows/*.js` の差分があるのに `docs/agents/eval-runs.jsonl` の更新が含まれていない場合に `::error::` を出して失敗する（導入時は warning のみだったが、run を開かないと見えず 3 件の PR（#627 #679 #693）で無視されたため 2026-09-05 に失敗へ変更。PR 本文の行頭 `eval-skip: <理由>` で免除できる。vkumai は Free プランで required check を設定できないため、赤でもマージ自体は物理的に止まらない点は変わらない）
   - **既知の限界**: 上記が保証するのは「evalスクリプトが最後まで実行されたこと」の痕跡のみであり、実行そのものを強制するものではない（実行し忘れて何もコミットしなければ警告が出るだけで、PRの作成・マージ自体は妨げない）。また記録内容の正しさ（本当にそのfixtureセットに対して実行したか、pass/fail件数が改ざんされていないか）までは検証しない
+
+### ノイズ幅と held-out（issue #907、2026-10-24）
+
+Anthropic「Automating eval design and hillclimbing」（2026-09-28）の、良い eval の 4 条件（本番を反映・能力に応じて伸びる・
+100% 未満の余地・run 間分散が小さい）と過学習対策（train / test 分割・失敗内容をプロンプトに貼らない・
+eval のノイズが最小改善より小さいかを先に確かめる・1 ラウンド 1 パッチ・ノイズ内の改善は採用しない）を
+記録と検査の形にした。deep ルートの Find プロンプトを締めて recall が 11/17 → 5/17 に落ちた件（issue #796）は、
+「1 回の数字で判断した」と「調整に使った fixture で測った」が重なった型で、この節の仕組みで防ぐ。
+運用側のルールは [`.claude/rules/workflow-eval-requirement.md`](../../.claude/rules/workflow-eval-requirement.md)。
+**この節を入れた PR（issue #907）では実際の eval は回していない**——次にプロンプト・探索手順を変えるとき、
+下の形で初めて回す。
+
+**ノイズ幅の測り方**
+
+- `EVAL_RUNS=N scripts/eval-sweep-recall.sh <layer>`（`npm run eval:workflows` も同じ環境変数）で、同じ fixture セットを
+  N run 続けて回す。既定は 1（今までどおり）。run の間でも clone は作り直す
+- 記録（`docs/agents/eval-runs.jsonl`）には `runs`・`runPass`（run ごとの合格数）が付き、2 run 以上なら
+  `passMin` / `passMax` / `passMean` / `passStdev`（母標準偏差）/ `noiseWidth`（最大 − 最小）が付く。
+  **`pass` / `total` は全 run の合算**（1 run なら今までと同じ値）なので、`pass / total` を読む側
+  （精度指標 PM・鮮度検査）は壊れない。**1 run の記録には `noiseWidth` を書かない**——1 回の実行から
+  「幅 0」とは言えない（C-025。0 と「測っていない」を混ぜない）
+- 採用の判定に使うノイズ幅は**範囲（最大 − 最小）**で、標準偏差は参考に残すだけ。run 数が 3 程度では
+  標準偏差は不安定で、範囲のほうが保守的（大きめに出る）
+- 費用の目安: 2026-09-10 の実測で sweep 系 1 run が haiku で $0.3〜1.5。採用判定 1 回は
+  変更前後 × train / test × 3 run = 12 run なので、1 層あたり $5〜15 と見込む（キャッシュ読みの量で約 3 倍振れる）
+- 記録の形は `scripts/check-eval-record-shape.test.sh` が見る（cutoff 2026-10-24 以降の行。昔の形の行は書き換えない）
+
+**held-out（train / test）の分け方**
+
+- 調整に使うのが **train**（`scripts/eval-fixtures/<set>`）、評価専用が **test**（`<set>-holdout`。expected.json に
+  `heldOut: true`。2026-09-10 導入、隔離は `scripts/check-holdout-isolation.test.sh`）。記録には fixture 側の印を
+  読んだ `split`（train / test）が付く。印は fixture 側の 1 か所だけで、記録側に別の印は作らない（C-010）
+- **分け方の基準: 直近の失敗例を優先して test に残す。** Sweep が最近見逃した形は「いま測りたい能力」そのもので、
+  それを train に入れてプロンプトを寄せると、見逃しが直ったのか覚えただけなのか分からなくなる。
+  2026-10-24 時点の分け方（eval-runs.jsonl の記録から）:
+
+  | 層 | train（調整に使う） | test（held-out） | test に回した理由 |
+  | --- | --- | --- | --- |
+  | sweep-db | `sweep-db`（陽性 1 + 陰性 1。直近 2/2） | `sweep-db-holdout/case-1`（所属判定の主語違い） | 2026-09-10 に haiku が 4 回中 4 回見逃した（sonnet は 1/1）。直近の失敗例 |
+  | sweep-data | `sweep-data`（陽性 1 + 陰性 1。直近 1/2） | `sweep-data-holdout/case-1`（上限の無い一覧） | 3 回とも 0/1。認可欠落（train 側）に寄っていないかを測る |
+  | sweep-ui | `sweep-ui`（陽性 2 + 陰性 1。直近 2/3） | `sweep-ui-holdout/case-1`（二重送信ガード無し） | 2 回とも 0/1 |
+  | sweep-types | `sweep-types`（陽性 1 + 陰性 1。直近 1/2） | `sweep-types-holdout/case-1`（nullable 列を非 null 型に） | 2 回とも 0/1 |
+  | db-impl | `db-impl`（4 case。直近 3/4） | **無い** | 次にこのプロンプトを変えるときは、先に `db-impl-holdout` を 1 case 作る（無いと採用を書けない） |
+  | spec-check | `spec-check`（1 case。直近 1/1） | **無い** | 同上 |
+
+- train と test が同じ中身の fixture を持たないことは `check-eval-record-shape.test.sh` が sha256 で見る
+  （コピーして名前だけ変えた held-out を落とす）。test が 0 件になれば落ちる
+
+**採用の記録**
+
+- `scripts/record-eval-decision.sh --decision adopted|rejected --before-train <ts> --after-train <ts> --before-test <ts> --after-test <ts> --change "<1 行>"`
+  が `docs/agents/eval-decisions.jsonl` へ 1 行書く。`<ts>` は eval-runs.jsonl の `timestamp`
+- `adopted` と書けるのは: 4 行すべてが 2 run 以上／各対で `fixtureSet`・`model`・`fixturesTree`・`judgeBlob` が同じ／
+  未コミットのまま測った行が無い／前後で `workflowsTree` か `agentsTree` が違う／**train と test の両方で、
+  合格数の平均の改善が 4 行の `noiseWidth` の最大値より大きい**。満たさなければスクリプトが拒む（理由を名指し）。
+  判定は `scripts/lib/scan-eval-record-shape.mjs` の `judge` 1 か所で、検査も同じ関数で採用記録を読み直す（E-053）
+- 見送りも `rejected` で残す（見送った記録が次の判断の材料になる）
+
+**既知の限界**
+
+- ノイズ幅は run 数が少ないほど過小に出る。3 run で見えない揺れはある
+- 1 case の test セット（いまの 4 層）では合格数は 0 か 1 で、揺れが 1 回でもあれば `noiseWidth` が 1 になり、
+  改善の最大値（1）を超えられず採用できない。**これは case を増やす圧として意図した**（記事の「能力に応じて伸びる」）。
+  採用を急ぐなら test の case を 2 つ以上にする
+- 採用記録が無い PR を CI で落とす配線はまだ無い（`check-eval-runs-freshness.sh` は記録の有無と木しか見ない）。
+  「1 ラウンド 1 パッチ」「失敗ケースの本文を貼らない（train 側）」は人の規律のまま
+  （[`undetectable-rules-inventory.md`](./undetectable-rules-inventory.md)）
+- 記録の形の検査は cutoff 以降の日付の行だけを見る。過去の日付で手書きすれば通る（日付の偽装は見ない）

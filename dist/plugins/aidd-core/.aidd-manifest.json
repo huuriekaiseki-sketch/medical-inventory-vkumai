@@ -130,7 +130,7 @@
     "scripts/lib/pr-numbers-from-transcript.jq": "abbd2e884ebf9f930bd96caf10bf929df9079f5619b577724ba5cfbf986c5ab4",
     "scripts/lib/precision-metrics.mjs": "5b3b48b2493d1898d8770e656677ce34503cf76a7b7f2b315c5a50b587807166",
     "scripts/lib/reconstruct-loop-observability.ts": "9f6a8bd0003a1a11de8771633036fb52bad56f88af314cc80def7aee77aef60a",
-    "scripts/lib/record-eval-run.sh": "cc8cc10f9ef40b3c0973e76c7b9625e4112fdd94a4e130ba4332a27fdd9f5346",
+    "scripts/lib/record-eval-run.sh": "8845aac612805778858cdad677056a9ada5e4b478ee8d85673ea6c528878fa47",
     "scripts/lib/rehearse-merge.mjs": "d54a3696851431740f59db1d36b5f97be0a8bbb515d18c48998048f8e62cf37c",
     "scripts/lib/render-harness-map.mjs": "bb62cfeebc699c3f008c72bd7fea7066cd945a903432b0277599fe2e67ef6d00",
     "scripts/lib/render-rulebook-index.mjs": "79feaebe545e373c75b028614c703342b9b330a835bdc61dca1f59ee876a55ae",

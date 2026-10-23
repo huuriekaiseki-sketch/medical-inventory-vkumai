@@ -28,6 +28,9 @@ set -euo pipefail
 #   EVAL_SWEEP_RECALL_AGENT_CMD     - 実際の`claude -p`呼び出しの代わりに使うコマンド
 #   EVAL_SWEEP_RECALL_MODEL     - manifest のモデルを上書きする（同じ fixture を別モデルで測る）
 #   EVAL_SWEEP_RECALL_DEBUG_DIR     - 指定すると各caseの生出力(JSON)を<case名>.jsonとして保存する
+#   EVAL_RUNS                       - 同じ fixture セットを何 run 回すか（省略時は 1。issue #907）。
+#     2 以上にすると run ごとの合格数と**ノイズ幅**（run 間の最大 − 最小）が記録に残る。
+#     改善を採用する前に、その幅より大きい改善かを見るための口（docs/agents/observability-internals.md）
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${EVAL_SWEEP_RECALL_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
@@ -54,6 +57,12 @@ AGENT_TYPE="$(jq -r '.agentType' "$MANIFEST_FILE")"
 # 「指示が悪いのか、モデルの容量が足りないのか」を分けて測るための口。
 # 差し替えた回は記録の `model` も変わるので、条件が違う回として扱われ混ざらない。
 MODEL="${EVAL_SWEEP_RECALL_MODEL:-$(jq -r '.model' "$MANIFEST_FILE")}"
+# 何 run 回すか（issue #907、2026-10-24）。run 間のばらつきを測るための口で、既定は 1（今までどおり）
+RUNS="${EVAL_RUNS:-1}"
+if ! [[ "$RUNS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "eval-sweep-recall: EVAL_RUNS は 1 以上の整数で指定してください（いまは '${RUNS}'）" >&2
+  exit 1
+fi
 
 # docs/agents/agent-result-schema.md参照。aidd-phase1.jsのAGENT_RESULT_SCHEMAと同一。
 JSON_SCHEMA='{"type":"object","properties":{"status":{"type":"string","enum":["pass","blocked"]},"detail":{"type":"string"}},"required":["status","detail"]}'
@@ -150,6 +159,8 @@ HIT_COUNT=0
 # 従来の判定（本文全体）での合格数。**判定を切り替えた影響を測るためだけに数える**（R11 の後段）
 LOOSE_HIT_COUNT=0
 MISS_LINES=""
+# run ごとの合格数（空白区切り）。記録の `runPass` / `noiseWidth` の元
+RUN_PASSES=""
 
 # 判定に使った回答本文の保存先。**採点器を直したとき、過去の回を測り直すために要る**。
 # 2026-09-10 まで判定後に捨てていたので、それ以前の回は永久に測り直せない。
@@ -160,111 +171,131 @@ if _details_root="$(resolve_log_dir 2>/dev/null)"; then
   mkdir -p "$DETAILS_DIR" 2>/dev/null || DETAILS_DIR=""
 fi
 
-for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
-  [ -d "$case_dir" ] || continue
-  case_name="$(basename "$case_dir")"
-  files_dir="${case_dir}files"
-  expected_file="${case_dir}expected.json"
-  if [ ! -d "$files_dir" ] || [ ! -f "$expected_file" ]; then
-    echo "eval-sweep-recall: $case_name はfiles/またはexpected.jsonが無いためスキップします" >&2
-    continue
-  fi
-  TOTAL=$((TOTAL + 1))
-  # WHY(配列をそのまま出さない、2026-09-10): expectedFilePathContains は文字列か配列。
-  #      `jq -r` に配列を渡すと JSON のまま複数行で出て、MISS の理由が読めなくなる（実測）
-  EXPECTED_PATH="$(jq -r '.expectedFilePathContains | if type == "array" then join(" / ") else . end' "$expected_file")"
-
-  CLONE_DIR="$(mktemp -d)"
-  CLONE_EXIT=0
-  git clone --quiet --depth 1 "file://$REPO_DIR" "$CLONE_DIR/repo" || CLONE_EXIT=$?
-  if [ "$CLONE_EXIT" -ne 0 ]; then
-    rm -rf "$CLONE_DIR"
-    MISS_LINES="$MISS_LINES
-- [$case_name] NG: リポジトリのcloneに失敗しました(exit=$CLONE_EXIT)"
-    continue
-  fi
-  cp -r "$files_dir"/. "$CLONE_DIR/repo/"
-
-  BUILD_EXIT=0
-  PROMPT="$(node "$SCRIPT_DIR/lib/build-eval-prompt.mjs" "$CLONE_DIR/repo/.claude/workflows/lib/prompts/sweep.js" buildSweepPrompt "現在のコードベース全体の調査")" || BUILD_EXIT=$?
-  if [ "$BUILD_EXIT" -ne 0 ]; then
-    rm -rf "$CLONE_DIR"
-    MISS_LINES="$MISS_LINES
-- [$case_name] NG: プロンプトの構築に失敗しました(exit=$BUILD_EXIT)"
-    continue
+# WHY(run を外側のループにする、2026-10-24・issue #907): 同じ fixture を N 回続けて回し、
+#      run ごとの合格数を別々に持つ。1 回の数字で「良くなった／悪くなった」と言うと、
+#      モデルの揺れを仕組みの変化と読み違える（2026-09-10 に同じ木で 2/2 → 1/2 → 2/2 を実測）。
+#      run の間でも clone は作り直すので、前の run の書き込みは次の run に残らない。
+for run_idx in $(seq 1 "$RUNS"); do
+  RUN_HIT_BEFORE="$HIT_COUNT"
+  if [ "$RUNS" -gt 1 ]; then
+    echo "--- run ${run_idx}/${RUNS} ---"
   fi
 
-  AGENT_EXIT=0
-  AGENT_OUTPUT="$(cd "$CLONE_DIR/repo" && run_agent_with_timeout "$PROMPT")" || AGENT_EXIT=$?
-  rm -rf "$CLONE_DIR"
-
-  if [ -n "${EVAL_SWEEP_RECALL_DEBUG_DIR:-}" ]; then
-    mkdir -p "$EVAL_SWEEP_RECALL_DEBUG_DIR"
-    printf '%s' "$AGENT_OUTPUT" > "$EVAL_SWEEP_RECALL_DEBUG_DIR/${case_name}.json"
-  fi
-
-  if [ "$AGENT_EXIT" -ne 0 ]; then
-    MISS_LINES="$MISS_LINES
-- [$case_name] NG: エージェント実行が失敗しました(exit=$AGENT_EXIT)"
-    continue
-  fi
-
-  DETAIL_FILE="$(mktemp)"
-  # WHY(issue #731): --json-schema を渡しても、モデル（特に haiku）が JSON でなく素のテキストで返す
-  #      ことがある。その場合 jq が失敗して detail が空になり、エージェントが欠陥を正しく報告して
-  #      いても MISS になっていた（2026-09-05 実測: 生出力に期待パスとキーワードの両方があるのに 0/1）。
-  #      JSON として読めなければ生出力全体を判定対象にする（判定は部分文字列一致なので過検出は
-  #      増えない。status の取得は諦める）
-  # `claude -p --output-format json` の包みを剥がす。**包みが無い（モック）出力もそのまま通る**
-  AGENT_PAYLOAD="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --payload 2>/dev/null || printf '%s' "$AGENT_OUTPUT")"
-  # 使用量を足し上げる（設計提案 3「費用」）
-  USAGE_JSON="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --usage 2>/dev/null || echo '{}')"
-  accumulate_usage "$USAGE_JSON"
-
-  if ! printf '%s' "$AGENT_PAYLOAD" | jq -r '.detail // ""' > "$DETAIL_FILE" 2>/dev/null; then
-    printf '%s' "$AGENT_PAYLOAD" > "$DETAIL_FILE"
-    echo "[$case_name] 注意: エージェント出力が JSON ではないため生出力全体を判定対象にしました" >&2
-  fi
-  IS_HIT="$(EXPECTED_FILE="$expected_file" DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py")"
-  # 従来の判定（本文全体で見る）も併せて取る。2026-09-10 に判定を「**同じ指摘の中で**
-  # そろっているか」へ変えたので、**切り替えの影響を測れるように両方を残す**（R11 の後段）
-  IS_HIT_LOOSE="$(EXPECTED_FILE="$expected_file" DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py" --loose 2>/dev/null || echo "$IS_HIT")"
-  [ "$IS_HIT_LOOSE" = "true" ] && LOOSE_HIT_COUNT=$((LOOSE_HIT_COUNT + 1))
-  # 判定に使った本文を残す。**採点器を直したときに過去の回を測り直すために要る**——
-  # 2026-09-10 まで捨てていたので、それ以前の回は測り直せない
-  if [ -n "$DETAILS_DIR" ]; then
-    cp "$DETAIL_FILE" "$DETAILS_DIR/${case_name}.txt" 2>/dev/null || true
-  fi
-  # 実コードへの指摘の多さを追う（2026-09-10）。**本物か誤りかは分けない**——
-  # 分けるのは人の仕事で、ここで測れるのは「増えた／減った」だけ。
-  # 読めなかった回（-1）は 0 と混ぜず、別に数える。
-  CASE_FINDINGS="$(DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py" --count 2>/dev/null || echo -1)"
-  if [ "$CASE_FINDINGS" -ge 0 ] 2>/dev/null; then
-    FINDINGS_REPORTED=$((FINDINGS_REPORTED + CASE_FINDINGS))
-    FINDINGS_SAMPLES=$((FINDINGS_SAMPLES + 1))
-  else
-    FINDINGS_UNREADABLE=$((FINDINGS_UNREADABLE + 1))
-  fi
-  rm -f "$DETAIL_FILE"
-
-  # 陰性対照（欠陥の無い fixture）は逆向きに採点する。HIT/MISS の文言もそれに合わせる
-  # （2026-09-10・レビュー指摘 R11。陽性だけを測ると「全部に指摘を出す」エージェントが満点になる）
-  EXPECT_NO_FINDING="$(jq -r '.expectNoFinding // false' "$expected_file")"
-  if [ "$IS_HIT" = "true" ]; then
-    HIT_COUNT=$((HIT_COUNT + 1))
-    if [ "$EXPECT_NO_FINDING" = "true" ]; then
-      echo "[${case_name}] HIT（陰性対照）: 欠陥の無いコードに指摘を出さなかった"
-    else
-      echo "[${case_name}] HIT: 期待ファイル(${EXPECTED_PATH})とキーワードの両方を、指摘として報告した"
+  for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
+    [ -d "$case_dir" ] || continue
+    case_name="$(basename "$case_dir")"
+    # 複数 run のときだけ run 番号を付ける（1 run の出力・保存名は今までどおり）
+    case_label="$case_name"
+    case_stem="$case_name"
+    if [ "$RUNS" -gt 1 ]; then
+      case_label="run${run_idx} ${case_name}"
+      case_stem="${case_name}.run${run_idx}"
     fi
-  elif [ "$EXPECT_NO_FINDING" = "true" ]; then
-    MISS_LINES="$MISS_LINES
-- [${case_name}] MISS（陰性対照）: 欠陥の無いコードに指摘を出した（過検出）"
-  else
-    MISS_LINES="$MISS_LINES
-- [${case_name}] MISS: 期待ファイル(${EXPECTED_PATH})かキーワードが無い、または「指摘なし」と報告した"
-  fi
+    files_dir="${case_dir}files"
+    expected_file="${case_dir}expected.json"
+    if [ ! -d "$files_dir" ] || [ ! -f "$expected_file" ]; then
+      echo "eval-sweep-recall: $case_name はfiles/またはexpected.jsonが無いためスキップします" >&2
+      continue
+    fi
+    TOTAL=$((TOTAL + 1))
+    # WHY(配列をそのまま出さない、2026-09-10): expectedFilePathContains は文字列か配列。
+    #      `jq -r` に配列を渡すと JSON のまま複数行で出て、MISS の理由が読めなくなる（実測）
+    EXPECTED_PATH="$(jq -r '.expectedFilePathContains | if type == "array" then join(" / ") else . end' "$expected_file")"
+
+    CLONE_DIR="$(mktemp -d)"
+    CLONE_EXIT=0
+    git clone --quiet --depth 1 "file://$REPO_DIR" "$CLONE_DIR/repo" || CLONE_EXIT=$?
+    if [ "$CLONE_EXIT" -ne 0 ]; then
+      rm -rf "$CLONE_DIR"
+      MISS_LINES="$MISS_LINES
+- [$case_label] NG: リポジトリのcloneに失敗しました(exit=$CLONE_EXIT)"
+      continue
+    fi
+    cp -r "$files_dir"/. "$CLONE_DIR/repo/"
+
+    BUILD_EXIT=0
+    PROMPT="$(node "$SCRIPT_DIR/lib/build-eval-prompt.mjs" "$CLONE_DIR/repo/.claude/workflows/lib/prompts/sweep.js" buildSweepPrompt "現在のコードベース全体の調査")" || BUILD_EXIT=$?
+    if [ "$BUILD_EXIT" -ne 0 ]; then
+      rm -rf "$CLONE_DIR"
+      MISS_LINES="$MISS_LINES
+- [$case_label] NG: プロンプトの構築に失敗しました(exit=$BUILD_EXIT)"
+      continue
+    fi
+
+    AGENT_EXIT=0
+    AGENT_OUTPUT="$(cd "$CLONE_DIR/repo" && run_agent_with_timeout "$PROMPT")" || AGENT_EXIT=$?
+    rm -rf "$CLONE_DIR"
+
+    if [ -n "${EVAL_SWEEP_RECALL_DEBUG_DIR:-}" ]; then
+      mkdir -p "$EVAL_SWEEP_RECALL_DEBUG_DIR"
+      printf '%s' "$AGENT_OUTPUT" > "$EVAL_SWEEP_RECALL_DEBUG_DIR/${case_stem}.json"
+    fi
+
+    if [ "$AGENT_EXIT" -ne 0 ]; then
+      MISS_LINES="$MISS_LINES
+- [$case_label] NG: エージェント実行が失敗しました(exit=$AGENT_EXIT)"
+      continue
+    fi
+
+    DETAIL_FILE="$(mktemp)"
+    # WHY(issue #731): --json-schema を渡しても、モデル（特に haiku）が JSON でなく素のテキストで返す
+    #      ことがある。その場合 jq が失敗して detail が空になり、エージェントが欠陥を正しく報告して
+    #      いても MISS になっていた（2026-09-05 実測: 生出力に期待パスとキーワードの両方があるのに 0/1）。
+    #      JSON として読めなければ生出力全体を判定対象にする（判定は部分文字列一致なので過検出は
+    #      増えない。status の取得は諦める）
+    # `claude -p --output-format json` の包みを剥がす。**包みが無い（モック）出力もそのまま通る**
+    AGENT_PAYLOAD="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --payload 2>/dev/null || printf '%s' "$AGENT_OUTPUT")"
+    # 使用量を足し上げる（設計提案 3「費用」）
+    USAGE_JSON="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --usage 2>/dev/null || echo '{}')"
+    accumulate_usage "$USAGE_JSON"
+
+    if ! printf '%s' "$AGENT_PAYLOAD" | jq -r '.detail // ""' > "$DETAIL_FILE" 2>/dev/null; then
+      printf '%s' "$AGENT_PAYLOAD" > "$DETAIL_FILE"
+      echo "[$case_label] 注意: エージェント出力が JSON ではないため生出力全体を判定対象にしました" >&2
+    fi
+    IS_HIT="$(EXPECTED_FILE="$expected_file" DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py")"
+    # 従来の判定（本文全体で見る）も併せて取る。2026-09-10 に判定を「**同じ指摘の中で**
+    # そろっているか」へ変えたので、**切り替えの影響を測れるように両方を残す**（R11 の後段）
+    IS_HIT_LOOSE="$(EXPECTED_FILE="$expected_file" DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py" --loose 2>/dev/null || echo "$IS_HIT")"
+    [ "$IS_HIT_LOOSE" = "true" ] && LOOSE_HIT_COUNT=$((LOOSE_HIT_COUNT + 1))
+    # 判定に使った本文を残す。**採点器を直したときに過去の回を測り直すために要る**——
+    # 2026-09-10 まで捨てていたので、それ以前の回は測り直せない
+    if [ -n "$DETAILS_DIR" ]; then
+      cp "$DETAIL_FILE" "$DETAILS_DIR/${case_stem}.txt" 2>/dev/null || true
+    fi
+    # 実コードへの指摘の多さを追う（2026-09-10）。**本物か誤りかは分けない**——
+    # 分けるのは人の仕事で、ここで測れるのは「増えた／減った」だけ。
+    # 読めなかった回（-1）は 0 と混ぜず、別に数える。
+    CASE_FINDINGS="$(DETAIL_FILE="$DETAIL_FILE" python3 "$SCRIPT_DIR/lib/judge-sweep-recall.py" --count 2>/dev/null || echo -1)"
+    if [ "$CASE_FINDINGS" -ge 0 ] 2>/dev/null; then
+      FINDINGS_REPORTED=$((FINDINGS_REPORTED + CASE_FINDINGS))
+      FINDINGS_SAMPLES=$((FINDINGS_SAMPLES + 1))
+    else
+      FINDINGS_UNREADABLE=$((FINDINGS_UNREADABLE + 1))
+    fi
+    rm -f "$DETAIL_FILE"
+
+    # 陰性対照（欠陥の無い fixture）は逆向きに採点する。HIT/MISS の文言もそれに合わせる
+    # （2026-09-10・レビュー指摘 R11。陽性だけを測ると「全部に指摘を出す」エージェントが満点になる）
+    EXPECT_NO_FINDING="$(jq -r '.expectNoFinding // false' "$expected_file")"
+    if [ "$IS_HIT" = "true" ]; then
+      HIT_COUNT=$((HIT_COUNT + 1))
+      if [ "$EXPECT_NO_FINDING" = "true" ]; then
+        echo "[${case_label}] HIT（陰性対照）: 欠陥の無いコードに指摘を出さなかった"
+      else
+        echo "[${case_label}] HIT: 期待ファイル(${EXPECTED_PATH})とキーワードの両方を、指摘として報告した"
+      fi
+    elif [ "$EXPECT_NO_FINDING" = "true" ]; then
+      MISS_LINES="$MISS_LINES
+- [${case_label}] MISS（陰性対照）: 欠陥の無いコードに指摘を出した（過検出）"
+    else
+      MISS_LINES="$MISS_LINES
+- [${case_label}] MISS: 期待ファイル(${EXPECTED_PATH})かキーワードが無い、または「指摘なし」と報告した"
+    fi
+  done
+  RUN_PASSES="$RUN_PASSES $((HIT_COUNT - RUN_HIT_BEFORE))"
 done
+RUN_PASSES="${RUN_PASSES# }"
 
 if [ "$TOTAL" -eq 0 ]; then
   echo "eval-sweep-recall: $FIXTURE_SET_DIR に case-*/ ディレクトリが1件も見つかりませんでした" >&2
@@ -274,6 +305,10 @@ fi
 echo ""
 echo "=== eval-sweep-recall: $LAYER ==="
 echo "recall: $HIT_COUNT / $TOTAL"
+# run ごとの内訳とノイズ幅（2 run 以上のとき）。採用の判定はこの幅より大きい改善だけを本物と見る
+if [ "$RUNS" -gt 1 ]; then
+  echo "run ごと: ${RUN_PASSES}（各 run の分母は $((TOTAL / RUNS))。ノイズ幅 = 最大 − 最小）"
+fi
 # 判定を切り替えた影響をその場でも見せる（2026-09-10・R11 の後段）。
 # 差があるということは、パスとキーワードが**別々の指摘に分散**していた回があったということ
 if [ "$LOOSE_HIT_COUNT" -ne "$HIT_COUNT" ]; then
@@ -289,6 +324,8 @@ EVAL_FINDINGS_SAMPLES="$FINDINGS_SAMPLES" \
 EVAL_FINDINGS_UNREADABLE="$FINDINGS_UNREADABLE" \
 EVAL_LOOSE_PASS="$LOOSE_HIT_COUNT" \
 EVAL_DETAILS_DIR="$DETAILS_DIR" \
+EVAL_RUN_PASSES="$RUN_PASSES" \
+EVAL_FIXTURE_SET_DIR="$FIXTURE_SET_DIR" \
 record_eval_run \
   "eval-sweep-recall" "$LAYER" "$HIT_COUNT" "$TOTAL" "$RUN_STARTED_AT" "$MODEL"
 

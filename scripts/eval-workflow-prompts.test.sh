@@ -314,6 +314,54 @@ EVAL_RUNS_LINE="$(tail -n 1 "$DUMMY_REPO/docs/agents/eval-runs.jsonl" 2>/dev/nul
 assert_contains "$EVAL_RUNS_LINE" '"pass": 1, "total": 2' "失敗ケースを含んでいてもeval-runs.jsonlへ追記される"
 echo '{ "status": "pass" }' > "$FIXTURES_DIR/sample/case-b/expected.json"
 
+echo "=== scenario 12: EVAL_RUNS=2 で同じ fixture を 2 run 回し、run ごとの合格数とノイズ幅を記録する（issue #907） ==="
+# WHY(2026-10-24): 1 回の数字で「良くなった」と言うと、モデルの揺れを仕組みの変化と読み違える。
+#      run ごとの合格数を別に残し、pass / total は合算（読む側の pass / total が壊れない）
+rm -f "$MOCK_CALL_LOG"
+rm -f "$DUMMY_REPO/docs/agents/eval-runs.jsonl"
+echo '{ "status": "pass" }' > "$MOCK_RESPONSE_FILE"
+set +e
+OUT="$(
+  EVAL_WORKFLOW_PROMPTS_REPO_DIR="$DUMMY_REPO" \
+  EVAL_WORKFLOW_PROMPTS_FIXTURES_DIR="$FIXTURES_DIR" \
+  EVAL_WORKFLOW_PROMPTS_LOCK_DIR="$WORKDIR/lock" \
+  EVAL_WORKFLOW_PROMPTS_AGENT_CMD="$MOCK_AGENT" \
+  EVAL_RUNS=2 \
+  MOCK_CALL_LOG="$MOCK_CALL_LOG" \
+  MOCK_RESPONSE_FILE="$MOCK_RESPONSE_FILE" \
+  bash "$SCRIPT" sample 2>/dev/null
+)"
+EXIT_CODE=$?
+set -e
+assert_eq "$EXIT_CODE" "0" "2 run とも合格で exit 0"
+assert_eq "$(wc -l < "$MOCK_CALL_LOG" | tr -d ' ')" "4" "2 case × 2 run = 4 回エージェントが呼ばれる"
+assert_contains "$OUT" "--- run 1/2 ---" "run の区切りを出す"
+assert_contains "$OUT" "[run2 case-a] OK" "run 番号を付けて case を出す"
+assert_contains "$OUT" "4 / 4 件 合格" "合計は全 run の合算"
+assert_contains "$OUT" "run ごと: 2 2" "run ごとの内訳を出す"
+EVAL_RUNS_LINE="$(tail -n 1 "$DUMMY_REPO/docs/agents/eval-runs.jsonl" 2>/dev/null || echo "")"
+assert_contains "$EVAL_RUNS_LINE" '"pass": 4, "total": 4' "記録の pass / total も合算"
+assert_contains "$EVAL_RUNS_LINE" '"runs": 2' "run 数を記録"
+assert_contains "$EVAL_RUNS_LINE" '"runPass": [2, 2]' "run ごとの合格数を記録"
+assert_contains "$EVAL_RUNS_LINE" '"noiseWidth": 0' "ノイズ幅（最大 − 最小）を記録"
+assert_contains "$EVAL_RUNS_LINE" '"split": "train"' "held-out でないセットは train"
+# 不正な EVAL_RUNS は走らせる前に止める
+set +e
+ERR_OUT="$(
+  EVAL_WORKFLOW_PROMPTS_REPO_DIR="$DUMMY_REPO" \
+  EVAL_WORKFLOW_PROMPTS_FIXTURES_DIR="$FIXTURES_DIR" \
+  EVAL_WORKFLOW_PROMPTS_LOCK_DIR="$WORKDIR/lock" \
+  EVAL_WORKFLOW_PROMPTS_AGENT_CMD="$MOCK_AGENT" \
+  EVAL_RUNS=0 \
+  MOCK_CALL_LOG="$MOCK_CALL_LOG" \
+  MOCK_RESPONSE_FILE="$MOCK_RESPONSE_FILE" \
+  bash "$SCRIPT" sample 2>&1
+)"
+EXIT_CODE=$?
+set -e
+assert_eq "$EXIT_CODE" "1" "EVAL_RUNS=0 は exit 1"
+assert_contains "$ERR_OUT" "EVAL_RUNS は 1 以上の整数" "理由を出す"
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
