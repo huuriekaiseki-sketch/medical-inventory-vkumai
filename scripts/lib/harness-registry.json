@@ -300,6 +300,7 @@
       ],
       "checks": [
         "scripts/check-detectors-effective.test.sh",
+        "scripts/check-blocking-hooks-onfailure.test.sh",
         "scripts/check-mutation-freshness.test.sh",
         "scripts/check-rls-mutation-freshness.test.sh",
         "scripts/check-rls-mutation.test.sh",

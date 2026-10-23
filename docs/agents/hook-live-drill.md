@@ -219,6 +219,10 @@ hooks-path-alive だけが上表のとおり文言が事実を越えていた。
 - `.claude/settings.json` または `.codex/hooks.json` の hooks を追加・変更したとき（その hook のみ）。
   変わったことは上の「実走した版」で機械が見る
 - Claude Code 本体のメジャー更新後（transcript / `wf_*.json` の形式が変わりうる）
+- **本体を 2.1.295 以上にした直後に 1 回**（2026-10-23 に足した `"onFailure": "block"` の実走）: 止める hook 4 本の
+  うち 1 本を `sleep 10` に差し替えて timeout させ、`timed out; blocking because onFailure is "block"` の文言で
+  deny されることを見る。構造テスト（`scripts/check-blocking-hooks-onfailure.test.sh`）は設定の有無しか見ない
+  ので、**本当に止めるか**はここでしか分からない。2.1.289 で足した時点では未実走
 - プラグイン v1 の切り出し前と、各バージョンのリリース前（全件）
 
 ## 次回実施予定日

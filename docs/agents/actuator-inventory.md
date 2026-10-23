@@ -22,6 +22,15 @@
 この表の「分類」は設計の宣言であって、**実際に何を何回止めたかを数える記録はどこにも無かった**。
 記録は判定を変えない（書けなければ黙って飛ぶ）ので、この表の分類はそのまま読める。
 
+**block / ask / deny の 4 本（`check-direct-ddl-execution` / `check-readonly-bash` / `check-dependency-change` /
+`check-skip-marker-write`）は、hook 自身が失敗したときも止める**（2026-10-23、`.claude/settings.json` の
+`"onFailure": "block"`。Claude Code 2.1.295 以上）。それまでは、jq 不在だけを exit 2 で拒否側へ倒していて、
+**timeout（5 秒）・起動失敗・想定外の exit 1 では判定なしとして通していた**（公式 hooks リファレンス:
+"don't count on a stalled hook to act as a gate"）。warning-only の hook には付けない——付けると timeout の
+たびに作業が止まり、毎回止まる警告は外される。「止める hook だけが持つ」ことは両方向で
+`scripts/check-blocking-hooks-onfailure.test.sh` が見る（止める側の宣言は、各 hook が `log_hook_decision` を
+`deny` / `ask` で呼んでいること）。Codex 側（`.codex/hooks.json`）に相当する指定は無い。
+
 ## 棚卸し表
 
 | Hookイベント | スクリプト | 分類 | 備考 |
@@ -75,7 +84,8 @@
 | Stop（Codex側） | `codex-ai-check-suggest.sh` | warning-only | Claude 側 `ai-check-suggest.sh` の Codex 版（2026-09-11 に派生先から逆輸入。Codex 側には Stop hook が 1 本も無かった）。同じく止めない。**2026-09-12 に表へ追加——しかもこの 1 本は、人が手で突き合わせたときには見落としており、`check-actuator-inventory-coverage.test.sh` が書いた直後に見つけた**（`.codex/hooks.json` 側の登録を目視で追い切れていなかった） |
 | （参考）per-edit | security-guidanceプラグイン（`possible_real_facility_name`等） | warning-only | issue #440。Claude Code公式プラグイン経由、上記`.claude/settings.json`のhooksとは別経路 |
 
-（`SubagentStart`/`SubagentStop`の`log-subagent-hook-skeleton.sh`、および`InstructionsLoaded`の
+（`SubagentStart`/`SubagentStop`/`PostToolUse`(matcher `SubagentHandback`、issue #902。auto mode の
+subagent の報告本文を残す 3 本目の登録)の`log-subagent-hook-skeleton.sh`、および`InstructionsLoaded`の
 `log-instructions-loaded.sh`（issue #742。公式仕様で出力が全て無視されるため是正手段を持ちえない）は
 検知ではなく記録専用のためこの表の対象外）
 
