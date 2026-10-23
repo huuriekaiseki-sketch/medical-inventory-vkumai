@@ -119,7 +119,7 @@
 | [`docs/agents/upstream-docs-review.md`](./upstream-docs-review.md) | Claude Code / Anthropic / Codex の公式ドキュメント差分を月 1 で確認する手順・実施記録・「最後に確認した版」（v1 の対応バージョンの正本）。期限は `scripts/check-upstream-docs-review-staleness.sh` が SessionStart で警告 |
 | `scripts/maintenance-digest.sh` | 定期作業 3 つ（fault-injection 訓練・hook 実走ドリル・docs 差分確認）の期限を一括表示。`claude -p --maintenance`（Setup hook）または手動実行（issue #741） |
 | `scripts/log-instructions-loaded.sh` / `scripts/summarize-instructions-loaded.sh` | InstructionsLoaded hook で実際に読み込まれた CLAUDE.md / rules を `logs/instructions-loaded.jsonl` に記録し、常時ロード量と rules 別ロード回数を集計する（issue #742。月次サマリにも載る） |
-| `scripts/check-subagent-model-force.sh` | `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` が設定されていると agent ごとの model 指定が黙って無効化されるため SessionStart で警告（issue #743） |
+| `scripts/check-subagent-model-force.sh` | `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` / `CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL` が設定されていると agent ごとの model 指定が黙って無効化されるため SessionStart で警告（issue #743） |
 | `scripts/aidd-fault-injection-setup.sh` / `scripts/aidd-fault-injection-teardown.sh` | fault injection訓練用の`.aidd/run-manifest.json`差し替え・復元（issue #395） |
 | `scripts/eval-workflow-prompts.sh` / `scripts/eval-fixtures/` | AIDDワークフロープロンプトのeval基盤（issue #391） |
 | `.claude/workflows/lib/prompts/` | ワークフロー内プロンプト文字列の正本（Workflow DSL側へはインライン複製、sync testで乖離検知） |

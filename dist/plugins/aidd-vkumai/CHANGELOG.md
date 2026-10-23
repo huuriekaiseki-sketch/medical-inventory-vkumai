@@ -2,6 +2,11 @@
 
 ## 未配布（main に入ったが、まだ版を切っていない）
 
+- aidd-core の `check-subagent-model-force.sh`（SessionStart、warning のみ）が、`CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL`
+  （Claude Code 2.1.296。Workflow の agent だけを 1 つのモデルに寄せる）も名指しするようにした。
+  環境変数か settings の `env` に非空の値があれば知らせる。従来の `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` の知らせは
+  文面ごと変わらず、両方あれば 1 件の知らせに両方が入る。**hook の登録（`hooks/hooks.json`）は変わらない**ので、
+  導入先での再信頼は要らない（issue #743 の延長）
 - aidd-core の `log-subagent-hook-skeleton.sh` を `PostToolUse`（matcher `SubagentHandback`）にも登録した
   （issue #902、2026-10-23）。Claude Code 2.1.271 以降の auto mode では subagent の報告が `SubagentHandback`
   ツール経由になり、`SubagentStop` の `last_assistant_message` は報告ではない。報告本文（`tool_input.message`
