@@ -1,5 +1,14 @@
 # 変更履歴（7 項目の 7 の前半。既知の制約は KNOWN-LIMITS.md）
 
+## 未配布（main に入ったが、まだ版を切っていない）
+
+- 止める hook に `"onFailure": "block"` を足した（2026-10-23）。aidd-core の `check-skip-marker-write.sh`、
+  aidd-vkumai の `check-direct-ddl-execution.sh` / `check-readonly-bash.sh` / `check-dependency-change.sh`。
+  hook の timeout・起動失敗・想定外の exit code のときも、通さずに止める（それまでは jq 不在だけを止めていた）。
+  **Claude Code 用の 2 本とも `hooks/hooks.json` が変わる**（Claude Code には hook 単位の信頼が無いので、
+  更新すればそのまま有効になる）。**2.1.295 以上が前提**（KNOWN-LIMITS.md）。Codex 用の 2 本は不変。
+  宣言と実物の突合 `scripts/check-blocking-hooks-onfailure.test.sh` を aidd-core に同梱する
+
 ## 0.1.5（2026-09-30）
 
 Codex 用の aidd-codex-vkumai に、セッションの始まりの点検をまとめて動かす入口が増える版

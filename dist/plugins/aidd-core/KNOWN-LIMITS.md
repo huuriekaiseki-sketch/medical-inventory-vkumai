@@ -37,6 +37,12 @@
 - `InstructionsLoaded` の出力は無視される。常時ロード量の上限判定は SessionStart の
   `check-claude-md-size.sh` が担う
 - プラグイン同梱 subagent の frontmatter `hooks` / `permissionMode` / `mcpServers` は無視される
+- **止める hook（aidd-core の skip マーカー、aidd-vkumai の DDL・読み取り専用 Bash・依存変更）は
+  `"onFailure": "block"` を持つ**（2026-10-23）。hook の timeout・起動失敗・想定外の exit code でも
+  ツール呼び出しを止める。**Claude Code 2.1.295 以上が前提**で、それより古い本体では無視される
+  （= 以前どおり素通り）か、未知キーとして設定の読み込みに影響する可能性がある（未確認。`attribution: false`
+  は旧版で設定ファイルごと読まれなかった前例がある）。Codex 用の 2 本には相当する指定が無く、Codex では
+  hook の失敗は今も通す側に倒れる
 - **`claude plugin update` は依存を連れて上がらない**（2026-09-28、0.1.1 で実測）。`aidd-vkumai` を
   update しても `aidd-core` は導入時の版のまま。依存範囲 `^0.1.0` を旧版が満たすため。導入先は
   2 本とも update する（README と `RELEASE.md` §4.1）
