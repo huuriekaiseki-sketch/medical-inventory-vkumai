@@ -219,6 +219,58 @@ else
   ng "回答本文が保存されていない" "$DETAILS_LINE"
 fi
 
+echo "=== scenario 9: EVAL_RUNS=3 で同じ fixture を 3 run 回し、run ごとの合格数とノイズ幅を記録する（issue #907） ==="
+# WHY(2026-10-24): 同じ木で 2/2 → 1/2 → 2/2 と振れた実測がある（2026-09-10）。1 回の数字で判断せず、
+#      run ごとの合格数を別に残す。モックは呼び出し回数で応答を変え、run 2 だけ MISS にする
+MOCK_COUNTER="$WORKDIR/mock-counter"
+rm -f "$MOCK_COUNTER"
+cat > "$MOCK_AGENT" <<'MOCK_EOF'
+#!/usr/bin/env bash
+cat /dev/stdin > /dev/null
+n=0
+[ -f "$MOCK_COUNTER" ] && n="$(cat "$MOCK_COUNTER")"
+n=$((n + 1))
+printf '%s' "$n" > "$MOCK_COUNTER"
+if [ "$n" -eq 2 ]; then
+  printf '{"status":"pass","detail":"指摘なし"}'
+else
+  cat "$MOCK_RESPONSE_FILE"
+fi
+MOCK_EOF
+echo '{ "expectedFilePathContains": "probe/repository.ts", "expectedKeywords": ["internalNote"] }' > "$FIXTURES_DIR/sweep-x/case-1/expected.json"
+printf '{"status":"pass","detail":"src/lib/probe/repository.ts:5 — internalNote が型定義に無い"}' > "$MOCK_RESPONSE_FILE"
+set +e
+OUT="$(
+  EVAL_SWEEP_RECALL_REPO_DIR="$DUMMY_REPO" \
+  EVAL_SWEEP_RECALL_FIXTURES_DIR="$FIXTURES_DIR" \
+  EVAL_SWEEP_RECALL_LOCK_DIR="$WORKDIR/lock" \
+  AIDD_LOG_DIR="$WORKDIR/logs" \
+  EVAL_RUNS=3 \
+  EVAL_SWEEP_RECALL_AGENT_CMD="MOCK_COUNTER='$MOCK_COUNTER' MOCK_RESPONSE_FILE='$MOCK_RESPONSE_FILE' '$MOCK_AGENT'" \
+  bash "$SCRIPT" sweep-x 2>&1
+)"
+EXIT_CODE=$?
+set -e
+assert_contains "$OUT" "--- run 2/3 ---" "run の区切りを出す"
+assert_contains "$OUT" "recall: 2 / 3" "合計は全 run の合算（1 case × 3 run）"
+assert_contains "$OUT" "run ごと: 1 0 1" "run ごとの内訳を出す"
+assert_contains "$OUT" "[run2 case-1] MISS" "どの run の MISS かが分かる"
+[ "$EXIT_CODE" -eq 1 ] && ok "1 run でも MISS があれば exit 1" || ng "MISS があるのに exit $EXIT_CODE"
+RUNS9="$(tail -n 1 "$DUMMY_REPO/docs/agents/eval-runs.jsonl")"
+assert_contains "$RUNS9" '"pass": 2, "total": 3' "記録の pass / total も合算（読む側の率が壊れない）"
+assert_contains "$RUNS9" '"runs": 3' "run 数を記録"
+assert_contains "$RUNS9" '"runPass": [1, 0, 1]' "run ごとの合格数を記録"
+assert_contains "$RUNS9" '"noiseWidth": 1' "ノイズ幅（最大 − 最小）を記録"
+assert_contains "$RUNS9" '"split": "train"' "held-out でないセットは train"
+# 回答本文は run ごとに別名で残る（1 run のときの名前は変えない）
+DETAILS_LINE9="$(grep -e "回答本文:" <<<"$OUT" | head -1)"
+DETAILS_PATH9="${DETAILS_LINE9#回答本文: }"
+if [ -n "$DETAILS_PATH9" ] && [ -f "$DETAILS_PATH9/case-1.run2.txt" ]; then
+  ok "run ごとに本文を別名で残す（case-1.run2.txt）"
+else
+  ng "run ごとの本文が残っていない" "$(ls "$DETAILS_PATH9" 2>/dev/null)"
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1

@@ -19,6 +19,9 @@
 #
 # 使い方: source してから
 #   record_eval_run <script名> <fixtureセット> <pass> <total> <開始時刻(epoch)> [モデル]
+#   複数 run の回は環境変数で内訳を渡す（issue #907、2026-10-24）:
+#     EVAL_RUN_PASSES="2 1 2"        run ごとの合格数（空なら 1 run として <pass> をそのまま使う）
+#     EVAL_FIXTURE_SET_DIR=<dir>     セットのディレクトリ（expected.json の heldOut から split を決める）
 
 # 使用量の足し上げ（設計提案 3「費用」）。1 回の eval は複数の case を回すので、
 # case ごとの費用・トークンをここへ積む。**取れなかった回は 0 として積まない**——
@@ -167,8 +170,9 @@ record_eval_run() {
     "${EVAL_USAGE_SAMPLES:-0}" "${EVAL_USAGE_MISSING:-0}" "${EVAL_CACHE_READ_TOKENS:-0}" \
     "$workflows_dirty" "$fixtures_dirty" "$agents_tree" "$agents_dirty" "$judge_blob" \
     "${EVAL_FINDINGS_REPORTED:--1}" "${EVAL_FINDINGS_SAMPLES:-0}" "${EVAL_FINDINGS_UNREADABLE:-0}" \
-    "${EVAL_LOOSE_PASS:--1}" "${EVAL_DETAILS_DIR:-}" <<'PY' || return 0
-import json, sys
+    "${EVAL_LOOSE_PASS:--1}" "${EVAL_DETAILS_DIR:-}" \
+    "${EVAL_RUN_PASSES:-}" "${EVAL_FIXTURE_SET_DIR:-}" <<'PY' || return 0
+import json, os, sys, glob, statistics
 from datetime import datetime, timezone
 
 (file, script, fixture_set, passed, total,
@@ -177,7 +181,43 @@ from datetime import datetime, timezone
  cache_read_tokens, workflows_dirty, fixtures_dirty,
  agents_tree, agents_dirty, judge_blob,
  findings_reported, findings_samples, findings_unreadable,
- loose_pass, details_dir) = sys.argv[1:28]
+ loose_pass, details_dir, run_passes_raw, fixture_set_dir) = sys.argv[1:30]
+
+# WHY(run ごとの合格数を別に残す、2026-10-24・issue #907): Anthropic の 2026-09-28 の記事
+#      （Automating eval design and hillclimbing）の「eval のノイズが、検出したい最小の改善より
+#      小さいことを先に確かめる」を取り込む。1 回の実行で N run 回したとき（EVAL_RUNS=N）、
+#      `pass` / `total` は**全 run の合算**にする——1 run（既定）なら今までと同じ値なので、
+#      `pass / total` を読む側（精度指標・鮮度検査）は壊れない。run ごとの内訳は `runPass` に、
+#      **ノイズ幅**（run 間の最大 − 最小）は `noiseWidth` に別の欄で残す。
+#      1 run の回には `noiseWidth` を**書かない**（0 と「測っていない」を混ぜない。C-025）——
+#      採用の判定（導入先の入口）はこの欄が無い回を根拠にできない。
+run_passes = [int(x) for x in run_passes_raw.split() if x.strip()]
+if not run_passes:
+    run_passes = [int(passed)]
+
+# WHY(train / test を記録に残す、2026-10-24・issue #907): held-out（評価専用）セットは 2026-09-10 から
+#      `*-holdout` と expected.json の `heldOut: true` で区別してきたが、**記録の側には何も無かった**ので、
+#      後から「test 側だけが伸びたか」を機械で集計できなかった。印は fixture 側のものを**読む**だけで、
+#      新しい印は作らない（印を 2 か所に持つと食い違う。C-010）。判定は case の expected.json を見て、
+#      全部に印があれば test、1 つも無ければ train。混ざっていれば mixed（隔離検査が別に落とす）。
+#      セットのディレクトリが渡されない呼び出し（テスト等）はセット名の `-holdout` で決める。
+def derive_split(set_dir, set_name):
+    if set_dir and os.path.isdir(set_dir):
+        flags = []
+        for exp in sorted(glob.glob(os.path.join(set_dir, "case-*", "expected.json"))):
+            try:
+                with open(exp, encoding="utf-8") as fh:
+                    flags.append(json.load(fh).get("heldOut") is True)
+            except Exception:
+                flags.append(False)
+        if flags:
+            if all(flags):
+                return "test"
+            if not any(flags):
+                return "train"
+            return "mixed"
+    return "test" if set_name.endswith("-holdout") else "train"
+
 row = {
     "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "script": script,
@@ -200,7 +240,21 @@ row = {
     "branch": branch,
     # 時間（秒）
     "elapsedSeconds": int(elapsed),
+    # train（調整に使う）か test（held-out・評価専用）か。fixture 側の印を読んだ結果
+    "split": derive_split(fixture_set_dir, fixture_set),
+    # 何 run 回したか・run ごとの合格数（`pass` はこの合算）
+    "runs": len(run_passes),
+    "runPass": run_passes,
 }
+# run 間のばらつき。**2 run 以上の回にだけ書く**——1 回の実行から「幅 0」とは言えない
+if len(run_passes) >= 2:
+    row["passMin"] = min(run_passes)
+    row["passMax"] = max(run_passes)
+    row["passMean"] = round(statistics.fmean(run_passes), 3)
+    # 母標準偏差（run は全部手元にあるので標本補正はしない）
+    row["passStdev"] = round(statistics.pstdev(run_passes), 3)
+    # ノイズ幅 = 最大 − 最小。採用の判定はこの値より大きい改善だけを本物と見る
+    row["noiseWidth"] = max(run_passes) - min(run_passes)
 if model:
     row["model"] = model
 # 費用とトークン（2026-09-10。`claude -p --output-format json` から取れることを実測した）。

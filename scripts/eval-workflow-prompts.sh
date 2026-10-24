@@ -37,6 +37,9 @@ set -euo pipefail
 #   EVAL_WORKFLOW_PROMPTS_MODEL     - manifest のモデルを上書きする（同じ fixture を別モデルで測る）
 #   EVAL_WORKFLOW_PROMPTS_DEBUG_DIR     - 指定すると各caseの生出力を<case名>.raw.txtとして保存
 #                                         する（status不一致の原因調査用。issue #401）
+#   EVAL_RUNS                       - 同じ fixture セットを何 run 回すか（省略時は 1。issue #907）。
+#     2 以上にすると run ごとの合格数と**ノイズ幅**（run 間の最大 − 最小）が記録に残る。
+#     改善を採用する前に、その幅より大きい改善かを見るための口（docs/agents/observability-internals.md）
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${EVAL_WORKFLOW_PROMPTS_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
@@ -66,6 +69,12 @@ PROMPT_FN="$(jq -r '.promptFn' "$MANIFEST_FILE")"
 # 差し替えた回は記録の `model` も変わるので、条件が違う回として扱われ混ざらない。
 MODEL="${EVAL_WORKFLOW_PROMPTS_MODEL:-$(jq -r '.model' "$MANIFEST_FILE")}"
 JSON_SCHEMA="$(jq -c '.jsonSchema' "$MANIFEST_FILE")"
+# 何 run 回すか（issue #907、2026-10-24）。run 間のばらつきを測るための口で、既定は 1（今までどおり）
+RUNS="${EVAL_RUNS:-1}"
+if ! [[ "$RUNS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "eval-workflow-prompts: EVAL_RUNS は 1 以上の整数で指定してください（いまは '${RUNS}'）" >&2
+  exit 1
+fi
 
 mkdir -p "$LOCK_DIR"
 
@@ -173,72 +182,92 @@ RUN_STARTED_AT="$(date +%s)"
 TOTAL=0
 PASS_COUNT=0
 FAIL_LINES=""
+# run ごとの合格数（空白区切り）。記録の `runPass` / `noiseWidth` の元
+RUN_PASSES=""
 
-for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
-  [ -d "$case_dir" ] || continue
-  case_name="$(basename "$case_dir")"
-  spec_file="${case_dir}spec.md"
-  expected_file="${case_dir}expected.json"
-  if [ ! -f "$spec_file" ] || [ ! -f "$expected_file" ]; then
-    echo "eval-workflow-prompts: $case_name はspec.mdまたはexpected.jsonが無いためスキップします" >&2
-    continue
+# WHY(run を外側のループにする、2026-10-24・issue #907): eval-sweep-recall.sh と同じ。
+#      1 回の数字で判断せず、run ごとの合格数を別々に残してノイズ幅を測る
+for run_idx in $(seq 1 "$RUNS"); do
+  RUN_PASS_BEFORE="$PASS_COUNT"
+  if [ "$RUNS" -gt 1 ]; then
+    echo "--- run ${run_idx}/${RUNS} ---"
   fi
-  TOTAL=$((TOTAL + 1))
-  EXPECTED_STATUS="$(jq -r '.status' "$expected_file")"
 
-  CLONE_DIR="$(mktemp -d)"
-  # git clone/プロンプト構築の失敗を`set -e`で全体abortさせず、当該fixtureのNGとして
-  # 記録した上で次のfixtureへ進む(エージェント呼び出し失敗・status不一致と同じ扱いに揃える)。
-  # ガードしないと1fixtureの事故(cloneミス等)で残り全fixtureの結果が失われ、かつ
-  # $CLONE_DIRがrm -rfされずリークする。
-  CLONE_EXIT=0
-  git clone --quiet --depth 1 "file://$REPO_DIR" "$CLONE_DIR/repo" || CLONE_EXIT=$?
-  if [ "$CLONE_EXIT" -ne 0 ]; then
+  for case_dir in "$FIXTURE_SET_DIR"/case-*/; do
+    [ -d "$case_dir" ] || continue
+    case_name="$(basename "$case_dir")"
+    # 複数 run のときだけ run 番号を付ける（1 run の出力・保存名は今までどおり）
+    case_label="$case_name"
+    case_stem="$case_name"
+    if [ "$RUNS" -gt 1 ]; then
+      case_label="run${run_idx} ${case_name}"
+      case_stem="${case_name}.run${run_idx}"
+    fi
+    spec_file="${case_dir}spec.md"
+    expected_file="${case_dir}expected.json"
+    if [ ! -f "$spec_file" ] || [ ! -f "$expected_file" ]; then
+      echo "eval-workflow-prompts: $case_name はspec.mdまたはexpected.jsonが無いためスキップします" >&2
+      continue
+    fi
+    TOTAL=$((TOTAL + 1))
+    EXPECTED_STATUS="$(jq -r '.status' "$expected_file")"
+
+    CLONE_DIR="$(mktemp -d)"
+    # git clone/プロンプト構築の失敗を`set -e`で全体abortさせず、当該fixtureのNGとして
+    # 記録した上で次のfixtureへ進む(エージェント呼び出し失敗・status不一致と同じ扱いに揃える)。
+    # ガードしないと1fixtureの事故(cloneミス等)で残り全fixtureの結果が失われ、かつ
+    # $CLONE_DIRがrm -rfされずリークする。
+    CLONE_EXIT=0
+    git clone --quiet --depth 1 "file://$REPO_DIR" "$CLONE_DIR/repo" || CLONE_EXIT=$?
+    if [ "$CLONE_EXIT" -ne 0 ]; then
+      rm -rf "$CLONE_DIR"
+      FAIL_LINES="$FAIL_LINES
+- [$case_label] NG: リポジトリのcloneに失敗しました(exit=$CLONE_EXIT)"
+      continue
+    fi
+    cp "$spec_file" "$CLONE_DIR/repo/SPEC.md"
+
+    BUILD_EXIT=0
+    PROMPT="$(node "$SCRIPT_DIR/lib/build-eval-prompt.mjs" "$CLONE_DIR/repo/$PROMPT_MODULE" "$PROMPT_FN" "SPEC.md")" || BUILD_EXIT=$?
+    if [ "$BUILD_EXIT" -ne 0 ]; then
+      rm -rf "$CLONE_DIR"
+      FAIL_LINES="$FAIL_LINES
+- [$case_label] NG: プロンプトの構築に失敗しました(exit=$BUILD_EXIT)"
+      continue
+    fi
+
+    AGENT_EXIT=0
+    AGENT_OUTPUT="$(cd "$CLONE_DIR/repo" && run_agent_with_timeout "$PROMPT")" || AGENT_EXIT=$?
+    if [ -n "${EVAL_WORKFLOW_PROMPTS_DEBUG_DIR:-}" ]; then
+      mkdir -p "$EVAL_WORKFLOW_PROMPTS_DEBUG_DIR"
+      printf '%s' "$AGENT_OUTPUT" > "$EVAL_WORKFLOW_PROMPTS_DEBUG_DIR/$case_stem.raw.txt"
+    fi
     rm -rf "$CLONE_DIR"
-    FAIL_LINES="$FAIL_LINES
-- [$case_name] NG: リポジトリのcloneに失敗しました(exit=$CLONE_EXIT)"
-    continue
-  fi
-  cp "$spec_file" "$CLONE_DIR/repo/SPEC.md"
 
-  BUILD_EXIT=0
-  PROMPT="$(node "$SCRIPT_DIR/lib/build-eval-prompt.mjs" "$CLONE_DIR/repo/$PROMPT_MODULE" "$PROMPT_FN" "SPEC.md")" || BUILD_EXIT=$?
-  if [ "$BUILD_EXIT" -ne 0 ]; then
-    rm -rf "$CLONE_DIR"
-    FAIL_LINES="$FAIL_LINES
-- [$case_name] NG: プロンプトの構築に失敗しました(exit=$BUILD_EXIT)"
-    continue
-  fi
+    if [ "$AGENT_EXIT" -ne 0 ]; then
+      FAIL_LINES="$FAIL_LINES
+- [$case_label] NG: エージェント実行が失敗しました(exit=$AGENT_EXIT)"
+      continue
+    fi
 
-  AGENT_EXIT=0
-  AGENT_OUTPUT="$(cd "$CLONE_DIR/repo" && run_agent_with_timeout "$PROMPT")" || AGENT_EXIT=$?
-  if [ -n "${EVAL_WORKFLOW_PROMPTS_DEBUG_DIR:-}" ]; then
-    mkdir -p "$EVAL_WORKFLOW_PROMPTS_DEBUG_DIR"
-    printf '%s' "$AGENT_OUTPUT" > "$EVAL_WORKFLOW_PROMPTS_DEBUG_DIR/$case_name.raw.txt"
-  fi
-  rm -rf "$CLONE_DIR"
+    # `claude -p --output-format json` の包みを剥がす。**包みが無い（モック）出力もそのまま通る**
+    AGENT_PAYLOAD="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --payload 2>/dev/null || printf '%s' "$AGENT_OUTPUT")"
+    # 使用量を足し上げる（設計提案 3「費用」）。取れなければ 0 のまま
+    USAGE_JSON="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --usage 2>/dev/null || echo '{}')"
+    accumulate_usage "$USAGE_JSON"
 
-  if [ "$AGENT_EXIT" -ne 0 ]; then
-    FAIL_LINES="$FAIL_LINES
-- [$case_name] NG: エージェント実行が失敗しました(exit=$AGENT_EXIT)"
-    continue
-  fi
-
-  # `claude -p --output-format json` の包みを剥がす。**包みが無い（モック）出力もそのまま通る**
-  AGENT_PAYLOAD="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --payload 2>/dev/null || printf '%s' "$AGENT_OUTPUT")"
-  # 使用量を足し上げる（設計提案 3「費用」）。取れなければ 0 のまま
-  USAGE_JSON="$(printf '%s' "$AGENT_OUTPUT" | node "$SCRIPT_DIR/lib/agent-output.mjs" --usage 2>/dev/null || echo '{}')"
-  accumulate_usage "$USAGE_JSON"
-
-  ACTUAL_STATUS="$(printf '%s' "$AGENT_PAYLOAD" | jq -r '.status' 2>/dev/null || echo "")"
-  if [ "$ACTUAL_STATUS" = "$EXPECTED_STATUS" ]; then
-    PASS_COUNT=$((PASS_COUNT + 1))
-    echo "[$case_name] OK: status=$ACTUAL_STATUS (期待通り)"
-  else
-    FAIL_LINES="$FAIL_LINES
-- [$case_name] NG: status=$ACTUAL_STATUS (期待値=$EXPECTED_STATUS)"
-  fi
+    ACTUAL_STATUS="$(printf '%s' "$AGENT_PAYLOAD" | jq -r '.status' 2>/dev/null || echo "")"
+    if [ "$ACTUAL_STATUS" = "$EXPECTED_STATUS" ]; then
+      PASS_COUNT=$((PASS_COUNT + 1))
+      echo "[$case_label] OK: status=$ACTUAL_STATUS (期待通り)"
+    else
+      FAIL_LINES="$FAIL_LINES
+- [$case_label] NG: status=$ACTUAL_STATUS (期待値=$EXPECTED_STATUS)"
+    fi
+  done
+  RUN_PASSES="$RUN_PASSES $((PASS_COUNT - RUN_PASS_BEFORE))"
 done
+RUN_PASSES="${RUN_PASSES# }"
 
 # case-*/が1件もマッチしなかった場合(非nullglobのbashでは`for`が展開されない
 # 文字列そのままで1回だけ回るため`[ -d "$case_dir" ]`で弾かれTOTALが0のまま残る)、
@@ -251,13 +280,20 @@ fi
 echo ""
 echo "=== eval-workflow-prompts: $FIXTURE_SET ==="
 echo "$PASS_COUNT / $TOTAL 件 合格"
+# run ごとの内訳とノイズ幅（2 run 以上のとき）。採用の判定はこの幅より大きい改善だけを本物と見る
+if [ "$RUNS" -gt 1 ]; then
+  echo "run ごと: ${RUN_PASSES}（各 run の分母は $((TOTAL / RUNS))。ノイズ幅 = 最大 − 最小）"
+fi
 
 # issue #496: 実行完了の痕跡をgit管理下のJSONLへ残す。実行有無の機械検知
 # (scripts/check-eval-runs-freshness.sh)がこのファイルの更新有無を見るため、
 # pass/fail問わず(=ループが最後まで到達した場合は常に)1行追記する。
 # 条件（木のハッシュ・モデル）・所要時間・費用も一緒に残す
 # ——**同じ条件の回どうしでしかばらつきは比べられない**（設計提案 3）
-EVAL_RUNS_REPO_DIR="$REPO_DIR" record_eval_run \
+EVAL_RUNS_REPO_DIR="$REPO_DIR" \
+EVAL_RUN_PASSES="$RUN_PASSES" \
+EVAL_FIXTURE_SET_DIR="$FIXTURE_SET_DIR" \
+record_eval_run \
   "eval-workflow-prompts" "$FIXTURE_SET" "$PASS_COUNT" "$TOTAL" "$RUN_STARTED_AT" "$MODEL"
 
 if [ -n "$FAIL_LINES" ]; then
