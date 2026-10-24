@@ -39,6 +39,15 @@ SessionStart hook（`scripts/check-upstream-docs-review-staleness.sh`）が監�
 3. **記録する**: 下の実施記録に追記し、「最後に確認した版」と「次回実施予定日」を更新する
 4. **必要なら実走する**: hook のイベントや transcript 形式が変わっていたら
    [`hook-live-drill.md`](./hook-live-drill.md) を回す（形式変化は fail-open hook を無音で殺す）
+5. **プロンプトとスキルの棚卸し**（issue #905、2026-10-24 から）: 本体が新しいモデル向けに書き方を変えたとき、
+   このリポジトリの CLAUDE.md / skills / agents は古い書き方のまま残る。2 つのコマンドを非対話で回して結果を実施記録に貼る
+   （hook の再帰発火を避けるため `--settings '{"disableAllHooks":true}'` と `--no-session-persistence` を付ける）:
+   - `claude -p "/doctor prompt-audit" --settings '{"disableAllHooks":true}' --no-session-persistence --max-turns 3`
+     （2.1.283。旧モデル向けの書き方を監査する。指摘が出たら 1 件ずつ issue 化するか、その場で直す）
+   - `claude -p "/skill-doctor" --settings '{"disableAllHooks":true}' --no-session-persistence --max-turns 3`
+     （2.1.252。スキルごとの context コストと使用頻度。**個人スキル（userSettings）は個人の判断**で、
+     ここで見るのは projectSettings の行——0 回のまま残っているプロジェクトスキルは消すか統合するかを決める）
+   どちらも人が打つ。結果で見直し対象が出たら issue 化する
 
 ## 実施記録
 
@@ -163,3 +172,33 @@ Codex 0.154〜0.156 は GitHub タグページの要約のみ、hooks.md の Eli
 
 **実走の要否（手順 4）**: hook イベントの形式変化は無いが、2.1.300 の transcript 形式変更と 2.1.271 の `SubagentHandback` が
 骨格記録の中身を変えている（上の実測）。本体を 2.1.295 以上へ更新したあと、`hook-live-drill.md` を subagent 系 2 本だけ回す。
+
+### 2026-10-24（手順 5 の 1 回目。issue #905）
+
+`claude -p "/skill-doctor"` と `claude -p "/doctor prompt-audit" --max-turns 60`（`--max-turns 3` では
+「Reached max turns」で終わる。監査はファイルを読んで回るので 60 程度が要る）を、`--settings '{"disableAllHooks":true}'`
+`--no-session-persistence` で回した。本体 2.1.289。
+
+**`/skill-doctor`**: 読み込まれるスキル 180 本前後のうち **87 本が一度も起動されていない**（ほぼ個人設定の
+デザイン系。1 本あたり毎ターン 20〜260 トークンの一覧行）。claude.ai 同期の 14 本も未使用。
+projectSettings では `e2e-runner` と `aidd-session-report` が 0 回、`structured-review` 22 回・
+`feature-spec` 25 回・`handoff-format` 29 回・`aidd-phase1-router` 16 回・`aidd-phase2` 14 回。
+個人側の整理は個人の判断。プロジェクト側は `e2e-runner` / `aidd-session-report` の扱いを次回までに決める。
+
+**`/doctor prompt-audit`**（編集は未適用。高 7・中 9・低 11。プロジェクト側は issue 化、個人設定側は本人へ報告）:
+- 事実のずれ（高）: `AGENTS.md` の `ai:check` の説明に `test:integration` が無い／`contract-writer` が sonnet と
+  書かれているが実ファイルは haiku／`spec-drafter` が一覧に無い。`handoff-format` スキルの相対リンク
+  `../../docs/agents/...` はスキルの置き場からは `.claude` 直下の docs を指して実在しない（`../../../docs/` が正）。
+  `feature-spec` の「STEP 7 の e2e-runner」の参照先が無い
+- 矛盾（中）: ルート `CLAUDE.md` の「確認を求めるのは停止①②の 2 箇所のみ」と、後から足した依存変更の承認
+  （`common.md`）・新規テーブルの設計質問（`db-schema.md`）が食い違う。例外として明記する方向
+- 経緯の語り（中）: `common.md` 148〜153 行、ルート `CLAUDE.md` 80〜85 行（Fable 5 固定）、rules 3 本、
+  `sweep-*.md` の「issue #675 の教訓」見出し等に日付・件数・issue 番号が残る。規則の根拠は挙動で、
+  経緯は `decisions.md` へ（理由の文は残す）
+- 低（flag のみ）: `judge-panel` の 1〜5 点採点を Workflow が読んでいない／`feature-spec` の「design スキル」が
+  一覧に無い／祖先の `~/medical-inventory-vkumai/CLAUDE.md` と worktree 側が二重に読み込まれる（環境要因）
+- 個人設定側（`~/.claude/`。このリポジトリでは直さない）: デザインスキルの symlink の説明が実態（7 本だけ symlink）と
+  違う／`learned` の `favicon` は非推奨／`mentor`・`solopreneur`・`obsidian-daily-log` に期限切れの固定値／
+  `medical-ai` のモデル ID 固定／`chain-parallel` の URL 入力時の分岐と重複した強調
+
+生の出力は個人情報（スキル本文に書かれた個人の計画・資産）を含むため PR には貼らない。
