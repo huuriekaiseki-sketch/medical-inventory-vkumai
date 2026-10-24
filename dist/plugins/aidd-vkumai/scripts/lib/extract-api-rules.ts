@@ -6,8 +6,13 @@
 //      zod のスキーマは実行時に内省できる（`_zod.bag` に minimum / maximum、
 //      enum は `def.entries`）ので、**実物から値を取り出して**突き合わせる。
 //
-//      2026-09-07 の実測: `_zod.bag` は文字列なら { minimum: 最小長, maximum: 最大長 }、
+//      2026-09-07 の実測（zod 4.5.4）: `_zod.bag` は文字列なら { minimum: 最小長, maximum: 最大長 }、
 //      数値なら { minimum: 下限 } を返す。optional / nullable / pipe / default は剥がす。
+//      2026-10-24 の実測（zod 4.6.7、GHSA-mrhx-c7xc-m3w5 の修正で上げた）: `_zod.bag` は parse の前後とも
+//      空 `{}` になり、制約値は `_zod.def.checks` の各要素の `_zod.def` に移った
+//      （文字列: { check: "max_length", maximum }、数値: { check: "greater_than", value, inclusive }）。
+//      **bag だけを見ていた抽出器は 0 件を返し、層の突合が素通りする直前だった**（emit テストの
+//      「値まで取れている」の対が無ければ気づけなかった。C-025）。checks を先に読み、bag は旧版の予備にする。
 //
 // 使い方: scripts/check-layer-consistency.test.sh が
 //   scripts/lib/__tests__/extract-api-rules.emit.test.ts 経由で呼ぶ（vitest を実行系に借りる）。
@@ -36,17 +41,42 @@ export interface ApiRule {
   enum: string[] | null
 }
 
+/**
+ * 制約値を取り出す。zod 4.6 以降は `_zod.def.checks`、4.5 までは `_zod.bag` に入る。
+ * checks を先に読み（同じ種類が複数あれば厳しい方）、無ければ bag を見る。
+ */
+function constraintsOf(z: Any): { maxLength: number | null; min: number | null } {
+  const def = (z.def ?? {}) as Any
+  const bag = (z.bag ?? {}) as Any
+  let maxLength: number | null = null
+  let min: number | null = null
+  const checks = Array.isArray(def.checks) ? (def.checks as Any[]) : []
+  for (const check of checks) {
+    const checkDef = (((check?._zod ?? {}) as Any).def ?? check ?? {}) as Any
+    if (checkDef.check === 'max_length' && typeof checkDef.maximum === 'number') {
+      maxLength = maxLength === null ? checkDef.maximum : Math.min(maxLength, checkDef.maximum)
+    }
+    // 数値の「下限」。inclusive の有無は DB の CHECK と同じく値だけを突き合わせる（従来の bag.minimum と同じ粒度）
+    if (checkDef.check === 'greater_than' && typeof checkDef.value === 'number') {
+      min = min === null ? checkDef.value : Math.max(min, checkDef.value)
+    }
+  }
+  if (maxLength === null && typeof bag.maximum === 'number') maxLength = bag.maximum
+  if (min === null && typeof bag.minimum === 'number') min = bag.minimum
+  return { maxLength, min }
+}
+
 function ruleOf(node: Any): ApiRule {
   const inner = peel(node)
   const z = (inner?._zod ?? {}) as Any
   const def = (z.def ?? {}) as Any
-  const bag = (z.bag ?? {}) as Any
   const type = (def.type as string) ?? null
+  const constraints = constraintsOf(z)
   return {
     type,
     // 文字列の maximum は「最大長」、数値の minimum は「下限」
-    maxLength: type === 'string' && typeof bag.maximum === 'number' ? bag.maximum : null,
-    min: type === 'number' && typeof bag.minimum === 'number' ? bag.minimum : null,
+    maxLength: type === 'string' ? constraints.maxLength : null,
+    min: type === 'number' ? constraints.min : null,
     enum: def.entries ? Object.keys(def.entries as Any) : null,
   }
 }
