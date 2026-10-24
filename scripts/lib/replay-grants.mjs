@@ -24,8 +24,9 @@
 //     同名のどの署名にも当たるものとして扱う（曖昧さは `ambiguous` に出す）
 //   - ALTER DEFAULT PRIVILEGES は追わない。見つけたら報告する
 //   - 権限の**中身が正しいか**は見ない（それは RLS 変異計測 H-06 と直接攻撃の実測の担当）
-import { readdirSync, readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, realpathSync } from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { writeLine } from './stdout-sync.mjs'
 
 const SEP = String.fromCharCode(0)
@@ -403,7 +404,22 @@ export function replayGrants(migrationsDir, options = {}) {
   }
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)
+// WHY(issue #806・2026-10-19): `path.resolve` 同士の比較だと、argv[1] が symlink 経由（macOS の
+//      mktemp -d が返す /var/folders → /private/var/folders、プラグインの配布先）のとき import.meta.url
+//      （実体パス）と一致せず、main() が走らないまま無出力・exit 0 で終わる。呼び出し側が `|| true` で
+//      受けると、空出力が「取得できませんでした」に化けて誰も気づかない。実体パスへ直してから比べる。
+//      #806 で 21 本を直したとき、この綴りの 8 本は走査に掛からず残っていた。
+//      この書き方へ戻すと check-cli-entry-guard.test.sh が落とす
+function isRunAsCli() {
+  const entry = process.argv[1]
+  if (!entry) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entry)).href
+  } catch {
+    return false
+  }
+}
+const isMain = isRunAsCli()
 if (isMain) {
   const idx = process.argv.indexOf('--migrations')
   const dir = idx >= 0 ? process.argv[idx + 1] : 'supabase/migrations'

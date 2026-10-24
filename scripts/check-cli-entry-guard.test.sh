@@ -9,6 +9,14 @@
 # ——同じ穴を踏んで、踏んだ場所だけ直し、隣へ広げていなかった（C-047）。
 # 直すだけではまた一部だけ戻るので、**素の比較の書き方そのものを落とす**。
 #
+# WHY(2026-10-19 に綴りを 1 つ足した): 上の走査は `file://` を文字列で足す綴りしか見ておらず、
+# **同じ意味の別の綴り**（`path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)`
+# や `=== fileURLToPath(import.meta.url)`）で書かれた 8 本は、#806 で 21 本を直した日も数えられず、
+# 走査にも掛からないまま残っていた。PR #897 の sandbox（mktemp -d の下）で実物が黙ったことで見つかった
+# （E-107）。`path.resolve` は symlink を解決しないので、機序は `file://` 連結とまったく同じ。
+# 文字列で当てる走査は**綴りを 1 つ増やされると外れる**ので、同じ意味の綴りを見つけたら走査へ足し、
+# scenario 1 でその綴りが本当に黙ることを対で測る。
+#
 # 実行: bash scripts/check-cli-entry-guard.test.sh
 set -euo pipefail
 
@@ -31,13 +39,15 @@ assert_eq() {
   fi
 }
 
-# 走査: 素の比較（import.meta.url を argv[1] から作った file:// 文字列と比べる）を含むファイルを列挙する。
+# 走査: 素の比較を含むファイルを列挙する。綴りは 2 つ——
+#   (i)  import.meta.url を argv[1] から作った file:// 文字列と比べる
+#   (ii) path.resolve(process.argv[1]) を import.meta.url 由来のパスと同じ行で比べる（2026-10-19 に足した）
 # $1=根。コメント行は数えない（この検査自身や WHY コメントが書き方を説明するため）
 scan_naive_guard() {
   local root="$1"
   grep -rnE --include='*.js' --include='*.mjs' --include='*.ts' \
     --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.next --exclude-dir=.git \
-    'import\.meta\.url[[:space:]]*===?[[:space:]]*[`"'"'"']file://' "$root" 2>/dev/null \
+    'import\.meta\.url[[:space:]]*===?[[:space:]]*[`"'"'"']file://|path\.resolve\(process\.argv\[1\]\).*import\.meta\.url|import\.meta\.url.*path\.resolve\(process\.argv\[1\]\)' "$root" 2>/dev/null \
     | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|#)' || true
 }
 
@@ -47,11 +57,22 @@ cat > "$WORKDIR_REAL/real/naive.mjs" <<'EOF'
 function main() { console.log('ran') }
 if (import.meta.url === `file://${process.argv[1]}`) { main() }
 EOF
+cat > "$WORKDIR_REAL/real/naive-resolve.mjs" <<'EOF'
+import path from 'node:path'
+function main() { console.log('ran') }
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) { main() }
+EOF
 ln -s "$WORKDIR_REAL/real" "$WORKDIR_REAL/link"
 OUT_REAL="$(node "$WORKDIR_REAL/real/naive.mjs")"
 OUT_LINK="$(node "$WORKDIR_REAL/link/naive.mjs")"
 assert_eq "$OUT_REAL" "ran" "実体パスで起動すれば main() が走る（対照）"
 assert_eq "$OUT_LINK" "" "symlink 経由だと何も出力しない（偽の「何も無し」を実測）"
+# WHY(2026-10-19): path.resolve は symlink を解決しない（正規化するだけ）ので、(ii) の綴りも同じように黙る。
+#      「別の綴りだから大丈夫」と読まないよう、綴りごとに黙ることを実測する
+OUT_RESOLVE_REAL="$(node "$WORKDIR_REAL/real/naive-resolve.mjs")"
+OUT_RESOLVE_LINK="$(node "$WORKDIR_REAL/link/naive-resolve.mjs")"
+assert_eq "$OUT_RESOLVE_REAL" "ran" "path.resolve の綴りも、実体パスで起動すれば main() が走る（対照）"
+assert_eq "$OUT_RESOLVE_LINK" "" "path.resolve の綴りも、symlink 経由だと何も出力しない"
 
 echo "=== scenario 2: 実態に、素の比較が 1 つも無い ==="
 HITS="$(scan_naive_guard "$REPO_ROOT/scripts"; scan_naive_guard "$REPO_ROOT/.claude"; scan_naive_guard "$REPO_ROOT/e2e"; scan_naive_guard "$REPO_ROOT/src")"
@@ -73,7 +94,9 @@ else
   fail=1
 fi
 GUARDED="$(grep -rlE --include='*.js' --include='*.mjs' --include='*.ts' --exclude-dir=node_modules 'function isRunAsCli' "$REPO_ROOT/scripts" "$REPO_ROOT/.claude" | wc -l | tr -d ' ')"
-if [ "$GUARDED" -ge 20 ]; then
+# WHY(下限 30、2026-10-19): #806 の 21 本 + 共通 4 本に、path.resolve の綴りだった 8 本を直して 33 本。
+#      下限は「直した本数が減らない」ratchet なので、直した日の本数の少し下に置く
+if [ "$GUARDED" -ge 30 ]; then
   echo "  OK: 直した判定（isRunAsCli）を持つファイルが $GUARDED 本ある（0 件だと「書き方を変えて逃げた」を見逃す）"
 else
   echo "  NG: isRunAsCli を持つファイルが $GUARDED 本しかない"
@@ -84,10 +107,13 @@ echo "=== scenario 4: fixture で検知できる（RED 方向の自己検証） 
 mkdir -p "$WORKDIR_REAL/fx/bad" "$WORKDIR_REAL/fx/good"
 cp "$WORKDIR_REAL/real/naive.mjs" "$WORKDIR_REAL/fx/bad/a.mjs"
 printf '%s\n' "if (import.meta.url == 'file://' + process.argv[1]) main()" > "$WORKDIR_REAL/fx/bad/b.js"
+cp "$WORKDIR_REAL/real/naive-resolve.mjs" "$WORKDIR_REAL/fx/bad/c.mjs"
+printf '%s\n' "const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])" > "$WORKDIR_REAL/fx/bad/d.mjs"
 cat > "$WORKDIR_REAL/fx/good/ok.mjs" <<'EOF'
 import { realpathSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 // 説明のためのコメント: import.meta.url === `file://${process.argv[1]}` は symlink で外れる
+// 同じく path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname) も外れる
 function isRunAsCli() {
   const entry = process.argv[1]
   if (!entry) return false
@@ -95,8 +121,15 @@ function isRunAsCli() {
 }
 if (isRunAsCli()) console.log('ran')
 EOF
-assert_eq "$(scan_naive_guard "$WORKDIR_REAL/fx/bad" | wc -l | tr -d ' ')" "2" "素の比較を 2 通りの書き方とも検知する"
-assert_eq "$(scan_naive_guard "$WORKDIR_REAL/fx/good" | wc -l | tr -d ' ')" "0" "直した形と、コメントの中の説明は誤検知しない"
+cat > "$WORKDIR_REAL/fx/good/ok-realpath.mjs" <<'EOF'
+import { realpathSync } from 'node:fs'
+function isEntryPoint() {
+  try { return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(new URL(import.meta.url).pathname) } catch { return false }
+}
+if (isEntryPoint()) console.log('ran')
+EOF
+assert_eq "$(scan_naive_guard "$WORKDIR_REAL/fx/bad" | wc -l | tr -d ' ')" "4" "素の比較を 4 通りの綴りとも検知する（file:// 連結 2 つ・path.resolve 2 つ）"
+assert_eq "$(scan_naive_guard "$WORKDIR_REAL/fx/good" | wc -l | tr -d ' ')" "0" "直した形 2 つ（pathToFileURL 比較・realpathSync 同士）と、コメントの中の説明は誤検知しない"
 ln -s "$WORKDIR_REAL/fx/good" "$WORKDIR_REAL/fx/good-link"
 assert_eq "$(node "$WORKDIR_REAL/fx/good-link/ok.mjs")" "ran" "直した形は symlink 経由でも main() が走る"
 
@@ -110,6 +143,27 @@ for js in loop-observability-gap.js agent-progress-gap.js; do
   assert_eq "$CODE" "1" "$js: symlink 経由でも gap ありで exit 1"
   assert_eq "$(jq -r '.hasGap' <<<"$(head -n 1 <<<"$OUT")" 2>/dev/null || echo none)" "true" "$js: symlink 経由でも hasGap を出力する"
 done
+
+echo "=== scenario 5b: path.resolve の綴りだった実物が、symlink 経由でも出力を出す（2026-10-19） ==="
+# WHY: 走査が緑でも「直した形で本当に走る」は別の話（C-022）。8 本のうち、引数無しで動く derive と、
+#      配布物（aidd-core）に入る check-harness-score の 2 本を、symlink 経由の repo-link から起動する。
+#      直す前はどちらも無出力・exit 0 で、呼び出し側の `|| true` と合わさって「取得できませんでした」に化けていた
+OUT_DERIVE="$(node "$WORKDIR_REAL/repo-link/scripts/lib/derive-test-selection.mjs" --list-keys 2>/dev/null || true)"
+if [ -n "$OUT_DERIVE" ]; then
+  echo "  OK: derive-test-selection.mjs --list-keys: symlink 経由でも出力がある"
+else
+  echo "  NG: derive-test-selection.mjs --list-keys: symlink 経由だと無出力（入口判定が実体パスで比べていない）"
+  fail=1
+fi
+set +e
+OUT_SCORE="$(node "$WORKDIR_REAL/repo-link/scripts/lib/check-harness-score.mjs" --root "$WORKDIR_REAL/repo-link" 2>/dev/null)"
+set -e
+if grep -qF '[harness-score]' <<<"$OUT_SCORE"; then
+  echo "  OK: check-harness-score.mjs: symlink 経由でも判定を言う"
+else
+  echo "  NG: check-harness-score.mjs: symlink 経由だと何も言わない (out=$OUT_SCORE)"
+  fail=1
+fi
 
 echo "=== scenario 6: 判定が何も言わなかったら、呼び出し側は「漏れなし」と読まない ==="
 # WHY: 判定の側をいくら直しても、将来別の理由で無出力になることはありうる。呼び出し側で

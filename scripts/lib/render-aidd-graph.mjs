@@ -11,7 +11,7 @@
 //   node scripts/lib/render-aidd-graph.mjs --check    # 書き出さず、コミット済みファイルと一致するか検査（不一致で exit 1）
 //   node scripts/lib/render-aidd-graph.mjs --out <dir>  # 出力先ルートを差し替え（テスト用）
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import { writeLine } from './stdout-sync.mjs'
@@ -170,7 +170,22 @@ export function render(graph) {
   }
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+// WHY(issue #806・2026-10-19): `path.resolve` 同士の比較だと、argv[1] が symlink 経由（macOS の
+//      mktemp -d が返す /var/folders → /private/var/folders、プラグインの配布先）のとき import.meta.url
+//      （実体パス）と一致せず、main() が走らないまま無出力・exit 0 で終わる。呼び出し側が `|| true` で
+//      受けると、空出力が「取得できませんでした」に化けて誰も気づかない。実体パスへ直してから比べる。
+//      #806 で 21 本を直したとき、この綴りの 8 本は走査に掛からず残っていた。
+//      この書き方へ戻すと check-cli-entry-guard.test.sh が落とす
+function isRunAsCli() {
+  const entry = process.argv[1]
+  if (!entry) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entry)).href
+  } catch {
+    return false
+  }
+}
+const isMain = isRunAsCli()
 if (isMain) {
   const args = process.argv.slice(2)
   const check = args.includes('--check')
