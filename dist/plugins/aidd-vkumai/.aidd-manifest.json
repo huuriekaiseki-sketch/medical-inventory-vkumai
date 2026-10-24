@@ -59,7 +59,7 @@
     "scripts/lib/check-write-path-gaps.mjs": "222f3cf713c0fb2f95846d4924a96ad777163e2b60cdad5a1e91716e0f2ef908",
     "scripts/lib/compare-config.mjs": "b5f77256c096d90a3dedf5feeae1af7a863205eb325cac2bff9567b10378e0da",
     "scripts/lib/compare-layers.mjs": "fa3c811ce4fc606272c1e9391ece09fc98ebb870b43deec79c03456143f2faf0",
-    "scripts/lib/extract-api-rules.ts": "42277ee68e58b9d6df914e71ad1f17b1d40ca7fdb9725869ead763ec6ef14a26",
+    "scripts/lib/extract-api-rules.ts": "3933b12de3f277af066cc7c4f8d4329dcfb8e024c60b81caf461f3e05e713e94",
     "scripts/lib/fixture-guard.mjs": "dfc8ba2d7c61c1fb3a82c03beb53fe030a22f53fc63d48a032700bab63d15fd9",
     "scripts/lib/hook-decisions-summary.mjs": "8bd759d518ca3ba0b72382e266222a08ab99468587e0c892617ab43f39fd1b00",
     "scripts/lib/integration-leak-baseline.json": "6a9575df97e9c4ad269ade01ebc888a74c0474d817902e555a55ba6a636b03b9",
