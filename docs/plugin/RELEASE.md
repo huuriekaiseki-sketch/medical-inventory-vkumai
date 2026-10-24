@@ -167,6 +167,11 @@ Codex 側の初回実測は CLI 0.147.0 と marketplace commit `be18c7d` で行�
 配布後にこの表へ書き戻した結果は、中心リポジトリの `dist/plugins` には入るが marketplace 上の同じ版には
 届かない（版の文字列が同じなので配り直さない。タグの内容も動かさない）。次の版で届く。
 
+**PreToolUse の deny は、人が対話 CLI を操作しなくても `codex exec` で確かめられる**（2026-10-24 追加、issue #909）。
+見るのは stdout の `--json` ではなく stderr の `Command blocked by PreToolUse hook` と rollout の
+`custom_tool_call_output`（stdout の JSONL には止められたコマンドが item として出ない）。手順と判定表は
+`docs/agents/hook-live-drill.md`「Codex 側: `codex exec --json` での機械確認」。hook 自身の失敗（仕様書 05）は対象外。
+
 **Codex の実機確認は、普段の作業場所でも行う**（2026-09-30 追加）。信頼済みの親フォルダの外に作った clone
 （`/private/tmp` の下など）では、フォルダの信頼を聞かれ、リポジトリの `.codex/hooks.json` も読み込まれる。
 普段の作業場所（信頼済みの親フォルダの下）では、信頼を聞かれず、リポジトリの hook は読み込まれない。

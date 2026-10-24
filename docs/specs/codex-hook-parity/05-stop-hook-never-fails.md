@@ -2,7 +2,7 @@
 
 - feature: `codex-hook-parity-05-stop-hook-never-fails`
 - 重要度: 低 / 影響: Codex のみ
-- 状態: 2026-09-29 承認（決めてほしいこと 2 件はおすすめの通り）。スクリプトとテストは実装済み（PR #859）。**Codex 実機では確かめられていない**: 非対話モード（`codex exec --json`）では、直す前の版でも hook の失敗が出力にも保存記録にも現れず、比べる対象が取れなかった（2026-09-29。`docs/plugin/codex/evidence/2026-09-29-release-0.1.4-verify.md`）。確かめるには対話 CLI を人が操作する必要がある
+- 状態: 2026-09-29 承認（決めてほしいこと 2 件はおすすめの通り）。スクリプトとテストは実装済み（PR #859）。**Codex 実機では確かめられていない**: 非対話モード（`codex exec --json`）では、直す前の版でも hook の失敗が出力にも保存記録にも現れず、比べる対象が取れなかった（2026-09-29。`docs/plugin/codex/evidence/2026-09-29-release-0.1.4-verify.md`）。確かめるには対話 CLI を人が操作する必要がある。**2026-10-24 追記（issue #909）**: PreToolUse の **deny** は非対話モードでも機械的に読める（stderr の `Command blocked by PreToolUse hook` と rollout の `custom_tool_call_output`。stdout の `--json` には出ない。手順は `docs/agents/hook-live-drill.md`「Codex 側: `codex exec --json` での機械確認」）。ただしこの仕様書が扱う **hook 自身の失敗**（PostToolUse / Stop が rc≠0 で終わること）は同じ測定では対象にしておらず、2026-09-29 の結論は変わらない
 
 ---
 
