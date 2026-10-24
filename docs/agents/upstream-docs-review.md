@@ -128,6 +128,9 @@ claude.com / claude.dev の実践記事（09-28〜10-22 の 4 本）、OpenAI de
    （それ以前は 13 体の `effort: low` 等が無視されていた可能性）。2.1.292 の Agent ツール `effort` 引数が
    Workflow の `agent()` にも渡せるかと合わせ、OTel `llm_request` span の `effort` 属性（2.1.274）か `/cost` で
    **先に測る**（直す案はその後。`feedback_measure_before_recommending_fix`）
+   → **2026-10-24 実測済み**（issue #906）。sonnet / opus では frontmatter の値が `output_config.effort` にそのまま乗り、
+   haiku には effort 自体が送られない（sweep 4 本の `low` は API 上 no-op）。階層は変えない。根拠と抜粋は
+   [`decisions/aidd-pipeline.md`「なぜ agent の effort を実測してから階層を見直すことにしたか」](./decisions/aidd-pipeline.md#なぜ-agent-の-effort-を実測してから階層を見直すことにしたかissue-906)
 7. **eval 運用に「ノイズ幅」と「held-out」を足す**（09-28 Anthropic「Automating eval design and hillclimbing」）。
    `eval-sweep-recall.sh` / `eval-workflow-prompts.sh` の fixture を train / test に分け、run 間分散を
    `docs/agents/eval-runs.jsonl` に残し、改善がノイズ幅以下なら採用しない。1 ラウンド 1 パッチ。
