@@ -11,17 +11,19 @@ SessionStart hook（`scripts/check-upstream-docs-review-staleness.sh`）が監�
 
 ## 次回実施予定日
 
-2026-11-23（月 1 の目安。Claude Code のマイナー版が 10 個以上進んだとき、または v1 の各バージョン前は
+2026-12-08（月 1 の目安。Claude Code のマイナー版が 10 個以上進んだとき、または v1 の各バージョン前は
 予定日を待たず実施する。実施後に手動で書き換える。期限は SessionStart の個別警告に加え、
-`claude -p --maintenance`（`scripts/maintenance-digest.sh`、issue #741）で他の定期作業とまとめて確認できる）
+`claude -p --maintenance`（`scripts/maintenance-digest.sh`、issue #741）で他の定期作業とまとめて確認できる。
+3 回目（2026-11-08）は手順 1〜3 のみの軽量実施だったので、次回は手順 5 も回す）
 
 ## 最後に確認した版
 
 | 対象 | 版 / 日付 | 確認日 |
 |---|---|---|
-| Claude Code | 2.1.309（changelog の先頭。手元は 2.1.289 で 20 版遅れ） | 2026-10-23 |
-| Codex CLI | 0.163.0（2026-10-15。0.164 は alpha のみ） | 2026-10-23 |
-| Anthropic engineering blog | 最新記事 2026-10-13（claude.com / claude.dev 側の実践記事は 2026-10-22 まで確認） | 2026-10-23 |
+| Claude Code | 2.1.319（changelog の先頭。手元は 2.1.289 で 30 版遅れ） | 2026-11-08 |
+| Codex CLI | 0.167.0（手元は 0.147.0） | 2026-11-08 |
+| Anthropic engineering blog | 最新記事 2026-11-06「The components of agent memory」 | 2026-11-08 |
+| Claude Platform release notes | 2026-10-09 の Managed Agents dynamic workflows（beta）まで | 2026-11-08 |
 
 ## 手順（1〜2 時間）
 
@@ -202,3 +204,55 @@ projectSettings では `e2e-runner` と `aidd-session-report` が 0 回、`struc
   `medical-ai` のモデル ID 固定／`chain-parallel` の URL 入力時の分岐と重複した強調
 
 生の出力は個人情報（スキル本文に書かれた個人の計画・資産）を含むため PR には貼らない。
+
+### 2026-11-08（3 回目。軽量実施。手順 1〜3 のみ）
+
+きっかけは「新しいワークフロー系の機能が追加されていないか」という問い。予定日（11-23）の 15 日前だが、
+Claude Code のマイナー版が前回から 10 個進んでいたので前倒しで実施した。**手順 4（実走）と手順 5
+（prompt-audit / skill-doctor）は回していない**（手順 5 は 10-24 に 1 回目を回したばかり）。
+調査は別セッション（「新しいワークフロー調査」、アーカイブ済み）で行い、結果はこの記録以外に残していない。
+
+範囲: Claude Code 2.1.310〜2.1.319、Codex 0.164〜0.167、Claude Platform release notes（10-24 以降）、
+Anthropic engineering、OpenAI deprecations。**手元の Claude Code は 2.1.289 のまま**（前回と同じ）。
+
+**v1 設計に効く制約・注意**
+- 2.1.312: prompt hook / agent hook の**同時実行が 24 件まで**。AIDD の fan-out（sweep 4 本＋Find の多数起動）で
+  上限に当たりうる。超過分が待たされるのか落ちるのかは changelog の要約だけでは分からない（docs 原文は未確認）。
+  落ちる側なら無音なので、骨格記録（`subagent-skeleton.jsonl`）の件数と起動数の突合（gap check）で初めて見える。
+  次に deep ルートを回すときは起動数が 24 を超えた区間の記録漏れを疑う
+- 2.1.319: auto mode が分類器へフォールバックしなくなった。hard_deny を「分類器の内側の 1 層」として維持する
+  判断（前回）はそのまま。分類器に頼っていた挙動が変わるので、auto mode での実機差を次の実走で見る
+- 2.1.314: `permissions.blockWritesOutsideWorkingDirectories`。worktree 運用（`logs/` は全 worktree 共有、
+  `~/.claude/` への書き込みあり）では壊れうるものがある。Bash 経由の書き込みにも効くかは未確認なので、入れるなら対象を調べてから
+- Codex: hooks イベントが 14 種（PreModelRequest / PostModelRequest / PermissionRequest / Interrupt /
+  PreCompact / PostCompact / SubagentStart 等）。PreToolUse の deny は `hookSpecificOutput.permissionDecision: deny`
+  （exit 2 も可）。既存の deny ラッパー方針と整合。追従は issue #908（ユーザー指示があるまで着手しない。2026-09-30 の決定）
+- Anthropic engineering 11-06「The components of agent memory」: auto memory の `MEMORY.md` は**先頭 200 行 / 25 KB
+  しか読まれない**と明記。前回「余裕あり」としたが、**このリポジトリ用の個人側 MEMORY.md は 2026-11-08 時点で
+  120 行 / 30,984 バイトで 25 KB を超えている**（後半の行は読まれていない可能性）。個人設定なのでここでは直さない
+
+**取り込む価値あり（番号は優先順。着手は人が決める）**
+1. **`permissions.denyInsteadOfPrompting`（2.1.319）**。無人実行で permission prompt 待ちになる代わりに deny して続行する。
+   AIDD の無人 Workflow 実行で「prompt 待ちのまま止まる」ことを防ぐ候補（止まった回数は未集計。
+   `check-workflow-interruption` の記録で数えてから入れるか決める）。**前提: 本体 2.1.319 以上**。`-p` 実行（verify-claims 等）に付けるか、Workflow 中だけかは分けて判断
+2. **`CLAUDE_CODE_SUBAGENT_EFFORT`（2.1.316）を `check-subagent-model-force.sh` の検知対象に足す**。
+   issue #743 / 前回 4 番（`CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL`）と同じ型で、環境変数 1 本で AIDD の effort 階層が
+   黙って上書きされる。1 行＋テスト。effort の実測（issue #906）で haiku には effort が送られないので、効くのは sonnet / opus の agent
+3. **Claude Managed Agents の dynamic workflows（beta、2026-10-09）**。エージェント自身が「多数のエージェントを phase で走らせ結果を
+   まとめるプログラム」を書き、サーバーが workflow run として回す（`multiagent: {type: multiagent_20261001, workflows: {type: enabled}}`、
+   beta header `managed-agents-2026-04-01`、イベント `workflow_run.*`。1 run 同時 64 スレッド・総 1,000 agent・寿命 24h・
+   セッション同時 10 run）。Claude Code の Workflow ツールと同じ発想のサーバー側版。**今は対応不要**（AIDD は Claude Code の
+   Workflow で足りている）が、ハーネスをサーバー側へ移す選択肢として記録。ワークフロー本体のスキーマは docs に無い（agent が書く）
+
+**対応不要（理由つき）**
+- Claude Code 2.1.319 の MCP tasks 背景実行、2.1.318 の workflows の usage limit 後 resume 修正: 恩恵のみ
+- Codex `/presets`（0.164）、`codex agents` command center（0.167）、`codex queue --resume`（0.166）: 対話操作の機能。hook・配布物に影響なし
+- OpenAI Agent Builder と Evals の 2026-11-30 停止（Evals は 10-31 から read-only。移行先は Agents SDK / ChatGPT Workspace Agents、
+  Evals は Promptfoo）: このリポジトリは OpenAI Evals を使っていない
+- ChatGPT Scheduled tasks のイベントトリガー（GitHub PR アクティビティ等。CLI では定義不可）: 使っていない
+
+**取得できなかったもの**: `openai.com` は fetcher に 403 を返すので InfoQ と `developers.openai.com/api/docs/deprecations` で代替した。
+dynamic workflows の本体スキーマ（docs に無い）。Claude Code 2.1.310〜319 の各項目は changelog の要約のみで docs 原文は未確認。
+
+**実走の要否（手順 4）**: hook イベントの入出力形式の変化は changelog 上は無い。前回からの持ち越し（本体 2.1.295 以上へ更新したあと
+`hook-live-drill.md` を subagent 系 2 本だけ回す）はそのまま。
