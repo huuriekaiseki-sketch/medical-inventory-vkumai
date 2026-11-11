@@ -20,7 +20,7 @@ SessionStart hook（`scripts/check-upstream-docs-review-staleness.sh`）が監�
 
 | 対象 | 版 / 日付 | 確認日 |
 |---|---|---|
-| Claude Code | 2.1.322（changelog の先頭。手元は 2.1.289） | 2026-11-11 |
+| Claude Code | 2.1.322（changelog の先頭。手元は、PATH 上の CLI が 2.1.289、デスクトップアプリのセッションが 2.1.321） | 2026-11-11 |
 | Codex CLI | 0.167.1（2026-11-10。0.169 は alpha のみ。手元は 0.147.0） | 2026-11-11 |
 | Anthropic engineering blog | 最新記事 2026-11-06「The components of agent memory」 | 2026-11-08 |
 | Claude Platform release notes | 2026-11-09 の Claude Fable 5.2 まで | 2026-11-11 |
@@ -95,6 +95,7 @@ Codex 0.154.0〜0.163.0、Anthropic engineering（新記事 2 本: 05-25 封じ�
 claude.com / claude.dev の実践記事（09-28〜10-22 の 4 本）、OpenAI developers blog（日付記載なし）。
 取得は 4 体の subagent（changelog は curl で全文、docs は `code.claude.com/docs/en/<slug>.md` の原文）。
 **手元の Claude Code は 2.1.289** なので、下の「取り込む」のうち 2.1.295 以降の機能は本体更新が前提。
+→ **2026-11-12 訂正**: 2.1.289 は PATH 上の CLI の版。この回のセッション自体はデスクトップアプリで、本体は 2.1.308 だった（下の 11-12 の節）。
 
 **v1 設計に効く制約・注意（docs / changelog から）**
 - 2.1.288: PreToolUse / PermissionRequest の matcher 失敗・入力のシリアライズ失敗は**スキップでなく block** になった（fail-closed 側へ。歓迎）。2.1.299: plugin hook に値を渡せない・答えを受け取れないときも refuse
@@ -216,6 +217,7 @@ Claude Code のマイナー版が前回から 10 個進んでいたので前倒�
 
 範囲: Claude Code 2.1.310〜2.1.319、Codex 0.164〜0.167、Claude Platform release notes（10-24 以降）、
 Anthropic engineering、OpenAI deprecations。**手元の Claude Code は 2.1.289 のまま**（前回と同じ）。
+→ **2026-11-12 訂正**: 2.1.289 は PATH 上の CLI の版。この回のセッションはデスクトップアプリで、本体は 2.1.317 だった（下の 11-12 の節）。
 
 **v1 設計に効く制約・注意**
 - 2.1.312: prompt hook / agent hook の**同時実行が 24 件まで**。AIDD の fan-out（sweep 4 本＋Find の多数起動）で
@@ -273,6 +275,7 @@ dynamic workflows の本体スキーマ（docs に無い）。Claude Code 2.1.31
 範囲: Claude Code 2.1.310〜2.1.322（changelog 原文。欠番 2.1.313 / 315 / 320）、Codex 0.164.0〜0.167.1（GitHub releases の一覧と
 `learn.chatgpt.com/docs/changelog`。後者は一部が要約経由）、Claude Platform release notes（09-28〜11-09）、
 Managed Agents の workflow runs の docs 原文、Anthropic engineering、OpenAI deprecations。手元は Claude Code 2.1.289 / Codex 0.147.0 のまま。
+→ **2026-11-12 訂正**: 2.1.289 は PATH 上の CLI の版。この回のセッションはデスクトップアプリで、本体は 2.1.317（途中から 2.1.321）だった（下の 11-12 の節）。
 
 **11-08 の記録の訂正（changelog 原文で確認）**
 - **hook の同時実行 24 件（2.1.312）は prompt 型 / agent 型の hook だけが対象**（セッションあたり 24 本まで、subagent 分を含む。
@@ -295,6 +298,8 @@ Managed Agents の workflow runs の docs 原文、Anthropic engineering、OpenA
   `platform.claude.com/docs/en/managed-agents/workflow-runs.md` の原文の表で一致を確認。同時 64 は「保証しない」との注記つき
 
 **11-08 の見落とし（2.1.310〜2.1.319。手元 2.1.289 に効くもの）**
+→ **2026-11-12 訂正**: 「手元 2.1.289」は PATH 上の CLI と、それを `claude -p` で呼ぶスクリプトの話。デスクトップアプリのセッションは
+2.1.317 以上で動いていて、下の 2.1.314 / 2.1.319 の修正は版の上では入っている（効くことの実測はしていない。下の 11-12 の節）。
 - **2.1.314: matcher が Bash の hook は、Monitor ツールが起動するシェルコマンドに走っていなかった**（修正後は block / ask はできるが
   approve / 書き換えはできない）。このリポジトリの止める hook 4 本（`check-skip-marker-write` / `check-dependency-change` /
   `check-direct-ddl-execution` / `check-readonly-bash`）は matcher に Bash を使う。**2.1.289 では Monitor 経由のコマンドが
@@ -307,6 +312,7 @@ Managed Agents の workflow runs の docs 原文、Anthropic engineering、OpenA
   （「設定を継がない」前提が 2.1.289 では完全ではない）。2.1.317: `--setting-sources` を使う実行で古い transcript が掃除されない不具合も修正
 - 2.1.311: `SubagentStop` hook が完了時の 1 回でなく、動作中の subagent ごとに毎分 2 回ほど走っていた。**実測**: `logs/subagent-skeleton.jsonl` の
   2026-10-01 以降、SubagentStop のある 56 体のうち 49 体が 1 行・7 体が 2 行。大量の重複は起きていない（2 行の 7 体の原因は未調査）
+  → **2026-11-12 調査済み**: 7 体のうち 6 体は agent 型 hook の評価役（1〜2 秒差）。56 体の大半も subagent ではなかった（下の 11-12 の節）
 - 2.1.319: `claude plugin update` が、新しい版で足された依存プラグインを入れていなかった（`docs/plugin/COMPATIBILITY.md` の
   「依存側は自動で上がらず個別 update」の実測は 2.1.270 のもの。次の配布時に測り直す）
 - 2.1.318: 背景の subagent はシェルコマンドを 3 分で背景へ回す。2.1.311: subagent の隔離 worktree が、その subagent が起動した
@@ -335,9 +341,59 @@ Managed Agents の workflow runs の docs 原文、Anthropic engineering、OpenA
 `logs/subagent-skeleton.jsonl` に `SubagentHandback` の行だけがあり、`SubagentStart` / `SubagentStop` の行が無い。2026-10-01 以降の集計でも
 SubagentStart のある agent は 6 体、SubagentStop のある agent は 56 体で食い違う。gap check の期待件数（起動数）と骨格記録の突合に効くので、
 仮説の前に transcript で「hook が呼ばれたか」を数える
+→ **2026-11-12 調査済み**: 欠けるのは web-fetch の subagent だけ。「6 体と 56 体の食い違い」は欠落ではなかった（下の 11-12 の節）
 
 **取得できなかったもの・読んでいないもの**: Codex の changelog ページは 22 万字のうち約 8 万字だけ原文で、残りは要約経由（0.163〜0.166 の版の境目は近似）。
 claude.com/blog は 1 ページ目のみ。Claude Code の docs ページは未確認。
 
 **教訓（手順 1 への反映）**: changelog は要約させず `curl` で全文を取り、判定に使う項目は原文の 1 行を読む。手順 1 の
 「WebFetch で要約」は、項目の拾い出しまでにとどめる。
+
+### 2026-11-12（11-11 の節の訂正。骨格記録の欠落を調べた）
+
+11-11 の節の「副産物（原因未調査）」を調べた。その途中で、**これまでの節が「手元の Claude Code」と書いてきた 2.1.289 は
+PATH 上の CLI の版で、デスクトップアプリのセッションは別の版の本体で動いている**と分かった。該当行には「→ 2026-11-12 訂正」を付け、
+根拠はここに書く。docs の差分確認そのもの（手順 1〜5）は回していない。「最後に確認した版」と次回実施予定日は動かさない。
+
+**デスクトップアプリのセッションの本体の版（transcript の各行の `version` を数えた）**
+- 10-23 のセッション: 2.1.308／11-08 のセッション: 2.1.317／11-11 のセッション: 2.1.317 から途中で 2.1.321。3 つとも `entrypoint` は `claude-desktop`
+- `claude --version` は 2.1.289。これは PATH 上の CLI の版で、`claude -p` を呼ぶスクリプト（`verify-claims.sh` / `eval-workflow-prompts.sh` /
+  `eval-sweep-recall.sh` / `workflow-nesting-drill.sh`）が使うのはこちら（スクリプトが PATH の `claude` を呼ぶ、という読みで、実行時の版は測っていない）
+- **版に依存する判定は、`claude --version` でなく、対象のセッションの transcript の `version` で見る**
+
+**11-11 の節の読み替え**
+- 「2.1.289 では、止める hook 4 本が Monitor ツール経由のコマンドを素通りしうる」（2.1.314 の修正）と「許可チェックのすり抜け 4 件は未修正」
+  （2.1.319 の修正）は、**CLI と `claude -p` の側の話**。デスクトップアプリのセッションは 2.1.317 以上で、版の上では修正が入っている。
+  **どちらの側も実測はしていない**（デスクトップ側で Monitor 経由の deny が実際に止まるかも未確認）
+- `onFailure`（2.1.295 以上。#910）は、デスクトップアプリのセッションでは版の条件を満たしている。`hook-live-drill.md` の該当分は、
+  CLI の更新を待たずにデスクトップアプリのセッションから回せる可能性がある（未実施）
+- 10-23・11-08 の節にある「2.1.289 では〜」という判定は、その回のセッションが 2.1.308 / 2.1.317 だったことを踏まえて読む。
+  **個別の読み直しはしていない。** 他の docs の「本体 2.1.289」（`ai-config-map.md` / `hook-live-drill.md` / `tooling-decisions.md` /
+  `decisions/aidd-pipeline.md`）も、CLI で測ったものかデスクトップアプリで測ったものかは未確認
+
+**骨格記録（`logs/subagent-skeleton.jsonl`）の欠落の調査結果**
+- **本当に欠けるのは web-fetch の subagent だけ。** 11-08 以降の 11 体（本体 2.1.317 と 2.1.321）すべてで、`SubagentHandback` の行だけがあり、
+  `SubagentStart` / `SubagentStop` の行が無い。**対照実験**: 同じセッション・同じ本体 2.1.321 で、Explore と web-fetch を 1 体ずつ同じ応答の中で起動した。
+  Explore は Start / Handback / Stop の 3 行、web-fetch は Handback の 1 行だけだった。changelog（全文を grep）に該当する記述は無い
+- **「SubagentStart のある agent 6 体・SubagentStop のある agent 56 体」の食い違いは欠落ではなかった。** `agentType` が空の `SubagentStop` 行は
+  subagent ではなく、本体の内部 agent が出している（次の入力の候補を作る agent・compaction の要約・agent 型 hook の評価役）。これらは
+  `SubagentStart` を出さない。全期間で 1,642 行（`SubagentStop` 行の半分強）。内訳は、`lastAssistantMessage` が 60 字以下の 1 行のもの 1,473 行・
+  analysis / summary のタグで始まるもの 34 行・それ以外 135 行。`agentTranscriptPath` の指すファイルは 1 つも残っていない
+- **`agentType` のある agent には、Stop だけあって Start が無いものは 0 体**（全期間。Start 1,453 体・Stop 1,438 体・Start だけで Stop が無いもの 15 体）
+- `SubagentStop` が 2 行ある 7 体（11-11 の節）のうち、6 体は `agentId` が `hook-agent-` で始まる agent 型 hook の評価役で、2 行の差は 1〜2 秒。
+  残る 1 体は claude-code-guide（9 秒差、原因は未調査）。2.1.311 で直った「毎分 2 回」の型ではない
+- subagent の `meta.json`（種類と起動の形）と突き合わせたとき、10-24 の 7 体（sweep-db 6・adversarial-verify 1）にも行が無かった。これは issue #906 の
+  実測を scratchpad の別ディレクトリで動かしたもので、このリポジトリの hook が読み込まれていない（欠落ではない）
+
+**分かっていないこと**
+- web-fetch で欠けるのが「agent の種類」のせいか「foreground という起動の形」のせいか。11 体はすべて foreground で、この版の Agent ツールは
+  起動の形を選べないので分けられなかった。旧版では foreground でも Start / Stop が残っている（09-19 の reviewer 30 体・09-18 の judge-panel 1 体・
+  10-02 の claude-code-guide 1 体）ので、「foreground なら常に欠ける」ではない
+- hook が呼ばれていないのか、呼ばれたが黙って終わったのか。`log-subagent-hook-skeleton.sh` は、Start / Stop の payload で `agent_id` が空だと
+  何も書かずに exit 0 する。同じ web-fetch の `PostToolUse(SubagentHandback)` の payload には `agent_id` が入っているので、空である見込みは低いが、
+  スクリプトに印を足さないと区別できない（C-025 の型。「行が無い」を「呼ばれていない」と読まない）
+- 読む側への影響。`snapshot-agent-baseline.sh` は Start と Stop の対で実行件数と所要時間を数えるので、web-fetch の実行は載らないはず
+  （コードを読んだだけで、出力では確かめていない）。`agentType` が空の行を各スクリプトがどう扱うかは見ていない
+
+**教訓**: 「手元の版」を 1 つの数字で書かない。CLI とデスクトップアプリで本体が別で、後者はアプリ側の更新で進む。記録には
+「どの入口の、どの版か」を書き、根拠は transcript の `version` にする。骨格記録を数えるときは `agentType` が空の行を除く。
