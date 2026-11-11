@@ -12,7 +12,7 @@
 | 0.1.3 | 2.1.270（2 本の `claude plugin update` で 0.1.2 → 0.1.3 を実測） | 2.1.261 | Codex 側は codex/ と codex-vkumai/ の COMPATIBILITY.md | 2026-09-28。差は文書のみ。`aidd-codex-vkumai` の marketplace 初掲載 |
 | 0.1.4 | 2.1.270（2 本の `claude plugin update` で 0.1.3 → 0.1.4 を実測）。**版が上がることだけを確認。導入先での hook の発火は未実測**（導入先ではプラグインが disabled）。中心リポジトリでは同じスクリプトが project hook として動いている | 2.1.261 | Codex 側は codex/ と codex-vkumai/ の COMPATIBILITY.md | 2026-09-29。Codex の hook を Claude Code と同じ仕様に揃える 6 件。初めてスクリプトの中身が変わる版 |
 | 0.1.5 | 2.1.270（2 本の `claude plugin update` で 0.1.4 → 0.1.5 を実測）。**版が上がることだけを確認。導入先での hook の発火は未実測**（導入先ではプラグインが disabled） | 2.1.261 | Codex 側は codex/ と codex-vkumai/ の COMPATIBILITY.md | 2026-09-30。Claude Code 用の 2 本は hook の定義が不変。Codex 用の aidd-codex-vkumai に hook が 1 本増える |
-| 未配布（次の版） | 未実測（中心リポジトリの本体は 2.1.289。`onFailure` は 2.1.295 以上でしか効かないため、更新後に実走する） | 2.1.319（2026-10-23 の 2.1.309 から、2026-11-08 の軽量な docs 差分確認で changelog を 2.1.319 まで読んで進めた。2.1.310〜319 にこの表の前提を変える項目は無い） | Codex 側は codex/ と codex-vkumai/ の COMPATIBILITY.md | 2026-10-23。止める hook 4 本に `"onFailure": "block"`。**Claude Code 2.1.295 以上が前提**（KNOWN-LIMITS.md）。Codex 用の 2 本は不変 |
+| 未配布（次の版） | 未実測（中心リポジトリの本体は 2.1.289。`onFailure` は 2.1.295 以上でしか効かないため、更新後に実走する） | 2.1.322（2026-10-23 の 2.1.309 から、2026-11-11 に changelog の原文を 2.1.322 まで読んで進めた。2.1.310〜322 に、下の「前提にしている挙動」を変える項目は無い。2.1.314 で、matcher が Bash の hook が Monitor ツール経由のコマンドにも走るようになった） | Codex 側は codex/ と codex-vkumai/ の COMPATIBILITY.md | 2026-10-23。止める hook 4 本に `"onFailure": "block"`。**Claude Code 2.1.295 以上が前提**（KNOWN-LIMITS.md）。Codex 用の 2 本は不変 |
 
 ## 前提にしている Claude Code の挙動（変わると壊れる）
 

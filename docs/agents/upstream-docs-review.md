@@ -20,14 +20,16 @@ SessionStart hook（`scripts/check-upstream-docs-review-staleness.sh`）が監�
 
 | 対象 | 版 / 日付 | 確認日 |
 |---|---|---|
-| Claude Code | 2.1.319（changelog の先頭。手元は 2.1.289 で 30 版遅れ） | 2026-11-08 |
-| Codex CLI | 0.167.0（手元は 0.147.0） | 2026-11-08 |
+| Claude Code | 2.1.322（changelog の先頭。手元は 2.1.289） | 2026-11-11 |
+| Codex CLI | 0.167.1（2026-11-10。0.169 は alpha のみ。手元は 0.147.0） | 2026-11-11 |
 | Anthropic engineering blog | 最新記事 2026-11-06「The components of agent memory」 | 2026-11-08 |
-| Claude Platform release notes | 2026-10-09 の Managed Agents dynamic workflows（beta）まで | 2026-11-08 |
+| Claude Platform release notes | 2026-11-09 の Claude Fable 5.2 まで | 2026-11-11 |
 
 ## 手順（1〜2 時間）
 
-1. **差分を取る**（WebFetch で要約。日付でフィルタさせると要約器が誤るので「先頭から N 版」で取る）
+1. **差分を取る**（WebFetch で要約。日付でフィルタさせると要約器が誤るので「先頭から N 版」で取る。
+   **Claude Code の changelog だけは `curl` で全文を取り、判定に使う項目は原文の行を読む**——要約は「〜のときだけ」の
+   条件節を落とし、2026-11-08 の判定が 3 件ずれた。下の 2026-11-11 の節）
    - Claude Code changelog: `https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md`
      （「最後に確認した版」より新しい版の項目を全部。hooks / subagent / compaction / plugin / workflow /
      sandbox / permission / skill の語を含む項目は省略させない）
@@ -220,10 +222,13 @@ Anthropic engineering、OpenAI deprecations。**手元の Claude Code は 2.1.28
   上限に当たりうる。超過分が待たされるのか落ちるのかは changelog の要約だけでは分からない（docs 原文は未確認）。
   落ちる側なら無音なので、骨格記録（`subagent-skeleton.jsonl`）の件数と起動数の突合（gap check）で初めて見える。
   次に deep ルートを回すときは起動数が 24 を超えた区間の記録漏れを疑う
+  → **2026-11-11 訂正**: 対象は prompt 型 / agent 型の hook だけで、このリポジトリの hook（command 型）には当たらない。下の 11-11 の節
 - 2.1.319: auto mode が分類器へフォールバックしなくなった。hard_deny を「分類器の内側の 1 層」として維持する
   判断（前回）はそのまま。分類器に頼っていた挙動が変わるので、auto mode での実機差を次の実走で見る
+  → **2026-11-11 訂正**: テレメトリか feature flag を切っているときだけの変更。下の 11-11 の節
 - 2.1.314: `permissions.blockWritesOutsideWorkingDirectories`。worktree 運用（`logs/` は全 worktree 共有、
   `~/.claude/` への書き込みあり）では壊れうるものがある。Bash 経由の書き込みにも効くかは未確認なので、入れるなら対象を調べてから
+  → **2026-11-11 確認**: 対象は Write / Edit / NotebookEdit だけ。Bash は対象外。下の 11-11 の節
 - Codex: hooks イベントが 14 種（PreModelRequest / PostModelRequest / PermissionRequest / Interrupt /
   PreCompact / PostCompact / SubagentStart 等）。PreToolUse の deny は `hookSpecificOutput.permissionDecision: deny`
   （exit 2 も可）。既存の deny ラッパー方針と整合。追従は issue #908（ユーザー指示があるまで着手しない。2026-09-30 の決定）
@@ -238,6 +243,7 @@ Anthropic engineering、OpenAI deprecations。**手元の Claude Code は 2.1.28
 2. **`CLAUDE_CODE_SUBAGENT_EFFORT`（2.1.316）を `check-subagent-model-force.sh` の検知対象に足す**。
    issue #743 / 前回 4 番（`CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL`）と同じ型で、環境変数 1 本で AIDD の effort 階層が
    黙って上書きされる。1 行＋テスト。effort の実測（issue #906）で haiku には effort が送られないので、効くのは sonnet / opus の agent
+   → **2026-11-11 訂正**: 上書きはしない（他に指定が無いときだけ効く）。影響するのは effort 未指定の `implementer` だけ。下の 11-11 の節
 3. **Claude Managed Agents の dynamic workflows（beta、2026-10-09）**。エージェント自身が「多数のエージェントを phase で走らせ結果を
    まとめるプログラム」を書き、サーバーが workflow run として回す（`multiagent: {type: multiagent_20261001, workflows: {type: enabled}}`、
    beta header `managed-agents-2026-04-01`、イベント `workflow_run.*`。1 run 同時 64 スレッド・総 1,000 agent・寿命 24h・
@@ -256,3 +262,82 @@ dynamic workflows の本体スキーマ（docs に無い）。Claude Code 2.1.31
 
 **実走の要否（手順 4）**: hook イベントの入出力形式の変化は changelog 上は無い。前回からの持ち越し（本体 2.1.295 以上へ更新したあと
 `hook-live-drill.md` を subagent 系 2 本だけ回す）はそのまま。
+
+### 2026-11-11（3 回目の訂正と追補。changelog を原文で読み直した）
+
+11-08 の記録は changelog を要約器（WebFetch）経由で読んでいた。同じ範囲を `curl` で全文取得して読み直したところ、
+**要約が条件節（「〜のときだけ」「〜型の hook は」）を落としていて、判定が 3 件ずれていた**。11-08 の節の該当行には
+「→ 2026-11-11 訂正」を付け、根拠はここに書く。あわせて 11-08 以降の新着（2.1.321 / 2.1.322、Codex 0.167.1）を足す。
+**手順 4・5 は今回も回していない。Claude Code の docs ページ（hooks / sub-agents / plugins-reference）の現行値の突き合わせもしていない。**
+
+範囲: Claude Code 2.1.310〜2.1.322（changelog 原文。欠番 2.1.313 / 315 / 320）、Codex 0.164.0〜0.167.1（GitHub releases の一覧と
+`learn.chatgpt.com/docs/changelog`。後者は一部が要約経由）、Claude Platform release notes（09-28〜11-09）、
+Managed Agents の workflow runs の docs 原文、Anthropic engineering、OpenAI deprecations。手元は Claude Code 2.1.289 / Codex 0.147.0 のまま。
+
+**11-08 の記録の訂正（changelog 原文で確認）**
+- **hook の同時実行 24 件（2.1.312）は prompt 型 / agent 型の hook だけが対象**（セッションあたり 24 本まで、subagent 分を含む。
+  加えて、イベントの timeout より長く待った分が 12 本まで）。このリポジトリの hook は全部 command 型で、
+  `.claude/settings.json` と個人設定に prompt 型 / agent 型は 0 本（grep で確認）。**fan-out 時に骨格記録を取りこぼす、という
+  11-08 の懸念は当たらない**。「起動数が 24 を超えた区間の記録漏れを疑う」は取り下げる
+- **`CLAUDE_CODE_SUBAGENT_EFFORT`（2.1.316）は上書きしない**。他に effort の指定が無い subagent にだけ効く（セッションの effort を
+  継ぐ代わりにこの値になる）。AIDD の 13 体のうち frontmatter に `effort:` が無いのは `implementer` だけ（`grep -L` で確認）なので、
+  影響はその 1 体に限られる。「検知対象に足す」は優先度を下げる。入れるなら対象は「effort 未指定の agent があるときだけ警告」
+  - 関連（2.1.317）: メインと違うモデルで動く subagent は、セッションの effort でなく、そのモデルの保存済み effort か既定値を使うようになった。
+    これも effort 未指定の agent にだけ効く
+- **auto mode の分類器フォールバック廃止（2.1.319）は、テレメトリか feature flag を切っているとき（LLM gateway 越しを含む）だけ**。
+  個人設定・プロジェクト設定に `DISABLE_TELEMETRY` / `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` /
+  `CLAUDE_CODE_DISABLE_FEATURE_FLAGS` は無い（grep で確認。シェルで export している場合は別）。「次の実走で実機差を見る」は不要
+- **`permissions.blockWritesOutsideWorkingDirectories`（2.1.314）の対象は Write / Edit / NotebookEdit だけ**。Bash 経由の書き込みと
+  hook スクリプトの書き込み（`logs/`）は対象外。壊れうるのは作業ディレクトリ外への Write / Edit（個人側 memory への書き込み等）
+- `permissions.denyInsteadOfPrompting`（2.1.319）の適用範囲は「ターミナルのセッション・subagent・teammate」と書かれている。
+  `claude -p` での挙動は changelog に無い（verify-claims 等に付ける判断の前に実測が要る）
+- Managed Agents dynamic workflows の上限（1 run 同時 64 スレッド・総 1,000 agent・寿命 24h・セッション同時 10 run）は
+  `platform.claude.com/docs/en/managed-agents/workflow-runs.md` の原文の表で一致を確認。同時 64 は「保証しない」との注記つき
+
+**11-08 の見落とし（2.1.310〜2.1.319。手元 2.1.289 に効くもの）**
+- **2.1.314: matcher が Bash の hook は、Monitor ツールが起動するシェルコマンドに走っていなかった**（修正後は block / ask はできるが
+  approve / 書き換えはできない）。このリポジトリの止める hook 4 本（`check-skip-marker-write` / `check-dependency-change` /
+  `check-direct-ddl-execution` / `check-readonly-bash`）は matcher に Bash を使う。**2.1.289 では Monitor 経由のコマンドが
+  この 4 本を素通りしうる。未実測**。本体を 2.1.314 以上にしたあと `hook-live-drill.md` で Monitor 経由の deny を 1 本確かめる
+- **2.1.319: 許可チェックのすり抜け修正 4 件**（引用符つきの語で Bash の deny / ask ルールを外せた／`sed` が accept-edits と auto mode で
+  許可チェックを飛ばせた／環境変数プレフィックスでコマンドの一部を隠せた／worktree 作成時の sandbox escape）。hook でなく本体の
+  許可ルール側の穴で、2.1.289 は未修正。**本体更新の理由になる**（#910 の「2.1.295 以上が要る」と同じ方向）
+- 2.1.314: `--setting-sources` で除外した設定ファイルから、auto mode のルールや保存済みの許可が一部読まれていた。
+  `verify-claims.sh` / `eval-workflow-prompts.sh` / `eval-sweep-recall.sh` / `workflow-nesting-drill.sh` がこの指定を使う
+  （「設定を継がない」前提が 2.1.289 では完全ではない）。2.1.317: `--setting-sources` を使う実行で古い transcript が掃除されない不具合も修正
+- 2.1.311: `SubagentStop` hook が完了時の 1 回でなく、動作中の subagent ごとに毎分 2 回ほど走っていた。**実測**: `logs/subagent-skeleton.jsonl` の
+  2026-10-01 以降、SubagentStop のある 56 体のうち 49 体が 1 行・7 体が 2 行。大量の重複は起きていない（2 行の 7 体の原因は未調査）
+- 2.1.319: `claude plugin update` が、新しい版で足された依存プラグインを入れていなかった（`docs/plugin/COMPATIBILITY.md` の
+  「依存側は自動で上がらず個別 update」の実測は 2.1.270 のもの。次の配布時に測り直す）
+- 2.1.318: 背景の subagent はシェルコマンドを 3 分で背景へ回す。2.1.311: subagent の隔離 worktree が、その subagent が起動した
+  背景 subagent の作業中に消される不具合を修正。2.1.311: 自動 compaction 直後に古い `MEMORY.md` / `CLAUDE.md` が見えていた不具合を修正
+
+**11-08 以降の新着**
+- **Claude Code 2.1.321: Claude Fable 5.2（`claude-fable-5-2`）が Fable の既定**。保存済みの Fable 5.1 の選択は `fable` へ移る。
+  ルート `CLAUDE.md` の `/goal` のターン数（Fable 5 の実測で 20 → 15 に校正、issue #498）は「モデル世代が変わったら見直す」条件に当たる。
+  agent / workflow にモデル ID の固定は無い（`fable` を grep、コメント 1 件のみ）
+  - 同版: workflow を止める・一時停止したことが Claude に伝わっていなかった不具合を修正／auto mode で、背景 subagent の報告が
+    compaction をまたぐと失われる不具合を修正／`claude -p` の背景コマンドは 10 分で止まる（30 分と伝えていた誤りを修正。
+    10-23 の節の「unattended の background コマンドは 30 分上限」は `-p` では 10 分と読む）／`cp` / `mv` でディレクトリへ書き込むファイルに
+    deny ルールが効いていなかった不具合を修正／PreToolUse の `ask` が別 hook の `defer` で失われる不具合を修正
+- Claude Code 2.1.322: Vertex の fast mode のみ。対応不要
+- **Codex 0.167.1（2026-11-10）**: 0.167.0 からの変更の記載なし。0.169 は alpha。0.164 に「プラグインの hook の承認をプラグインの中身に結びつける」、
+  0.166 に「PreToolUse hook へコマンドの作業ディレクトリを渡す」、0.167 に「PreToolUse hook を Guardian の確認より先に適用する」がある
+  （いずれも PR タイトルのみ。hook の信頼まわりは次の配布時に `docs/plugin/RELEASE.md` §4.3 を測り直す）
+- Claude Platform: 11-09 Fable 5.2 / Mythos 5.2（入力 $8・出力 $40 / MTok。5.1 は $10・$50）。11-02 message threads（beta）。
+  10-21 API version `2026-10-21` と SDK のメジャー版。10-14 OpenTelemetry export（beta）。このリポジトリは API を直接呼ばないので対応不要
+- Anthropic: engineering の最新は 11-06 のまま。claude.com/blog に 11-09「Safely scaling multi-agent teams with Claude Fable 5.2」
+  （1,000 エージェントの運用。**一覧の要約だけで本文は未読**）
+- OpenAI deprecations: Agent Builder / Evals に加え **Reusable prompts（`v1/prompts`）も 2026-11-30 停止**。`gpt-5.3-codex` は 2027-04-01 停止
+  （`.codex/config.toml` にモデル指定は無い）
+
+**副産物（原因未調査。別件）**: 2026-11-11 のセッション（デスクトップアプリ、auto mode）で起動した subagent 3 体は、
+`logs/subagent-skeleton.jsonl` に `SubagentHandback` の行だけがあり、`SubagentStart` / `SubagentStop` の行が無い。2026-10-01 以降の集計でも
+SubagentStart のある agent は 6 体、SubagentStop のある agent は 56 体で食い違う。gap check の期待件数（起動数）と骨格記録の突合に効くので、
+仮説の前に transcript で「hook が呼ばれたか」を数える
+
+**取得できなかったもの・読んでいないもの**: Codex の changelog ページは 22 万字のうち約 8 万字だけ原文で、残りは要約経由（0.163〜0.166 の版の境目は近似）。
+claude.com/blog は 1 ページ目のみ。Claude Code の docs ページは未確認。
+
+**教訓（手順 1 への反映）**: changelog は要約させず `curl` で全文を取り、判定に使う項目は原文の 1 行を読む。手順 1 の
+「WebFetch で要約」は、項目の拾い出しまでにとどめる。
