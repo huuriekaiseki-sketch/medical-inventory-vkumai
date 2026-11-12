@@ -156,6 +156,18 @@ messageTruncated?}` の行として同じファイルに残す。`message` は�
 突合の数字は変わらない（限界は同スクリプトの WHY に書いた）。通常モード（`SubagentHandback` が
 提供されないとき）はこの行は書かれず、従来どおり `lastAssistantMessage` に本文が入る。
 
+**黙って終わった回の印（issue #928、2026-11-12）**: `log-subagent-hook-skeleton.sh` は、payload の
+`hook_event_name` が空のとき、または `SubagentStart` / `SubagentStop` で `agent_id` が空のとき、骨格記録には
+何も書かずに exit 0 する。以前はこのとき何も残らず、骨格記録に行が無いことを「hook が呼ばれていない」と
+読むしかなかった。いまは、その回を `logs/subagent-skeleton-dropped.jsonl` に
+`{timestamp, hookEvent, sessionId, agentType, reason, payloadKeys}` の 1 行として残す（`reason` は
+`empty_hook_event` か `empty_agent_id`）。`payloadKeys` は届いた payload のキー名だけで、値は写さない
+（`last_assistant_message` 等の本文を共有の jsonl に積まないため）。骨格記録と別ファイルにしたのは、
+骨格記録が `agentId` で Start / Stop を対にして読まれるからで、骨格記録の行の形は変えていない。
+`SUBAGENT_HOOK_SKELETON_LOG_FILE` で骨格記録の置き場所を変えたときは、印もその隣（`<名前>-dropped.jsonl`）に書く。
+**この印を読んで知らせる仕組みは無い（人が見に行く）。** 印が無いことから言えるのは「この 2 つの分岐では
+終わっていない」までで、payload が JSON として読めない回と、hook が timeout で打ち切られた回は残らない。
+
 **既知の限界:**
 - ペイロードに`status`（pass/fail/blocked）フィールドは含まれない。`SubagentStop`が発火した
   という事実は「エージェントが完了処理まで到達した」ことの証拠にしかならず、pass/fail/blocked
@@ -178,6 +190,17 @@ messageTruncated?}` の行として同じファイルに残す。`message` は�
   未対応のまま残っている
 - 既存の`log-agent-progress.sh` / `log-loop-observability.sh` / gap check群は削除しておらず、
   新方式と併存させている（新方式が安定稼働することを確認してから、廃止を別issueで検討する）
+- **web-fetch の subagent は `SubagentStart` / `SubagentStop` の行が残らない**（2026-11-12 の調査、issue #928）。
+  2026-11-08 以降の 11 体すべてで `SubagentHandback` の行だけがあり、同じセッション・同じ本体 2.1.321 で並べて
+  起動した Explore には 3 行とも残った。上の表の「機械強制（呼び忘れ得ない）」は、この種類には当たらない。
+  `snapshot-agent-baseline.sh` は Start と Stop の対で数えるので、web-fetch の実行は基準値に載らないはず
+  （コードを読んだだけで、出力では確かめていない）。hook が呼ばれていないのか、呼ばれたが `agent_id` が空で
+  終わったのかは未確定で、上の印を入れた版で測り直す
+- **`agentType` が空の `SubagentStop` 行は subagent のものではない**（同調査）。本体の内部 agent
+  （次の入力の候補を作る agent・compaction の要約・agent 型 hook の評価役）が出していて、`SubagentStart` を
+  出さない。全期間で 1,642 行（`SubagentStop` 行の半分強、2026-11-12 時点）、`agentTranscriptPath` の指すファイルは
+  1 つも残っていない。骨格記録から subagent の数を数えるときは、`agentType` が空の行を除く。読む側の各スクリプトが
+  この行をどう扱うかは確かめていない
 
 **第4の記録層（issue #442調査 → issue #462・#493で組み込み済み）**: Workflowツールが
 `agent()`呼び出しごとに書き出す`journal.jsonl`（`subagents/workflows/wf_<runId>/journal.jsonl`）
