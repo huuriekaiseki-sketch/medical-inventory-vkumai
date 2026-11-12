@@ -392,8 +392,12 @@ PATH 上の CLI の版で、デスクトップアプリのセッションは別�
 - hook が呼ばれていないのか、呼ばれたが黙って終わったのか。`log-subagent-hook-skeleton.sh` は、Start / Stop の payload で `agent_id` が空だと
   何も書かずに exit 0 する。同じ web-fetch の `PostToolUse(SubagentHandback)` の payload には `agent_id` が入っているので、空である見込みは低いが、
   スクリプトに印を足さないと区別できない（C-025 の型。「行が無い」を「呼ばれていない」と読まない）
+  → **同日 測り直し済み（issue #928、PR #929）**: 印を足した版で測り、web-fetch では hook が呼ばれていないと分かった。
+  結論と限界は `observability-internals.md` の骨格記録の「既知の限界」
 - 読む側への影響。`snapshot-agent-baseline.sh` は Start と Stop の対で実行件数と所要時間を数えるので、web-fetch の実行は載らないはず
   （コードを読んだだけで、出力では確かめていない）。`agentType` が空の行を各スクリプトがどう扱うかは見ていない
+  → **同日 確認済み（issue #928）**: 出力に web-fetch の行は無く、`agentType` が空の行は `(unknown)` 1,653 runs として
+  数え込まれていた（同上）
 
 **教訓**: 「手元の版」を 1 つの数字で書かない。CLI とデスクトップアプリで本体が別で、後者はアプリ側の更新で進む。記録には
 「どの入口の、どの版か」を書き、根拠は transcript の `version` にする。骨格記録を数えるときは `agentType` が空の行を除く。
