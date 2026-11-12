@@ -44,7 +44,22 @@ mkdir -p "$OUT_DIR"
 OUT_FILE="$OUT_DIR/${DATE}.json"
 
 # --- subagent-skeleton.jsonlからagentType別の実行件数・所要時間を集計 ---
-SKELETON_SUMMARY="[]"
+#
+# WHY（issue #928）: agentType が空で、同じ agentId の SubagentStart も無い SubagentStop 行は runs に数えない。
+# この行は subagent のものではなく、本体の内部 agent（次の入力の候補を作る agent・compaction の要約・
+# agent 型 hook の評価役）が出している（2026-11-12 の調査。全期間で 1,642 行、指す transcript は 1 つも残っていない）。
+# 以前は "(unknown)" として数えていて、実データでは (unknown) が 1,653 runs・所要時間 null で種類別の最大の行に
+# なっていた。基準値は model / effort の変更前後で subagent の実行を比べるためのものなので、混ぜると比較が壊れる。
+#
+# 種類は「SubagentStop の agentType、無ければ同じ agentId の SubagentStart の agentType」で決める。Stop 側だけ
+# 種類が欠けた subagent を、内部 agent と一緒に捨てないため。
+#
+# 除いた件数は捨てずに subagentSkeletonExcluded.emptyAgentTypeStops に残す。0 件と「数えていない」を区別でき、
+# 本体の版が変わって内部 agent の出方が変わったときに、この数字の動きで気づける。
+#
+# 限界: web-fetch の subagent は SubagentStart / SubagentStop の hook が呼ばれない（同調査）ので、ここには載らない。
+# SubagentHandback の行から補うことはしていない（所要時間が取れず、補うかどうかは issue #928 で未決）。
+SKELETON_SUMMARY='{"byType":[],"excludedEmptyAgentTypeStops":0}'
 if [ -f "$SKELETON_FILE" ]; then
   SKELETON_SUMMARY="$(python3 - "$SKELETON_FILE" <<'PYEOF'
 import json, sys
@@ -53,6 +68,7 @@ from collections import defaultdict
 path = sys.argv[1]
 starts = {}
 by_type = defaultdict(lambda: {"runs": 0, "totalDurationMs": 0, "durationSamples": 0})
+excluded_empty_type_stops = 0
 
 with open(path) as f:
     for line in f:
@@ -61,15 +77,19 @@ with open(path) as f:
             continue
         rec = json.loads(line)
         agent_id = rec.get("agentId")
-        agent_type = rec.get("agentType") or "(unknown)"
+        agent_type = rec.get("agentType") or ""
         event = rec.get("hookEvent")
         ts = rec.get("timestamp")
         if event == "SubagentStart" and agent_id:
             starts[agent_id] = {"timestamp": ts, "agentType": agent_type}
         elif event == "SubagentStop" and agent_id:
-            entry = by_type[agent_type]
-            entry["runs"] += 1
             start = starts.get(agent_id)
+            resolved_type = agent_type or (start or {}).get("agentType") or ""
+            if not resolved_type:
+                excluded_empty_type_stops += 1
+                continue
+            entry = by_type[resolved_type]
+            entry["runs"] += 1
             if start and start.get("timestamp") and ts:
                 from datetime import datetime
                 fmt = "%Y-%m-%dT%H:%M:%SZ"
@@ -92,7 +112,7 @@ for agent_type, entry in sorted(by_type.items()):
         "avgDurationMs": avg,
         "totalDurationMs": entry["totalDurationMs"] if entry["durationSamples"] else None,
     })
-print(json.dumps(result, ensure_ascii=False))
+print(json.dumps({"byType": result, "excludedEmptyAgentTypeStops": excluded_empty_type_stops}, ensure_ascii=False))
 PYEOF
 )"
 fi
@@ -143,13 +163,17 @@ TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 jq -n \
   --arg generatedAt "$TIMESTAMP" \
-  --argjson subagentSkeletonByType "$SKELETON_SUMMARY" \
+  --argjson skeleton "$SKELETON_SUMMARY" \
   --argjson loopObservabilityByAgent "$LOOP_OBS_SUMMARY" \
   --argjson otelDebugCollectorPresent "$OTEL_DEBUG_PRESENT" \
   '{
     generatedAt: $generatedAt,
     note: "rounds/findingCountはWorkflow戻り値にのみ存在し現状永続化されていないため、Workflow完了直後にオーケストレーターがこのファイルへ手動で追記すること(issue #429)。",
-    subagentSkeletonByType: $subagentSkeletonByType,
+    subagentSkeletonByType: $skeleton.byType,
+    subagentSkeletonExcluded: {
+      emptyAgentTypeStops: $skeleton.excludedEmptyAgentTypeStops,
+      note: "agentTypeが空でSubagentStartも無いSubagentStop行は、本体の内部agent（次の入力の候補・compactionの要約・agent型hookの評価役）のものでsubagentの実行ではないため、subagentSkeletonByTypeのrunsに数えない(issue #928)。web-fetchはSubagentStart/Stopのhookが呼ばれないため、どちらにも載らない。"
+    },
     loopObservabilityByAgent: $loopObservabilityByAgent,
     otelDebugCollectorPresent: $otelDebugCollectorPresent
   }' > "$OUT_FILE"

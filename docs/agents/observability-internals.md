@@ -206,9 +206,13 @@ messageTruncated?}` の行として同じファイルに残す。`message` は�
   （次の入力の候補を作る agent・compaction の要約・agent 型 hook の評価役）が出していて、`SubagentStart` を
   出さない。全期間で 1,642 行（`SubagentStop` 行の半分強、2026-11-12 時点）、`agentTranscriptPath` の指すファイルは
   1 つも残っていない。骨格記録から subagent の数を数えるときは、`agentType` が空の行を除く。
-  **`snapshot-agent-baseline.sh` はこの行を除いていない**（同日、出力で確認）。`agentType` が `(unknown)` の行が
-  1,653 runs・所要時間 null で、種類別の最大の行になっている。基準値の `(unknown)` は subagent の実行件数として
-  読まない（スクリプトは未修正）。ほかの読む側（`canonical-event.ts` /
+  **`snapshot-agent-baseline.sh` はこの行を runs に数えない**（issue #928 で修正）。修正前は `(unknown)` として数えていて、
+  2026-11-12 の実データでは `(unknown)` が 1,653 runs・所要時間 null で種類別の最大の行になっていた。修正後は、
+  `agentType` が空で、同じ `agentId` の `SubagentStart` も無い `SubagentStop` 行を除き、除いた件数を
+  `subagentSkeletonExcluded.emptyAgentTypeStops` に残す（`SubagentStop` 側だけ種類が欠けた subagent は、
+  `SubagentStart` の種類で数える）。実データで、種類のある 18 行の件数と所要時間が修正前後で変わらないことを確かめた。
+  **コミット済みの `docs/agents/baselines/2026-07-16.json` と `2026-07-23.json` は修正前の出力で、作り直していない。**
+  この 2 本の `(unknown)` の行は subagent の実行件数として読まない。ほかの読む側（`canonical-event.ts` /
   `verify-agent-progress-transcript.sh` / `check-aidd-stats-recorded.sh`）がこの行をどう扱うかは確かめていない
 
 **第4の記録層（issue #442調査 → issue #462・#493で組み込み済み）**: Workflowツールが
