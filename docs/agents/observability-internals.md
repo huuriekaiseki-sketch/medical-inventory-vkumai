@@ -193,14 +193,23 @@ messageTruncated?}` の行として同じファイルに残す。`message` は�
 - **web-fetch の subagent は `SubagentStart` / `SubagentStop` の行が残らない**（2026-11-12 の調査、issue #928）。
   2026-11-08 以降の 11 体すべてで `SubagentHandback` の行だけがあり、同じセッション・同じ本体 2.1.321 で並べて
   起動した Explore には 3 行とも残った。上の表の「機械強制（呼び忘れ得ない）」は、この種類には当たらない。
-  `snapshot-agent-baseline.sh` は Start と Stop の対で数えるので、web-fetch の実行は基準値に載らないはず
-  （コードを読んだだけで、出力では確かめていない）。hook が呼ばれていないのか、呼ばれたが `agent_id` が空で
-  終わったのかは未確定で、上の印を入れた版で測り直す
+  **測り直しの結論（同日、印を入れた版がメインのチェックアウトに入ってから）: この 2 つの hook は web-fetch では
+  呼ばれていない。** web-fetch と Explore を 1 体ずつ起動し、Explore は 3 行、web-fetch は `SubagentHandback` の
+  1 行だけで、`subagent-skeleton-dropped.jsonl` は作られなかった。同じスクリプトに `agent_id` の無い payload を
+  直接渡す対照では印が残ったので、「呼ばれたが黙って終わった」ではない（payload が JSON として読めない回と
+  timeout の回は印が残らないので厳密には除外できないが、同じ秒に同じスクリプトが同じ agent の
+  `SubagentHandback` を書けている）。欠ける理由が agent の種類か、foreground という起動の形かは分かっていない
+  （この版の Agent ツールは起動の形を選べない）。
+  **`snapshot-agent-baseline.sh` の出力に web-fetch の行は無い**（出力で確認。2026-11-12 時点で 12 体ぶんが
+  基準値に載っていない）。web-fetch の実行を数えたいときは `SubagentHandback` の行を数えるしかない
 - **`agentType` が空の `SubagentStop` 行は subagent のものではない**（同調査）。本体の内部 agent
   （次の入力の候補を作る agent・compaction の要約・agent 型 hook の評価役）が出していて、`SubagentStart` を
   出さない。全期間で 1,642 行（`SubagentStop` 行の半分強、2026-11-12 時点）、`agentTranscriptPath` の指すファイルは
-  1 つも残っていない。骨格記録から subagent の数を数えるときは、`agentType` が空の行を除く。読む側の各スクリプトが
-  この行をどう扱うかは確かめていない
+  1 つも残っていない。骨格記録から subagent の数を数えるときは、`agentType` が空の行を除く。
+  **`snapshot-agent-baseline.sh` はこの行を除いていない**（同日、出力で確認）。`agentType` が `(unknown)` の行が
+  1,653 runs・所要時間 null で、種類別の最大の行になっている。基準値の `(unknown)` は subagent の実行件数として
+  読まない（スクリプトは未修正）。ほかの読む側（`canonical-event.ts` /
+  `verify-agent-progress-transcript.sh` / `check-aidd-stats-recorded.sh`）がこの行をどう扱うかは確かめていない
 
 **第4の記録層（issue #442調査 → issue #462・#493で組み込み済み）**: Workflowツールが
 `agent()`呼び出しごとに書き出す`journal.jsonl`（`subagents/workflows/wf_<runId>/journal.jsonl`）
