@@ -150,7 +150,7 @@
     "scripts/log-find-av-precision.test.sh": "14590d8f194652e576425f7b6b9df4c78f2f886d7deb22d9e517c659b5c808c0",
     "scripts/log-instructions-loaded.sh": "9b0e5cbc1ff63754f00427e1794f166c500b72488876844a968c8160bb74de59",
     "scripts/log-instructions-loaded.test.sh": "081f30fb7766bd88455ffb959f57c430f08556bec9ed53a3cbbdceb4535ffc42",
-    "scripts/log-subagent-hook-skeleton.sh": "758850ddc03d1b656c6aaa6206852af14d011e5b0b09058fd9430f9bb07c4c36",
+    "scripts/log-subagent-hook-skeleton.sh": "71d939fbd1c49536c5d4eb1e73d864e868cd2e73830514f010e65f578123d949",
     "scripts/maintenance-digest.sh": "69f96db2187a626290d7e88ed09d765f4808a1931b1f5ba7c511c09b3f858055",
     "scripts/maintenance-digest.test.sh": "eda02e776c4c9a26e4c34f3ab9bdad5308ae01aea6ff6deb7cfed8d933896c87",
     "scripts/new-rulebook.sh": "b8d448a77347f51966cf0b9317313c8b4583ba773e001ccd6428e6fbfd19ca7b",

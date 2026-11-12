@@ -75,15 +75,49 @@ if [[ "$HOOK_EVENT" == "PostToolUse" ]]; then
   HANDBACK_MESSAGE_LENGTH="$(echo "$PAYLOAD" | jq -r '.tool_input.message // "" | length')"
 fi
 
+# WHY（issue #928）: 下の 2 か所は「呼ばれたが、骨格記録には書かずに終わる」分岐。以前は何も残さなかったので、
+# 骨格記録に行が無いとき「hook が呼ばれていない」のか「呼ばれたがここで終わった」のかを区別できなかった
+# （2026-11-12 の調査で、web-fetch の subagent の SubagentStart / SubagentStop がどちらなのか決められなかった）。
+# 行が無いことを、呼ばれていないことと読まないために、終わった回を別ファイルに 1 行残す。
+#
+# 別ファイルにする理由: 骨格記録は agentId で Start / Stop を対にして読まれる（snapshot-agent-baseline.sh ほか）。
+# agentId の無い Start / Stop の行を同じファイルに混ぜると、読む側の数え方が変わる。骨格記録の行の形は変えない。
+#
+# 残すのは、届いた payload のキー名と、種類を表す 3 つの値（hook_event_name / session_id / agent_type）だけ。
+# 値を丸ごと写さないのは、last_assistant_message 等に本文が入るため（共有の jsonl に本文を積まない）。
+# キー名があれば「agent_id の代わりに何が届いたか」を後から調べられる。
+#
+# 印を書くこと自体の失敗（jq の失敗・書き込み不可）では hook を失敗させない（末尾の || true）。
+# 限界: payload が JSON として読めないときは、この分岐より前の jq で落ちるので印は残らない。hook が
+# timeout（5 秒）で打ち切られたときも残らない。「印が無い」は「この 2 つの分岐では終わっていない」まで。
+DROPPED_LOG_FILE="${LOG_FILE%.jsonl}-dropped.jsonl"
+log_dropped() {
+  local reason="$1"
+  mkdir -p "$(dirname "$DROPPED_LOG_FILE")" 2>/dev/null || true
+  echo "$PAYLOAD" | jq -c \
+    --arg timestamp "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    --arg reason "$reason" \
+    '{
+      timestamp: $timestamp,
+      hookEvent: (.hook_event_name // ""),
+      sessionId: (.session_id // ""),
+      agentType: (.agent_type // ""),
+      reason: $reason,
+      payloadKeys: keys
+    }' >> "$DROPPED_LOG_FILE" 2>/dev/null || true
+}
+
 if [[ -z "$HOOK_EVENT" ]]; then
+  log_dropped "empty_hook_event"
   exit 0
 fi
 if [[ -z "$AGENT_ID" && "$HOOK_EVENT" != "SubagentHandback" ]]; then
-  # ペイロード形状が想定と異なる場合はサイレントに何もしない(hookの失敗でセッション全体を
+  # ペイロード形状が想定と異なる場合は骨格記録には何も書かない(hookの失敗でセッション全体を
   # 止めないため。exit非0にするとhook自体がエラー扱いになりうる)。
   # SubagentHandback だけは agent_id が無くても書く。公式 docs は subagent 内の PostToolUse に
   # agent_id が入ると言うが、実機で欠けたときに報告本文ごと静かに消えるより、agentId 空の行が
   # 残って「欠けている」と分かるほうがよい（C-025 の型を避ける）。
+  log_dropped "empty_agent_id"
   exit 0
 fi
 

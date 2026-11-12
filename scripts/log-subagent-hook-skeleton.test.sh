@@ -145,7 +145,99 @@ assert_eq "$EXIT_CODE" "0" "exit 0"
 AFTER_LINES="$(wc -l < "$TMP_LOG" | tr -d ' ')"
 assert_eq "$AFTER_LINES" "$BEFORE_LINES" "行数が増えない（Bash の PostToolUse は対象外）"
 
-rm -f "$TMP_LOG"
+# WHY（issue #928）: 2026-11-12 の調査で、web-fetch の subagent だけ SubagentStart / SubagentStop の行が
+# 骨格記録に無いと分かった。ところが本スクリプトは agent_id（または hook_event_name）が空だと何も書かずに
+# exit 0 するので、「hook が呼ばれていない」のか「呼ばれたが黙って終わった」のかを、記録から区別できなかった
+# （行が無いことを、呼ばれていないことと読んでしまう。C-025 の型）。10〜15 は、黙って終わった回を
+# 別ファイル（<骨格記録>-dropped.jsonl）に残すことの RED fixture と、その対（書いた回・対象外の回には
+# 印を残さない）。骨格記録そのものの行の形は変えない（scenario 3 がそのまま通ること）。
+TMP_DROPPED="${TMP_LOG%.jsonl}-dropped.jsonl"
+dropped_lines() {
+  if [ -f "$TMP_DROPPED" ]; then
+    wc -l < "$TMP_DROPPED" | tr -d ' '
+  else
+    echo 0
+  fi
+}
+
+echo "=== scenario 10: agent_id の無い SubagentStart は、黙って終わった印を別ファイルに 1 行残す（issue #928） ==="
+BEFORE_DROPPED="$(dropped_lines)"
+BEFORE_LINES="$(wc -l < "$TMP_LOG" | tr -d ' ')"
+input='{"session_id":"sess-3","hook_event_name":"SubagentStart"}'
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0（hook は失敗させない）"
+assert_eq "$(dropped_lines)" "$((BEFORE_DROPPED + 1))" "印が 1 行だけ増える"
+AFTER_LINES="$(wc -l < "$TMP_LOG" | tr -d ' ')"
+assert_eq "$AFTER_LINES" "$BEFORE_LINES" "骨格記録の行数は増えない（形を変えない）"
+LAST_DROPPED="$(tail -n 1 "$TMP_DROPPED" 2>/dev/null || true)"
+assert_contains "$LAST_DROPPED" '"reason":"empty_agent_id"' "理由が empty_agent_id"
+assert_contains "$LAST_DROPPED" '"hookEvent":"SubagentStart"' "hookEvent が残る"
+assert_contains "$LAST_DROPPED" '"sessionId":"sess-3"' "sessionId が残る"
+assert_contains "$LAST_DROPPED" '"payloadKeys":["hook_event_name","session_id"]' "届いた payload のキー名が残る（形を後から調べられる）"
+assert_contains "$LAST_DROPPED" '"timestamp":"' "timestamp が残る"
+
+echo "=== scenario 11: 印には payload の値を写さない（キー名と種類だけ） ==="
+input='{"session_id":"sess-3","hook_event_name":"SubagentStop","agent_type":"web-fetch","last_assistant_message":"SECRET-BODY-928","agent_transcript_path":"/tmp/subagents/agent-x.jsonl"}'
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+LAST_DROPPED="$(tail -n 1 "$TMP_DROPPED" 2>/dev/null || true)"
+assert_contains "$LAST_DROPPED" '"hookEvent":"SubagentStop"' "hookEvent が残る"
+assert_contains "$LAST_DROPPED" '"agentType":"web-fetch"' "agentType が残る（どの種類で起きたかが分かる）"
+assert_contains "$LAST_DROPPED" '"last_assistant_message"' "キー名は残る"
+if grep -qF -e 'SECRET-BODY-928' -e '/tmp/subagents/agent-x.jsonl' <<<"$LAST_DROPPED"; then
+  echo "  NG: 印に payload の値が写っている（実際: ${LAST_DROPPED}）"
+  fail=1
+else
+  echo "  OK: 本文やパスの値は写らない"
+fi
+
+echo "=== scenario 12: hook_event_name の無い payload も、理由つきで印を残す ==="
+BEFORE_DROPPED="$(dropped_lines)"
+input='{"session_id":"sess-3","agent_id":"agent-noevent","agent_type":"reviewer"}'
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_eq "$(dropped_lines)" "$((BEFORE_DROPPED + 1))" "印が 1 行だけ増える"
+LAST_DROPPED="$(tail -n 1 "$TMP_DROPPED" 2>/dev/null || true)"
+assert_contains "$LAST_DROPPED" '"reason":"empty_hook_event"' "理由が empty_hook_event"
+
+echo "=== scenario 13（対）: 骨格記録に書けた回には印を残さない ==="
+BEFORE_DROPPED="$(dropped_lines)"
+input='{"session_id":"sess-3","agent_id":"agent-ok","agent_type":"web-fetch","hook_event_name":"SubagentStart"}'
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_eq "$(dropped_lines)" "$BEFORE_DROPPED" "印は増えない"
+LAST_LINE="$(tail -n 1 "$TMP_LOG")"
+assert_contains "$LAST_LINE" '"agentId":"agent-ok"' "骨格記録には従来どおり書かれる"
+
+echo "=== scenario 14（対）: SubagentHandback 以外の PostToolUse は対象外で、印も残さない ==="
+BEFORE_DROPPED="$(dropped_lines)"
+input='{"session_id":"sess-3","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}'
+run_hook "$input"
+assert_eq "$EXIT_CODE" "0" "exit 0"
+assert_eq "$(dropped_lines)" "$BEFORE_DROPPED" "印は増えない（対象外の回は「黙って終わった回」ではない）"
+
+echo "=== scenario 15: 置き場所を指定しないとき、印は共有の logs/ の subagent-skeleton-dropped.jsonl に書く ==="
+TMP_LOG_DIR="$(mktemp -d)"
+set +e
+printf '%s' '{"session_id":"sess-3","hook_event_name":"SubagentStop","agent_type":"web-fetch"}' | AIDD_LOG_DIR="$TMP_LOG_DIR" bash "$SCRIPT"
+EXIT_CODE=$?
+set -e
+assert_eq "$EXIT_CODE" "0" "exit 0"
+if [ -f "$TMP_LOG_DIR/subagent-skeleton-dropped.jsonl" ]; then
+  echo "  OK: logs/ の解決結果の直下に subagent-skeleton-dropped.jsonl ができる"
+else
+  echo "  NG: $TMP_LOG_DIR/subagent-skeleton-dropped.jsonl が無い（実際: $(ls "$TMP_LOG_DIR"))"
+  fail=1
+fi
+if [ -f "$TMP_LOG_DIR/subagent-skeleton.jsonl" ]; then
+  echo "  NG: 骨格記録に行が書かれている（黙って終わった回は骨格記録に書かない）"
+  fail=1
+else
+  echo "  OK: 骨格記録は作られない"
+fi
+rm -rf "$TMP_LOG_DIR"
+
+rm -f "$TMP_LOG" "$TMP_DROPPED"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAIL"
