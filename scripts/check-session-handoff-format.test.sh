@@ -190,6 +190,43 @@ else
   assert_ok "日付で始まらないファイルは対象外"
 fi
 
+# WHY(issue #932): macOS の en_US.UTF-8 では、awk の文字列比較（strcoll）が、ASCII を含まない別々の文字列を
+#      「等しい」と返す（"型検査" == "同時実行" が真になる）。04 表の判定は `reason=="—"` で「理由が無い」を
+#      見ていたので、**日本語だけで書いた理由が「—」と等しいと判定され、理由があるのに「理由が無い」と出ていた**
+#      （2026-11-12 に実データのメモ 3 本で発生。C・C.UTF-8・ja_JP.UTF-8 では起きない）。
+#      CI は C.UTF-8 で回すので CI では見えない。ここでは判定の関数を en_US.UTF-8 のまま呼んで確かめる。
+#
+# 限界: この RED 方向が効くのは、比較がロケールで壊れる環境（macOS）だけ。Linux の glibc はこの壊れ方をしないので、
+#      直す前の版でも通る。効く環境かどうかは下で 1 行出す（「通った」を「どの環境でも守られている」と読ませない）。
+echo "=== scenario 4: en_US.UTF-8 でも、日本語だけの理由を「理由が無い」と読まない（issue #932） ==="
+LOCALE_BODY='## 30秒サマリー
+- 変更概要: なにか
+
+## 04 どう確認したか
+| 種別 | 状態 | 結果・証跡 |
+| --- | --- | --- |
+| 同時実行 | ➖ 今回不要 | 今回は触っていない |
+| 規模の実測 | ⬜ 未実施 | 時間切れ |
+| 生成型の鮮度 | ➖ 今回不要 | — |
+| 依存差分レビュー | ⬜ 未実施 |  |'
+LOCALE_OUT="$(export LC_ALL=en_US.UTF-8; handoff_four_state_issues "$LOCALE_BODY" 2>/dev/null)"
+if grep -q -e '同時実行（' -e '規模の実測（' <<<"$LOCALE_OUT"; then
+  assert_fail "日本語だけの理由を「理由が無い」と誤って判定した" "$LOCALE_OUT"
+else
+  assert_ok "日本語だけの理由がある行は名指しされない"
+fi
+# 対: 直したせいで、本当に理由が無い行（「—」と空）を見逃すようになっていないこと
+if grep -q '生成型の鮮度（➖ なのに理由が無い）' <<<"$LOCALE_OUT" && grep -q '依存差分レビュー（⬜ なのに理由が無い）' <<<"$LOCALE_OUT"; then
+  assert_ok "「—」と空の理由は en_US.UTF-8 でも名指しされる（対）"
+else
+  assert_fail "本当に理由が無い行を検知できない" "$LOCALE_OUT"
+fi
+if (export LC_ALL=en_US.UTF-8; awk 'BEGIN { exit !("型検査" == "同時実行") }' 2>/dev/null); then
+  echo "  （この環境は en_US.UTF-8 で文字列比較が壊れる。上の判定は直す前の版なら落ちる）"
+else
+  echo "  （この環境は en_US.UTF-8 でも文字列比較が壊れない。上の判定は直す前の版でも通る）"
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "FAILED"
   exit 1
