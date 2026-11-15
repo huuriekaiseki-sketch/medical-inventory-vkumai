@@ -117,7 +117,7 @@
     "scripts/lib/count-flow-loop-records.sh": "fcf13d500891d938bd0eb9cf0f607e37114fd9904acbfc44d25a51c598962eec",
     "scripts/lib/gate-effectiveness-summary.ts": "6d704753c32f573b7b52a19273b6f67c017a314aefd84accea66a3f73f56e692",
     "scripts/lib/generate-codex-agents.mjs": "dfdd6fb2fa0b1157770f437b452cb6c50cc015f192b83c3c1788a3b7e9099d21",
-    "scripts/lib/handoff-04-table.sh": "c1e38ca268895e1de83d8bcbc15cc460722ea37f8d3d2902b8f2974c21c3df05",
+    "scripts/lib/handoff-04-table.sh": "306c3a4b788a9686e430d1070c17d7b97e701516618754ef0676fb3334e49415",
     "scripts/lib/harvest-journal-events.ts": "63fb76382f15c8051a4956e33f9255091b0077625a76cf5eaa9d429c9d8f8029",
     "scripts/lib/hook-decisions-summary.mjs": "8bd759d518ca3ba0b72382e266222a08ab99468587e0c892617ab43f39fd1b00",
     "scripts/lib/hook-registry-hash.mjs": "54705e51f482166b9ccb1186cf8017284a411b0730c596f4f903102fd30dfaeb",

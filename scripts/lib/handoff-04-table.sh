@@ -22,7 +22,14 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/table-row.sh"
 # $1=メモ本文 → 4 値から外れた行を "種別（理由）; " の形で並べて返す（空なら問題なし）
 handoff_four_state_issues() {
   local body="$1" out
-  out="$(printf '%s\n' "$body" | table_mask_stream | awk -F'|' '
+  # WHY(LC_ALL=C を awk にだけ付ける。issue #932): awk の `==` は strcoll で比べる。macOS の en_US.UTF-8 は、
+  #      ASCII を含まない別々の文字列を「等しい」と返すので、下の `reason=="—"` が日本語だけの理由にも真になり、
+  #      理由があるのに「理由が無い」と出ていた（2026-11-12、実データのメモ 3 本と PR 本文の検査で発生）。
+  #      C ロケールならバイト列の比較になり、呼び出し側のロケールに左右されない。
+  #      この awk は正規表現の一致と等値比較しか使わず、文字数を数える関数（length / substr / index）を使わない
+  #      ので、バイト単位で扱っても結果は変わらない（既定の C ロケールと CI の C.UTF-8 で通っているのと同じ動き）。
+  #      スクリプト全体のロケールは変えない。呼び出し元（hook・構造テスト）のほかの処理に影響させないため。
+  out="$(printf '%s\n' "$body" | table_mask_stream | LC_ALL=C awk -F'|' '
     /^#+ .*どう確認したか/ {f=1; next}
     /^## / {f=0}
     f && /^\| / {

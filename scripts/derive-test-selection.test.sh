@@ -140,7 +140,10 @@ assert_eq "$EXIT_CODE" "0" "exit 0"
 KEY_COUNT="$(grep -c . <<<"$OUT")"
 run --list-rules
 assert_eq "$(grep -c . <<<"$OUT")" "$KEY_COUNT" "--list-rules の行数 = --list-keys の行数"
-assert_eq "$(cut -f2 <<<"$OUT" | sort | uniq -d | wc -l | tr -d ' ')" "0" "label（種別名）が重複しない"
+# WHY(LC_ALL=C。issue #932): uniq は strcoll で隣の行と比べる。macOS の en_US.UTF-8 は、ASCII を含まない別々の
+#      文字列（「型検査」と「同時実行」など）を「等しい」と返すので、重複が無いのに 2 件と数えていた。
+#      バイト列で比べれば、呼び出し側のロケールに左右されない。sort も同じ並びで揃える
+assert_eq "$(cut -f2 <<<"$OUT" | LC_ALL=C sort | LC_ALL=C uniq -d | wc -l | tr -d ' ')" "0" "label（種別名）が重複しない"
 assert_eq "$(cut -f3 <<<"$OUT" | grep -v -e '^always$' -e '^on-change$' -e '^milestone$' | wc -l | tr -d ' ')" "0" "timing は3値のみ"
 
 echo "=== scenario 14: コミット前の変更（ステージ済み・作業ツリー・未追跡）も既定で拾う ==="
