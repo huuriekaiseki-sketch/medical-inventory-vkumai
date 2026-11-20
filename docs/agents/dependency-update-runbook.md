@@ -45,7 +45,7 @@ SessionStart hook（`scripts/check-dependency-update-staleness.sh`）と `claude
 
 | 対象 | 版 | 確認日 |
 | --- | --- | --- |
-| next / eslint-config-next | 16.4.2（PR #916、2026-10-23。Latest 16.4.3。`@next/env` は 16.2.12 のまま。次回 next と一緒に揃える） | 2026-10-24 |
+| next / eslint-config-next | 16.4.6（2026-11-20、16.4.2 から。Latest 16.4.6。`@next/env` は 16.2.12 のまま。理由は実施記録 2026-11-20） | 2026-11-20 |
 | react / react-dom | 19.2.8（Latest 19.3.1、minor。ピン留めの組なので next と同じ回で判断） | 2026-10-24 |
 | @supabase/supabase-js | 2.112.4（Latest 2.118.0） | 2026-10-24 |
 | @supabase/ssr | 0.12.5（Latest 0.12.7） | 2026-10-24 |
@@ -56,6 +56,29 @@ SessionStart hook（`scripts/check-dependency-update-staleness.sh`）と `claude
 | fast-check | 4.9.0（dev のみ。推移依存は `pure-rand` 8.4.2 だけ） | 2026-09-07 |
 
 ## 実施記録
+
+### 2026-11-20（臨時 1 件: next の patch。月次の棚卸しではない）
+
+`next` / `eslint-config-next` を 16.4.2 → 16.4.6 に上げた。月次の棚卸し（予定日 2026-11-24）は別に行う。
+
+- **きっかけ**: `next dev` を起動したら、next 自身が「この版は既知の脆弱性の対象」と出して 1 回目の起動を
+  止めた（エージェントの環境から起動したときだけ止まる。2 回目は警告つきで起動する）。`npm audit --omit=dev` で
+  確かめると、`next` 16.0.0〜16.4.4 に **moderate** の advisory が 7 件あった
+  （GHSA-mfr8-8qww-v76h / GHSA-vc7v-qv4w-wrv8 / GHSA-7qx7-33qx-rqx2 / GHSA-f3mh-rxg3-f5g2 /
+  GHSA-pc58-hwjq-p385 / GHSA-rhh4-g77r-r9qj / GHSA-vvgp-ww4w-46vf）。
+- **CI の監査では見つからない**: CI と main の定期 audit は `--audit-level=high` で見ているので、moderate は
+  0 件として通る。今回は next 自身の警告で気づいた。
+- **代替案**: 無し（対象は next 本体。修正は 16.4.5 以降に入っており、`dist-tags.latest` が 16.4.6）。
+- **権限 / 環境変数 / DB への影響**: なし。
+- **固定した版と出所**: `next` 16.4.6・`eslint-config-next` 16.4.6（どちらも exact 固定、registry.npmjs.org、
+  2026-11-09 公開）。lock は `npx -y npm@11.19.0 install` で作った。差分は版の入れ替えだけ（50 行ずつ）。
+- **`npm audit --omit=dev --audit-level=high`**: 0 件。`--audit-level` を付けない `npm audit --omit=dev` も 0 件。
+- **`@next/env` は 16.2.12 のまま据え置いた。** 前回「次回 next と一緒に揃える」と書いたが、`@next/env` は
+  統合テストと E2E の環境変数の読み込み（`loadEnvConfig`）に使っていて、上げたら実 DB で確かめる必要がある。
+  今回は脆弱性の対応だけにとどめた。揃えるのは月次の棚卸しで、統合テストと E2E を回せる場所で行う。
+- **`react` / `react-dom` は 19.2.8 のまま。** minor の更新なので、脆弱性の patch とは混ぜない。
+- **`AGENTS.md` の管理ブロック**: 16.4.6 でも書き出す本文は同じで、書き換えは起きない
+  （next の `hasCurrentAgentRules()` が true）。
 
 ### 2026-10-24（2 回目。期限 2026-10-06 から 18 日遅れ）
 
